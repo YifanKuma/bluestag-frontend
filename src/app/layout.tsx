@@ -1,33 +1,28 @@
-import type {Metadata} from "next";
-import {Geist, Geist_Mono} from "next/font/google";
+// app/layout.tsx
+import type {Metadata, Viewport} from "next";
 import "./globals.css";
-import 'react-international-phone/style.css';
+import {Inter} from "next/font/google";
 
-const geistSans = Geist({
-    variable: "--font-geist-sans",
-    subsets: ["latin"],
-});
+const inter = Inter({subsets: ["latin"], variable: "--font-inter"});
 
-const geistMono = Geist_Mono({
-    variable: "--font-geist-mono",
-    subsets: ["latin"],
-});
+export const metadata: Metadata = {
+    title: "BLUESTAG.AI — Voice AI for Aussie SMBs",
+    description:
+        "Modern Voice AI for Australian small businesses: sales, payments, customer service, and more.",
+};
 
-export const metadata = {
-    title: "BLUESTAG.AI — AI Voice Agents",
-    description: "Qualify leads, book appointments, collect payments, support customers — 24/7.",
+export const viewport: Viewport = {
+    themeColor: "#0b1020",
 };
 
 export default function RootLayout({
                                        children,
-                                   }: Readonly<{
+                                   }: {
     children: React.ReactNode;
-}>) {
+}) {
     return (
-        <html lang="en">
-        <body
-            className={`${geistSans.variable} ${geistMono.variable} antialiased`}
-        >
+        <html lang="en" className="h-full">
+        <body className={`${inter.variable} min-h-screen antialiased`}>
         {children}
         </body>
         </html>
