@@ -1,0 +1,243 @@
+<html>
+<head>
+<title>no-unsafe-optional-chaining.js</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #8c8c8c; font-style: italic;}
+.s1 { color: #8c8c8c; font-style: italic;}
+.s2 { color: #080808;}
+.s3 { color: #067d17;}
+.s4 { color: #0033b3;}
+.s5 { color: #1750eb;}
+</style>
+</head>
+<body bgcolor="#ffffff">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#c0c0c0" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+no-unsafe-optional-chaining.js</font>
+</center></td></tr></table>
+<pre><span class="s0">/**</span>
+ <span class="s0">* </span><span class="s1">@fileoverview </span><span class="s0">Rule to disallow unsafe optional chaining</span>
+ <span class="s0">* </span><span class="s1">@author </span><span class="s0">Yeon JuAn</span>
+ <span class="s0">*/</span>
+
+<span class="s3">&quot;use strict&quot;</span><span class="s2">;</span>
+
+<span class="s4">const </span><span class="s2">UNSAFE_ARITHMETIC_OPERATORS = </span><span class="s4">new </span><span class="s2">Set([</span><span class="s3">&quot;+&quot;</span><span class="s2">, </span><span class="s3">&quot;-&quot;</span><span class="s2">, </span><span class="s3">&quot;/&quot;</span><span class="s2">, </span><span class="s3">&quot;*&quot;</span><span class="s2">, </span><span class="s3">&quot;%&quot;</span><span class="s2">, </span><span class="s3">&quot;**&quot;</span><span class="s2">]);</span>
+<span class="s4">const </span><span class="s2">UNSAFE_ASSIGNMENT_OPERATORS = </span><span class="s4">new </span><span class="s2">Set([</span>
+	<span class="s3">&quot;+=&quot;</span><span class="s2">,</span>
+	<span class="s3">&quot;-=&quot;</span><span class="s2">,</span>
+	<span class="s3">&quot;/=&quot;</span><span class="s2">,</span>
+	<span class="s3">&quot;*=&quot;</span><span class="s2">,</span>
+	<span class="s3">&quot;%=&quot;</span><span class="s2">,</span>
+	<span class="s3">&quot;**=&quot;</span><span class="s2">,</span>
+<span class="s2">]);</span>
+<span class="s4">const </span><span class="s2">UNSAFE_RELATIONAL_OPERATORS = </span><span class="s4">new </span><span class="s2">Set([</span><span class="s3">&quot;in&quot;</span><span class="s2">, </span><span class="s3">&quot;instanceof&quot;</span><span class="s2">]);</span>
+
+<span class="s0">/**</span>
+ <span class="s0">* Checks whether a node is a destructuring pattern or not</span>
+ <span class="s0">* </span><span class="s1">@param </span><span class="s0">{ASTNode} node node to check</span>
+ <span class="s0">* </span><span class="s1">@returns </span><span class="s0">{boolean} `true` if a node is a destructuring pattern, otherwise `false`</span>
+ <span class="s0">*/</span>
+<span class="s4">function </span><span class="s2">isDestructuringPattern(node) {</span>
+	<span class="s4">return </span><span class="s2">node.type === </span><span class="s3">&quot;ObjectPattern&quot; </span><span class="s2">|| node.type === </span><span class="s3">&quot;ArrayPattern&quot;</span><span class="s2">;</span>
+<span class="s2">}</span>
+
+<span class="s0">/** </span><span class="s1">@type </span><span class="s0">{import('../types').Rule.RuleModule} */</span>
+<span class="s2">module.exports = {</span>
+	<span class="s2">meta: {</span>
+		<span class="s2">type: </span><span class="s3">&quot;problem&quot;</span><span class="s2">,</span>
+
+		<span class="s2">defaultOptions: [</span>
+			<span class="s2">{</span>
+				<span class="s2">disallowArithmeticOperators: </span><span class="s4">false</span><span class="s2">,</span>
+			<span class="s2">},</span>
+		<span class="s2">],</span>
+
+		<span class="s2">docs: {</span>
+			<span class="s2">description:</span>
+				<span class="s3">&quot;Disallow use of optional chaining in contexts where the `undefined` value is not allowed&quot;</span><span class="s2">,</span>
+			<span class="s2">recommended: </span><span class="s4">true</span><span class="s2">,</span>
+			<span class="s2">url: </span><span class="s3">&quot;https://eslint.org/docs/latest/rules/no-unsafe-optional-chaining&quot;</span><span class="s2">,</span>
+		<span class="s2">},</span>
+		<span class="s2">schema: [</span>
+			<span class="s2">{</span>
+				<span class="s2">type: </span><span class="s3">&quot;object&quot;</span><span class="s2">,</span>
+				<span class="s2">properties: {</span>
+					<span class="s2">disallowArithmeticOperators: {</span>
+						<span class="s2">type: </span><span class="s3">&quot;boolean&quot;</span><span class="s2">,</span>
+					<span class="s2">},</span>
+				<span class="s2">},</span>
+				<span class="s2">additionalProperties: </span><span class="s4">false</span><span class="s2">,</span>
+			<span class="s2">},</span>
+		<span class="s2">],</span>
+		<span class="s2">fixable: </span><span class="s4">null</span><span class="s2">,</span>
+		<span class="s2">messages: {</span>
+			<span class="s2">unsafeOptionalChain:</span>
+				<span class="s3">&quot;Unsafe usage of optional chaining. If it short-circuits with 'undefined' the evaluation will throw TypeError.&quot;</span><span class="s2">,</span>
+			<span class="s2">unsafeArithmetic:</span>
+				<span class="s3">&quot;Unsafe arithmetic operation on optional chaining. It can result in NaN.&quot;</span><span class="s2">,</span>
+		<span class="s2">},</span>
+	<span class="s2">},</span>
+
+	<span class="s2">create(context) {</span>
+		<span class="s4">const </span><span class="s2">[{ disallowArithmeticOperators }] = context.options;</span>
+
+		<span class="s0">/**</span>
+		 <span class="s0">* Reports unsafe usage of optional chaining</span>
+		 <span class="s0">* </span><span class="s1">@param </span><span class="s0">{ASTNode} node node to report</span>
+		 <span class="s0">* </span><span class="s1">@returns </span><span class="s0">{void}</span>
+		 <span class="s0">*/</span>
+		<span class="s4">function </span><span class="s2">reportUnsafeUsage(node) {</span>
+			<span class="s2">context.report({</span>
+				<span class="s2">messageId: </span><span class="s3">&quot;unsafeOptionalChain&quot;</span><span class="s2">,</span>
+				<span class="s2">node,</span>
+			<span class="s2">});</span>
+		<span class="s2">}</span>
+
+		<span class="s0">/**</span>
+		 <span class="s0">* Reports unsafe arithmetic operation on optional chaining</span>
+		 <span class="s0">* </span><span class="s1">@param </span><span class="s0">{ASTNode} node node to report</span>
+		 <span class="s0">* </span><span class="s1">@returns </span><span class="s0">{void}</span>
+		 <span class="s0">*/</span>
+		<span class="s4">function </span><span class="s2">reportUnsafeArithmetic(node) {</span>
+			<span class="s2">context.report({</span>
+				<span class="s2">messageId: </span><span class="s3">&quot;unsafeArithmetic&quot;</span><span class="s2">,</span>
+				<span class="s2">node,</span>
+			<span class="s2">});</span>
+		<span class="s2">}</span>
+
+		<span class="s0">/**</span>
+		 <span class="s0">* Checks and reports if a node can short-circuit with `undefined` by optional chaining.</span>
+		 <span class="s0">* </span><span class="s1">@param </span><span class="s0">{ASTNode} [node] node to check</span>
+		 <span class="s0">* </span><span class="s1">@param </span><span class="s0">{Function} reportFunc report function</span>
+		 <span class="s0">* </span><span class="s1">@returns </span><span class="s0">{void}</span>
+		 <span class="s0">*/</span>
+		<span class="s4">function </span><span class="s2">checkUndefinedShortCircuit(node, reportFunc) {</span>
+			<span class="s4">if </span><span class="s2">(!node) {</span>
+				<span class="s4">return</span><span class="s2">;</span>
+			<span class="s2">}</span>
+			<span class="s4">switch </span><span class="s2">(node.type) {</span>
+				<span class="s4">case </span><span class="s3">&quot;LogicalExpression&quot;</span><span class="s2">:</span>
+					<span class="s4">if </span><span class="s2">(node.operator === </span><span class="s3">&quot;||&quot; </span><span class="s2">|| node.operator === </span><span class="s3">&quot;??&quot;</span><span class="s2">) {</span>
+						<span class="s2">checkUndefinedShortCircuit(node.right, reportFunc);</span>
+					<span class="s2">} </span><span class="s4">else if </span><span class="s2">(node.operator === </span><span class="s3">&quot;&amp;&amp;&quot;</span><span class="s2">) {</span>
+						<span class="s2">checkUndefinedShortCircuit(node.left, reportFunc);</span>
+						<span class="s2">checkUndefinedShortCircuit(node.right, reportFunc);</span>
+					<span class="s2">}</span>
+					<span class="s4">break</span><span class="s2">;</span>
+				<span class="s4">case </span><span class="s3">&quot;SequenceExpression&quot;</span><span class="s2">:</span>
+					<span class="s2">checkUndefinedShortCircuit(</span>
+						<span class="s2">node.expressions.at(-</span><span class="s5">1</span><span class="s2">),</span>
+						<span class="s2">reportFunc,</span>
+					<span class="s2">);</span>
+					<span class="s4">break</span><span class="s2">;</span>
+				<span class="s4">case </span><span class="s3">&quot;ConditionalExpression&quot;</span><span class="s2">:</span>
+					<span class="s2">checkUndefinedShortCircuit(node.consequent, reportFunc);</span>
+					<span class="s2">checkUndefinedShortCircuit(node.alternate, reportFunc);</span>
+					<span class="s4">break</span><span class="s2">;</span>
+				<span class="s4">case </span><span class="s3">&quot;AwaitExpression&quot;</span><span class="s2">:</span>
+					<span class="s2">checkUndefinedShortCircuit(node.argument, reportFunc);</span>
+					<span class="s4">break</span><span class="s2">;</span>
+				<span class="s4">case </span><span class="s3">&quot;ChainExpression&quot;</span><span class="s2">:</span>
+					<span class="s2">reportFunc(node);</span>
+					<span class="s4">break</span><span class="s2">;</span>
+				<span class="s4">default</span><span class="s2">:</span>
+					<span class="s4">break</span><span class="s2">;</span>
+			<span class="s2">}</span>
+		<span class="s2">}</span>
+
+		<span class="s0">/**</span>
+		 <span class="s0">* Checks unsafe usage of optional chaining</span>
+		 <span class="s0">* </span><span class="s1">@param </span><span class="s0">{ASTNode} node node to check</span>
+		 <span class="s0">* </span><span class="s1">@returns </span><span class="s0">{void}</span>
+		 <span class="s0">*/</span>
+		<span class="s4">function </span><span class="s2">checkUnsafeUsage(node) {</span>
+			<span class="s2">checkUndefinedShortCircuit(node, reportUnsafeUsage);</span>
+		<span class="s2">}</span>
+
+		<span class="s0">/**</span>
+		 <span class="s0">* Checks unsafe arithmetic operations on optional chaining</span>
+		 <span class="s0">* </span><span class="s1">@param </span><span class="s0">{ASTNode} node node to check</span>
+		 <span class="s0">* </span><span class="s1">@returns </span><span class="s0">{void}</span>
+		 <span class="s0">*/</span>
+		<span class="s4">function </span><span class="s2">checkUnsafeArithmetic(node) {</span>
+			<span class="s2">checkUndefinedShortCircuit(node, reportUnsafeArithmetic);</span>
+		<span class="s2">}</span>
+
+		<span class="s4">return </span><span class="s2">{</span>
+			<span class="s3">&quot;AssignmentExpression, AssignmentPattern&quot;</span><span class="s2">(node) {</span>
+				<span class="s4">if </span><span class="s2">(isDestructuringPattern(node.left)) {</span>
+					<span class="s2">checkUnsafeUsage(node.right);</span>
+				<span class="s2">}</span>
+			<span class="s2">},</span>
+			<span class="s3">&quot;ClassDeclaration, ClassExpression&quot;</span><span class="s2">(node) {</span>
+				<span class="s2">checkUnsafeUsage(node.superClass);</span>
+			<span class="s2">},</span>
+			<span class="s2">CallExpression(node) {</span>
+				<span class="s4">if </span><span class="s2">(!node.optional) {</span>
+					<span class="s2">checkUnsafeUsage(node.callee);</span>
+				<span class="s2">}</span>
+			<span class="s2">},</span>
+			<span class="s2">NewExpression(node) {</span>
+				<span class="s2">checkUnsafeUsage(node.callee);</span>
+			<span class="s2">},</span>
+			<span class="s2">VariableDeclarator(node) {</span>
+				<span class="s4">if </span><span class="s2">(isDestructuringPattern(node.id)) {</span>
+					<span class="s2">checkUnsafeUsage(node.init);</span>
+				<span class="s2">}</span>
+			<span class="s2">},</span>
+			<span class="s2">MemberExpression(node) {</span>
+				<span class="s4">if </span><span class="s2">(!node.optional) {</span>
+					<span class="s2">checkUnsafeUsage(node.object);</span>
+				<span class="s2">}</span>
+			<span class="s2">},</span>
+			<span class="s2">TaggedTemplateExpression(node) {</span>
+				<span class="s2">checkUnsafeUsage(node.tag);</span>
+			<span class="s2">},</span>
+			<span class="s2">ForOfStatement(node) {</span>
+				<span class="s2">checkUnsafeUsage(node.right);</span>
+			<span class="s2">},</span>
+			<span class="s2">SpreadElement(node) {</span>
+				<span class="s4">if </span><span class="s2">(node.parent &amp;&amp; node.parent.type !== </span><span class="s3">&quot;ObjectExpression&quot;</span><span class="s2">) {</span>
+					<span class="s2">checkUnsafeUsage(node.argument);</span>
+				<span class="s2">}</span>
+			<span class="s2">},</span>
+			<span class="s2">BinaryExpression(node) {</span>
+				<span class="s4">if </span><span class="s2">(UNSAFE_RELATIONAL_OPERATORS.has(node.operator)) {</span>
+					<span class="s2">checkUnsafeUsage(node.right);</span>
+				<span class="s2">}</span>
+				<span class="s4">if </span><span class="s2">(</span>
+					<span class="s2">disallowArithmeticOperators &amp;&amp;</span>
+					<span class="s2">UNSAFE_ARITHMETIC_OPERATORS.has(node.operator)</span>
+				<span class="s2">) {</span>
+					<span class="s2">checkUnsafeArithmetic(node.right);</span>
+					<span class="s2">checkUnsafeArithmetic(node.left);</span>
+				<span class="s2">}</span>
+			<span class="s2">},</span>
+			<span class="s2">WithStatement(node) {</span>
+				<span class="s2">checkUnsafeUsage(node.object);</span>
+			<span class="s2">},</span>
+			<span class="s2">UnaryExpression(node) {</span>
+				<span class="s4">if </span><span class="s2">(</span>
+					<span class="s2">disallowArithmeticOperators &amp;&amp;</span>
+					<span class="s2">UNSAFE_ARITHMETIC_OPERATORS.has(node.operator)</span>
+				<span class="s2">) {</span>
+					<span class="s2">checkUnsafeArithmetic(node.argument);</span>
+				<span class="s2">}</span>
+			<span class="s2">},</span>
+			<span class="s2">AssignmentExpression(node) {</span>
+				<span class="s4">if </span><span class="s2">(</span>
+					<span class="s2">disallowArithmeticOperators &amp;&amp;</span>
+					<span class="s2">UNSAFE_ASSIGNMENT_OPERATORS.has(node.operator)</span>
+				<span class="s2">) {</span>
+					<span class="s2">checkUnsafeArithmetic(node.right);</span>
+				<span class="s2">}</span>
+			<span class="s2">},</span>
+		<span class="s2">};</span>
+	<span class="s2">},</span>
+<span class="s2">};</span>
+</pre>
+</body>
+</html>

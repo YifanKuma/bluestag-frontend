@@ -1,0 +1,290 @@
+<html>
+<head>
+<title>next-metadata-route-loader.js</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #067d17;}
+.s1 { color: #080808;}
+.s2 { color: #0033b3;}
+.s3 { color: #1750eb;}
+.s4 { color: #8c8c8c; font-style: italic;}
+.s5 { color: #0037a6;}
+</style>
+</head>
+<body bgcolor="#ffffff">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#c0c0c0" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+next-metadata-route-loader.js</font>
+</center></td></tr></table>
+<pre><span class="s0">&quot;use strict&quot;</span><span class="s1">;</span>
+<span class="s1">Object.defineProperty(exports, </span><span class="s0">&quot;__esModule&quot;</span><span class="s1">, {</span>
+    <span class="s1">value: </span><span class="s2">true</span>
+<span class="s1">});</span>
+<span class="s3">0 </span><span class="s1">&amp;&amp; (module.exports = {</span>
+    <span class="s2">default</span><span class="s1">: </span><span class="s2">null</span><span class="s1">,</span>
+    <span class="s1">getFilenameAndExtension: </span><span class="s2">null</span>
+<span class="s1">});</span>
+<span class="s2">function </span><span class="s1">_export(target, all) {</span>
+    <span class="s2">for</span><span class="s1">(</span><span class="s2">var </span><span class="s1">name </span><span class="s2">in </span><span class="s1">all)Object.defineProperty(target, name, {</span>
+        <span class="s1">enumerable: </span><span class="s2">true</span><span class="s1">,</span>
+        <span class="s1">get: all[name]</span>
+    <span class="s1">});</span>
+<span class="s1">}</span>
+<span class="s1">_export(exports, {</span>
+    <span class="s2">default</span><span class="s1">: </span><span class="s2">function</span><span class="s1">() {</span>
+        <span class="s2">return </span><span class="s1">_default;</span>
+    <span class="s1">},</span>
+    <span class="s1">getFilenameAndExtension: </span><span class="s2">function</span><span class="s1">() {</span>
+        <span class="s2">return </span><span class="s1">getFilenameAndExtension;</span>
+    <span class="s1">}</span>
+<span class="s1">});</span>
+<span class="s2">const </span><span class="s1">_fs = </span><span class="s4">/*#__PURE__*/ </span><span class="s1">_interop_require_default(require(</span><span class="s0">&quot;fs&quot;</span><span class="s1">));</span>
+<span class="s2">const </span><span class="s1">_path = </span><span class="s4">/*#__PURE__*/ </span><span class="s1">_interop_require_default(require(</span><span class="s0">&quot;path&quot;</span><span class="s1">));</span>
+<span class="s2">const </span><span class="s1">_mimetype = require(</span><span class="s0">&quot;../../../lib/mime-type&quot;</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">_utils = require(</span><span class="s0">&quot;./utils&quot;</span><span class="s1">);</span>
+<span class="s2">function </span><span class="s1">_interop_require_default(obj) {</span>
+    <span class="s2">return </span><span class="s1">obj &amp;&amp; obj.__esModule ? obj : {</span>
+        <span class="s2">default</span><span class="s1">: obj</span>
+    <span class="s1">};</span>
+<span class="s1">}</span>
+<span class="s2">function </span><span class="s1">errorOnBadHandler(resourcePath) {</span>
+    <span class="s2">return </span><span class="s0">`</span>
+  <span class="s0">if (typeof handler !== 'function') { 
+    throw new Error('Default export is missing in </span><span class="s1">${JSON.stringify(resourcePath)}</span><span class="s0">') 
+  } 
+  `</span><span class="s1">;</span>
+<span class="s1">}</span>
+<span class="s4">/* re-export the userland route configs */ </span><span class="s1">async </span><span class="s2">function </span><span class="s1">createReExportsCode(resourcePath, loaderContext) {</span>
+    <span class="s2">const </span><span class="s1">exportNames = </span><span class="s2">await </span><span class="s1">(</span><span class="s3">0</span><span class="s1">, _utils.getLoaderModuleNamedExports)(resourcePath, loaderContext);</span>
+    <span class="s4">// Re-export configs but avoid conflicted exports</span>
+    <span class="s2">const </span><span class="s1">reExportNames = exportNames.filter((name)=&gt;name !== </span><span class="s0">'default' </span><span class="s1">&amp;&amp; name !== </span><span class="s0">'generateSitemaps'</span><span class="s1">);</span>
+    <span class="s2">return </span><span class="s1">reExportNames.length &gt; </span><span class="s3">0 </span><span class="s1">? </span><span class="s0">`export { </span><span class="s1">${reExportNames.join(</span><span class="s0">', '</span><span class="s1">)} </span><span class="s0">} from </span><span class="s1">${JSON.stringify(resourcePath)}</span><span class="s5">\n</span><span class="s0">` </span><span class="s1">: </span><span class="s0">''</span><span class="s1">;</span>
+<span class="s1">}</span>
+<span class="s2">const </span><span class="s1">cacheHeader = {</span>
+    <span class="s1">none: </span><span class="s0">'no-cache, no-store'</span><span class="s1">,</span>
+    <span class="s1">longCache: </span><span class="s0">'public, immutable, no-transform, max-age=31536000'</span><span class="s1">,</span>
+    <span class="s1">revalidate: </span><span class="s0">'public, max-age=0, must-revalidate'</span>
+<span class="s1">};</span>
+<span class="s2">function </span><span class="s1">getFilenameAndExtension(resourcePath) {</span>
+    <span class="s2">const </span><span class="s1">filename = _path.default.basename(resourcePath);</span>
+    <span class="s2">const </span><span class="s1">[name, ext] = filename.split(</span><span class="s0">'.'</span><span class="s1">, </span><span class="s3">2</span><span class="s1">);</span>
+    <span class="s2">return </span><span class="s1">{</span>
+        <span class="s1">name,</span>
+        <span class="s1">ext</span>
+    <span class="s1">};</span>
+<span class="s1">}</span>
+<span class="s2">function </span><span class="s1">getContentType(resourcePath) {</span>
+    <span class="s2">let </span><span class="s1">{ name, ext } = getFilenameAndExtension(resourcePath);</span>
+    <span class="s2">if </span><span class="s1">(ext === </span><span class="s0">'jpg'</span><span class="s1">) ext = </span><span class="s0">'jpeg'</span><span class="s1">;</span>
+    <span class="s2">if </span><span class="s1">(name === </span><span class="s0">'favicon' </span><span class="s1">&amp;&amp; ext === </span><span class="s0">'ico'</span><span class="s1">) </span><span class="s2">return </span><span class="s0">'image/x-icon'</span><span class="s1">;</span>
+    <span class="s2">if </span><span class="s1">(name === </span><span class="s0">'sitemap'</span><span class="s1">) </span><span class="s2">return </span><span class="s0">'application/xml'</span><span class="s1">;</span>
+    <span class="s2">if </span><span class="s1">(name === </span><span class="s0">'robots'</span><span class="s1">) </span><span class="s2">return </span><span class="s0">'text/plain'</span><span class="s1">;</span>
+    <span class="s2">if </span><span class="s1">(name === </span><span class="s0">'manifest'</span><span class="s1">) </span><span class="s2">return </span><span class="s0">'application/manifest+json'</span><span class="s1">;</span>
+    <span class="s2">if </span><span class="s1">(ext === </span><span class="s0">'png' </span><span class="s1">|| ext === </span><span class="s0">'jpeg' </span><span class="s1">|| ext === </span><span class="s0">'ico' </span><span class="s1">|| ext === </span><span class="s0">'svg'</span><span class="s1">) {</span>
+        <span class="s2">return </span><span class="s1">_mimetype.imageExtMimeTypeMap[ext];</span>
+    <span class="s1">}</span>
+    <span class="s2">return </span><span class="s0">'text/plain'</span><span class="s1">;</span>
+<span class="s1">}</span>
+<span class="s1">async </span><span class="s2">function </span><span class="s1">getStaticAssetRouteCode(resourcePath, fileBaseName) {</span>
+    <span class="s2">const </span><span class="s1">cache = fileBaseName === </span><span class="s0">'favicon' </span><span class="s1">? </span><span class="s0">'public, max-age=0, must-revalidate' </span><span class="s1">: process.env.NODE_ENV !== </span><span class="s0">'production' </span><span class="s1">? cacheHeader.none : cacheHeader.longCache;</span>
+    <span class="s2">const </span><span class="s1">isTwitter = fileBaseName === </span><span class="s0">'twitter-image'</span><span class="s1">;</span>
+    <span class="s2">const </span><span class="s1">isOpenGraph = fileBaseName === </span><span class="s0">'opengraph-image'</span><span class="s1">;</span>
+    <span class="s4">// Twitter image file size limit is 5MB.</span>
+    <span class="s4">// General Open Graph image file size limit is 8MB.</span>
+    <span class="s4">// x-ref: https://developer.x.com/en/docs/x-for-websites/cards/overview/summary</span>
+    <span class="s4">// x-ref(facebook): https://developers.facebook.com/docs/sharing/webmasters/images</span>
+    <span class="s2">const </span><span class="s1">fileSizeLimit = isTwitter ? </span><span class="s3">5 </span><span class="s1">: </span><span class="s3">8</span><span class="s1">;</span>
+    <span class="s2">const </span><span class="s1">imgName = isTwitter ? </span><span class="s0">'Twitter' </span><span class="s1">: </span><span class="s0">'Open Graph'</span><span class="s1">;</span>
+    <span class="s2">const </span><span class="s1">code = </span><span class="s0">`</span><span class="s5">\ 
+</span><span class="s0">/* static asset route */ 
+import { NextResponse } from 'next/server' 
+ 
+const contentType = </span><span class="s1">${JSON.stringify(getContentType(resourcePath))}</span>
+<span class="s0">const buffer = Buffer.from(</span><span class="s1">${JSON.stringify((</span><span class="s2">await </span><span class="s1">_fs.default.promises.readFile(resourcePath)).toString(</span><span class="s0">'base64'</span><span class="s1">))}</span><span class="s0">, 'base64' 
+  ) 
+ 
+if (</span><span class="s1">${isTwitter || isOpenGraph}</span><span class="s0">) { 
+  const fileSizeInMB = buffer.byteLength / 1024 / 1024 
+  if (fileSizeInMB &gt; </span><span class="s1">${fileSizeLimit}</span><span class="s0">) { 
+    throw new Error('File size for </span><span class="s1">${imgName} </span><span class="s0">image </span><span class="s1">${JSON.stringify(resourcePath)} </span><span class="s0">exceeds </span><span class="s1">${fileSizeLimit}</span><span class="s0">MB. ' + 
+    </span><span class="s5">\`</span><span class="s0">(Current: </span><span class="s5">\$</span><span class="s0">{fileSizeInMB.toFixed(2)}MB)</span><span class="s5">\n\` </span><span class="s0">+ 
+    'Read more: https://nextjs.org/docs/app/api-reference/file-conventions/metadata/opengraph-image#image-files-jpg-png-gif' 
+    ) 
+  } 
+} 
+ 
+export function GET() { 
+  return new NextResponse(buffer, { 
+    headers: { 
+      'Content-Type': contentType, 
+      'Cache-Control': </span><span class="s1">${JSON.stringify(cache)}</span><span class="s0">, 
+    }, 
+  }) 
+} 
+ 
+export const dynamic = 'force-static' 
+`</span><span class="s1">;</span>
+    <span class="s2">return </span><span class="s1">code;</span>
+<span class="s1">}</span>
+<span class="s1">async </span><span class="s2">function </span><span class="s1">getDynamicTextRouteCode(resourcePath, loaderContext) {</span>
+    <span class="s2">return </span><span class="s0">`</span><span class="s5">\ 
+</span><span class="s0">/* dynamic asset route */ 
+import { NextResponse } from 'next/server' 
+import handler from </span><span class="s1">${JSON.stringify(resourcePath)}</span>
+<span class="s0">import { resolveRouteData } from 'next/dist/build/webpack/loaders/metadata/resolve-route-data' 
+ 
+const contentType = </span><span class="s1">${JSON.stringify(getContentType(resourcePath))}</span>
+<span class="s0">const fileType = </span><span class="s1">${JSON.stringify(getFilenameAndExtension(resourcePath).name)}</span>
+
+<span class="s1">${errorOnBadHandler(resourcePath)}</span>
+<span class="s1">${</span><span class="s2">await </span><span class="s1">createReExportsCode(resourcePath, loaderContext)}</span>
+
+<span class="s0">export async function GET() { 
+  const data = await handler() 
+  const content = resolveRouteData(data, fileType) 
+ 
+  return new NextResponse(content, { 
+    headers: { 
+      'Content-Type': contentType, 
+      'Cache-Control': </span><span class="s1">${JSON.stringify(cacheHeader.revalidate)}</span><span class="s0">, 
+    }, 
+  }) 
+} 
+`</span><span class="s1">;</span>
+<span class="s1">}</span>
+<span class="s4">// &lt;metadata-image&gt;/[id]/route.js</span>
+<span class="s1">async </span><span class="s2">function </span><span class="s1">getDynamicImageRouteCode(resourcePath, loaderContext) {</span>
+    <span class="s2">return </span><span class="s0">`</span><span class="s5">\ 
+</span><span class="s0">/* dynamic image route */ 
+import { NextResponse } from 'next/server' 
+import * as userland from </span><span class="s1">${JSON.stringify(resourcePath)}</span>
+
+<span class="s0">const imageModule = { ...userland } 
+ 
+const handler = imageModule.default 
+const generateImageMetadata = imageModule.generateImageMetadata 
+ 
+</span><span class="s1">${errorOnBadHandler(resourcePath)}</span>
+<span class="s1">${</span><span class="s2">await </span><span class="s1">createReExportsCode(resourcePath, loaderContext)}</span>
+
+<span class="s0">export async function GET(_, ctx) { 
+  const params = await ctx.params 
+  const { __metadata_id__, ...rest } = params || {} 
+  const restParams = params ? rest : undefined 
+  const targetId = __metadata_id__ 
+  let id = undefined 
+   
+  if (generateImageMetadata) { 
+    const imageMetadata = await generateImageMetadata({ params: restParams }) 
+    id = imageMetadata.find((item) =&gt; { 
+      if (process.env.NODE_ENV !== 'production') { 
+        if (item?.id == null) { 
+          throw new Error('id property is required for every item returned from generateImageMetadata') 
+        } 
+      } 
+      return item.id.toString() === targetId 
+    })?.id 
+    if (id == null) { 
+      return new NextResponse('Not Found', { 
+        status: 404, 
+      }) 
+    } 
+  } 
+ 
+  return handler({ params: restParams, id }) 
+} 
+`</span><span class="s1">;</span>
+<span class="s1">}</span>
+<span class="s1">async </span><span class="s2">function </span><span class="s1">getDynamicSitemapRouteCode(resourcePath, loaderContext) {</span>
+    <span class="s2">let </span><span class="s1">staticGenerationCode = </span><span class="s0">''</span><span class="s1">;</span>
+    <span class="s2">const </span><span class="s1">exportNames = </span><span class="s2">await </span><span class="s1">(</span><span class="s3">0</span><span class="s1">, _utils.getLoaderModuleNamedExports)(resourcePath, loaderContext);</span>
+    <span class="s2">const </span><span class="s1">hasGenerateSitemaps = exportNames.includes(</span><span class="s0">'generateSitemaps'</span><span class="s1">);</span>
+    <span class="s2">if </span><span class="s1">(process.env.NODE_ENV === </span><span class="s0">'production' </span><span class="s1">&amp;&amp; hasGenerateSitemaps) {</span>
+        <span class="s1">staticGenerationCode = </span><span class="s0">`</span><span class="s5">\ 
+    </span><span class="s0">/* dynamic sitemap route */ 
+    export async function generateStaticParams() { 
+      const sitemaps = await sitemapModule.generateSitemaps() 
+      const params = [] 
+ 
+      for (const item of sitemaps) { 
+        params.push({ __metadata_id__: item.id.toString() + '.xml' }) 
+      } 
+      return params 
+    } 
+    `</span><span class="s1">;</span>
+    <span class="s1">}</span>
+    <span class="s2">const </span><span class="s1">code = </span><span class="s0">`</span><span class="s5">\ 
+</span><span class="s0">import { NextResponse } from 'next/server' 
+import * as userland from </span><span class="s1">${JSON.stringify(resourcePath)}</span>
+<span class="s0">import { resolveRouteData } from 'next/dist/build/webpack/loaders/metadata/resolve-route-data' 
+ 
+const sitemapModule = { ...userland } 
+const handler = sitemapModule.default 
+const contentType = </span><span class="s1">${JSON.stringify(getContentType(resourcePath))}</span>
+<span class="s0">const fileType = </span><span class="s1">${JSON.stringify(getFilenameAndExtension(resourcePath).name)}</span>
+
+<span class="s1">${errorOnBadHandler(resourcePath)}</span>
+<span class="s1">${</span><span class="s2">await </span><span class="s1">createReExportsCode(resourcePath, loaderContext)}</span>
+
+<span class="s0">export async function GET(_, ctx) { 
+  const { __metadata_id__: id, ...params } = await ctx.params || {} 
+  const hasXmlExtension = id ? id.endsWith('.xml') : false 
+ 
+  if (id &amp;&amp; !hasXmlExtension) { 
+    return new NextResponse('Not Found', { 
+      status: 404, 
+    }) 
+  } 
+ 
+  if (process.env.NODE_ENV !== 'production' &amp;&amp; sitemapModule.generateSitemaps) { 
+    const sitemaps = await sitemapModule.generateSitemaps() 
+    for (const item of sitemaps) { 
+      if (item?.id == null) { 
+        throw new Error('id property is required for every item returned from generateSitemaps') 
+      } 
+    } 
+  } 
+ 
+  const targetId = id &amp;&amp; hasXmlExtension ? id.slice(0, -4) : undefined 
+ 
+  const data = await handler({ id: targetId }) 
+  const content = resolveRouteData(data, fileType) 
+ 
+  return new NextResponse(content, { 
+    headers: { 
+      'Content-Type': contentType, 
+      'Cache-Control': </span><span class="s1">${JSON.stringify(cacheHeader.revalidate)}</span><span class="s0">, 
+    }, 
+  }) 
+} 
+ 
+</span><span class="s1">${staticGenerationCode}</span>
+<span class="s0">`</span><span class="s1">;</span>
+    <span class="s2">return </span><span class="s1">code;</span>
+<span class="s1">}</span>
+<span class="s4">// When it's static route, it could be favicon.ico, sitemap.xml, robots.txt etc.</span>
+<span class="s4">// TODO-METADATA: improve the cache control strategy</span>
+<span class="s2">const </span><span class="s1">nextMetadataRouterLoader = async </span><span class="s2">function</span><span class="s1">() {</span>
+    <span class="s2">const </span><span class="s1">{ isDynamicRouteExtension, filePath } = </span><span class="s2">this</span><span class="s1">.getOptions();</span>
+    <span class="s2">const </span><span class="s1">{ name: fileBaseName } = getFilenameAndExtension(filePath);</span>
+    <span class="s2">this</span><span class="s1">.addDependency(filePath);</span>
+    <span class="s2">let </span><span class="s1">code = </span><span class="s0">''</span><span class="s1">;</span>
+    <span class="s2">if </span><span class="s1">(isDynamicRouteExtension === </span><span class="s0">'1'</span><span class="s1">) {</span>
+        <span class="s2">if </span><span class="s1">(fileBaseName === </span><span class="s0">'robots' </span><span class="s1">|| fileBaseName === </span><span class="s0">'manifest'</span><span class="s1">) {</span>
+            <span class="s1">code = </span><span class="s2">await </span><span class="s1">getDynamicTextRouteCode(filePath, </span><span class="s2">this</span><span class="s1">);</span>
+        <span class="s1">} </span><span class="s2">else if </span><span class="s1">(fileBaseName === </span><span class="s0">'sitemap'</span><span class="s1">) {</span>
+            <span class="s1">code = </span><span class="s2">await </span><span class="s1">getDynamicSitemapRouteCode(filePath, </span><span class="s2">this</span><span class="s1">);</span>
+        <span class="s1">} </span><span class="s2">else </span><span class="s1">{</span>
+            <span class="s1">code = </span><span class="s2">await </span><span class="s1">getDynamicImageRouteCode(filePath, </span><span class="s2">this</span><span class="s1">);</span>
+        <span class="s1">}</span>
+    <span class="s1">} </span><span class="s2">else </span><span class="s1">{</span>
+        <span class="s1">code = </span><span class="s2">await </span><span class="s1">getStaticAssetRouteCode(filePath, fileBaseName);</span>
+    <span class="s1">}</span>
+    <span class="s2">return </span><span class="s1">code;</span>
+<span class="s1">};</span>
+<span class="s2">const </span><span class="s1">_default = nextMetadataRouterLoader;</span>
+
+<span class="s4">//# sourceMappingURL=next-metadata-route-loader.js.map</span></pre>
+</body>
+</html>

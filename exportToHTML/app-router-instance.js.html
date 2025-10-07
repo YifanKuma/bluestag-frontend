@@ -1,0 +1,364 @@
+<html>
+<head>
+<title>app-router-instance.js</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #067d17;}
+.s1 { color: #080808;}
+.s2 { color: #0033b3;}
+.s3 { color: #1750eb;}
+.s4 { color: #8c8c8c; font-style: italic;}
+</style>
+</head>
+<body bgcolor="#ffffff">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#c0c0c0" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+app-router-instance.js</font>
+</center></td></tr></table>
+<pre><span class="s0">&quot;use strict&quot;</span><span class="s1">;</span>
+<span class="s1">Object.defineProperty(exports, </span><span class="s0">&quot;__esModule&quot;</span><span class="s1">, {</span>
+    <span class="s1">value: </span><span class="s2">true</span>
+<span class="s1">});</span>
+<span class="s3">0 </span><span class="s1">&amp;&amp; (module.exports = {</span>
+    <span class="s1">createMutableActionQueue: </span><span class="s2">null</span><span class="s1">,</span>
+    <span class="s1">dispatchNavigateAction: </span><span class="s2">null</span><span class="s1">,</span>
+    <span class="s1">dispatchTraverseAction: </span><span class="s2">null</span><span class="s1">,</span>
+    <span class="s1">getCurrentAppRouterState: </span><span class="s2">null</span><span class="s1">,</span>
+    <span class="s1">publicAppRouterInstance: </span><span class="s2">null</span>
+<span class="s1">});</span>
+<span class="s2">function </span><span class="s1">_export(target, all) {</span>
+    <span class="s2">for</span><span class="s1">(</span><span class="s2">var </span><span class="s1">name </span><span class="s2">in </span><span class="s1">all)Object.defineProperty(target, name, {</span>
+        <span class="s1">enumerable: </span><span class="s2">true</span><span class="s1">,</span>
+        <span class="s1">get: all[name]</span>
+    <span class="s1">});</span>
+<span class="s1">}</span>
+<span class="s1">_export(exports, {</span>
+    <span class="s1">createMutableActionQueue: </span><span class="s2">function</span><span class="s1">() {</span>
+        <span class="s2">return </span><span class="s1">createMutableActionQueue;</span>
+    <span class="s1">},</span>
+    <span class="s1">dispatchNavigateAction: </span><span class="s2">function</span><span class="s1">() {</span>
+        <span class="s2">return </span><span class="s1">dispatchNavigateAction;</span>
+    <span class="s1">},</span>
+    <span class="s1">dispatchTraverseAction: </span><span class="s2">function</span><span class="s1">() {</span>
+        <span class="s2">return </span><span class="s1">dispatchTraverseAction;</span>
+    <span class="s1">},</span>
+    <span class="s1">getCurrentAppRouterState: </span><span class="s2">function</span><span class="s1">() {</span>
+        <span class="s2">return </span><span class="s1">getCurrentAppRouterState;</span>
+    <span class="s1">},</span>
+    <span class="s1">publicAppRouterInstance: </span><span class="s2">function</span><span class="s1">() {</span>
+        <span class="s2">return </span><span class="s1">publicAppRouterInstance;</span>
+    <span class="s1">}</span>
+<span class="s1">});</span>
+<span class="s2">const </span><span class="s1">_routerreducertypes = require(</span><span class="s0">&quot;./router-reducer/router-reducer-types&quot;</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">_routerreducer = require(</span><span class="s0">&quot;./router-reducer/router-reducer&quot;</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">_react = require(</span><span class="s0">&quot;react&quot;</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">_isthenable = require(</span><span class="s0">&quot;../../shared/lib/is-thenable&quot;</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">_segmentcache = require(</span><span class="s0">&quot;./segment-cache&quot;</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">_useactionqueue = require(</span><span class="s0">&quot;./use-action-queue&quot;</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">_addbasepath = require(</span><span class="s0">&quot;../add-base-path&quot;</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">_approuter = require(</span><span class="s0">&quot;./app-router&quot;</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">_prefetchreducer = require(</span><span class="s0">&quot;./router-reducer/reducers/prefetch-reducer&quot;</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">_links = require(</span><span class="s0">&quot;./links&quot;</span><span class="s1">);</span>
+<span class="s2">function </span><span class="s1">runRemainingActions(actionQueue, setState) {</span>
+    <span class="s2">if </span><span class="s1">(actionQueue.pending !== </span><span class="s2">null</span><span class="s1">) {</span>
+        <span class="s1">actionQueue.pending = actionQueue.pending.next;</span>
+        <span class="s2">if </span><span class="s1">(actionQueue.pending !== </span><span class="s2">null</span><span class="s1">) {</span>
+            <span class="s4">// eslint-disable-next-line @typescript-eslint/no-use-before-define</span>
+            <span class="s1">runAction({</span>
+                <span class="s1">actionQueue,</span>
+                <span class="s1">action: actionQueue.pending,</span>
+                <span class="s1">setState</span>
+            <span class="s1">});</span>
+        <span class="s1">} </span><span class="s2">else </span><span class="s1">{</span>
+            <span class="s4">// No more actions are pending, check if a refresh is needed</span>
+            <span class="s2">if </span><span class="s1">(actionQueue.needsRefresh) {</span>
+                <span class="s1">actionQueue.needsRefresh = </span><span class="s2">false</span><span class="s1">;</span>
+                <span class="s1">actionQueue.dispatch({</span>
+                    <span class="s1">type: _routerreducertypes.ACTION_REFRESH,</span>
+                    <span class="s1">origin: window.location.origin</span>
+                <span class="s1">}, setState);</span>
+            <span class="s1">}</span>
+        <span class="s1">}</span>
+    <span class="s1">}</span>
+<span class="s1">}</span>
+<span class="s1">async </span><span class="s2">function </span><span class="s1">runAction(param) {</span>
+    <span class="s2">let </span><span class="s1">{ actionQueue, action, setState } = param;</span>
+    <span class="s2">const </span><span class="s1">prevState = actionQueue.state;</span>
+    <span class="s1">actionQueue.pending = action;</span>
+    <span class="s2">const </span><span class="s1">payload = action.payload;</span>
+    <span class="s2">const </span><span class="s1">actionResult = actionQueue.action(prevState, payload);</span>
+    <span class="s2">function </span><span class="s1">handleResult(nextState) {</span>
+        <span class="s4">// if we discarded this action, the state should also be discarded</span>
+        <span class="s2">if </span><span class="s1">(action.discarded) {</span>
+            <span class="s2">return</span><span class="s1">;</span>
+        <span class="s1">}</span>
+        <span class="s1">actionQueue.state = nextState;</span>
+        <span class="s1">runRemainingActions(actionQueue, setState);</span>
+        <span class="s1">action.resolve(nextState);</span>
+    <span class="s1">}</span>
+    <span class="s4">// if the action is a promise, set up a callback to resolve it</span>
+    <span class="s2">if </span><span class="s1">((</span><span class="s3">0</span><span class="s1">, _isthenable.isThenable)(actionResult)) {</span>
+        <span class="s1">actionResult.then(handleResult, (err)=&gt;{</span>
+            <span class="s1">runRemainingActions(actionQueue, setState);</span>
+            <span class="s1">action.reject(err);</span>
+        <span class="s1">});</span>
+    <span class="s1">} </span><span class="s2">else </span><span class="s1">{</span>
+        <span class="s1">handleResult(actionResult);</span>
+    <span class="s1">}</span>
+<span class="s1">}</span>
+<span class="s2">function </span><span class="s1">dispatchAction(actionQueue, payload, setState) {</span>
+    <span class="s2">let </span><span class="s1">resolvers = {</span>
+        <span class="s1">resolve: setState,</span>
+        <span class="s1">reject: ()=&gt;{}</span>
+    <span class="s1">};</span>
+    <span class="s4">// most of the action types are async with the exception of restore</span>
+    <span class="s4">// it's important that restore is handled quickly since it's fired on the popstate event</span>
+    <span class="s4">// and we don't want to add any delay on a back/forward nav</span>
+    <span class="s4">// this only creates a promise for the async actions</span>
+    <span class="s2">if </span><span class="s1">(payload.type !== _routerreducertypes.ACTION_RESTORE) {</span>
+        <span class="s4">// Create the promise and assign the resolvers to the object.</span>
+        <span class="s2">const </span><span class="s1">deferredPromise = </span><span class="s2">new </span><span class="s1">Promise((resolve, reject)=&gt;{</span>
+            <span class="s1">resolvers = {</span>
+                <span class="s1">resolve,</span>
+                <span class="s1">reject</span>
+            <span class="s1">};</span>
+        <span class="s1">});</span>
+        <span class="s1">(</span><span class="s3">0</span><span class="s1">, _react.startTransition)(()=&gt;{</span>
+            <span class="s4">// we immediately notify React of the pending promise -- the resolver is attached to the action node</span>
+            <span class="s4">// and will be called when the associated action promise resolves</span>
+            <span class="s1">setState(deferredPromise);</span>
+        <span class="s1">});</span>
+    <span class="s1">}</span>
+    <span class="s2">const </span><span class="s1">newAction = {</span>
+        <span class="s1">payload,</span>
+        <span class="s1">next: </span><span class="s2">null</span><span class="s1">,</span>
+        <span class="s1">resolve: resolvers.resolve,</span>
+        <span class="s1">reject: resolvers.reject</span>
+    <span class="s1">};</span>
+    <span class="s4">// Check if the queue is empty</span>
+    <span class="s2">if </span><span class="s1">(actionQueue.pending === </span><span class="s2">null</span><span class="s1">) {</span>
+        <span class="s4">// The queue is empty, so add the action and start it immediately</span>
+        <span class="s4">// Mark this action as the last in the queue</span>
+        <span class="s1">actionQueue.last = newAction;</span>
+        <span class="s1">runAction({</span>
+            <span class="s1">actionQueue,</span>
+            <span class="s1">action: newAction,</span>
+            <span class="s1">setState</span>
+        <span class="s1">});</span>
+    <span class="s1">} </span><span class="s2">else if </span><span class="s1">(payload.type === _routerreducertypes.ACTION_NAVIGATE || payload.type === _routerreducertypes.ACTION_RESTORE) {</span>
+        <span class="s4">// Navigations (including back/forward) take priority over any pending actions.</span>
+        <span class="s4">// Mark the pending action as discarded (so the state is never applied) and start the navigation action immediately.</span>
+        <span class="s1">actionQueue.pending.discarded = </span><span class="s2">true</span><span class="s1">;</span>
+        <span class="s4">// The rest of the current queue should still execute after this navigation.</span>
+        <span class="s4">// (Note that it can't contain any earlier navigations, because we always put those into `actionQueue.pending` by calling `runAction`)</span>
+        <span class="s1">newAction.next = actionQueue.pending.next;</span>
+        <span class="s4">// if the pending action was a server action, mark the queue as needing a refresh once events are processed</span>
+        <span class="s2">if </span><span class="s1">(actionQueue.pending.payload.type === _routerreducertypes.ACTION_SERVER_ACTION) {</span>
+            <span class="s1">actionQueue.needsRefresh = </span><span class="s2">true</span><span class="s1">;</span>
+        <span class="s1">}</span>
+        <span class="s1">runAction({</span>
+            <span class="s1">actionQueue,</span>
+            <span class="s1">action: newAction,</span>
+            <span class="s1">setState</span>
+        <span class="s1">});</span>
+    <span class="s1">} </span><span class="s2">else </span><span class="s1">{</span>
+        <span class="s4">// The queue is not empty, so add the action to the end of the queue</span>
+        <span class="s4">// It will be started by runRemainingActions after the previous action finishes</span>
+        <span class="s2">if </span><span class="s1">(actionQueue.last !== </span><span class="s2">null</span><span class="s1">) {</span>
+            <span class="s1">actionQueue.last.next = newAction;</span>
+        <span class="s1">}</span>
+        <span class="s1">actionQueue.last = newAction;</span>
+    <span class="s1">}</span>
+<span class="s1">}</span>
+<span class="s2">let </span><span class="s1">globalActionQueue = </span><span class="s2">null</span><span class="s1">;</span>
+<span class="s2">function </span><span class="s1">createMutableActionQueue(initialState, instrumentationHooks) {</span>
+    <span class="s2">const </span><span class="s1">actionQueue = {</span>
+        <span class="s1">state: initialState,</span>
+        <span class="s1">dispatch: (payload, setState)=&gt;dispatchAction(actionQueue, payload, setState),</span>
+        <span class="s1">action: async (state, action)=&gt;{</span>
+            <span class="s2">const </span><span class="s1">result = (</span><span class="s3">0</span><span class="s1">, _routerreducer.reducer)(state, action);</span>
+            <span class="s2">return </span><span class="s1">result;</span>
+        <span class="s1">},</span>
+        <span class="s1">pending: </span><span class="s2">null</span><span class="s1">,</span>
+        <span class="s1">last: </span><span class="s2">null</span><span class="s1">,</span>
+        <span class="s1">onRouterTransitionStart: instrumentationHooks !== </span><span class="s2">null </span><span class="s1">&amp;&amp; </span><span class="s2">typeof </span><span class="s1">instrumentationHooks.onRouterTransitionStart === </span><span class="s0">'function' </span><span class="s1">? instrumentationHooks.onRouterTransitionStart : </span><span class="s2">null</span>
+    <span class="s1">};</span>
+    <span class="s2">if </span><span class="s1">(</span><span class="s2">typeof </span><span class="s1">window !== </span><span class="s0">'undefined'</span><span class="s1">) {</span>
+        <span class="s4">// The action queue is lazily created on hydration, but after that point</span>
+        <span class="s4">// it doesn't change. So we can store it in a global rather than pass</span>
+        <span class="s4">// it around everywhere via props/context.</span>
+        <span class="s2">if </span><span class="s1">(globalActionQueue !== </span><span class="s2">null</span><span class="s1">) {</span>
+            <span class="s2">throw </span><span class="s1">Object.defineProperty(</span><span class="s2">new </span><span class="s1">Error(</span><span class="s0">'Internal Next.js Error: createMutableActionQueue was called more ' </span><span class="s1">+ </span><span class="s0">'than once'</span><span class="s1">), </span><span class="s0">&quot;__NEXT_ERROR_CODE&quot;</span><span class="s1">, {</span>
+                <span class="s1">value: </span><span class="s0">&quot;E624&quot;</span><span class="s1">,</span>
+                <span class="s1">enumerable: </span><span class="s2">false</span><span class="s1">,</span>
+                <span class="s1">configurable: </span><span class="s2">true</span>
+            <span class="s1">});</span>
+        <span class="s1">}</span>
+        <span class="s1">globalActionQueue = actionQueue;</span>
+    <span class="s1">}</span>
+    <span class="s2">return </span><span class="s1">actionQueue;</span>
+<span class="s1">}</span>
+<span class="s2">function </span><span class="s1">getCurrentAppRouterState() {</span>
+    <span class="s2">return </span><span class="s1">globalActionQueue !== </span><span class="s2">null </span><span class="s1">? globalActionQueue.state : </span><span class="s2">null</span><span class="s1">;</span>
+<span class="s1">}</span>
+<span class="s2">function </span><span class="s1">getAppRouterActionQueue() {</span>
+    <span class="s2">if </span><span class="s1">(globalActionQueue === </span><span class="s2">null</span><span class="s1">) {</span>
+        <span class="s2">throw </span><span class="s1">Object.defineProperty(</span><span class="s2">new </span><span class="s1">Error(</span><span class="s0">'Internal Next.js error: Router action dispatched before initialization.'</span><span class="s1">), </span><span class="s0">&quot;__NEXT_ERROR_CODE&quot;</span><span class="s1">, {</span>
+            <span class="s1">value: </span><span class="s0">&quot;E668&quot;</span><span class="s1">,</span>
+            <span class="s1">enumerable: </span><span class="s2">false</span><span class="s1">,</span>
+            <span class="s1">configurable: </span><span class="s2">true</span>
+        <span class="s1">});</span>
+    <span class="s1">}</span>
+    <span class="s2">return </span><span class="s1">globalActionQueue;</span>
+<span class="s1">}</span>
+<span class="s2">function </span><span class="s1">getProfilingHookForOnNavigationStart() {</span>
+    <span class="s2">if </span><span class="s1">(globalActionQueue !== </span><span class="s2">null</span><span class="s1">) {</span>
+        <span class="s2">return </span><span class="s1">globalActionQueue.onRouterTransitionStart;</span>
+    <span class="s1">}</span>
+    <span class="s2">return null</span><span class="s1">;</span>
+<span class="s1">}</span>
+<span class="s2">function </span><span class="s1">dispatchNavigateAction(href, navigateType, shouldScroll, linkInstanceRef) {</span>
+    <span class="s4">// TODO: This stuff could just go into the reducer. Leaving as-is for now</span>
+    <span class="s4">// since we're about to rewrite all the router reducer stuff anyway.</span>
+    <span class="s2">const </span><span class="s1">url = </span><span class="s2">new </span><span class="s1">URL((</span><span class="s3">0</span><span class="s1">, _addbasepath.addBasePath)(href), location.href);</span>
+    <span class="s2">if </span><span class="s1">(process.env.__NEXT_APP_NAV_FAIL_HANDLING) {</span>
+        <span class="s1">window.next.__pendingUrl = url;</span>
+    <span class="s1">}</span>
+    <span class="s1">(</span><span class="s3">0</span><span class="s1">, _links.setLinkForCurrentNavigation)(linkInstanceRef);</span>
+    <span class="s2">const </span><span class="s1">onRouterTransitionStart = getProfilingHookForOnNavigationStart();</span>
+    <span class="s2">if </span><span class="s1">(onRouterTransitionStart !== </span><span class="s2">null</span><span class="s1">) {</span>
+        <span class="s1">onRouterTransitionStart(href, navigateType);</span>
+    <span class="s1">}</span>
+    <span class="s1">(</span><span class="s3">0</span><span class="s1">, _useactionqueue.dispatchAppRouterAction)({</span>
+        <span class="s1">type: _routerreducertypes.ACTION_NAVIGATE,</span>
+        <span class="s1">url,</span>
+        <span class="s1">isExternalUrl: (</span><span class="s3">0</span><span class="s1">, _approuter.isExternalURL)(url),</span>
+        <span class="s1">locationSearch: location.search,</span>
+        <span class="s1">shouldScroll,</span>
+        <span class="s1">navigateType,</span>
+        <span class="s1">allowAliasing: </span><span class="s2">true</span>
+    <span class="s1">});</span>
+<span class="s1">}</span>
+<span class="s2">function </span><span class="s1">dispatchTraverseAction(href, tree) {</span>
+    <span class="s2">const </span><span class="s1">onRouterTransitionStart = getProfilingHookForOnNavigationStart();</span>
+    <span class="s2">if </span><span class="s1">(onRouterTransitionStart !== </span><span class="s2">null</span><span class="s1">) {</span>
+        <span class="s1">onRouterTransitionStart(href, </span><span class="s0">'traverse'</span><span class="s1">);</span>
+    <span class="s1">}</span>
+    <span class="s1">(</span><span class="s3">0</span><span class="s1">, _useactionqueue.dispatchAppRouterAction)({</span>
+        <span class="s1">type: _routerreducertypes.ACTION_RESTORE,</span>
+        <span class="s1">url: </span><span class="s2">new </span><span class="s1">URL(href),</span>
+        <span class="s1">tree</span>
+    <span class="s1">});</span>
+<span class="s1">}</span>
+<span class="s2">const </span><span class="s1">publicAppRouterInstance = {</span>
+    <span class="s1">back: ()=&gt;window.history.back(),</span>
+    <span class="s1">forward: ()=&gt;window.history.forward(),</span>
+    <span class="s1">prefetch: process.env.__NEXT_CLIENT_SEGMENT_CACHE ? </span><span class="s4">// data in the router reducer state; it writes into a global mutable</span>
+    <span class="s4">// cache. So we don't need to dispatch an action.</span>
+    <span class="s1">(href, options)=&gt;{</span>
+        <span class="s2">const </span><span class="s1">actionQueue = getAppRouterActionQueue();</span>
+        <span class="s2">var </span><span class="s1">_options_kind;</span>
+        <span class="s2">const </span><span class="s1">prefetchKind = (_options_kind = options == </span><span class="s2">null </span><span class="s1">? </span><span class="s2">void </span><span class="s3">0 </span><span class="s1">: options.kind) != </span><span class="s2">null </span><span class="s1">? _options_kind : _routerreducertypes.PrefetchKind.AUTO;</span>
+        <span class="s4">// We don't currently offer a way to issue a runtime prefetch via `router.prefetch()`.</span>
+        <span class="s4">// This will be possible when we update its API to not take a PrefetchKind.</span>
+        <span class="s2">let </span><span class="s1">fetchStrategy;</span>
+        <span class="s2">switch</span><span class="s1">(prefetchKind){</span>
+            <span class="s2">case </span><span class="s1">_routerreducertypes.PrefetchKind.AUTO:</span>
+                <span class="s1">{</span>
+                    <span class="s4">// We default to PPR. We'll discover whether or not the route supports it with the initial prefetch.</span>
+                    <span class="s1">fetchStrategy = _segmentcache.FetchStrategy.PPR;</span>
+                    <span class="s2">break</span><span class="s1">;</span>
+                <span class="s1">}</span>
+            <span class="s2">case </span><span class="s1">_routerreducertypes.PrefetchKind.FULL:</span>
+                <span class="s1">{</span>
+                    <span class="s1">fetchStrategy = _segmentcache.FetchStrategy.Full;</span>
+                    <span class="s2">break</span><span class="s1">;</span>
+                <span class="s1">}</span>
+            <span class="s2">case </span><span class="s1">_routerreducertypes.PrefetchKind.TEMPORARY:</span>
+                <span class="s1">{</span>
+                    <span class="s4">// This concept doesn't exist in the segment cache implementation.</span>
+                    <span class="s2">return</span><span class="s1">;</span>
+                <span class="s1">}</span>
+            <span class="s2">default</span><span class="s1">:</span>
+                <span class="s1">{</span>
+                    <span class="s1">prefetchKind;</span>
+                    <span class="s4">// Despite typescript thinking that this can't happen,</span>
+                    <span class="s4">// we might get an unexpected value from user code.</span>
+                    <span class="s4">// We don't know what they want, but we know they want a prefetch,</span>
+                    <span class="s4">// so use the default.</span>
+                    <span class="s1">fetchStrategy = _segmentcache.FetchStrategy.PPR;</span>
+                <span class="s1">}</span>
+        <span class="s1">}</span>
+        <span class="s2">var </span><span class="s1">_options_onInvalidate;</span>
+        <span class="s1">(</span><span class="s3">0</span><span class="s1">, _segmentcache.prefetch)(href, actionQueue.state.nextUrl, actionQueue.state.tree, fetchStrategy, (_options_onInvalidate = options == </span><span class="s2">null </span><span class="s1">? </span><span class="s2">void </span><span class="s3">0 </span><span class="s1">: options.onInvalidate) != </span><span class="s2">null </span><span class="s1">? _options_onInvalidate : </span><span class="s2">null</span><span class="s1">);</span>
+    <span class="s1">} : (href, options)=&gt;{</span>
+        <span class="s4">// Use the old prefetch implementation.</span>
+        <span class="s2">const </span><span class="s1">actionQueue = getAppRouterActionQueue();</span>
+        <span class="s2">const </span><span class="s1">url = (</span><span class="s3">0</span><span class="s1">, _approuter.createPrefetchURL)(href);</span>
+        <span class="s2">if </span><span class="s1">(url !== </span><span class="s2">null</span><span class="s1">) {</span>
+            <span class="s2">var </span><span class="s1">_options_kind;</span>
+            <span class="s4">// The prefetch reducer doesn't actually update any state or</span>
+            <span class="s4">// trigger a rerender. It just writes to a mutable cache. So we</span>
+            <span class="s4">// shouldn't bother calling setState/dispatch; we can just re-run</span>
+            <span class="s4">// the reducer directly using the current state.</span>
+            <span class="s4">// TODO: Refactor this away from a &quot;reducer&quot; so it's</span>
+            <span class="s4">// less confusing.</span>
+            <span class="s1">(</span><span class="s3">0</span><span class="s1">, _prefetchreducer.prefetchReducer)(actionQueue.state, {</span>
+                <span class="s1">type: _routerreducertypes.ACTION_PREFETCH,</span>
+                <span class="s1">url,</span>
+                <span class="s1">kind: (_options_kind = options == </span><span class="s2">null </span><span class="s1">? </span><span class="s2">void </span><span class="s3">0 </span><span class="s1">: options.kind) != </span><span class="s2">null </span><span class="s1">? _options_kind : _routerreducertypes.PrefetchKind.FULL</span>
+            <span class="s1">});</span>
+        <span class="s1">}</span>
+    <span class="s1">},</span>
+    <span class="s1">replace: (href, options)=&gt;{</span>
+        <span class="s1">(</span><span class="s3">0</span><span class="s1">, _react.startTransition)(()=&gt;{</span>
+            <span class="s2">var </span><span class="s1">_options_scroll;</span>
+            <span class="s1">dispatchNavigateAction(href, </span><span class="s0">'replace'</span><span class="s1">, (_options_scroll = options == </span><span class="s2">null </span><span class="s1">? </span><span class="s2">void </span><span class="s3">0 </span><span class="s1">: options.scroll) != </span><span class="s2">null </span><span class="s1">? _options_scroll : </span><span class="s2">true</span><span class="s1">, </span><span class="s2">null</span><span class="s1">);</span>
+        <span class="s1">});</span>
+    <span class="s1">},</span>
+    <span class="s1">push: (href, options)=&gt;{</span>
+        <span class="s1">(</span><span class="s3">0</span><span class="s1">, _react.startTransition)(()=&gt;{</span>
+            <span class="s2">var </span><span class="s1">_options_scroll;</span>
+            <span class="s1">dispatchNavigateAction(href, </span><span class="s0">'push'</span><span class="s1">, (_options_scroll = options == </span><span class="s2">null </span><span class="s1">? </span><span class="s2">void </span><span class="s3">0 </span><span class="s1">: options.scroll) != </span><span class="s2">null </span><span class="s1">? _options_scroll : </span><span class="s2">true</span><span class="s1">, </span><span class="s2">null</span><span class="s1">);</span>
+        <span class="s1">});</span>
+    <span class="s1">},</span>
+    <span class="s1">refresh: ()=&gt;{</span>
+        <span class="s1">(</span><span class="s3">0</span><span class="s1">, _react.startTransition)(()=&gt;{</span>
+            <span class="s1">(</span><span class="s3">0</span><span class="s1">, _useactionqueue.dispatchAppRouterAction)({</span>
+                <span class="s1">type: _routerreducertypes.ACTION_REFRESH,</span>
+                <span class="s1">origin: window.location.origin</span>
+            <span class="s1">});</span>
+        <span class="s1">});</span>
+    <span class="s1">},</span>
+    <span class="s1">hmrRefresh: ()=&gt;{</span>
+        <span class="s2">if </span><span class="s1">(process.env.NODE_ENV !== </span><span class="s0">'development'</span><span class="s1">) {</span>
+            <span class="s2">throw </span><span class="s1">Object.defineProperty(</span><span class="s2">new </span><span class="s1">Error(</span><span class="s0">'hmrRefresh can only be used in development mode. Please use refresh instead.'</span><span class="s1">), </span><span class="s0">&quot;__NEXT_ERROR_CODE&quot;</span><span class="s1">, {</span>
+                <span class="s1">value: </span><span class="s0">&quot;E485&quot;</span><span class="s1">,</span>
+                <span class="s1">enumerable: </span><span class="s2">false</span><span class="s1">,</span>
+                <span class="s1">configurable: </span><span class="s2">true</span>
+            <span class="s1">});</span>
+        <span class="s1">} </span><span class="s2">else </span><span class="s1">{</span>
+            <span class="s1">(</span><span class="s3">0</span><span class="s1">, _react.startTransition)(()=&gt;{</span>
+                <span class="s1">(</span><span class="s3">0</span><span class="s1">, _useactionqueue.dispatchAppRouterAction)({</span>
+                    <span class="s1">type: _routerreducertypes.ACTION_HMR_REFRESH,</span>
+                    <span class="s1">origin: window.location.origin</span>
+                <span class="s1">});</span>
+            <span class="s1">});</span>
+        <span class="s1">}</span>
+    <span class="s1">}</span>
+<span class="s1">};</span>
+<span class="s4">// Exists for debugging purposes. Don't use in application code.</span>
+<span class="s2">if </span><span class="s1">(</span><span class="s2">typeof </span><span class="s1">window !== </span><span class="s0">'undefined' </span><span class="s1">&amp;&amp; window.next) {</span>
+    <span class="s1">window.next.router = publicAppRouterInstance;</span>
+<span class="s1">}</span>
+
+<span class="s2">if </span><span class="s1">((</span><span class="s2">typeof </span><span class="s1">exports.default === </span><span class="s0">'function' </span><span class="s1">|| (</span><span class="s2">typeof </span><span class="s1">exports.default === </span><span class="s0">'object' </span><span class="s1">&amp;&amp; exports.default !== </span><span class="s2">null</span><span class="s1">)) &amp;&amp; </span><span class="s2">typeof </span><span class="s1">exports.default.__esModule === </span><span class="s0">'undefined'</span><span class="s1">) {</span>
+  <span class="s1">Object.defineProperty(exports.default, </span><span class="s0">'__esModule'</span><span class="s1">, { value: </span><span class="s2">true </span><span class="s1">});</span>
+  <span class="s1">Object.assign(exports.default, exports);</span>
+  <span class="s1">module.exports = exports.default;</span>
+<span class="s1">}</span>
+
+<span class="s4">//# sourceMappingURL=app-router-instance.js.map</span></pre>
+</body>
+</html>

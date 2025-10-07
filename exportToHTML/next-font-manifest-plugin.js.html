@@ -1,0 +1,141 @@
+<html>
+<head>
+<title>next-font-manifest-plugin.js</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #067d17;}
+.s1 { color: #080808;}
+.s2 { color: #0033b3;}
+.s3 { color: #8c8c8c; font-style: italic;}
+.s4 { color: #264eff;}
+.s5 { color: #1750eb;}
+</style>
+</head>
+<body bgcolor="#ffffff">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#c0c0c0" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+next-font-manifest-plugin.js</font>
+</center></td></tr></table>
+<pre><span class="s0">&quot;use strict&quot;</span><span class="s1">;</span>
+<span class="s1">Object.defineProperty(exports, </span><span class="s0">&quot;__esModule&quot;</span><span class="s1">, {</span>
+    <span class="s1">value: </span><span class="s2">true</span>
+<span class="s1">});</span>
+<span class="s1">Object.defineProperty(exports, </span><span class="s0">&quot;NextFontManifestPlugin&quot;</span><span class="s1">, {</span>
+    <span class="s1">enumerable: </span><span class="s2">true</span><span class="s1">,</span>
+    <span class="s1">get: </span><span class="s2">function</span><span class="s1">() {</span>
+        <span class="s2">return </span><span class="s1">NextFontManifestPlugin;</span>
+    <span class="s1">}</span>
+<span class="s1">});</span>
+<span class="s2">const </span><span class="s1">_webpack = require(</span><span class="s0">&quot;next/dist/compiled/webpack/webpack&quot;</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">_getroutefromentrypoint = </span><span class="s3">/*#__PURE__*/ </span><span class="s1">_interop_require_default(require(</span><span class="s0">&quot;../../../server/get-route-from-entrypoint&quot;</span><span class="s1">));</span>
+<span class="s2">const </span><span class="s1">_constants = require(</span><span class="s0">&quot;../../../shared/lib/constants&quot;</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">_utils = require(</span><span class="s0">&quot;../utils&quot;</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">_path = </span><span class="s3">/*#__PURE__*/ </span><span class="s1">_interop_require_default(require(</span><span class="s0">&quot;path&quot;</span><span class="s1">));</span>
+<span class="s2">function </span><span class="s1">_interop_require_default(obj) {</span>
+    <span class="s2">return </span><span class="s1">obj &amp;&amp; obj.__esModule ? obj : {</span>
+        <span class="s2">default</span><span class="s1">: obj</span>
+    <span class="s1">};</span>
+<span class="s1">}</span>
+<span class="s2">const </span><span class="s1">PLUGIN_NAME = </span><span class="s0">'NextFontManifestPlugin'</span><span class="s1">;</span>
+<span class="s3">/**</span>
+ <span class="s3">* When calling font functions with next/font, you can specify if you'd like the font to be preloaded (true by default).</span>
+ <span class="s3">* e.g.: const inter = Inter({ subsets: ['latin'], preload: true })</span>
+ <span class="s3">*</span>
+ <span class="s3">* In that case, next-font-loader will emit the font file as [name].p.[ext] instead of [name].[ext]</span>
+ <span class="s3">* This function returns those files from an array that can include both preloaded and non-preloaded files.</span>
+ <span class="s3">*/ </span><span class="s2">function </span><span class="s1">getPreloadedFontFiles(fontFiles) {</span>
+    <span class="s2">return </span><span class="s1">fontFiles.filter((file)=&gt;</span><span class="s4">/\.p\.(woff|woff2|eot|ttf|otf)$/</span><span class="s1">.test(file));</span>
+<span class="s1">}</span>
+<span class="s3">/**</span>
+ <span class="s3">* Similarly to getPreloadedFontFiles, but returns true if some of the files includes -s in the name.</span>
+ <span class="s3">* This means that a font is using size adjust in its fallback font.</span>
+ <span class="s3">* This was added to enable adding data-size-adjust=&quot;true&quot; to the dom, used by the Google Aurora team to collect statistics.</span>
+ <span class="s3">*/ </span><span class="s2">function </span><span class="s1">getPageIsUsingSizeAdjust(fontFiles) {</span>
+    <span class="s2">return </span><span class="s1">fontFiles.some((file)=&gt;file.includes(</span><span class="s0">'-s'</span><span class="s1">));</span>
+<span class="s1">}</span>
+<span class="s2">class </span><span class="s1">NextFontManifestPlugin {</span>
+    <span class="s1">constructor(options){</span>
+        <span class="s2">this</span><span class="s1">.appDir = options.appDir;</span>
+    <span class="s1">}</span>
+    <span class="s1">apply(compiler) {</span>
+        <span class="s1">compiler.hooks.make.tap(PLUGIN_NAME, (compilation)=&gt;{</span>
+            <span class="s3">// In this stage the font files are emitted and we can collect all files emitted by each chunkGroup (entry).</span>
+            <span class="s1">compilation.hooks.processAssets.tap({</span>
+                <span class="s1">name: PLUGIN_NAME,</span>
+                <span class="s1">stage: _webpack.webpack.Compilation.PROCESS_ASSETS_STAGE_ADDITIONS</span>
+            <span class="s1">}, ()=&gt;{</span>
+                <span class="s2">const </span><span class="s1">nextFontManifest = {</span>
+                    <span class="s1">pages: {},</span>
+                    <span class="s1">app: {},</span>
+                    <span class="s1">appUsingSizeAdjust: </span><span class="s2">false</span><span class="s1">,</span>
+                    <span class="s1">pagesUsingSizeAdjust: </span><span class="s2">false</span>
+                <span class="s1">};</span>
+                <span class="s2">if </span><span class="s1">(</span><span class="s2">this</span><span class="s1">.appDir) {</span>
+                    <span class="s2">const </span><span class="s1">appDirBase = _path.default.dirname(</span><span class="s2">this</span><span class="s1">.appDir) + _path.default.sep;</span>
+                    <span class="s3">// After all modules are created, we collect the modules that was created by next-font-loader.</span>
+                    <span class="s1">(</span><span class="s5">0</span><span class="s1">, _utils.traverseModules)(compilation, (mod, _chunk, chunkGroup)=&gt;{</span>
+                        <span class="s2">var </span><span class="s1">_mod_request;</span>
+                        <span class="s2">if </span><span class="s1">(mod == </span><span class="s2">null </span><span class="s1">? </span><span class="s2">void </span><span class="s5">0 </span><span class="s1">: (_mod_request = mod.request) == </span><span class="s2">null </span><span class="s1">? </span><span class="s2">void </span><span class="s5">0 </span><span class="s1">: _mod_request.includes(</span><span class="s0">'/next-font-loader/index.js?'</span><span class="s1">)) {</span>
+                            <span class="s2">var </span><span class="s1">_mod_buildInfo;</span>
+                            <span class="s2">if </span><span class="s1">(!((_mod_buildInfo = mod.buildInfo) == </span><span class="s2">null </span><span class="s1">? </span><span class="s2">void </span><span class="s5">0 </span><span class="s1">: _mod_buildInfo.assets)) </span><span class="s2">return</span><span class="s1">;</span>
+                            <span class="s2">const </span><span class="s1">chunkEntryName = (appDirBase + chunkGroup.name).replace(</span><span class="s4">/[\\/]/g</span><span class="s1">, _path.default.sep);</span>
+                            <span class="s2">const </span><span class="s1">modAssets = Object.keys(mod.buildInfo.assets);</span>
+                            <span class="s2">const </span><span class="s1">fontFiles = modAssets.filter((file)=&gt;</span><span class="s4">/\.(woff|woff2|eot|ttf|otf)$/</span><span class="s1">.test(file));</span>
+                            <span class="s3">// Look if size-adjust fallback font is being used</span>
+                            <span class="s2">if </span><span class="s1">(!nextFontManifest.appUsingSizeAdjust) {</span>
+                                <span class="s1">nextFontManifest.appUsingSizeAdjust = getPageIsUsingSizeAdjust(fontFiles);</span>
+                            <span class="s1">}</span>
+                            <span class="s2">const </span><span class="s1">preloadedFontFiles = getPreloadedFontFiles(fontFiles);</span>
+                            <span class="s3">// Add an entry of the module's font files in the manifest.</span>
+                            <span class="s3">// We'll add an entry even if no files should preload.</span>
+                            <span class="s3">// When an entry is present but empty, instead of preloading the font files, a preconnect tag is added.</span>
+                            <span class="s2">if </span><span class="s1">(fontFiles.length &gt; </span><span class="s5">0</span><span class="s1">) {</span>
+                                <span class="s2">if </span><span class="s1">(!nextFontManifest.app[chunkEntryName]) {</span>
+                                    <span class="s1">nextFontManifest.app[chunkEntryName] = [];</span>
+                                <span class="s1">}</span>
+                                <span class="s1">nextFontManifest.app[chunkEntryName].push(...preloadedFontFiles);</span>
+                            <span class="s1">}</span>
+                        <span class="s1">}</span>
+                    <span class="s1">}, (chunkGroup)=&gt;{</span>
+                        <span class="s2">var </span><span class="s1">_chunkGroup_name;</span>
+                        <span class="s3">// Only loop through entrypoints that are under app/.</span>
+                        <span class="s2">return </span><span class="s1">!!((_chunkGroup_name = chunkGroup.name) == </span><span class="s2">null </span><span class="s1">? </span><span class="s2">void </span><span class="s5">0 </span><span class="s1">: _chunkGroup_name.startsWith(</span><span class="s0">'app/'</span><span class="s1">));</span>
+                    <span class="s1">});</span>
+                <span class="s1">}</span>
+                <span class="s3">// Look at all the entrypoints created for pages/.</span>
+                <span class="s2">for </span><span class="s1">(</span><span class="s2">const </span><span class="s1">entrypoint of compilation.entrypoints.values()){</span>
+                    <span class="s2">const </span><span class="s1">pagePath = (</span><span class="s5">0</span><span class="s1">, _getroutefromentrypoint.default)(entrypoint.name);</span>
+                    <span class="s2">if </span><span class="s1">(!pagePath) {</span>
+                        <span class="s2">continue</span><span class="s1">;</span>
+                    <span class="s1">}</span>
+                    <span class="s3">// Get font files from the chunks included in the entrypoint.</span>
+                    <span class="s2">const </span><span class="s1">fontFiles = entrypoint.chunks.flatMap((chunk)=&gt;[</span>
+                            <span class="s1">...chunk.auxiliaryFiles</span>
+                        <span class="s1">]).filter((file)=&gt;</span><span class="s4">/\.(woff|woff2|eot|ttf|otf)$/</span><span class="s1">.test(file));</span>
+                    <span class="s3">// Look if size-adjust fallback font is being used</span>
+                    <span class="s2">if </span><span class="s1">(!nextFontManifest.pagesUsingSizeAdjust) {</span>
+                        <span class="s1">nextFontManifest.pagesUsingSizeAdjust = getPageIsUsingSizeAdjust(fontFiles);</span>
+                    <span class="s1">}</span>
+                    <span class="s2">const </span><span class="s1">preloadedFontFiles = getPreloadedFontFiles(fontFiles);</span>
+                    <span class="s3">// Add an entry of the route's font files in the manifest.</span>
+                    <span class="s3">// We'll add an entry even if no files should preload.</span>
+                    <span class="s3">// When an entry is present but empty, instead of preloading the font files, a preconnect tag is added.</span>
+                    <span class="s2">if </span><span class="s1">(fontFiles.length &gt; </span><span class="s5">0</span><span class="s1">) {</span>
+                        <span class="s1">nextFontManifest.pages[pagePath] = preloadedFontFiles;</span>
+                    <span class="s1">}</span>
+                <span class="s1">}</span>
+                <span class="s2">const </span><span class="s1">manifest = JSON.stringify(nextFontManifest, </span><span class="s2">null</span><span class="s1">);</span>
+                <span class="s3">// Create manifest for edge</span>
+                <span class="s1">compilation.emitAsset(</span><span class="s0">`server/</span><span class="s1">${_constants.NEXT_FONT_MANIFEST}</span><span class="s0">.js`</span><span class="s1">, </span><span class="s2">new </span><span class="s1">_webpack.sources.RawSource(</span><span class="s0">`self.__NEXT_FONT_MANIFEST=</span><span class="s1">${JSON.stringify(manifest)}</span><span class="s0">`</span><span class="s1">));</span>
+                <span class="s3">// Create manifest for server</span>
+                <span class="s1">compilation.emitAsset(</span><span class="s0">`server/</span><span class="s1">${_constants.NEXT_FONT_MANIFEST}</span><span class="s0">.json`</span><span class="s1">, </span><span class="s2">new </span><span class="s1">_webpack.sources.RawSource(manifest));</span>
+            <span class="s1">});</span>
+        <span class="s1">});</span>
+        <span class="s2">return</span><span class="s1">;</span>
+    <span class="s1">}</span>
+<span class="s1">}</span>
+
+<span class="s3">//# sourceMappingURL=next-font-manifest-plugin.js.map</span></pre>
+</body>
+</html>

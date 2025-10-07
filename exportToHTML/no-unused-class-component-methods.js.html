@@ -1,0 +1,280 @@
+<html>
+<head>
+<title>no-unused-class-component-methods.js</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #8c8c8c; font-style: italic;}
+.s1 { color: #8c8c8c; font-style: italic;}
+.s2 { color: #080808;}
+.s3 { color: #067d17;}
+.s4 { color: #0033b3;}
+.s5 { color: #1750eb;}
+</style>
+</head>
+<body bgcolor="#ffffff">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#c0c0c0" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+no-unused-class-component-methods.js</font>
+</center></td></tr></table>
+<pre><span class="s0">/**</span>
+ <span class="s0">* </span><span class="s1">@fileoverview </span><span class="s0">Prevent declaring unused methods and properties of component class</span>
+ <span class="s0">* </span><span class="s1">@author </span><span class="s0">Paweł Nowak, Berton Zhu</span>
+ <span class="s0">*/</span>
+
+<span class="s3">'use strict'</span><span class="s2">;</span>
+
+<span class="s4">const </span><span class="s2">docsUrl = require(</span><span class="s3">'../util/docsUrl'</span><span class="s2">);</span>
+<span class="s4">const </span><span class="s2">componentUtil = require(</span><span class="s3">'../util/componentUtil'</span><span class="s2">);</span>
+<span class="s4">const </span><span class="s2">report = require(</span><span class="s3">'../util/report'</span><span class="s2">);</span>
+
+<span class="s0">// ------------------------------------------------------------------------------</span>
+<span class="s0">// Rule Definition</span>
+<span class="s0">// ------------------------------------------------------------------------------</span>
+
+<span class="s4">const </span><span class="s2">LIFECYCLE_METHODS = </span><span class="s4">new </span><span class="s2">Set([</span>
+  <span class="s3">'constructor'</span><span class="s2">,</span>
+  <span class="s3">'componentDidCatch'</span><span class="s2">,</span>
+  <span class="s3">'componentDidMount'</span><span class="s2">,</span>
+  <span class="s3">'componentDidUpdate'</span><span class="s2">,</span>
+  <span class="s3">'componentWillMount'</span><span class="s2">,</span>
+  <span class="s3">'componentWillReceiveProps'</span><span class="s2">,</span>
+  <span class="s3">'componentWillUnmount'</span><span class="s2">,</span>
+  <span class="s3">'componentWillUpdate'</span><span class="s2">,</span>
+  <span class="s3">'getChildContext'</span><span class="s2">,</span>
+  <span class="s3">'getSnapshotBeforeUpdate'</span><span class="s2">,</span>
+  <span class="s3">'render'</span><span class="s2">,</span>
+  <span class="s3">'shouldComponentUpdate'</span><span class="s2">,</span>
+  <span class="s3">'UNSAFE_componentWillMount'</span><span class="s2">,</span>
+  <span class="s3">'UNSAFE_componentWillReceiveProps'</span><span class="s2">,</span>
+  <span class="s3">'UNSAFE_componentWillUpdate'</span><span class="s2">,</span>
+<span class="s2">]);</span>
+
+<span class="s4">const </span><span class="s2">ES6_LIFECYCLE = </span><span class="s4">new </span><span class="s2">Set([</span>
+  <span class="s3">'state'</span><span class="s2">,</span>
+<span class="s2">]);</span>
+
+<span class="s4">const </span><span class="s2">ES5_LIFECYCLE = </span><span class="s4">new </span><span class="s2">Set([</span>
+  <span class="s3">'getInitialState'</span><span class="s2">,</span>
+  <span class="s3">'getDefaultProps'</span><span class="s2">,</span>
+  <span class="s3">'mixins'</span><span class="s2">,</span>
+<span class="s2">]);</span>
+
+<span class="s4">function </span><span class="s2">isKeyLiteralLike(node, property) {</span>
+  <span class="s4">return </span><span class="s2">property.type === </span><span class="s3">'Literal'</span>
+     <span class="s2">|| (property.type === </span><span class="s3">'TemplateLiteral' </span><span class="s2">&amp;&amp; property.expressions.length === </span><span class="s5">0</span><span class="s2">)</span>
+     <span class="s2">|| (node.computed === </span><span class="s4">false </span><span class="s2">&amp;&amp; property.type === </span><span class="s3">'Identifier'</span><span class="s2">);</span>
+<span class="s2">}</span>
+
+<span class="s0">// Descend through all wrapping TypeCastExpressions and return the expression</span>
+<span class="s0">// that was cast.</span>
+<span class="s4">function </span><span class="s2">uncast(node) {</span>
+  <span class="s4">while </span><span class="s2">(node.type === </span><span class="s3">'TypeCastExpression'</span><span class="s2">) {</span>
+    <span class="s2">node = node.expression;</span>
+  <span class="s2">}</span>
+  <span class="s4">return </span><span class="s2">node;</span>
+<span class="s2">}</span>
+
+<span class="s0">// Return the name of an identifier or the string value of a literal. Useful</span>
+<span class="s0">// anywhere that a literal may be used as a key (e.g., member expressions,</span>
+<span class="s0">// method definitions, ObjectExpression property keys).</span>
+<span class="s4">function </span><span class="s2">getName(node) {</span>
+  <span class="s2">node = uncast(node);</span>
+  <span class="s4">const </span><span class="s2">type = node.type;</span>
+
+  <span class="s4">if </span><span class="s2">(type === </span><span class="s3">'Identifier'</span><span class="s2">) {</span>
+    <span class="s4">return </span><span class="s2">node.name;</span>
+  <span class="s2">}</span>
+  <span class="s4">if </span><span class="s2">(type === </span><span class="s3">'Literal'</span><span class="s2">) {</span>
+    <span class="s4">return </span><span class="s2">String(node.value);</span>
+  <span class="s2">}</span>
+  <span class="s4">if </span><span class="s2">(type === </span><span class="s3">'TemplateLiteral' </span><span class="s2">&amp;&amp; node.expressions.length === </span><span class="s5">0</span><span class="s2">) {</span>
+    <span class="s4">return </span><span class="s2">node.quasis[</span><span class="s5">0</span><span class="s2">].value.raw;</span>
+  <span class="s2">}</span>
+  <span class="s4">return null</span><span class="s2">;</span>
+<span class="s2">}</span>
+
+<span class="s4">function </span><span class="s2">isThisExpression(node) {</span>
+  <span class="s4">return </span><span class="s2">uncast(node).type === </span><span class="s3">'ThisExpression'</span><span class="s2">;</span>
+<span class="s2">}</span>
+
+<span class="s4">function </span><span class="s2">getInitialClassInfo(node, isClass) {</span>
+  <span class="s4">return </span><span class="s2">{</span>
+    <span class="s2">classNode: node,</span>
+    <span class="s2">isClass,</span>
+    <span class="s0">// Set of nodes where properties were defined.</span>
+    <span class="s2">properties: </span><span class="s4">new </span><span class="s2">Set(),</span>
+
+    <span class="s0">// Set of names of properties that we've seen used.</span>
+    <span class="s2">usedProperties: </span><span class="s4">new </span><span class="s2">Set(),</span>
+
+    <span class="s2">inStatic: </span><span class="s4">false</span><span class="s2">,</span>
+  <span class="s2">};</span>
+<span class="s2">}</span>
+
+<span class="s4">const </span><span class="s2">messages = {</span>
+  <span class="s2">unused: </span><span class="s3">'Unused method or property &quot;{{name}}&quot;'</span><span class="s2">,</span>
+  <span class="s2">unusedWithClass: </span><span class="s3">'Unused method or property &quot;{{name}}&quot; of class &quot;{{className}}&quot;'</span><span class="s2">,</span>
+<span class="s2">};</span>
+
+<span class="s0">/** </span><span class="s1">@type </span><span class="s0">{import('eslint').Rule.RuleModule} */</span>
+<span class="s2">module.exports = {</span>
+  <span class="s2">meta: {</span>
+    <span class="s2">docs: {</span>
+      <span class="s2">description: </span><span class="s3">'Disallow declaring unused methods of component class'</span><span class="s2">,</span>
+      <span class="s2">category: </span><span class="s3">'Best Practices'</span><span class="s2">,</span>
+      <span class="s2">recommended: </span><span class="s4">false</span><span class="s2">,</span>
+      <span class="s2">url: docsUrl(</span><span class="s3">'no-unused-class-component-methods'</span><span class="s2">),</span>
+    <span class="s2">},</span>
+    <span class="s2">messages,</span>
+    <span class="s2">schema: [],</span>
+  <span class="s2">},</span>
+
+  <span class="s2">create: ((context) =&gt; {</span>
+    <span class="s4">let </span><span class="s2">classInfo = </span><span class="s4">null</span><span class="s2">;</span>
+
+    <span class="s0">// Takes an ObjectExpression node and adds all named Property nodes to the</span>
+    <span class="s0">// current set of properties.</span>
+    <span class="s4">function </span><span class="s2">addProperty(node) {</span>
+      <span class="s2">classInfo.properties.add(node);</span>
+    <span class="s2">}</span>
+
+    <span class="s0">// Adds the name of the given node as a used property if the node is an</span>
+    <span class="s0">// Identifier or a Literal. Other node types are ignored.</span>
+    <span class="s4">function </span><span class="s2">addUsedProperty(node) {</span>
+      <span class="s4">const </span><span class="s2">name = getName(node);</span>
+      <span class="s4">if </span><span class="s2">(name) {</span>
+        <span class="s2">classInfo.usedProperties.add(name);</span>
+      <span class="s2">}</span>
+    <span class="s2">}</span>
+
+    <span class="s4">function </span><span class="s2">reportUnusedProperties() {</span>
+      <span class="s0">// Report all unused properties.</span>
+      <span class="s4">for </span><span class="s2">(</span><span class="s4">const </span><span class="s2">node of classInfo.properties) { </span><span class="s0">// eslint-disable-line no-restricted-syntax</span>
+        <span class="s4">const </span><span class="s2">name = getName(node);</span>
+        <span class="s4">if </span><span class="s2">(</span>
+          <span class="s2">!classInfo.usedProperties.has(name)</span>
+           <span class="s2">&amp;&amp; !LIFECYCLE_METHODS.has(name)</span>
+           <span class="s2">&amp;&amp; (classInfo.isClass ? !ES6_LIFECYCLE.has(name) : !ES5_LIFECYCLE.has(name))</span>
+        <span class="s2">) {</span>
+          <span class="s4">const </span><span class="s2">className = (classInfo.classNode.id &amp;&amp; classInfo.classNode.id.name) || </span><span class="s3">''</span><span class="s2">;</span>
+
+          <span class="s4">const </span><span class="s2">messageID = className ? </span><span class="s3">'unusedWithClass' </span><span class="s2">: </span><span class="s3">'unused'</span><span class="s2">;</span>
+          <span class="s2">report(</span>
+            <span class="s2">context,</span>
+            <span class="s2">messages[messageID],</span>
+            <span class="s2">messageID,</span>
+            <span class="s2">{</span>
+              <span class="s2">node,</span>
+              <span class="s2">data: {</span>
+                <span class="s2">name,</span>
+                <span class="s2">className,</span>
+              <span class="s2">},</span>
+            <span class="s2">}</span>
+          <span class="s2">);</span>
+        <span class="s2">}</span>
+      <span class="s2">}</span>
+    <span class="s2">}</span>
+
+    <span class="s4">function </span><span class="s2">exitMethod() {</span>
+      <span class="s4">if </span><span class="s2">(!classInfo || !classInfo.inStatic) {</span>
+        <span class="s4">return</span><span class="s2">;</span>
+      <span class="s2">}</span>
+
+      <span class="s2">classInfo.inStatic = </span><span class="s4">false</span><span class="s2">;</span>
+    <span class="s2">}</span>
+
+    <span class="s4">return </span><span class="s2">{</span>
+      <span class="s2">ClassDeclaration(node) {</span>
+        <span class="s4">if </span><span class="s2">(componentUtil.isES6Component(node, context)) {</span>
+          <span class="s2">classInfo = getInitialClassInfo(node, </span><span class="s4">true</span><span class="s2">);</span>
+        <span class="s2">}</span>
+      <span class="s2">},</span>
+
+      <span class="s2">ObjectExpression(node) {</span>
+        <span class="s4">if </span><span class="s2">(componentUtil.isES5Component(node, context)) {</span>
+          <span class="s2">classInfo = getInitialClassInfo(node, </span><span class="s4">false</span><span class="s2">);</span>
+        <span class="s2">}</span>
+      <span class="s2">},</span>
+
+      <span class="s3">'ClassDeclaration:exit'</span><span class="s2">() {</span>
+        <span class="s4">if </span><span class="s2">(!classInfo) {</span>
+          <span class="s4">return</span><span class="s2">;</span>
+        <span class="s2">}</span>
+        <span class="s2">reportUnusedProperties();</span>
+        <span class="s2">classInfo = </span><span class="s4">null</span><span class="s2">;</span>
+      <span class="s2">},</span>
+
+      <span class="s3">'ObjectExpression:exit'</span><span class="s2">(node) {</span>
+        <span class="s4">if </span><span class="s2">(!classInfo || classInfo.classNode !== node) {</span>
+          <span class="s4">return</span><span class="s2">;</span>
+        <span class="s2">}</span>
+        <span class="s2">reportUnusedProperties();</span>
+        <span class="s2">classInfo = </span><span class="s4">null</span><span class="s2">;</span>
+      <span class="s2">},</span>
+
+      <span class="s2">Property(node) {</span>
+        <span class="s4">if </span><span class="s2">(!classInfo || classInfo.classNode !== node.parent) {</span>
+          <span class="s4">return</span><span class="s2">;</span>
+        <span class="s2">}</span>
+
+        <span class="s4">if </span><span class="s2">(isKeyLiteralLike(node, node.key)) {</span>
+          <span class="s2">addProperty(node.key);</span>
+        <span class="s2">}</span>
+      <span class="s2">},</span>
+
+      <span class="s3">'ClassProperty, MethodDefinition, PropertyDefinition'</span><span class="s2">(node) {</span>
+        <span class="s4">if </span><span class="s2">(!classInfo) {</span>
+          <span class="s4">return</span><span class="s2">;</span>
+        <span class="s2">}</span>
+
+        <span class="s4">if </span><span class="s2">(node.static) {</span>
+          <span class="s2">classInfo.inStatic = </span><span class="s4">true</span><span class="s2">;</span>
+          <span class="s4">return</span><span class="s2">;</span>
+        <span class="s2">}</span>
+
+        <span class="s4">if </span><span class="s2">(isKeyLiteralLike(node, node.key)) {</span>
+          <span class="s2">addProperty(node.key);</span>
+        <span class="s2">}</span>
+      <span class="s2">},</span>
+
+      <span class="s3">'ClassProperty:exit'</span><span class="s2">: exitMethod,</span>
+      <span class="s3">'MethodDefinition:exit'</span><span class="s2">: exitMethod,</span>
+      <span class="s3">'PropertyDefinition:exit'</span><span class="s2">: exitMethod,</span>
+
+      <span class="s2">MemberExpression(node) {</span>
+        <span class="s4">if </span><span class="s2">(!classInfo || classInfo.inStatic) {</span>
+          <span class="s4">return</span><span class="s2">;</span>
+        <span class="s2">}</span>
+
+        <span class="s4">if </span><span class="s2">(isThisExpression(node.object) &amp;&amp; isKeyLiteralLike(node, node.property)) {</span>
+          <span class="s4">if </span><span class="s2">(node.parent.type === </span><span class="s3">'AssignmentExpression' </span><span class="s2">&amp;&amp; node.parent.left === node) {</span>
+            <span class="s0">// detect `this.property = xxx`</span>
+            <span class="s2">addProperty(node.property);</span>
+          <span class="s2">} </span><span class="s4">else </span><span class="s2">{</span>
+            <span class="s0">// detect `this.property()`, `x = this.property`, etc.</span>
+            <span class="s2">addUsedProperty(node.property);</span>
+          <span class="s2">}</span>
+        <span class="s2">}</span>
+      <span class="s2">},</span>
+
+      <span class="s2">VariableDeclarator(node) {</span>
+        <span class="s4">if </span><span class="s2">(!classInfo || classInfo.inStatic) {</span>
+          <span class="s4">return</span><span class="s2">;</span>
+        <span class="s2">}</span>
+
+        <span class="s0">// detect `{ foo, bar: baz } = this`</span>
+        <span class="s4">if </span><span class="s2">(node.init &amp;&amp; isThisExpression(node.init) &amp;&amp; node.id.type === </span><span class="s3">'ObjectPattern'</span><span class="s2">) {</span>
+          <span class="s2">node.id.properties</span>
+            <span class="s2">.filter((prop) =&gt; prop.type === </span><span class="s3">'Property' </span><span class="s2">&amp;&amp; isKeyLiteralLike(prop, prop.key))</span>
+            <span class="s2">.forEach((prop) =&gt; {</span>
+              <span class="s2">addUsedProperty(</span><span class="s3">'key' </span><span class="s4">in </span><span class="s2">prop ? prop.key : undefined);</span>
+            <span class="s2">});</span>
+        <span class="s2">}</span>
+      <span class="s2">},</span>
+    <span class="s2">};</span>
+  <span class="s2">}),</span>
+<span class="s2">};</span>
+</pre>
+</body>
+</html>

@@ -1,0 +1,209 @@
+<html>
+<head>
+<title>telemetry-plugin.js</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #067d17;}
+.s1 { color: #080808;}
+.s2 { color: #0033b3;}
+.s3 { color: #8c8c8c; font-style: italic;}
+.s4 { color: #264eff;}
+.s5 { color: #1750eb;}
+</style>
+</head>
+<body bgcolor="#ffffff">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#c0c0c0" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+telemetry-plugin.js</font>
+</center></td></tr></table>
+<pre><span class="s0">&quot;use strict&quot;</span><span class="s1">;</span>
+<span class="s1">Object.defineProperty(exports, </span><span class="s0">&quot;__esModule&quot;</span><span class="s1">, {</span>
+    <span class="s1">value: </span><span class="s2">true</span>
+<span class="s1">});</span>
+<span class="s1">Object.defineProperty(exports, </span><span class="s0">&quot;TelemetryPlugin&quot;</span><span class="s1">, {</span>
+    <span class="s1">enumerable: </span><span class="s2">true</span><span class="s1">,</span>
+    <span class="s1">get: </span><span class="s2">function</span><span class="s1">() {</span>
+        <span class="s2">return </span><span class="s1">TelemetryPlugin;</span>
+    <span class="s1">}</span>
+<span class="s1">});</span>
+<span class="s2">const </span><span class="s1">_usecachetrackerutils = require(</span><span class="s0">&quot;./use-cache-tracker-utils&quot;</span><span class="s1">);</span>
+<span class="s3">// Map of a feature module to the file it belongs in the next package.</span>
+<span class="s2">const </span><span class="s1">FEATURE_MODULE_MAP = </span><span class="s2">new </span><span class="s1">Map([</span>
+    <span class="s1">[</span>
+        <span class="s0">'next/image'</span><span class="s1">,</span>
+        <span class="s0">'/next/image.js'</span>
+    <span class="s1">],</span>
+    <span class="s1">[</span>
+        <span class="s0">'next/future/image'</span><span class="s1">,</span>
+        <span class="s0">'/next/future/image.js'</span>
+    <span class="s1">],</span>
+    <span class="s1">[</span>
+        <span class="s0">'next/legacy/image'</span><span class="s1">,</span>
+        <span class="s0">'/next/legacy/image.js'</span>
+    <span class="s1">],</span>
+    <span class="s1">[</span>
+        <span class="s0">'next/script'</span><span class="s1">,</span>
+        <span class="s0">'/next/script.js'</span>
+    <span class="s1">],</span>
+    <span class="s1">[</span>
+        <span class="s0">'next/dynamic'</span><span class="s1">,</span>
+        <span class="s0">'/next/dynamic.js'</span>
+    <span class="s1">]</span>
+<span class="s1">]);</span>
+<span class="s2">const </span><span class="s1">FEATURE_MODULE_REGEXP_MAP = </span><span class="s2">new </span><span class="s1">Map([</span>
+    <span class="s1">[</span>
+        <span class="s0">'@next/font/google'</span><span class="s1">,</span>
+        <span class="s4">/\/@next\/font\/google\/target.css?.+$/</span>
+    <span class="s1">],</span>
+    <span class="s1">[</span>
+        <span class="s0">'@next/font/local'</span><span class="s1">,</span>
+        <span class="s4">/\/@next\/font\/local\/target.css?.+$/</span>
+    <span class="s1">],</span>
+    <span class="s1">[</span>
+        <span class="s0">'next/font/google'</span><span class="s1">,</span>
+        <span class="s4">/\/next\/font\/google\/target.css?.+$/</span>
+    <span class="s1">],</span>
+    <span class="s1">[</span>
+        <span class="s0">'next/font/local'</span><span class="s1">,</span>
+        <span class="s4">/\/next\/font\/local\/target.css?.+$/</span>
+    <span class="s1">]</span>
+<span class="s1">]);</span>
+<span class="s3">// List of build features used in webpack configuration</span>
+<span class="s2">const </span><span class="s1">BUILD_FEATURES = [</span>
+    <span class="s0">'swcLoader'</span><span class="s1">,</span>
+    <span class="s0">'swcRelay'</span><span class="s1">,</span>
+    <span class="s0">'swcStyledComponents'</span><span class="s1">,</span>
+    <span class="s0">'swcReactRemoveProperties'</span><span class="s1">,</span>
+    <span class="s0">'swcExperimentalDecorators'</span><span class="s1">,</span>
+    <span class="s0">'swcRemoveConsole'</span><span class="s1">,</span>
+    <span class="s0">'swcImportSource'</span><span class="s1">,</span>
+    <span class="s0">'swcEmotion'</span><span class="s1">,</span>
+    <span class="s0">'swc/target/x86_64-apple-darwin'</span><span class="s1">,</span>
+    <span class="s0">'swc/target/x86_64-unknown-linux-gnu'</span><span class="s1">,</span>
+    <span class="s0">'swc/target/x86_64-pc-windows-msvc'</span><span class="s1">,</span>
+    <span class="s0">'swc/target/i686-pc-windows-msvc'</span><span class="s1">,</span>
+    <span class="s0">'swc/target/aarch64-unknown-linux-gnu'</span><span class="s1">,</span>
+    <span class="s0">'swc/target/armv7-unknown-linux-gnueabihf'</span><span class="s1">,</span>
+    <span class="s0">'swc/target/aarch64-apple-darwin'</span><span class="s1">,</span>
+    <span class="s0">'swc/target/aarch64-linux-android'</span><span class="s1">,</span>
+    <span class="s0">'swc/target/arm-linux-androideabi'</span><span class="s1">,</span>
+    <span class="s0">'swc/target/x86_64-unknown-freebsd'</span><span class="s1">,</span>
+    <span class="s0">'swc/target/x86_64-unknown-linux-musl'</span><span class="s1">,</span>
+    <span class="s0">'swc/target/aarch64-unknown-linux-musl'</span><span class="s1">,</span>
+    <span class="s0">'swc/target/aarch64-pc-windows-msvc'</span><span class="s1">,</span>
+    <span class="s0">'turbotrace'</span><span class="s1">,</span>
+    <span class="s0">'transpilePackages'</span><span class="s1">,</span>
+    <span class="s0">'skipMiddlewareUrlNormalize'</span><span class="s1">,</span>
+    <span class="s0">'skipTrailingSlashRedirect'</span><span class="s1">,</span>
+    <span class="s0">'modularizeImports'</span><span class="s1">,</span>
+    <span class="s0">'esmExternals'</span><span class="s1">,</span>
+    <span class="s0">'webpackPlugins'</span>
+<span class="s1">];</span>
+<span class="s2">const </span><span class="s1">eliminatedPackages = </span><span class="s2">new </span><span class="s1">Set();</span>
+<span class="s2">const </span><span class="s1">useCacheTracker = (</span><span class="s5">0</span><span class="s1">, _usecachetrackerutils.createUseCacheTracker)();</span>
+<span class="s3">/**</span>
+ <span class="s3">* Determine if there is a feature of interest in the specified 'module'.</span>
+ <span class="s3">*/ </span><span class="s2">function </span><span class="s1">findFeatureInModule(module) {</span>
+    <span class="s2">if </span><span class="s1">(module.type !== </span><span class="s0">'javascript/auto'</span><span class="s1">) {</span>
+        <span class="s2">return</span><span class="s1">;</span>
+    <span class="s1">}</span>
+    <span class="s2">for </span><span class="s1">(</span><span class="s2">const </span><span class="s1">[feature, path] of FEATURE_MODULE_MAP){</span>
+        <span class="s2">var </span><span class="s1">_module_resource;</span>
+        <span class="s3">// imports like &quot;http&quot; will be undefined resource in rspack</span>
+        <span class="s2">if </span><span class="s1">((_module_resource = module.resource) == </span><span class="s2">null </span><span class="s1">? </span><span class="s2">void </span><span class="s5">0 </span><span class="s1">: _module_resource.endsWith(path)) {</span>
+            <span class="s2">return </span><span class="s1">feature;</span>
+        <span class="s1">}</span>
+    <span class="s1">}</span>
+    <span class="s2">const </span><span class="s1">normalizedIdentifier = module.identifier().replace(</span><span class="s4">/\\/g</span><span class="s1">, </span><span class="s0">'/'</span><span class="s1">);</span>
+    <span class="s2">for </span><span class="s1">(</span><span class="s2">const </span><span class="s1">[feature, regexp] of FEATURE_MODULE_REGEXP_MAP){</span>
+        <span class="s2">if </span><span class="s1">(regexp.test(normalizedIdentifier)) {</span>
+            <span class="s2">return </span><span class="s1">feature;</span>
+        <span class="s1">}</span>
+    <span class="s1">}</span>
+<span class="s1">}</span>
+<span class="s3">/**</span>
+ <span class="s3">* Find unique origin modules in the specified 'connections', which possibly</span>
+ <span class="s3">* contains more than one connection for a module due to different types of</span>
+ <span class="s3">* dependency.</span>
+ <span class="s3">*/ </span><span class="s2">function </span><span class="s1">findUniqueOriginModulesInConnections(connections, originModule) {</span>
+    <span class="s2">const </span><span class="s1">originModules = </span><span class="s2">new </span><span class="s1">Set();</span>
+    <span class="s2">for </span><span class="s1">(</span><span class="s2">const </span><span class="s1">connection of connections){</span>
+        <span class="s2">if </span><span class="s1">(!originModules.has(connection.originModule) &amp;&amp; connection.originModule !== originModule) {</span>
+            <span class="s1">originModules.add(connection.originModule);</span>
+        <span class="s1">}</span>
+    <span class="s1">}</span>
+    <span class="s2">return </span><span class="s1">originModules;</span>
+<span class="s1">}</span>
+<span class="s2">class </span><span class="s1">TelemetryPlugin {</span>
+    <span class="s3">// Build feature usage is on/off and is known before the build starts</span>
+    <span class="s1">constructor(buildFeaturesMap){</span>
+        <span class="s2">this</span><span class="s1">.usageTracker = </span><span class="s2">new </span><span class="s1">Map();</span>
+        <span class="s2">for </span><span class="s1">(</span><span class="s2">const </span><span class="s1">featureName of BUILD_FEATURES){</span>
+            <span class="s2">this</span><span class="s1">.usageTracker.set(featureName, {</span>
+                <span class="s1">featureName,</span>
+                <span class="s1">invocationCount: buildFeaturesMap.get(featureName) ? </span><span class="s5">1 </span><span class="s1">: </span><span class="s5">0</span>
+            <span class="s1">});</span>
+        <span class="s1">}</span>
+        <span class="s2">for </span><span class="s1">(</span><span class="s2">const </span><span class="s1">featureName of FEATURE_MODULE_MAP.keys()){</span>
+            <span class="s2">this</span><span class="s1">.usageTracker.set(featureName, {</span>
+                <span class="s1">featureName,</span>
+                <span class="s1">invocationCount: </span><span class="s5">0</span>
+            <span class="s1">});</span>
+        <span class="s1">}</span>
+        <span class="s2">for </span><span class="s1">(</span><span class="s2">const </span><span class="s1">featureName of FEATURE_MODULE_REGEXP_MAP.keys()){</span>
+            <span class="s2">this</span><span class="s1">.usageTracker.set(featureName, {</span>
+                <span class="s1">featureName,</span>
+                <span class="s1">invocationCount: </span><span class="s5">0</span>
+            <span class="s1">});</span>
+        <span class="s1">}</span>
+    <span class="s1">}</span>
+    <span class="s1">addUsage(featureName, invocationCount) {</span>
+        <span class="s2">this</span><span class="s1">.usageTracker.set(featureName, {</span>
+            <span class="s1">featureName,</span>
+            <span class="s1">invocationCount</span>
+        <span class="s1">});</span>
+    <span class="s1">}</span>
+    <span class="s1">apply(compiler) {</span>
+        <span class="s1">compiler.hooks.make.tapAsync(TelemetryPlugin.name, async (compilation, callback)=&gt;{</span>
+            <span class="s1">compilation.hooks.finishModules.tapAsync(TelemetryPlugin.name, async (modules, modulesFinish)=&gt;{</span>
+                <span class="s2">for </span><span class="s1">(</span><span class="s2">const </span><span class="s1">module of modules){</span>
+                    <span class="s2">const </span><span class="s1">feature = findFeatureInModule(module);</span>
+                    <span class="s2">if </span><span class="s1">(!feature) {</span>
+                        <span class="s2">continue</span><span class="s1">;</span>
+                    <span class="s1">}</span>
+                    <span class="s2">const </span><span class="s1">connections = compilation.moduleGraph.getIncomingConnections(module);</span>
+                    <span class="s2">const </span><span class="s1">originModules = findUniqueOriginModulesInConnections(connections, module);</span>
+                    <span class="s2">this</span><span class="s1">.usageTracker.get(feature).invocationCount = originModules.size;</span>
+                <span class="s1">}</span>
+                <span class="s1">modulesFinish();</span>
+            <span class="s1">});</span>
+            <span class="s1">callback();</span>
+        <span class="s1">});</span>
+        <span class="s2">if </span><span class="s1">(compiler.options.mode === </span><span class="s0">'production' </span><span class="s1">&amp;&amp; !compiler.watchMode) {</span>
+            <span class="s1">compiler.hooks.thisCompilation.tap(TelemetryPlugin.name, (compilation)=&gt;{</span>
+                <span class="s2">const </span><span class="s1">moduleHooks = compiler.webpack.NormalModule.getCompilationHooks(compilation);</span>
+                <span class="s1">moduleHooks.loader.tap(TelemetryPlugin.name, (loaderContext)=&gt;{</span>
+                    <span class="s1">;</span>
+                    <span class="s1">loaderContext.eliminatedPackages = eliminatedPackages;</span>
+                    <span class="s1">loaderContext.useCacheTracker = useCacheTracker;</span>
+                <span class="s1">});</span>
+            <span class="s1">});</span>
+        <span class="s1">}</span>
+    <span class="s1">}</span>
+    <span class="s1">usages() {</span>
+        <span class="s2">return </span><span class="s1">[</span>
+            <span class="s1">...</span><span class="s2">this</span><span class="s1">.usageTracker.values()</span>
+        <span class="s1">];</span>
+    <span class="s1">}</span>
+    <span class="s1">packagesUsedInServerSideProps() {</span>
+        <span class="s2">return </span><span class="s1">Array.from(eliminatedPackages);</span>
+    <span class="s1">}</span>
+    <span class="s1">getUseCacheTracker() {</span>
+        <span class="s2">return </span><span class="s1">Object.fromEntries(useCacheTracker);</span>
+    <span class="s1">}</span>
+<span class="s1">}</span>
+
+<span class="s3">//# sourceMappingURL=telemetry-plugin.js.map</span></pre>
+</body>
+</html>

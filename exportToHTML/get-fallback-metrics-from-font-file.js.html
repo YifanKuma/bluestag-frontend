@@ -1,0 +1,107 @@
+<html>
+<head>
+<title>get-fallback-metrics-from-font-file.js</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #067d17;}
+.s1 { color: #080808;}
+.s2 { color: #0033b3;}
+.s3 { color: #8c8c8c; font-style: italic;}
+.s4 { color: #1750eb;}
+.s5 { color: #8c8c8c; font-style: italic;}
+</style>
+</head>
+<body bgcolor="#ffffff">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#c0c0c0" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+get-fallback-metrics-from-font-file.js</font>
+</center></td></tr></table>
+<pre><span class="s0">&quot;use strict&quot;</span><span class="s1">;</span>
+<span class="s1">Object.defineProperty(exports, </span><span class="s0">&quot;__esModule&quot;</span><span class="s1">, { value: </span><span class="s2">true </span><span class="s1">});</span>
+<span class="s1">exports.getFallbackMetricsFromFontFile = getFallbackMetricsFromFontFile;</span>
+<span class="s3">// The font metadata of the fallback fonts, retrieved with fontkit on system font files</span>
+<span class="s3">// The average width is calculated with the calcAverageWidth function below</span>
+<span class="s2">const </span><span class="s1">DEFAULT_SANS_SERIF_FONT = {</span>
+    <span class="s1">name: </span><span class="s0">'Arial'</span><span class="s1">,</span>
+    <span class="s1">azAvgWidth: </span><span class="s4">934.5116279069767</span><span class="s1">,</span>
+    <span class="s1">unitsPerEm: </span><span class="s4">2048</span><span class="s1">,</span>
+<span class="s1">};</span>
+<span class="s2">const </span><span class="s1">DEFAULT_SERIF_FONT = {</span>
+    <span class="s1">name: </span><span class="s0">'Times New Roman'</span><span class="s1">,</span>
+    <span class="s1">azAvgWidth: </span><span class="s4">854.3953488372093</span><span class="s1">,</span>
+    <span class="s1">unitsPerEm: </span><span class="s4">2048</span><span class="s1">,</span>
+<span class="s1">};</span>
+<span class="s3">/**</span>
+ <span class="s3">* Calculate the average character width of a font file.</span>
+ <span class="s3">* Used to calculate the size-adjust property by comparing the fallback average with the loaded font average.</span>
+ <span class="s3">*/</span>
+<span class="s2">function </span><span class="s1">calcAverageWidth(font) {</span>
+    <span class="s2">try </span><span class="s1">{</span>
+        <span class="s3">/**</span>
+         <span class="s3">* Finding the right characters to use when calculating the average width is tricky.</span>
+         <span class="s3">* We can't just use the average width of all characters, because we have to take letter frequency into account.</span>
+         <span class="s3">* We also have to take word length into account, because the font's space width usually differ a lot from other characters.</span>
+         <span class="s3">* The goal is to find a string that'll give you a good average width, given most texts in most languages.</span>
+         <span class="s3">*</span>
+         <span class="s3">* TODO: Currently only works for the latin alphabet. Support more languages by finding the right characters for additional languages.</span>
+         <span class="s3">*</span>
+         <span class="s3">* The used characters were decided through trial and error with letter frequency and word length tables as a guideline.</span>
+         <span class="s3">* E.g. https://en.wikipedia.org/wiki/Letter_frequency</span>
+         <span class="s3">*/</span>
+        <span class="s2">const </span><span class="s1">avgCharacters = </span><span class="s0">'aaabcdeeeefghiijklmnnoopqrrssttuvwxyz      '</span><span class="s1">;</span>
+        <span class="s3">// Check if the font file has all the characters we need to calculate the average width</span>
+        <span class="s2">const </span><span class="s1">hasAllChars = font</span>
+            <span class="s1">.glyphsForString(avgCharacters)</span>
+            <span class="s1">.flatMap((glyph) =&gt; glyph.codePoints)</span>
+            <span class="s1">.every((codePoint) =&gt; font.hasGlyphForCodePoint(codePoint));</span>
+        <span class="s2">if </span><span class="s1">(!hasAllChars)</span>
+            <span class="s2">return </span><span class="s1">undefined;</span>
+        <span class="s2">const </span><span class="s1">widths = font</span>
+            <span class="s1">.glyphsForString(avgCharacters)</span>
+            <span class="s1">.map((glyph) =&gt; glyph.advanceWidth);</span>
+        <span class="s2">const </span><span class="s1">totalWidth = widths.reduce((sum, width) =&gt; sum + width, </span><span class="s4">0</span><span class="s1">);</span>
+        <span class="s2">return </span><span class="s1">totalWidth / widths.length;</span>
+    <span class="s1">}</span>
+    <span class="s2">catch </span><span class="s1">{</span>
+        <span class="s3">// Could not calculate average width from the font file, skip size-adjust</span>
+        <span class="s2">return </span><span class="s1">undefined;</span>
+    <span class="s1">}</span>
+<span class="s1">}</span>
+<span class="s2">function </span><span class="s1">formatOverrideValue(val) {</span>
+    <span class="s2">return </span><span class="s1">Math.abs(val * </span><span class="s4">100</span><span class="s1">).toFixed(</span><span class="s4">2</span><span class="s1">) + </span><span class="s0">'%'</span><span class="s1">;</span>
+<span class="s1">}</span>
+<span class="s3">/**</span>
+ <span class="s3">* Given a font file and category, calculate the fallback font override values.</span>
+ <span class="s3">* The returned values can be used to generate a CSS @font-face declaration.</span>
+ <span class="s3">*</span>
+ <span class="s3">* For example:</span>
+ <span class="s3">* </span><span class="s5">@font-face </span><span class="s3">{</span>
+ <span class="s3">*   font-family: local-font;</span>
+ <span class="s3">*   src: local(Arial);</span>
+ <span class="s3">*   size-adjust: 90%;</span>
+ <span class="s3">* }</span>
+ <span class="s3">*</span>
+ <span class="s3">* Read more about this technique in these texts by the Google Aurora team:</span>
+ <span class="s3">* https://developer.chrome.com/blog/font-fallbacks/</span>
+ <span class="s3">* https://docs.google.com/document/d/e/2PACX-1vRsazeNirATC7lIj2aErSHpK26hZ6dA9GsQ069GEbq5fyzXEhXbvByoftSfhG82aJXmrQ_sJCPBqcx_/pub</span>
+ <span class="s3">*/</span>
+<span class="s2">function </span><span class="s1">getFallbackMetricsFromFontFile(font, category = </span><span class="s0">'serif'</span><span class="s1">) {</span>
+    <span class="s2">const </span><span class="s1">fallbackFont = category === </span><span class="s0">'serif' </span><span class="s1">? DEFAULT_SERIF_FONT : DEFAULT_SANS_SERIF_FONT;</span>
+    <span class="s2">const </span><span class="s1">azAvgWidth = calcAverageWidth(font);</span>
+    <span class="s2">const </span><span class="s1">{ ascent, descent, lineGap, unitsPerEm } = font;</span>
+    <span class="s2">const </span><span class="s1">fallbackFontAvgWidth = fallbackFont.azAvgWidth / fallbackFont.unitsPerEm;</span>
+    <span class="s2">let </span><span class="s1">sizeAdjust = azAvgWidth</span>
+        <span class="s1">? azAvgWidth / unitsPerEm / fallbackFontAvgWidth</span>
+        <span class="s1">: </span><span class="s4">1</span><span class="s1">;</span>
+    <span class="s2">return </span><span class="s1">{</span>
+        <span class="s1">ascentOverride: formatOverrideValue(ascent / (unitsPerEm * sizeAdjust)),</span>
+        <span class="s1">descentOverride: formatOverrideValue(descent / (unitsPerEm * sizeAdjust)),</span>
+        <span class="s1">lineGapOverride: formatOverrideValue(lineGap / (unitsPerEm * sizeAdjust)),</span>
+        <span class="s1">fallbackFont: fallbackFont.name,</span>
+        <span class="s1">sizeAdjust: formatOverrideValue(sizeAdjust),</span>
+    <span class="s1">};</span>
+<span class="s1">}</span>
+</pre>
+</body>
+</html>

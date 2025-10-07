@@ -1,0 +1,233 @@
+<html>
+<head>
+<title>no-access-state-in-setstate.js</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #8c8c8c; font-style: italic;}
+.s1 { color: #8c8c8c; font-style: italic;}
+.s2 { color: #080808;}
+.s3 { color: #067d17;}
+.s4 { color: #0033b3;}
+.s5 { color: #1750eb;}
+</style>
+</head>
+<body bgcolor="#ffffff">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#c0c0c0" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+no-access-state-in-setstate.js</font>
+</center></td></tr></table>
+<pre><span class="s0">/**</span>
+ <span class="s0">* </span><span class="s1">@fileoverview </span><span class="s0">Prevent usage of this.state within setState</span>
+ <span class="s0">* </span><span class="s1">@author </span><span class="s0">Rolf Erik Lekang, Jørgen Aaberg</span>
+ <span class="s0">*/</span>
+
+<span class="s3">'use strict'</span><span class="s2">;</span>
+
+<span class="s4">const </span><span class="s2">docsUrl = require(</span><span class="s3">'../util/docsUrl'</span><span class="s2">);</span>
+<span class="s4">const </span><span class="s2">astUtil = require(</span><span class="s3">'../util/ast'</span><span class="s2">);</span>
+<span class="s4">const </span><span class="s2">componentUtil = require(</span><span class="s3">'../util/componentUtil'</span><span class="s2">);</span>
+<span class="s4">const </span><span class="s2">report = require(</span><span class="s3">'../util/report'</span><span class="s2">);</span>
+<span class="s4">const </span><span class="s2">getScope = require(</span><span class="s3">'../util/eslint'</span><span class="s2">).getScope;</span>
+
+<span class="s0">// ------------------------------------------------------------------------------</span>
+<span class="s0">// Rule Definition</span>
+<span class="s0">// ------------------------------------------------------------------------------</span>
+
+<span class="s4">const </span><span class="s2">messages = {</span>
+  <span class="s2">useCallback: </span><span class="s3">'Use callback in setState when referencing the previous state.'</span><span class="s2">,</span>
+<span class="s2">};</span>
+
+<span class="s0">/** </span><span class="s1">@type </span><span class="s0">{import('eslint').Rule.RuleModule} */</span>
+<span class="s2">module.exports = {</span>
+  <span class="s2">meta: {</span>
+    <span class="s2">docs: {</span>
+      <span class="s2">description: </span><span class="s3">'Disallow when this.state is accessed within setState'</span><span class="s2">,</span>
+      <span class="s2">category: </span><span class="s3">'Possible Errors'</span><span class="s2">,</span>
+      <span class="s2">recommended: </span><span class="s4">false</span><span class="s2">,</span>
+      <span class="s2">url: docsUrl(</span><span class="s3">'no-access-state-in-setstate'</span><span class="s2">),</span>
+    <span class="s2">},</span>
+
+    <span class="s2">messages,</span>
+  <span class="s2">},</span>
+
+  <span class="s2">create(context) {</span>
+    <span class="s4">function </span><span class="s2">isSetStateCall(node) {</span>
+      <span class="s4">return </span><span class="s2">astUtil.isCallExpression(node)</span>
+        <span class="s2">&amp;&amp; node.callee.property</span>
+        <span class="s2">&amp;&amp; node.callee.property.name === </span><span class="s3">'setState'</span>
+        <span class="s2">&amp;&amp; node.callee.object.type === </span><span class="s3">'ThisExpression'</span><span class="s2">;</span>
+    <span class="s2">}</span>
+
+    <span class="s4">function </span><span class="s2">isFirstArgumentInSetStateCall(current, node) {</span>
+      <span class="s4">if </span><span class="s2">(!isSetStateCall(current)) {</span>
+        <span class="s4">return false</span><span class="s2">;</span>
+      <span class="s2">}</span>
+      <span class="s4">while </span><span class="s2">(node &amp;&amp; node.parent !== current) {</span>
+        <span class="s2">node = node.parent;</span>
+      <span class="s2">}</span>
+      <span class="s4">return </span><span class="s2">current.arguments[</span><span class="s5">0</span><span class="s2">] === node;</span>
+    <span class="s2">}</span>
+
+    <span class="s0">/**</span>
+     <span class="s0">* </span><span class="s1">@param </span><span class="s0">{ASTNode} node</span>
+     <span class="s0">* </span><span class="s1">@returns </span><span class="s0">{boolean}</span>
+     <span class="s0">*/</span>
+    <span class="s4">function </span><span class="s2">isClassComponent(node) {</span>
+      <span class="s4">return </span><span class="s2">!!(</span>
+        <span class="s2">componentUtil.getParentES6Component(context, node)</span>
+        <span class="s2">|| componentUtil.getParentES5Component(context, node)</span>
+      <span class="s2">);</span>
+    <span class="s2">}</span>
+
+    <span class="s0">// The methods array contains all methods or functions that are using this.state</span>
+    <span class="s0">// or that are calling another method or function using this.state</span>
+    <span class="s4">const </span><span class="s2">methods = [];</span>
+    <span class="s0">// The vars array contains all variables that contains this.state</span>
+    <span class="s4">const </span><span class="s2">vars = [];</span>
+    <span class="s4">return </span><span class="s2">{</span>
+      <span class="s2">CallExpression(node) {</span>
+        <span class="s4">if </span><span class="s2">(!isClassComponent(node)) {</span>
+          <span class="s4">return</span><span class="s2">;</span>
+        <span class="s2">}</span>
+        <span class="s0">// Appends all the methods that are calling another</span>
+        <span class="s0">// method containing this.state to the methods array</span>
+        <span class="s2">methods.forEach((method) =&gt; {</span>
+          <span class="s4">if </span><span class="s2">(</span><span class="s3">'name' </span><span class="s4">in </span><span class="s2">node.callee &amp;&amp; node.callee.name === method.methodName) {</span>
+            <span class="s4">let </span><span class="s2">current = node.parent;</span>
+            <span class="s4">while </span><span class="s2">(current.type !== </span><span class="s3">'Program'</span><span class="s2">) {</span>
+              <span class="s4">if </span><span class="s2">(current.type === </span><span class="s3">'MethodDefinition'</span><span class="s2">) {</span>
+                <span class="s2">methods.push({</span>
+                  <span class="s2">methodName: </span><span class="s3">'name' </span><span class="s4">in </span><span class="s2">current.key ? current.key.name : undefined,</span>
+                  <span class="s2">node: method.node,</span>
+                <span class="s2">});</span>
+                <span class="s4">break</span><span class="s2">;</span>
+              <span class="s2">}</span>
+              <span class="s2">current = current.parent;</span>
+            <span class="s2">}</span>
+          <span class="s2">}</span>
+        <span class="s2">});</span>
+
+        <span class="s0">// Finding all CallExpressions that is inside a setState</span>
+        <span class="s0">// to further check if they contains this.state</span>
+        <span class="s4">let </span><span class="s2">current = node.parent;</span>
+        <span class="s4">while </span><span class="s2">(current.type !== </span><span class="s3">'Program'</span><span class="s2">) {</span>
+          <span class="s4">if </span><span class="s2">(isFirstArgumentInSetStateCall(current, node)) {</span>
+            <span class="s4">const </span><span class="s2">methodName = </span><span class="s3">'name' </span><span class="s4">in </span><span class="s2">node.callee ? node.callee.name : undefined;</span>
+            <span class="s2">methods.forEach((method) =&gt; {</span>
+              <span class="s4">if </span><span class="s2">(method.methodName === methodName) {</span>
+                <span class="s2">report(context, messages.useCallback, </span><span class="s3">'useCallback'</span><span class="s2">, {</span>
+                  <span class="s2">node: method.node,</span>
+                <span class="s2">});</span>
+              <span class="s2">}</span>
+            <span class="s2">});</span>
+
+            <span class="s4">break</span><span class="s2">;</span>
+          <span class="s2">}</span>
+          <span class="s2">current = current.parent;</span>
+        <span class="s2">}</span>
+      <span class="s2">},</span>
+
+      <span class="s2">MemberExpression(node) {</span>
+        <span class="s4">if </span><span class="s2">(</span>
+          <span class="s3">'name' </span><span class="s4">in </span><span class="s2">node.property</span>
+          <span class="s2">&amp;&amp; node.property.name === </span><span class="s3">'state'</span>
+          <span class="s2">&amp;&amp; node.object.type === </span><span class="s3">'ThisExpression'</span>
+          <span class="s2">&amp;&amp; isClassComponent(node)</span>
+        <span class="s2">) {</span>
+          <span class="s0">/** </span><span class="s1">@type </span><span class="s0">{import('eslint').Rule.Node} */</span>
+          <span class="s4">let </span><span class="s2">current = node;</span>
+          <span class="s4">while </span><span class="s2">(current.type !== </span><span class="s3">'Program'</span><span class="s2">) {</span>
+            <span class="s0">// Reporting if this.state is directly within this.setState</span>
+            <span class="s4">if </span><span class="s2">(isFirstArgumentInSetStateCall(current, node)) {</span>
+              <span class="s2">report(context, messages.useCallback, </span><span class="s3">'useCallback'</span><span class="s2">, {</span>
+                <span class="s2">node,</span>
+              <span class="s2">});</span>
+              <span class="s4">break</span><span class="s2">;</span>
+            <span class="s2">}</span>
+
+            <span class="s0">// Storing all functions and methods that contains this.state</span>
+            <span class="s4">if </span><span class="s2">(current.type === </span><span class="s3">'MethodDefinition'</span><span class="s2">) {</span>
+              <span class="s2">methods.push({</span>
+                <span class="s2">methodName: </span><span class="s3">'name' </span><span class="s4">in </span><span class="s2">current.key ? current.key.name : undefined,</span>
+                <span class="s2">node,</span>
+              <span class="s2">});</span>
+              <span class="s4">break</span><span class="s2">;</span>
+            <span class="s2">} </span><span class="s4">else if </span><span class="s2">(</span>
+              <span class="s2">current.type === </span><span class="s3">'FunctionExpression'</span>
+              <span class="s2">&amp;&amp; </span><span class="s3">'key' </span><span class="s4">in </span><span class="s2">current.parent</span>
+              <span class="s2">&amp;&amp; current.parent.key</span>
+            <span class="s2">) {</span>
+              <span class="s2">methods.push({</span>
+                <span class="s2">methodName: </span><span class="s3">'name' </span><span class="s4">in </span><span class="s2">current.parent.key ? current.parent.key.name : undefined,</span>
+                <span class="s2">node,</span>
+              <span class="s2">});</span>
+              <span class="s4">break</span><span class="s2">;</span>
+            <span class="s2">}</span>
+
+            <span class="s0">// Storing all variables containing this.state</span>
+            <span class="s4">if </span><span class="s2">(current.type === </span><span class="s3">'VariableDeclarator'</span><span class="s2">) {</span>
+              <span class="s2">vars.push({</span>
+                <span class="s2">node,</span>
+                <span class="s2">scope: getScope(context, node),</span>
+                <span class="s2">variableName: </span><span class="s3">'name' </span><span class="s4">in </span><span class="s2">current.id ? current.id.name : undefined,</span>
+              <span class="s2">});</span>
+              <span class="s4">break</span><span class="s2">;</span>
+            <span class="s2">}</span>
+
+            <span class="s2">current = current.parent;</span>
+          <span class="s2">}</span>
+        <span class="s2">}</span>
+      <span class="s2">},</span>
+
+      <span class="s2">Identifier(node) {</span>
+        <span class="s0">// Checks if the identifier is a variable within an object</span>
+        <span class="s0">/** </span><span class="s1">@type </span><span class="s0">{import('eslint').Rule.Node} */</span>
+        <span class="s4">let </span><span class="s2">current = node;</span>
+        <span class="s4">while </span><span class="s2">(current.parent.type === </span><span class="s3">'BinaryExpression'</span><span class="s2">) {</span>
+          <span class="s2">current = current.parent;</span>
+        <span class="s2">}</span>
+        <span class="s4">if </span><span class="s2">(</span>
+          <span class="s2">(</span><span class="s3">'value' </span><span class="s4">in </span><span class="s2">current.parent &amp;&amp; current.parent.value === current)</span>
+          <span class="s2">|| (</span><span class="s3">'object' </span><span class="s4">in </span><span class="s2">current.parent &amp;&amp; current.parent.object === current)</span>
+        <span class="s2">) {</span>
+          <span class="s4">while </span><span class="s2">(current.type !== </span><span class="s3">'Program'</span><span class="s2">) {</span>
+            <span class="s4">if </span><span class="s2">(isFirstArgumentInSetStateCall(current, node)) {</span>
+              <span class="s2">vars</span>
+                <span class="s2">.filter((v) =&gt; v.scope === getScope(context, node) &amp;&amp; v.variableName === node.name)</span>
+                <span class="s2">.forEach((v) =&gt; {</span>
+                  <span class="s2">report(context, messages.useCallback, </span><span class="s3">'useCallback'</span><span class="s2">, {</span>
+                    <span class="s2">node: v.node,</span>
+                  <span class="s2">});</span>
+                <span class="s2">});</span>
+            <span class="s2">}</span>
+            <span class="s2">current = current.parent;</span>
+          <span class="s2">}</span>
+        <span class="s2">}</span>
+      <span class="s2">},</span>
+
+      <span class="s2">ObjectPattern(node) {</span>
+        <span class="s4">const </span><span class="s2">isDerivedFromThis = </span><span class="s3">'init' </span><span class="s4">in </span><span class="s2">node.parent &amp;&amp; node.parent.init &amp;&amp; node.parent.init.type === </span><span class="s3">'ThisExpression'</span><span class="s2">;</span>
+        <span class="s2">node.properties.forEach((property) =&gt; {</span>
+          <span class="s4">if </span><span class="s2">(</span>
+            <span class="s2">property</span>
+            <span class="s2">&amp;&amp; </span><span class="s3">'key' </span><span class="s4">in </span><span class="s2">property</span>
+            <span class="s2">&amp;&amp; property.key</span>
+            <span class="s2">&amp;&amp; </span><span class="s3">'name' </span><span class="s4">in </span><span class="s2">property.key</span>
+            <span class="s2">&amp;&amp; property.key.name === </span><span class="s3">'state'</span>
+            <span class="s2">&amp;&amp; isDerivedFromThis</span>
+          <span class="s2">) {</span>
+            <span class="s2">vars.push({</span>
+              <span class="s2">node: property.key,</span>
+              <span class="s2">scope: getScope(context, node),</span>
+              <span class="s2">variableName: property.key.name,</span>
+            <span class="s2">});</span>
+          <span class="s2">}</span>
+        <span class="s2">});</span>
+      <span class="s2">},</span>
+    <span class="s2">};</span>
+  <span class="s2">},</span>
+<span class="s2">};</span>
+</pre>
+</body>
+</html>

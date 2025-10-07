@@ -1,0 +1,491 @@
+<html>
+<head>
+<title>no-implicit-coercion.js</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #8c8c8c; font-style: italic;}
+.s1 { color: #8c8c8c; font-style: italic;}
+.s2 { color: #080808;}
+.s3 { color: #067d17;}
+.s4 { color: #0033b3;}
+.s5 { color: #264eff;}
+.s6 { color: #1750eb;}
+</style>
+</head>
+<body bgcolor="#ffffff">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#c0c0c0" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+no-implicit-coercion.js</font>
+</center></td></tr></table>
+<pre><span class="s0">/**</span>
+ <span class="s0">* </span><span class="s1">@fileoverview </span><span class="s0">A rule to disallow the type conversions with shorter notations.</span>
+ <span class="s0">* </span><span class="s1">@author </span><span class="s0">Toru Nagashima</span>
+ <span class="s0">*/</span>
+
+<span class="s3">&quot;use strict&quot;</span><span class="s2">;</span>
+
+<span class="s4">const </span><span class="s2">astUtils = require(</span><span class="s3">&quot;./utils/ast-utils&quot;</span><span class="s2">);</span>
+
+<span class="s0">//------------------------------------------------------------------------------</span>
+<span class="s0">// Helpers</span>
+<span class="s0">//------------------------------------------------------------------------------</span>
+
+<span class="s4">const </span><span class="s2">INDEX_OF_PATTERN = </span><span class="s5">/^(?:i|lastI)ndexOf$/u</span><span class="s2">;</span>
+<span class="s4">const </span><span class="s2">ALLOWABLE_OPERATORS = [</span><span class="s3">&quot;~&quot;</span><span class="s2">, </span><span class="s3">&quot;!!&quot;</span><span class="s2">, </span><span class="s3">&quot;+&quot;</span><span class="s2">, </span><span class="s3">&quot;- -&quot;</span><span class="s2">, </span><span class="s3">&quot;-&quot;</span><span class="s2">, </span><span class="s3">&quot;*&quot;</span><span class="s2">];</span>
+
+<span class="s0">/**</span>
+ <span class="s0">* Checks whether or not a node is a double logical negating.</span>
+ <span class="s0">* </span><span class="s1">@param </span><span class="s0">{ASTNode} node An UnaryExpression node to check.</span>
+ <span class="s0">* </span><span class="s1">@returns </span><span class="s0">{boolean} Whether or not the node is a double logical negating.</span>
+ <span class="s0">*/</span>
+<span class="s4">function </span><span class="s2">isDoubleLogicalNegating(node) {</span>
+	<span class="s4">return </span><span class="s2">(</span>
+		<span class="s2">node.operator === </span><span class="s3">&quot;!&quot; </span><span class="s2">&amp;&amp;</span>
+		<span class="s2">node.argument.type === </span><span class="s3">&quot;UnaryExpression&quot; </span><span class="s2">&amp;&amp;</span>
+		<span class="s2">node.argument.operator === </span><span class="s3">&quot;!&quot;</span>
+	<span class="s2">);</span>
+<span class="s2">}</span>
+
+<span class="s0">/**</span>
+ <span class="s0">* Checks whether or not a node is a binary negating of `.indexOf()` method calling.</span>
+ <span class="s0">* </span><span class="s1">@param </span><span class="s0">{ASTNode} node An UnaryExpression node to check.</span>
+ <span class="s0">* </span><span class="s1">@returns </span><span class="s0">{boolean} Whether or not the node is a binary negating of `.indexOf()` method calling.</span>
+ <span class="s0">*/</span>
+<span class="s4">function </span><span class="s2">isBinaryNegatingOfIndexOf(node) {</span>
+	<span class="s4">if </span><span class="s2">(node.operator !== </span><span class="s3">&quot;~&quot;</span><span class="s2">) {</span>
+		<span class="s4">return false</span><span class="s2">;</span>
+	<span class="s2">}</span>
+	<span class="s4">const </span><span class="s2">callNode = astUtils.skipChainExpression(node.argument);</span>
+
+	<span class="s4">return </span><span class="s2">(</span>
+		<span class="s2">callNode.type === </span><span class="s3">&quot;CallExpression&quot; </span><span class="s2">&amp;&amp;</span>
+		<span class="s2">astUtils.isSpecificMemberAccess(callNode.callee, </span><span class="s4">null</span><span class="s2">, INDEX_OF_PATTERN)</span>
+	<span class="s2">);</span>
+<span class="s2">}</span>
+
+<span class="s0">/**</span>
+ <span class="s0">* Checks whether or not a node is a multiplying by one.</span>
+ <span class="s0">* </span><span class="s1">@param </span><span class="s0">{BinaryExpression} node A BinaryExpression node to check.</span>
+ <span class="s0">* </span><span class="s1">@returns </span><span class="s0">{boolean} Whether or not the node is a multiplying by one.</span>
+ <span class="s0">*/</span>
+<span class="s4">function </span><span class="s2">isMultiplyByOne(node) {</span>
+	<span class="s4">return </span><span class="s2">(</span>
+		<span class="s2">node.operator === </span><span class="s3">&quot;*&quot; </span><span class="s2">&amp;&amp;</span>
+		<span class="s2">((node.left.type === </span><span class="s3">&quot;Literal&quot; </span><span class="s2">&amp;&amp; node.left.value === </span><span class="s6">1</span><span class="s2">) ||</span>
+			<span class="s2">(node.right.type === </span><span class="s3">&quot;Literal&quot; </span><span class="s2">&amp;&amp; node.right.value === </span><span class="s6">1</span><span class="s2">))</span>
+	<span class="s2">);</span>
+<span class="s2">}</span>
+
+<span class="s0">/**</span>
+ <span class="s0">* Checks whether the given node logically represents multiplication by a fraction of `1`.</span>
+ <span class="s0">* For example, `a * 1` in `a * 1 / b` is technically multiplication by `1`, but the</span>
+ <span class="s0">* whole expression can be logically interpreted as `a * (1 / b)` rather than `(a * 1) / b`.</span>
+ <span class="s0">* </span><span class="s1">@param </span><span class="s0">{BinaryExpression} node A BinaryExpression node to check.</span>
+ <span class="s0">* </span><span class="s1">@param </span><span class="s0">{SourceCode} sourceCode The source code object.</span>
+ <span class="s0">* </span><span class="s1">@returns </span><span class="s0">{boolean} Whether or not the node is a multiplying by a fraction of `1`.</span>
+ <span class="s0">*/</span>
+<span class="s4">function </span><span class="s2">isMultiplyByFractionOfOne(node, sourceCode) {</span>
+	<span class="s4">return </span><span class="s2">(</span>
+		<span class="s2">node.type === </span><span class="s3">&quot;BinaryExpression&quot; </span><span class="s2">&amp;&amp;</span>
+		<span class="s2">node.operator === </span><span class="s3">&quot;*&quot; </span><span class="s2">&amp;&amp;</span>
+		<span class="s2">node.right.type === </span><span class="s3">&quot;Literal&quot; </span><span class="s2">&amp;&amp;</span>
+		<span class="s2">node.right.value === </span><span class="s6">1 </span><span class="s2">&amp;&amp;</span>
+		<span class="s2">node.parent.type === </span><span class="s3">&quot;BinaryExpression&quot; </span><span class="s2">&amp;&amp;</span>
+		<span class="s2">node.parent.operator === </span><span class="s3">&quot;/&quot; </span><span class="s2">&amp;&amp;</span>
+		<span class="s2">node.parent.left === node &amp;&amp;</span>
+		<span class="s2">!astUtils.isParenthesised(sourceCode, node)</span>
+	<span class="s2">);</span>
+<span class="s2">}</span>
+
+<span class="s0">/**</span>
+ <span class="s0">* Checks whether the result of a node is numeric or not</span>
+ <span class="s0">* </span><span class="s1">@param </span><span class="s0">{ASTNode} node The node to test</span>
+ <span class="s0">* </span><span class="s1">@returns </span><span class="s0">{boolean} true if the node is a number literal or a `Number()`, `parseInt` or `parseFloat` call</span>
+ <span class="s0">*/</span>
+<span class="s4">function </span><span class="s2">isNumeric(node) {</span>
+	<span class="s4">return </span><span class="s2">(</span>
+		<span class="s2">(node.type === </span><span class="s3">&quot;Literal&quot; </span><span class="s2">&amp;&amp; </span><span class="s4">typeof </span><span class="s2">node.value === </span><span class="s3">&quot;number&quot;</span><span class="s2">) ||</span>
+		<span class="s2">(node.type === </span><span class="s3">&quot;CallExpression&quot; </span><span class="s2">&amp;&amp;</span>
+			<span class="s2">(node.callee.name === </span><span class="s3">&quot;Number&quot; </span><span class="s2">||</span>
+				<span class="s2">node.callee.name === </span><span class="s3">&quot;parseInt&quot; </span><span class="s2">||</span>
+				<span class="s2">node.callee.name === </span><span class="s3">&quot;parseFloat&quot;</span><span class="s2">))</span>
+	<span class="s2">);</span>
+<span class="s2">}</span>
+
+<span class="s0">/**</span>
+ <span class="s0">* Returns the first non-numeric operand in a BinaryExpression. Designed to be</span>
+ <span class="s0">* used from bottom to up since it walks up the BinaryExpression trees using</span>
+ <span class="s0">* node.parent to find the result.</span>
+ <span class="s0">* </span><span class="s1">@param </span><span class="s0">{BinaryExpression} node The BinaryExpression node to be walked up on</span>
+ <span class="s0">* </span><span class="s1">@returns </span><span class="s0">{ASTNode|null} The first non-numeric item in the BinaryExpression tree or null</span>
+ <span class="s0">*/</span>
+<span class="s4">function </span><span class="s2">getNonNumericOperand(node) {</span>
+	<span class="s4">const </span><span class="s2">left = node.left,</span>
+		<span class="s2">right = node.right;</span>
+
+	<span class="s4">if </span><span class="s2">(right.type !== </span><span class="s3">&quot;BinaryExpression&quot; </span><span class="s2">&amp;&amp; !isNumeric(right)) {</span>
+		<span class="s4">return </span><span class="s2">right;</span>
+	<span class="s2">}</span>
+
+	<span class="s4">if </span><span class="s2">(left.type !== </span><span class="s3">&quot;BinaryExpression&quot; </span><span class="s2">&amp;&amp; !isNumeric(left)) {</span>
+		<span class="s4">return </span><span class="s2">left;</span>
+	<span class="s2">}</span>
+
+	<span class="s4">return null</span><span class="s2">;</span>
+<span class="s2">}</span>
+
+<span class="s0">/**</span>
+ <span class="s0">* Checks whether an expression evaluates to a string.</span>
+ <span class="s0">* </span><span class="s1">@param </span><span class="s0">{ASTNode} node node that represents the expression to check.</span>
+ <span class="s0">* </span><span class="s1">@returns </span><span class="s0">{boolean} Whether or not the expression evaluates to a string.</span>
+ <span class="s0">*/</span>
+<span class="s4">function </span><span class="s2">isStringType(node) {</span>
+	<span class="s4">return </span><span class="s2">(</span>
+		<span class="s2">astUtils.isStringLiteral(node) ||</span>
+		<span class="s2">(node.type === </span><span class="s3">&quot;CallExpression&quot; </span><span class="s2">&amp;&amp;</span>
+			<span class="s2">node.callee.type === </span><span class="s3">&quot;Identifier&quot; </span><span class="s2">&amp;&amp;</span>
+			<span class="s2">node.callee.name === </span><span class="s3">&quot;String&quot;</span><span class="s2">)</span>
+	<span class="s2">);</span>
+<span class="s2">}</span>
+
+<span class="s0">/**</span>
+ <span class="s0">* Checks whether a node is an empty string literal or not.</span>
+ <span class="s0">* </span><span class="s1">@param </span><span class="s0">{ASTNode} node The node to check.</span>
+ <span class="s0">* </span><span class="s1">@returns </span><span class="s0">{boolean} Whether or not the passed in node is an</span>
+ <span class="s0">* empty string literal or not.</span>
+ <span class="s0">*/</span>
+<span class="s4">function </span><span class="s2">isEmptyString(node) {</span>
+	<span class="s4">return </span><span class="s2">(</span>
+		<span class="s2">astUtils.isStringLiteral(node) &amp;&amp;</span>
+		<span class="s2">(node.value === </span><span class="s3">&quot;&quot; </span><span class="s2">||</span>
+			<span class="s2">(node.type === </span><span class="s3">&quot;TemplateLiteral&quot; </span><span class="s2">&amp;&amp;</span>
+				<span class="s2">node.quasis.length === </span><span class="s6">1 </span><span class="s2">&amp;&amp;</span>
+				<span class="s2">node.quasis[</span><span class="s6">0</span><span class="s2">].value.cooked === </span><span class="s3">&quot;&quot;</span><span class="s2">))</span>
+	<span class="s2">);</span>
+<span class="s2">}</span>
+
+<span class="s0">/**</span>
+ <span class="s0">* Checks whether or not a node is a concatenating with an empty string.</span>
+ <span class="s0">* </span><span class="s1">@param </span><span class="s0">{ASTNode} node A BinaryExpression node to check.</span>
+ <span class="s0">* </span><span class="s1">@returns </span><span class="s0">{boolean} Whether or not the node is a concatenating with an empty string.</span>
+ <span class="s0">*/</span>
+<span class="s4">function </span><span class="s2">isConcatWithEmptyString(node) {</span>
+	<span class="s4">return </span><span class="s2">(</span>
+		<span class="s2">node.operator === </span><span class="s3">&quot;+&quot; </span><span class="s2">&amp;&amp;</span>
+		<span class="s2">((isEmptyString(node.left) &amp;&amp; !isStringType(node.right)) ||</span>
+			<span class="s2">(isEmptyString(node.right) &amp;&amp; !isStringType(node.left)))</span>
+	<span class="s2">);</span>
+<span class="s2">}</span>
+
+<span class="s0">/**</span>
+ <span class="s0">* Checks whether or not a node is appended with an empty string.</span>
+ <span class="s0">* </span><span class="s1">@param </span><span class="s0">{ASTNode} node An AssignmentExpression node to check.</span>
+ <span class="s0">* </span><span class="s1">@returns </span><span class="s0">{boolean} Whether or not the node is appended with an empty string.</span>
+ <span class="s0">*/</span>
+<span class="s4">function </span><span class="s2">isAppendEmptyString(node) {</span>
+	<span class="s4">return </span><span class="s2">node.operator === </span><span class="s3">&quot;+=&quot; </span><span class="s2">&amp;&amp; isEmptyString(node.right);</span>
+<span class="s2">}</span>
+
+<span class="s0">/**</span>
+ <span class="s0">* Returns the operand that is not an empty string from a flagged BinaryExpression.</span>
+ <span class="s0">* </span><span class="s1">@param </span><span class="s0">{ASTNode} node The flagged BinaryExpression node to check.</span>
+ <span class="s0">* </span><span class="s1">@returns </span><span class="s0">{ASTNode} The operand that is not an empty string from a flagged BinaryExpression.</span>
+ <span class="s0">*/</span>
+<span class="s4">function </span><span class="s2">getNonEmptyOperand(node) {</span>
+	<span class="s4">return </span><span class="s2">isEmptyString(node.left) ? node.right : node.left;</span>
+<span class="s2">}</span>
+
+<span class="s0">//------------------------------------------------------------------------------</span>
+<span class="s0">// Rule Definition</span>
+<span class="s0">//------------------------------------------------------------------------------</span>
+
+<span class="s0">/** </span><span class="s1">@type </span><span class="s0">{import('../types').Rule.RuleModule} */</span>
+<span class="s2">module.exports = {</span>
+	<span class="s2">meta: {</span>
+		<span class="s2">hasSuggestions: </span><span class="s4">true</span><span class="s2">,</span>
+		<span class="s2">type: </span><span class="s3">&quot;suggestion&quot;</span><span class="s2">,</span>
+
+		<span class="s2">docs: {</span>
+			<span class="s2">description: </span><span class="s3">&quot;Disallow shorthand type conversions&quot;</span><span class="s2">,</span>
+			<span class="s2">recommended: </span><span class="s4">false</span><span class="s2">,</span>
+			<span class="s2">frozen: </span><span class="s4">true</span><span class="s2">,</span>
+			<span class="s2">url: </span><span class="s3">&quot;https://eslint.org/docs/latest/rules/no-implicit-coercion&quot;</span><span class="s2">,</span>
+		<span class="s2">},</span>
+
+		<span class="s2">fixable: </span><span class="s3">&quot;code&quot;</span><span class="s2">,</span>
+
+		<span class="s2">schema: [</span>
+			<span class="s2">{</span>
+				<span class="s2">type: </span><span class="s3">&quot;object&quot;</span><span class="s2">,</span>
+				<span class="s2">properties: {</span>
+					<span class="s2">boolean: {</span>
+						<span class="s2">type: </span><span class="s3">&quot;boolean&quot;</span><span class="s2">,</span>
+					<span class="s2">},</span>
+					<span class="s2">number: {</span>
+						<span class="s2">type: </span><span class="s3">&quot;boolean&quot;</span><span class="s2">,</span>
+					<span class="s2">},</span>
+					<span class="s2">string: {</span>
+						<span class="s2">type: </span><span class="s3">&quot;boolean&quot;</span><span class="s2">,</span>
+					<span class="s2">},</span>
+					<span class="s2">disallowTemplateShorthand: {</span>
+						<span class="s2">type: </span><span class="s3">&quot;boolean&quot;</span><span class="s2">,</span>
+					<span class="s2">},</span>
+					<span class="s2">allow: {</span>
+						<span class="s2">type: </span><span class="s3">&quot;array&quot;</span><span class="s2">,</span>
+						<span class="s2">items: {</span>
+							<span class="s4">enum</span><span class="s2">: ALLOWABLE_OPERATORS,</span>
+						<span class="s2">},</span>
+						<span class="s2">uniqueItems: </span><span class="s4">true</span><span class="s2">,</span>
+					<span class="s2">},</span>
+				<span class="s2">},</span>
+				<span class="s2">additionalProperties: </span><span class="s4">false</span><span class="s2">,</span>
+			<span class="s2">},</span>
+		<span class="s2">],</span>
+
+		<span class="s2">defaultOptions: [</span>
+			<span class="s2">{</span>
+				<span class="s2">allow: [],</span>
+				<span class="s2">boolean: </span><span class="s4">true</span><span class="s2">,</span>
+				<span class="s2">disallowTemplateShorthand: </span><span class="s4">false</span><span class="s2">,</span>
+				<span class="s2">number: </span><span class="s4">true</span><span class="s2">,</span>
+				<span class="s2">string: </span><span class="s4">true</span><span class="s2">,</span>
+			<span class="s2">},</span>
+		<span class="s2">],</span>
+
+		<span class="s2">messages: {</span>
+			<span class="s2">implicitCoercion:</span>
+				<span class="s3">&quot;Unexpected implicit coercion encountered. Use `{{recommendation}}` instead.&quot;</span><span class="s2">,</span>
+			<span class="s2">useRecommendation: </span><span class="s3">&quot;Use `{{recommendation}}` instead.&quot;</span><span class="s2">,</span>
+		<span class="s2">},</span>
+	<span class="s2">},</span>
+
+	<span class="s2">create(context) {</span>
+		<span class="s4">const </span><span class="s2">[options] = context.options;</span>
+		<span class="s4">const </span><span class="s2">sourceCode = context.sourceCode;</span>
+
+		<span class="s0">/**</span>
+		 <span class="s0">* Reports an error and autofixes the node</span>
+		 <span class="s0">* </span><span class="s1">@param </span><span class="s0">{ASTNode} node An ast node to report the error on.</span>
+		 <span class="s0">* </span><span class="s1">@param </span><span class="s0">{string} recommendation The recommended code for the issue</span>
+		 <span class="s0">* </span><span class="s1">@param </span><span class="s0">{bool} shouldSuggest Whether this report should offer a suggestion</span>
+		 <span class="s0">* </span><span class="s1">@param </span><span class="s0">{bool} shouldFix Whether this report should fix the node</span>
+		 <span class="s0">* </span><span class="s1">@returns </span><span class="s0">{void}</span>
+		 <span class="s0">*/</span>
+		<span class="s4">function </span><span class="s2">report(node, recommendation, shouldSuggest, shouldFix) {</span>
+			<span class="s0">/**</span>
+			 <span class="s0">* Fix function</span>
+			 <span class="s0">* </span><span class="s1">@param </span><span class="s0">{RuleFixer} fixer The fixer to fix.</span>
+			 <span class="s0">* </span><span class="s1">@returns </span><span class="s0">{Fix} The fix object.</span>
+			 <span class="s0">*/</span>
+			<span class="s4">function </span><span class="s2">fix(fixer) {</span>
+				<span class="s4">const </span><span class="s2">tokenBefore = sourceCode.getTokenBefore(node);</span>
+
+				<span class="s4">if </span><span class="s2">(</span>
+					<span class="s2">tokenBefore?.range[</span><span class="s6">1</span><span class="s2">] === node.range[</span><span class="s6">0</span><span class="s2">] &amp;&amp;</span>
+					<span class="s2">!astUtils.canTokensBeAdjacent(tokenBefore, recommendation)</span>
+				<span class="s2">) {</span>
+					<span class="s4">return </span><span class="s2">fixer.replaceText(node, </span><span class="s3">` </span><span class="s2">${recommendation}</span><span class="s3">`</span><span class="s2">);</span>
+				<span class="s2">}</span>
+
+				<span class="s4">return </span><span class="s2">fixer.replaceText(node, recommendation);</span>
+			<span class="s2">}</span>
+
+			<span class="s2">context.report({</span>
+				<span class="s2">node,</span>
+				<span class="s2">messageId: </span><span class="s3">&quot;implicitCoercion&quot;</span><span class="s2">,</span>
+				<span class="s2">data: { recommendation },</span>
+				<span class="s2">fix(fixer) {</span>
+					<span class="s4">if </span><span class="s2">(!shouldFix) {</span>
+						<span class="s4">return null</span><span class="s2">;</span>
+					<span class="s2">}</span>
+
+					<span class="s4">return </span><span class="s2">fix(fixer);</span>
+				<span class="s2">},</span>
+				<span class="s2">suggest: [</span>
+					<span class="s2">{</span>
+						<span class="s2">messageId: </span><span class="s3">&quot;useRecommendation&quot;</span><span class="s2">,</span>
+						<span class="s2">data: { recommendation },</span>
+						<span class="s2">fix(fixer) {</span>
+							<span class="s4">if </span><span class="s2">(shouldFix || !shouldSuggest) {</span>
+								<span class="s4">return null</span><span class="s2">;</span>
+							<span class="s2">}</span>
+
+							<span class="s4">return </span><span class="s2">fix(fixer);</span>
+						<span class="s2">},</span>
+					<span class="s2">},</span>
+				<span class="s2">],</span>
+			<span class="s2">});</span>
+		<span class="s2">}</span>
+
+		<span class="s4">return </span><span class="s2">{</span>
+			<span class="s2">UnaryExpression(node) {</span>
+				<span class="s4">let </span><span class="s2">operatorAllowed;</span>
+
+				<span class="s0">// !!foo</span>
+				<span class="s2">operatorAllowed = options.allow.includes(</span><span class="s3">&quot;!!&quot;</span><span class="s2">);</span>
+				<span class="s4">if </span><span class="s2">(</span>
+					<span class="s2">!operatorAllowed &amp;&amp;</span>
+					<span class="s2">options.boolean &amp;&amp;</span>
+					<span class="s2">isDoubleLogicalNegating(node)</span>
+				<span class="s2">) {</span>
+					<span class="s4">const </span><span class="s2">recommendation = </span><span class="s3">`Boolean(</span><span class="s2">${sourceCode.getText(node.argument.argument)}</span><span class="s3">)`</span><span class="s2">;</span>
+					<span class="s4">const </span><span class="s2">variable = astUtils.getVariableByName(</span>
+						<span class="s2">sourceCode.getScope(node),</span>
+						<span class="s3">&quot;Boolean&quot;</span><span class="s2">,</span>
+					<span class="s2">);</span>
+					<span class="s4">const </span><span class="s2">booleanExists = variable?.identifiers.length === </span><span class="s6">0</span><span class="s2">;</span>
+
+					<span class="s2">report(node, recommendation, </span><span class="s4">true</span><span class="s2">, booleanExists);</span>
+				<span class="s2">}</span>
+
+				<span class="s0">// ~foo.indexOf(bar)</span>
+				<span class="s2">operatorAllowed = options.allow.includes(</span><span class="s3">&quot;~&quot;</span><span class="s2">);</span>
+				<span class="s4">if </span><span class="s2">(</span>
+					<span class="s2">!operatorAllowed &amp;&amp;</span>
+					<span class="s2">options.boolean &amp;&amp;</span>
+					<span class="s2">isBinaryNegatingOfIndexOf(node)</span>
+				<span class="s2">) {</span>
+					<span class="s0">// `foo?.indexOf(bar) !== -1` will be true (== found) if the `foo` is nullish. So use `&gt;= 0` in that case.</span>
+					<span class="s4">const </span><span class="s2">comparison =</span>
+						<span class="s2">node.argument.type === </span><span class="s3">&quot;ChainExpression&quot;</span>
+							<span class="s2">? </span><span class="s3">&quot;&gt;= 0&quot;</span>
+							<span class="s2">: </span><span class="s3">&quot;!== -1&quot;</span><span class="s2">;</span>
+					<span class="s4">const </span><span class="s2">recommendation = </span><span class="s3">`</span><span class="s2">${sourceCode.getText(node.argument)} ${comparison}</span><span class="s3">`</span><span class="s2">;</span>
+
+					<span class="s2">report(node, recommendation, </span><span class="s4">false</span><span class="s2">, </span><span class="s4">false</span><span class="s2">);</span>
+				<span class="s2">}</span>
+
+				<span class="s0">// +foo</span>
+				<span class="s2">operatorAllowed = options.allow.includes(</span><span class="s3">&quot;+&quot;</span><span class="s2">);</span>
+				<span class="s4">if </span><span class="s2">(</span>
+					<span class="s2">!operatorAllowed &amp;&amp;</span>
+					<span class="s2">options.number &amp;&amp;</span>
+					<span class="s2">node.operator === </span><span class="s3">&quot;+&quot; </span><span class="s2">&amp;&amp;</span>
+					<span class="s2">!isNumeric(node.argument)</span>
+				<span class="s2">) {</span>
+					<span class="s4">const </span><span class="s2">recommendation = </span><span class="s3">`Number(</span><span class="s2">${sourceCode.getText(node.argument)}</span><span class="s3">)`</span><span class="s2">;</span>
+
+					<span class="s2">report(node, recommendation, </span><span class="s4">true</span><span class="s2">, </span><span class="s4">false</span><span class="s2">);</span>
+				<span class="s2">}</span>
+
+				<span class="s0">// -(-foo)</span>
+				<span class="s2">operatorAllowed = options.allow.includes(</span><span class="s3">&quot;- -&quot;</span><span class="s2">);</span>
+				<span class="s4">if </span><span class="s2">(</span>
+					<span class="s2">!operatorAllowed &amp;&amp;</span>
+					<span class="s2">options.number &amp;&amp;</span>
+					<span class="s2">node.operator === </span><span class="s3">&quot;-&quot; </span><span class="s2">&amp;&amp;</span>
+					<span class="s2">node.argument.type === </span><span class="s3">&quot;UnaryExpression&quot; </span><span class="s2">&amp;&amp;</span>
+					<span class="s2">node.argument.operator === </span><span class="s3">&quot;-&quot; </span><span class="s2">&amp;&amp;</span>
+					<span class="s2">!isNumeric(node.argument.argument)</span>
+				<span class="s2">) {</span>
+					<span class="s4">const </span><span class="s2">recommendation = </span><span class="s3">`Number(</span><span class="s2">${sourceCode.getText(node.argument.argument)}</span><span class="s3">)`</span><span class="s2">;</span>
+
+					<span class="s2">report(node, recommendation, </span><span class="s4">true</span><span class="s2">, </span><span class="s4">false</span><span class="s2">);</span>
+				<span class="s2">}</span>
+			<span class="s2">},</span>
+
+			<span class="s0">// Use `:exit` to prevent double reporting</span>
+			<span class="s3">&quot;BinaryExpression:exit&quot;</span><span class="s2">(node) {</span>
+				<span class="s4">let </span><span class="s2">operatorAllowed;</span>
+
+				<span class="s0">// 1 * foo</span>
+				<span class="s2">operatorAllowed = options.allow.includes(</span><span class="s3">&quot;*&quot;</span><span class="s2">);</span>
+				<span class="s4">const </span><span class="s2">nonNumericOperand =</span>
+					<span class="s2">!operatorAllowed &amp;&amp;</span>
+					<span class="s2">options.number &amp;&amp;</span>
+					<span class="s2">isMultiplyByOne(node) &amp;&amp;</span>
+					<span class="s2">!isMultiplyByFractionOfOne(node, sourceCode) &amp;&amp;</span>
+					<span class="s2">getNonNumericOperand(node);</span>
+
+				<span class="s4">if </span><span class="s2">(nonNumericOperand) {</span>
+					<span class="s4">const </span><span class="s2">recommendation = </span><span class="s3">`Number(</span><span class="s2">${sourceCode.getText(nonNumericOperand)}</span><span class="s3">)`</span><span class="s2">;</span>
+
+					<span class="s2">report(node, recommendation, </span><span class="s4">true</span><span class="s2">, </span><span class="s4">false</span><span class="s2">);</span>
+				<span class="s2">}</span>
+
+				<span class="s0">// foo - 0</span>
+				<span class="s2">operatorAllowed = options.allow.includes(</span><span class="s3">&quot;-&quot;</span><span class="s2">);</span>
+				<span class="s4">if </span><span class="s2">(</span>
+					<span class="s2">!operatorAllowed &amp;&amp;</span>
+					<span class="s2">options.number &amp;&amp;</span>
+					<span class="s2">node.operator === </span><span class="s3">&quot;-&quot; </span><span class="s2">&amp;&amp;</span>
+					<span class="s2">node.right.type === </span><span class="s3">&quot;Literal&quot; </span><span class="s2">&amp;&amp;</span>
+					<span class="s2">node.right.value === </span><span class="s6">0 </span><span class="s2">&amp;&amp;</span>
+					<span class="s2">!isNumeric(node.left)</span>
+				<span class="s2">) {</span>
+					<span class="s4">const </span><span class="s2">recommendation = </span><span class="s3">`Number(</span><span class="s2">${sourceCode.getText(node.left)}</span><span class="s3">)`</span><span class="s2">;</span>
+
+					<span class="s2">report(node, recommendation, </span><span class="s4">true</span><span class="s2">, </span><span class="s4">false</span><span class="s2">);</span>
+				<span class="s2">}</span>
+
+				<span class="s0">// &quot;&quot; + foo</span>
+				<span class="s2">operatorAllowed = options.allow.includes(</span><span class="s3">&quot;+&quot;</span><span class="s2">);</span>
+				<span class="s4">if </span><span class="s2">(</span>
+					<span class="s2">!operatorAllowed &amp;&amp;</span>
+					<span class="s2">options.string &amp;&amp;</span>
+					<span class="s2">isConcatWithEmptyString(node)</span>
+				<span class="s2">) {</span>
+					<span class="s4">const </span><span class="s2">recommendation = </span><span class="s3">`String(</span><span class="s2">${sourceCode.getText(getNonEmptyOperand(node))}</span><span class="s3">)`</span><span class="s2">;</span>
+
+					<span class="s2">report(node, recommendation, </span><span class="s4">true</span><span class="s2">, </span><span class="s4">false</span><span class="s2">);</span>
+				<span class="s2">}</span>
+			<span class="s2">},</span>
+
+			<span class="s2">AssignmentExpression(node) {</span>
+				<span class="s0">// foo += &quot;&quot;</span>
+				<span class="s4">const </span><span class="s2">operatorAllowed = options.allow.includes(</span><span class="s3">&quot;+&quot;</span><span class="s2">);</span>
+
+				<span class="s4">if </span><span class="s2">(</span>
+					<span class="s2">!operatorAllowed &amp;&amp;</span>
+					<span class="s2">options.string &amp;&amp;</span>
+					<span class="s2">isAppendEmptyString(node)</span>
+				<span class="s2">) {</span>
+					<span class="s4">const </span><span class="s2">code = sourceCode.getText(getNonEmptyOperand(node));</span>
+					<span class="s4">const </span><span class="s2">recommendation = </span><span class="s3">`</span><span class="s2">${code} </span><span class="s3">= String(</span><span class="s2">${code}</span><span class="s3">)`</span><span class="s2">;</span>
+
+					<span class="s2">report(node, recommendation, </span><span class="s4">true</span><span class="s2">, </span><span class="s4">false</span><span class="s2">);</span>
+				<span class="s2">}</span>
+			<span class="s2">},</span>
+
+			<span class="s2">TemplateLiteral(node) {</span>
+				<span class="s4">if </span><span class="s2">(!options.disallowTemplateShorthand) {</span>
+					<span class="s4">return</span><span class="s2">;</span>
+				<span class="s2">}</span>
+
+				<span class="s0">// tag`${foo}`</span>
+				<span class="s4">if </span><span class="s2">(node.parent.type === </span><span class="s3">&quot;TaggedTemplateExpression&quot;</span><span class="s2">) {</span>
+					<span class="s4">return</span><span class="s2">;</span>
+				<span class="s2">}</span>
+
+				<span class="s0">// `` or `${foo}${bar}`</span>
+				<span class="s4">if </span><span class="s2">(node.expressions.length !== </span><span class="s6">1</span><span class="s2">) {</span>
+					<span class="s4">return</span><span class="s2">;</span>
+				<span class="s2">}</span>
+
+				<span class="s0">//  `prefix${foo}`</span>
+				<span class="s4">if </span><span class="s2">(node.quasis[</span><span class="s6">0</span><span class="s2">].value.cooked !== </span><span class="s3">&quot;&quot;</span><span class="s2">) {</span>
+					<span class="s4">return</span><span class="s2">;</span>
+				<span class="s2">}</span>
+
+				<span class="s0">//  `${foo}postfix`</span>
+				<span class="s4">if </span><span class="s2">(node.quasis[</span><span class="s6">1</span><span class="s2">].value.cooked !== </span><span class="s3">&quot;&quot;</span><span class="s2">) {</span>
+					<span class="s4">return</span><span class="s2">;</span>
+				<span class="s2">}</span>
+
+				<span class="s0">// if the expression is already a string, then this isn't a coercion</span>
+				<span class="s4">if </span><span class="s2">(isStringType(node.expressions[</span><span class="s6">0</span><span class="s2">])) {</span>
+					<span class="s4">return</span><span class="s2">;</span>
+				<span class="s2">}</span>
+
+				<span class="s4">const </span><span class="s2">code = sourceCode.getText(node.expressions[</span><span class="s6">0</span><span class="s2">]);</span>
+				<span class="s4">const </span><span class="s2">recommendation = </span><span class="s3">`String(</span><span class="s2">${code}</span><span class="s3">)`</span><span class="s2">;</span>
+
+				<span class="s2">report(node, recommendation, </span><span class="s4">true</span><span class="s2">, </span><span class="s4">false</span><span class="s2">);</span>
+			<span class="s2">},</span>
+		<span class="s2">};</span>
+	<span class="s2">},</span>
+<span class="s2">};</span>
+</pre>
+</body>
+</html>

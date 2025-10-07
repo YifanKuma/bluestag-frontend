@@ -1,0 +1,245 @@
+<html>
+<head>
+<title>formatPhoneNumberForMobileDialing.js</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #8c8c8c; font-style: italic;}
+.s1 { color: #080808;}
+.s2 { color: #0033b3;}
+.s3 { color: #067d17;}
+.s4 { color: #8c8c8c; font-style: italic;}
+.s5 { color: #1750eb;}
+</style>
+</head>
+<body bgcolor="#ffffff">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#c0c0c0" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+formatPhoneNumberForMobileDialing.js</font>
+</center></td></tr></table>
+<pre><span class="s0">// This function is copy-pasted from</span>
+<span class="s0">// https://github.com/googlei18n/libphonenumber/blob/master/javascript/i18n/phonenumbers/phonenumberutil.js</span>
+<span class="s0">// It hasn't been tested. It's not currently exported.</span>
+<span class="s0">// Carriers codes aren't part of this library.</span>
+<span class="s0">// Send a PR if you want to add them.</span>
+
+<span class="s2">import </span><span class="s1">Metadata from </span><span class="s3">'./metadata.js'</span>
+<span class="s2">import </span><span class="s1">format from </span><span class="s3">'./format.js'</span>
+<span class="s2">import </span><span class="s1">getNumberType from </span><span class="s3">'./helpers/getNumberType.js'</span>
+<span class="s2">import </span><span class="s1">checkNumberLength from </span><span class="s3">'./helpers/checkNumberLength.js'</span>
+<span class="s2">import </span><span class="s1">getCountryCallingCode from </span><span class="s3">'./getCountryCallingCode.js'</span>
+
+<span class="s2">const </span><span class="s1">REGION_CODE_FOR_NON_GEO_ENTITY = </span><span class="s3">'001'</span>
+
+<span class="s0">/**</span>
+ <span class="s0">* Returns a number formatted in such a way that it can be dialed from a mobile</span>
+ <span class="s0">* phone in a specific region. If the number cannot be reached from the region</span>
+ <span class="s0">* (e.g. some countries block toll-free numbers from being called outside of the</span>
+ <span class="s0">* country), the method returns an empty string.</span>
+ <span class="s0">*</span>
+ <span class="s0">* </span><span class="s4">@param </span><span class="s0">{object} number - a `parse()`d phone number to be formatted.</span>
+ <span class="s0">* </span><span class="s4">@param </span><span class="s0">{string} from_country - the region where the call is being placed.</span>
+ <span class="s0">* </span><span class="s4">@param </span><span class="s0">{boolean} with_formatting - whether the number should be returned with</span>
+ <span class="s0">*     formatting symbols, such as spaces and dashes.</span>
+ <span class="s0">* </span><span class="s4">@return </span><span class="s0">{string}</span>
+ <span class="s0">*/</span>
+<span class="s2">export default function</span><span class="s1">(number, from_country, with_formatting, metadata) {</span>
+	<span class="s1">metadata = </span><span class="s2">new </span><span class="s1">Metadata(metadata)</span>
+
+	<span class="s0">// Validate `from_country`.</span>
+	<span class="s2">if </span><span class="s1">(!metadata.hasCountry(from_country)) {</span>
+		<span class="s2">throw new </span><span class="s1">Error(</span><span class="s3">`Unknown country: </span><span class="s1">${from_country}</span><span class="s3">`</span><span class="s1">)</span>
+	<span class="s1">}</span>
+
+	<span class="s0">// Not using the extension, as that part cannot normally be dialed</span>
+	<span class="s0">// together with the main number.</span>
+	<span class="s1">number = {</span>
+		<span class="s1">phone: number.phone,</span>
+		<span class="s1">country: number.country</span>
+	<span class="s1">}</span>
+
+	<span class="s2">const </span><span class="s1">number_type = getNumberType(number, undefined, metadata.metadata)</span>
+	<span class="s2">const </span><span class="s1">is_valid_number = number_type === number</span>
+
+	<span class="s2">let </span><span class="s1">formatted_number</span>
+
+	<span class="s2">if </span><span class="s1">(country === from_country) {</span>
+		<span class="s2">const </span><span class="s1">is_fixed_line_or_mobile =</span>
+			<span class="s1">number_type === </span><span class="s3">'FIXED_LINE' </span><span class="s1">||</span>
+			<span class="s1">number_type === </span><span class="s3">'MOBILE' </span><span class="s1">||</span>
+			<span class="s1">number_type === </span><span class="s3">'FIXED_LINE_OR_MOBILE'</span>
+
+		<span class="s0">// Carrier codes may be needed in some countries. We handle this here.</span>
+		<span class="s2">if </span><span class="s1">(country == </span><span class="s3">'BR' </span><span class="s1">&amp;&amp; is_fixed_line_or_mobile) {</span>
+			<span class="s1">formatted_number =</span>
+				<span class="s1">carrierCode ?</span>
+				<span class="s1">formatNationalNumberWithPreferredCarrierCode(number) :</span>
+				<span class="s0">// Brazilian fixed line and mobile numbers need to be dialed with a</span>
+				<span class="s0">// carrier code when called within Brazil. Without that, most of the</span>
+				<span class="s0">// carriers won't connect the call. Because of that, we return an</span>
+				<span class="s0">// empty string here.</span>
+				<span class="s3">''</span>
+		<span class="s1">} </span><span class="s2">else if </span><span class="s1">(getCountryCallingCode(country, metadata.metadata) === </span><span class="s3">'1'</span><span class="s1">) {</span>
+			<span class="s0">// For NANPA countries, we output international format for numbers that</span>
+			<span class="s0">// can be dialed internationally, since that always works, except for</span>
+			<span class="s0">// numbers which might potentially be short numbers, which are always</span>
+			<span class="s0">// dialled in national format.</span>
+
+			<span class="s0">// Select country for `checkNumberLength()`.</span>
+			<span class="s1">metadata.selectNumberingPlan(country)</span>
+
+			<span class="s2">if </span><span class="s1">(can_be_internationally_dialled(number) &amp;&amp;</span>
+				<span class="s1">checkNumberLength(number.phone, country, metadata) !== </span><span class="s3">'TOO_SHORT'</span><span class="s1">) {</span>
+				<span class="s1">formatted_number = format(number, </span><span class="s3">'INTERNATIONAL'</span><span class="s1">, metadata.metadata)</span>
+			<span class="s1">}</span>
+			<span class="s2">else </span><span class="s1">{</span>
+				<span class="s1">formatted_number = format(number, </span><span class="s3">'NATIONAL'</span><span class="s1">, metadata.metadata)</span>
+			<span class="s1">}</span>
+		<span class="s1">}</span>
+		<span class="s2">else </span><span class="s1">{</span>
+			<span class="s0">// For non-geographic countries, Mexican and Chilean fixed line and</span>
+			<span class="s0">// mobile numbers, we output international format for numbers that can be</span>
+			<span class="s0">// dialed internationally, as that always works.</span>
+			<span class="s2">if </span><span class="s1">(</span>
+				<span class="s1">(</span>
+					<span class="s1">country === REGION_CODE_FOR_NON_GEO_ENTITY</span>
+					<span class="s1">||</span>
+					<span class="s0">// MX fixed line and mobile numbers should always be formatted in</span>
+					<span class="s0">// international format, even when dialed within MX. For national</span>
+					<span class="s0">// format to work, a carrier code needs to be used, and the correct</span>
+					<span class="s0">// carrier code depends on if the caller and callee are from the</span>
+					<span class="s0">// same local area. It is trickier to get that to work correctly than</span>
+					<span class="s0">// using international format, which is tested to work fine on all</span>
+					<span class="s0">// carriers.</span>
+					<span class="s0">//</span>
+					<span class="s0">// CL fixed line numbers need the national prefix when dialing in the</span>
+					<span class="s0">// national format, but don't have it when used for display. The</span>
+					<span class="s0">// reverse is true for mobile numbers. As a result, we output them in</span>
+					<span class="s0">// the international format to make it work.</span>
+					<span class="s0">//</span>
+					<span class="s0">// UZ mobile and fixed-line numbers have to be formatted in</span>
+					<span class="s0">// international format or prefixed with special codes like 03, 04</span>
+					<span class="s0">// (for fixed-line) and 05 (for mobile) for dialling successfully</span>
+					<span class="s0">// from mobile devices. As we do not have complete information on</span>
+					<span class="s0">// special codes and to be consistent with formatting across all</span>
+					<span class="s0">// phone types we return the number in international format here.</span>
+					<span class="s0">//</span>
+					<span class="s1">((country === </span><span class="s3">'MX' </span><span class="s1">|| country === </span><span class="s3">'CL' </span><span class="s1">|| country == </span><span class="s3">'UZ'</span><span class="s1">) &amp;&amp; is_fixed_line_or_mobile)</span>
+				<span class="s1">)</span>
+				<span class="s1">&amp;&amp;</span>
+				<span class="s1">can_be_internationally_dialled(number)</span>
+			<span class="s1">) {</span>
+				<span class="s1">formatted_number = format(number, </span><span class="s3">'INTERNATIONAL'</span><span class="s1">)</span>
+			<span class="s1">}</span>
+			<span class="s2">else </span><span class="s1">{</span>
+				<span class="s1">formatted_number = format(number, </span><span class="s3">'NATIONAL'</span><span class="s1">)</span>
+			<span class="s1">}</span>
+		<span class="s1">}</span>
+	<span class="s1">}</span>
+	<span class="s2">else if </span><span class="s1">(is_valid_number &amp;&amp; can_be_internationally_dialled(number)) {</span>
+		<span class="s0">// We assume that short numbers are not diallable from outside their region,</span>
+		<span class="s0">// so if a number is not a valid regular length phone number, we treat it as</span>
+		<span class="s0">// if it cannot be internationally dialled.</span>
+		<span class="s2">return </span><span class="s1">with_formatting ?</span>
+			<span class="s1">format(number, </span><span class="s3">'INTERNATIONAL'</span><span class="s1">, metadata.metadata) :</span>
+			<span class="s1">format(number, </span><span class="s3">'E.164'</span><span class="s1">, metadata.metadata)</span>
+	<span class="s1">}</span>
+
+	<span class="s2">if </span><span class="s1">(!with_formatting) {</span>
+		<span class="s2">return </span><span class="s1">diallable_chars(formatted_number)</span>
+	<span class="s1">}</span>
+
+	<span class="s2">return </span><span class="s1">formatted_number</span>
+<span class="s1">}</span>
+
+<span class="s2">function </span><span class="s1">can_be_internationally_dialled(number) {</span>
+	<span class="s2">return true</span>
+<span class="s1">}</span>
+
+<span class="s0">/**</span>
+ <span class="s0">* A map that contains characters that are essential when dialling. That means</span>
+ <span class="s0">* any of the characters in this map must not be removed from a number when</span>
+ <span class="s0">* dialling, otherwise the call will not reach the intended destination.</span>
+ <span class="s0">*/</span>
+<span class="s2">const </span><span class="s1">DIALLABLE_CHARACTERS = {</span>
+	<span class="s3">'0'</span><span class="s1">: </span><span class="s3">'0'</span><span class="s1">,</span>
+	<span class="s3">'1'</span><span class="s1">: </span><span class="s3">'1'</span><span class="s1">,</span>
+	<span class="s3">'2'</span><span class="s1">: </span><span class="s3">'2'</span><span class="s1">,</span>
+	<span class="s3">'3'</span><span class="s1">: </span><span class="s3">'3'</span><span class="s1">,</span>
+	<span class="s3">'4'</span><span class="s1">: </span><span class="s3">'4'</span><span class="s1">,</span>
+	<span class="s3">'5'</span><span class="s1">: </span><span class="s3">'5'</span><span class="s1">,</span>
+	<span class="s3">'6'</span><span class="s1">: </span><span class="s3">'6'</span><span class="s1">,</span>
+	<span class="s3">'7'</span><span class="s1">: </span><span class="s3">'7'</span><span class="s1">,</span>
+	<span class="s3">'8'</span><span class="s1">: </span><span class="s3">'8'</span><span class="s1">,</span>
+	<span class="s3">'9'</span><span class="s1">: </span><span class="s3">'9'</span><span class="s1">,</span>
+	<span class="s3">'+'</span><span class="s1">: </span><span class="s3">'+'</span><span class="s1">,</span>
+	<span class="s3">'*'</span><span class="s1">: </span><span class="s3">'*'</span><span class="s1">,</span>
+	<span class="s3">'#'</span><span class="s1">: </span><span class="s3">'#'</span>
+<span class="s1">}</span>
+
+<span class="s2">function </span><span class="s1">diallable_chars(formatted_number) {</span>
+	<span class="s2">let </span><span class="s1">result = </span><span class="s3">''</span>
+
+	<span class="s2">let </span><span class="s1">i = </span><span class="s5">0</span>
+	<span class="s2">while </span><span class="s1">(i &lt; formatted_number.length) {</span>
+		<span class="s2">const </span><span class="s1">character = formatted_number[i]</span>
+		<span class="s2">if </span><span class="s1">(DIALLABLE_CHARACTERS[character]) {</span>
+			<span class="s1">result += character</span>
+		<span class="s1">}</span>
+		<span class="s1">i++</span>
+	<span class="s1">}</span>
+
+	<span class="s2">return </span><span class="s1">result</span>
+<span class="s1">}</span>
+
+<span class="s2">function </span><span class="s1">getPreferredDomesticCarrierCodeOrDefault() {</span>
+	<span class="s2">throw new </span><span class="s1">Error(</span><span class="s3">'carrier codes are not part of this library'</span><span class="s1">)</span>
+<span class="s1">}</span>
+
+<span class="s2">function </span><span class="s1">formatNationalNumberWithCarrierCode() {</span>
+	<span class="s2">throw new </span><span class="s1">Error(</span><span class="s3">'carrier codes are not part of this library'</span><span class="s1">)</span>
+<span class="s1">}</span>
+
+<span class="s0">/**</span>
+ <span class="s0">* Formats a phone number in national format for dialing using the carrier as</span>
+ <span class="s0">* specified in the preferred_domestic_carrier_code field of the PhoneNumber</span>
+ <span class="s0">* object passed in. If that is missing, use the {</span><span class="s4">@code </span><span class="s0">fallbackCarrierCode}</span>
+ <span class="s0">* passed in instead. If there is no {</span><span class="s4">@code </span><span class="s0">preferred_domestic_carrier_code},</span>
+ <span class="s0">* and the {</span><span class="s4">@code </span><span class="s0">fallbackCarrierCode} contains an empty string, return the</span>
+ <span class="s0">* number in national format without any carrier code.</span>
+ <span class="s0">*</span>
+ <span class="s0">* &lt;p&gt;Use {</span><span class="s4">@link </span><span class="s0">#formatNationalNumberWithCarrierCode} instead if the carrier</span>
+ <span class="s0">* code passed in should take precedence over the number's</span>
+ <span class="s0">* {</span><span class="s4">@code </span><span class="s0">preferred_domestic_carrier_code} when formatting.</span>
+ <span class="s0">*</span>
+ <span class="s0">* </span><span class="s4">@param </span><span class="s0">{i18n.phonenumbers.PhoneNumber} number the phone number to be</span>
+ <span class="s0">*     formatted.</span>
+ <span class="s0">* </span><span class="s4">@param </span><span class="s0">{string} fallbackCarrierCode the carrier selection code to be used, if</span>
+ <span class="s0">*     none is found in the phone number itself.</span>
+ <span class="s0">* </span><span class="s4">@return </span><span class="s0">{string} the formatted phone number in national format for dialing</span>
+ <span class="s0">*     using the number's preferred_domestic_carrier_code, or the</span>
+ <span class="s0">*     {</span><span class="s4">@code </span><span class="s0">fallbackCarrierCode} passed in if none is found.</span>
+ <span class="s0">*/</span>
+<span class="s2">function </span><span class="s1">formatNationalNumberWithPreferredCarrierCode(number) {</span>
+	<span class="s2">return </span><span class="s1">formatNationalNumberWithCarrierCode(</span>
+		<span class="s1">number,</span>
+		<span class="s1">carrierCode</span>
+	<span class="s1">);</span>
+<span class="s1">}</span>
+
+<span class="s0">// Google's tests:</span>
+<span class="s0">// https://github.com/googlei18n/libphonenumber/blob/597983dc4d56ed7e5337a8e74316dc7a3d02d794/javascript/i18n/phonenumbers/phonenumberutil_test.js</span>
+<span class="s0">//</span>
+<span class="s0">// import metadata from '../metadata.min.json' with { type: 'json' }</span>
+<span class="s0">//</span>
+<span class="s0">// import formatPhoneNumberForMobileDialing from './formatPhoneNumberForMobileDialing.js'</span>
+<span class="s0">//</span>
+<span class="s0">// describe('formatPhoneNumberForMobileDialing', () =&gt; {</span>
+<span class="s0">//  it('should format for mobile dialing', () =&gt; {</span>
+<span class="s0">//      formatPhoneNumberForMobileDialing({ phone: '8005553535', country: 'RU' }, 'US', true, metadata).should.equal('+7 800 555 3535')</span>
+<span class="s0">//      formatPhoneNumberForMobileDialing({ phone: '8005553535', country: 'RU' }, 'US', false, metadata).should.equal('+78005553535')</span>
+<span class="s0">//      formatPhoneNumberForMobileDialing({ phone: '8005553535', country: 'RU' }, 'RU', false, metadata).should.equal('8005553535')</span>
+<span class="s0">//  })</span>
+<span class="s0">// })</span></pre>
+</body>
+</html>

@@ -1,0 +1,93 @@
+<html>
+<head>
+<title>getCountryByNationalNumber.js</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #0033b3;}
+.s1 { color: #080808;}
+.s2 { color: #067d17;}
+.s3 { color: #8c8c8c; font-style: italic;}
+.s4 { color: #1750eb;}
+</style>
+</head>
+<body bgcolor="#ffffff">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#c0c0c0" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+getCountryByNationalNumber.js</font>
+</center></td></tr></table>
+<pre><span class="s0">import </span><span class="s1">Metadata from </span><span class="s2">'../metadata.js'</span>
+<span class="s0">import </span><span class="s1">getNumberType from </span><span class="s2">'./getNumberType.js'</span>
+
+<span class="s3">// Returns the exact country that the `nationalPhoneNumber` belongs to</span>
+<span class="s3">// in cases of ambiguity, i.e. when multiple countries share the same &quot;country calling code&quot;.</span>
+<span class="s0">export default function </span><span class="s1">getCountryByNationalNumber(nationalPhoneNumber, {</span>
+	<span class="s1">countries,</span>
+	<span class="s1">metadata</span>
+<span class="s1">}) {</span>
+	<span class="s3">// Re-create `metadata` because it will be selecting a `country`.</span>
+	<span class="s1">metadata = </span><span class="s0">new </span><span class="s1">Metadata(metadata)</span>
+
+	<span class="s3">// const matchingCountries = []</span>
+
+	<span class="s0">for </span><span class="s1">(</span><span class="s0">const </span><span class="s1">country of countries) {</span>
+		<span class="s1">metadata.selectNumberingPlan(country)</span>
+		<span class="s3">// &quot;Leading digits&quot; patterns are only defined for about 20% of all countries.</span>
+		<span class="s3">// By definition, matching &quot;leading digits&quot; is a sufficient but not a necessary</span>
+		<span class="s3">// condition for a phone number to belong to a country.</span>
+		<span class="s3">// The point of &quot;leading digits&quot; check is that it's the fastest one to get a match.</span>
+		<span class="s3">// https://gitlab.com/catamphetamine/libphonenumber-js/blob/master/METADATA.md#leading_digits</span>
+		<span class="s3">// I'd suppose that &quot;leading digits&quot; patterns are mutually exclusive for different countries</span>
+		<span class="s3">// because of the intended use of that feature.</span>
+		<span class="s0">if </span><span class="s1">(metadata.leadingDigits()) {</span>
+			<span class="s0">if </span><span class="s1">(nationalPhoneNumber &amp;&amp;</span>
+				<span class="s1">nationalPhoneNumber.search(metadata.leadingDigits()) === </span><span class="s4">0</span><span class="s1">) {</span>
+				<span class="s0">return </span><span class="s1">country</span>
+			<span class="s1">}</span>
+		<span class="s1">}</span>
+		<span class="s3">// Else perform full validation with all of those</span>
+		<span class="s3">// fixed-line/mobile/etc regular expressions.</span>
+		<span class="s0">else if </span><span class="s1">(getNumberType({ phone: nationalPhoneNumber, country }, undefined, metadata.metadata)) {</span>
+			<span class="s3">// When multiple countries share the same &quot;country calling code&quot;,</span>
+			<span class="s3">// type patterns aren't guaranteed to be unique among them.</span>
+			<span class="s3">// For example, both `US` and `CA` have the same pattern for `toll_free` numbers.</span>
+			<span class="s3">// https://gitlab.com/catamphetamine/libphonenumber-js/-/issues/103#note_1417147572</span>
+			<span class="s3">//</span>
+			<span class="s3">// That means that this `if` condition could be `true` for multiple countries from the list.</span>
+			<span class="s3">// Currently, it just returns the first one, which is also the &quot;main&quot; country for the &quot;country calling code&quot;.</span>
+			<span class="s3">// In an example with `toll_free` numbers above, `&quot;US&quot;` would be returned even though</span>
+			<span class="s3">// it could as well be `&quot;CA&quot;`.</span>
+			<span class="s3">//</span>
+			<span class="s3">// There was also a time when this attempted to be overly smart</span>
+			<span class="s3">// and kept track of all such multiple matching countries</span>
+			<span class="s3">// and then picked the one that matched the `defaultCountry`, if provided.</span>
+			<span class="s3">// For example, with `toll_free` numbers above, and with `defaultCountry: &quot;CA&quot;`,</span>
+			<span class="s3">// it would've returned `&quot;CA&quot;` instead of `&quot;US&quot;`.</span>
+			<span class="s3">// Later it turned out that such &quot;overly smart&quot; behavior turned out to be just confusing,</span>
+			<span class="s3">// so this &quot;overly smart&quot; country detection was reverted to returning the &quot;main&quot; country</span>
+			<span class="s3">// for the &quot;country calling code&quot;.</span>
+			<span class="s3">// https://gitlab.com/catamphetamine/libphonenumber-js/-/issues/154</span>
+			<span class="s3">//</span>
+			<span class="s0">return </span><span class="s1">country</span>
+			<span class="s3">//</span>
+			<span class="s3">// The &quot;overly smart&quot; behavior code:</span>
+			<span class="s3">//</span>
+			<span class="s3">// if (defaultCountry) {</span>
+			<span class="s3">//  if (country === defaultCountry) {</span>
+			<span class="s3">//      return country</span>
+			<span class="s3">//  } else {</span>
+			<span class="s3">//      matchingCountries.push(country)</span>
+			<span class="s3">//  }</span>
+			<span class="s3">// } else {</span>
+			<span class="s3">//  return country</span>
+			<span class="s3">// }</span>
+		<span class="s1">}</span>
+	<span class="s1">}</span>
+
+	<span class="s3">// // Return the first (&quot;main&quot;) one of the `matchingCountries`.</span>
+	<span class="s3">// if (matchingCountries.length &gt; 0) {</span>
+	<span class="s3">//  return matchingCountries[0]</span>
+	<span class="s3">// }</span>
+<span class="s1">}</span></pre>
+</body>
+</html>

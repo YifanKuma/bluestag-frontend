@@ -1,0 +1,104 @@
+<html>
+<head>
+<title>valueToFloat64Bytes.js</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #067d17;}
+.s1 { color: #080808;}
+.s2 { color: #0033b3;}
+.s3 { color: #1750eb;}
+.s4 { color: #8c8c8c; font-style: italic;}
+</style>
+</head>
+<body bgcolor="#ffffff">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#c0c0c0" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+valueToFloat64Bytes.js</font>
+</center></td></tr></table>
+<pre><span class="s0">'use strict'</span><span class="s1">;</span>
+
+<span class="s2">var </span><span class="s1">GetIntrinsic = require(</span><span class="s0">'get-intrinsic'</span><span class="s1">);</span>
+
+<span class="s2">var </span><span class="s1">$parseInt = GetIntrinsic(</span><span class="s0">'%parseInt%'</span><span class="s1">);</span>
+<span class="s2">var </span><span class="s1">$abs = require(</span><span class="s0">'math-intrinsics/abs'</span><span class="s1">);</span>
+<span class="s2">var </span><span class="s1">$floor = require(</span><span class="s0">'math-intrinsics/floor'</span><span class="s1">);</span>
+<span class="s2">var </span><span class="s1">isNegativeZero = require(</span><span class="s0">'math-intrinsics/isNegativeZero'</span><span class="s1">);</span>
+
+<span class="s2">var </span><span class="s1">callBound = require(</span><span class="s0">'call-bound'</span><span class="s1">);</span>
+
+<span class="s2">var </span><span class="s1">$strIndexOf = callBound(</span><span class="s0">'String.prototype.indexOf'</span><span class="s1">);</span>
+<span class="s2">var </span><span class="s1">$strSlice = callBound(</span><span class="s0">'String.prototype.slice'</span><span class="s1">);</span>
+
+<span class="s2">var </span><span class="s1">fractionToBitString = require(</span><span class="s0">'../helpers/fractionToBinaryString'</span><span class="s1">);</span>
+<span class="s2">var </span><span class="s1">intToBinString = require(</span><span class="s0">'../helpers/intToBinaryString'</span><span class="s1">);</span>
+
+<span class="s2">var </span><span class="s1">float64bias = </span><span class="s3">1023</span><span class="s1">;</span>
+
+<span class="s2">var </span><span class="s1">elevenOnes = </span><span class="s0">'11111111111'</span><span class="s1">;</span>
+<span class="s2">var </span><span class="s1">elevenZeroes = </span><span class="s0">'00000000000'</span><span class="s1">;</span>
+<span class="s2">var </span><span class="s1">fiftyOneZeroes = elevenZeroes + elevenZeroes + elevenZeroes + elevenZeroes + </span><span class="s0">'0000000'</span><span class="s1">;</span>
+
+<span class="s4">// IEEE 754-1985</span>
+<span class="s1">module.exports = </span><span class="s2">function </span><span class="s1">valueToFloat64Bytes(value, isLittleEndian) {</span>
+	<span class="s2">var </span><span class="s1">signBit = value &lt; </span><span class="s3">0 </span><span class="s1">|| isNegativeZero(value) ? </span><span class="s0">'1' </span><span class="s1">: </span><span class="s0">'0'</span><span class="s1">;</span>
+	<span class="s2">var </span><span class="s1">exponentBits;</span>
+	<span class="s2">var </span><span class="s1">significandBits;</span>
+
+	<span class="s2">if </span><span class="s1">(isNaN(value)) {</span>
+		<span class="s1">exponentBits = elevenOnes;</span>
+		<span class="s1">significandBits = </span><span class="s0">'1' </span><span class="s1">+ fiftyOneZeroes;</span>
+	<span class="s1">} </span><span class="s2">else if </span><span class="s1">(!isFinite(value)) {</span>
+		<span class="s1">exponentBits = elevenOnes;</span>
+		<span class="s1">significandBits = </span><span class="s0">'0' </span><span class="s1">+ fiftyOneZeroes;</span>
+	<span class="s1">} </span><span class="s2">else if </span><span class="s1">(value === </span><span class="s3">0</span><span class="s1">) {</span>
+		<span class="s1">exponentBits = elevenZeroes;</span>
+		<span class="s1">significandBits = </span><span class="s0">'0' </span><span class="s1">+ fiftyOneZeroes;</span>
+	<span class="s1">} </span><span class="s2">else </span><span class="s1">{</span>
+		<span class="s1">value = $abs(value); </span><span class="s4">// eslint-disable-line no-param-reassign</span>
+
+		<span class="s4">// Isolate the integer part (digits before the decimal):</span>
+		<span class="s2">var </span><span class="s1">integerPart = $floor(value);</span>
+
+		<span class="s2">var </span><span class="s1">intBinString = intToBinString(integerPart); </span><span class="s4">// bit string for integer part</span>
+		<span class="s2">var </span><span class="s1">fracBinString = fractionToBitString(value - integerPart); </span><span class="s4">// bit string for fractional part</span>
+
+		<span class="s2">var </span><span class="s1">numberOfBits;</span>
+		<span class="s4">// find exponent needed to normalize integer+fractional parts</span>
+		<span class="s2">if </span><span class="s1">(intBinString) {</span>
+			<span class="s1">exponentBits = intBinString.length - </span><span class="s3">1</span><span class="s1">; </span><span class="s4">// move the decimal to the left</span>
+		<span class="s1">} </span><span class="s2">else </span><span class="s1">{</span>
+			<span class="s2">var </span><span class="s1">first1 = $strIndexOf(fracBinString, </span><span class="s0">'1'</span><span class="s1">);</span>
+			<span class="s2">if </span><span class="s1">(first1 &gt; -</span><span class="s3">1</span><span class="s1">) {</span>
+				<span class="s1">numberOfBits = first1 + </span><span class="s3">1</span><span class="s1">;</span>
+			<span class="s1">}</span>
+			<span class="s1">exponentBits = -numberOfBits; </span><span class="s4">// move the decimal to the right</span>
+		<span class="s1">}</span>
+
+		<span class="s1">significandBits = intBinString + fracBinString;</span>
+		<span class="s2">if </span><span class="s1">(exponentBits &lt; </span><span class="s3">0</span><span class="s1">) {</span>
+			<span class="s4">// subnormals</span>
+			<span class="s2">if </span><span class="s1">(exponentBits &lt;= -float64bias) {</span>
+				<span class="s1">numberOfBits = float64bias - </span><span class="s3">1</span><span class="s1">; </span><span class="s4">// limit number of removed bits</span>
+			<span class="s1">}</span>
+			<span class="s1">significandBits = $strSlice(significandBits, numberOfBits); </span><span class="s4">// remove all leading 0s and the first 1 for normal values; for subnormals, remove up to `float64bias - 1` leading bits</span>
+		<span class="s1">} </span><span class="s2">else </span><span class="s1">{</span>
+			<span class="s1">significandBits = $strSlice(significandBits, </span><span class="s3">1</span><span class="s1">); </span><span class="s4">// remove the leading '1' (implicit/hidden bit)</span>
+		<span class="s1">}</span>
+		<span class="s1">exponentBits = $strSlice(elevenZeroes + intToBinString(exponentBits + float64bias), -</span><span class="s3">11</span><span class="s1">); </span><span class="s4">// Convert the exponent to a bit string</span>
+
+		<span class="s1">significandBits = $strSlice(significandBits + fiftyOneZeroes + </span><span class="s0">'0'</span><span class="s1">, </span><span class="s3">0</span><span class="s1">, </span><span class="s3">52</span><span class="s1">); </span><span class="s4">// fill in any trailing zeros and ensure we have only 52 fraction bits</span>
+	<span class="s1">}</span>
+
+	<span class="s2">var </span><span class="s1">bits = signBit + exponentBits + significandBits;</span>
+	<span class="s2">var </span><span class="s1">rawBytes = [];</span>
+	<span class="s2">for </span><span class="s1">(</span><span class="s2">var </span><span class="s1">i = </span><span class="s3">0</span><span class="s1">; i &lt; </span><span class="s3">8</span><span class="s1">; i++) {</span>
+		<span class="s2">var </span><span class="s1">targetIndex = isLittleEndian ? </span><span class="s3">8 </span><span class="s1">- i - </span><span class="s3">1 </span><span class="s1">: i;</span>
+		<span class="s1">rawBytes[targetIndex] = $parseInt($strSlice(bits, i * </span><span class="s3">8</span><span class="s1">, (i + </span><span class="s3">1</span><span class="s1">) * </span><span class="s3">8</span><span class="s1">), </span><span class="s3">2</span><span class="s1">);</span>
+	<span class="s1">}</span>
+
+	<span class="s2">return </span><span class="s1">rawBytes;</span>
+<span class="s1">};</span>
+</pre>
+</body>
+</html>

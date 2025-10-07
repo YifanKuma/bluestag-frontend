@@ -1,0 +1,133 @@
+<html>
+<head>
+<title>match-path-async.js</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #067d17;}
+.s1 { color: #080808;}
+.s2 { color: #0033b3;}
+.s3 { color: #1750eb;}
+.s4 { color: #8c8c8c; font-style: italic;}
+</style>
+</head>
+<body bgcolor="#ffffff">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#c0c0c0" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+match-path-async.js</font>
+</center></td></tr></table>
+<pre><span class="s0">&quot;use strict&quot;</span><span class="s1">;</span>
+<span class="s1">Object.defineProperty(exports, </span><span class="s0">&quot;__esModule&quot;</span><span class="s1">, { value: </span><span class="s2">true </span><span class="s1">});</span>
+<span class="s1">exports.matchFromAbsolutePathsAsync = exports.createMatchPathAsync = </span><span class="s2">void </span><span class="s3">0</span><span class="s1">;</span>
+<span class="s2">var </span><span class="s1">path = require(</span><span class="s0">&quot;path&quot;</span><span class="s1">);</span>
+<span class="s2">var </span><span class="s1">TryPath = require(</span><span class="s0">&quot;./try-path&quot;</span><span class="s1">);</span>
+<span class="s2">var </span><span class="s1">MappingEntry = require(</span><span class="s0">&quot;./mapping-entry&quot;</span><span class="s1">);</span>
+<span class="s2">var </span><span class="s1">Filesystem = require(</span><span class="s0">&quot;./filesystem&quot;</span><span class="s1">);</span>
+<span class="s4">/**</span>
+ <span class="s4">* See the sync version for docs.</span>
+ <span class="s4">*/</span>
+<span class="s2">function </span><span class="s1">createMatchPathAsync(absoluteBaseUrl, paths, mainFields, addMatchAll) {</span>
+    <span class="s2">if </span><span class="s1">(mainFields === </span><span class="s2">void </span><span class="s3">0</span><span class="s1">) { mainFields = [</span><span class="s0">&quot;main&quot;</span><span class="s1">]; }</span>
+    <span class="s2">if </span><span class="s1">(addMatchAll === </span><span class="s2">void </span><span class="s3">0</span><span class="s1">) { addMatchAll = </span><span class="s2">true</span><span class="s1">; }</span>
+    <span class="s2">var </span><span class="s1">absolutePaths = MappingEntry.getAbsoluteMappingEntries(absoluteBaseUrl, paths, addMatchAll);</span>
+    <span class="s2">return function </span><span class="s1">(requestedModule, readJson, fileExists, extensions, callback) {</span>
+        <span class="s2">return </span><span class="s1">matchFromAbsolutePathsAsync(absolutePaths, requestedModule, readJson, fileExists, extensions, callback, mainFields);</span>
+    <span class="s1">};</span>
+<span class="s1">}</span>
+<span class="s1">exports.createMatchPathAsync = createMatchPathAsync;</span>
+<span class="s4">/**</span>
+ <span class="s4">* See the sync version for docs.</span>
+ <span class="s4">*/</span>
+<span class="s2">function </span><span class="s1">matchFromAbsolutePathsAsync(absolutePathMappings, requestedModule, readJson, fileExists, extensions, callback, mainFields) {</span>
+    <span class="s2">if </span><span class="s1">(readJson === </span><span class="s2">void </span><span class="s3">0</span><span class="s1">) { readJson = Filesystem.readJsonFromDiskAsync; }</span>
+    <span class="s2">if </span><span class="s1">(fileExists === </span><span class="s2">void </span><span class="s3">0</span><span class="s1">) { fileExists = Filesystem.fileExistsAsync; }</span>
+    <span class="s2">if </span><span class="s1">(extensions === </span><span class="s2">void </span><span class="s3">0</span><span class="s1">) { extensions = Object.keys(require.extensions); }</span>
+    <span class="s2">if </span><span class="s1">(mainFields === </span><span class="s2">void </span><span class="s3">0</span><span class="s1">) { mainFields = [</span><span class="s0">&quot;main&quot;</span><span class="s1">]; }</span>
+    <span class="s2">var </span><span class="s1">tryPaths = TryPath.getPathsToTry(extensions, absolutePathMappings, requestedModule);</span>
+    <span class="s2">if </span><span class="s1">(!tryPaths) {</span>
+        <span class="s2">return </span><span class="s1">callback();</span>
+    <span class="s1">}</span>
+    <span class="s1">findFirstExistingPath(tryPaths, readJson, fileExists, callback, </span><span class="s3">0</span><span class="s1">, mainFields);</span>
+<span class="s1">}</span>
+<span class="s1">exports.matchFromAbsolutePathsAsync = matchFromAbsolutePathsAsync;</span>
+<span class="s2">function </span><span class="s1">findFirstExistingMainFieldMappedFile(packageJson, mainFields, packageJsonPath, fileExistsAsync, doneCallback, index) {</span>
+    <span class="s2">if </span><span class="s1">(index === </span><span class="s2">void </span><span class="s3">0</span><span class="s1">) { index = </span><span class="s3">0</span><span class="s1">; }</span>
+    <span class="s2">if </span><span class="s1">(index &gt;= mainFields.length) {</span>
+        <span class="s2">return </span><span class="s1">doneCallback(undefined, undefined);</span>
+    <span class="s1">}</span>
+    <span class="s2">var </span><span class="s1">tryNext = </span><span class="s2">function </span><span class="s1">() {</span>
+        <span class="s2">return </span><span class="s1">findFirstExistingMainFieldMappedFile(packageJson, mainFields, packageJsonPath, fileExistsAsync, doneCallback, index + </span><span class="s3">1</span><span class="s1">);</span>
+    <span class="s1">};</span>
+    <span class="s2">var </span><span class="s1">mainFieldMapping = packageJson[mainFields[index]];</span>
+    <span class="s2">if </span><span class="s1">(</span><span class="s2">typeof </span><span class="s1">mainFieldMapping !== </span><span class="s0">&quot;string&quot;</span><span class="s1">) {</span>
+        <span class="s4">// Skip mappings that are not pointers to replacement files</span>
+        <span class="s2">return </span><span class="s1">tryNext();</span>
+    <span class="s1">}</span>
+    <span class="s2">var </span><span class="s1">mappedFilePath = path.join(path.dirname(packageJsonPath), mainFieldMapping);</span>
+    <span class="s1">fileExistsAsync(mappedFilePath, </span><span class="s2">function </span><span class="s1">(err, exists) {</span>
+        <span class="s2">if </span><span class="s1">(err) {</span>
+            <span class="s2">return </span><span class="s1">doneCallback(err);</span>
+        <span class="s1">}</span>
+        <span class="s2">if </span><span class="s1">(exists) {</span>
+            <span class="s2">return </span><span class="s1">doneCallback(undefined, mappedFilePath);</span>
+        <span class="s1">}</span>
+        <span class="s2">return </span><span class="s1">tryNext();</span>
+    <span class="s1">});</span>
+<span class="s1">}</span>
+<span class="s4">// Recursive loop to probe for physical files</span>
+<span class="s2">function </span><span class="s1">findFirstExistingPath(tryPaths, readJson, fileExists, doneCallback, index, mainFields) {</span>
+    <span class="s2">if </span><span class="s1">(index === </span><span class="s2">void </span><span class="s3">0</span><span class="s1">) { index = </span><span class="s3">0</span><span class="s1">; }</span>
+    <span class="s2">if </span><span class="s1">(mainFields === </span><span class="s2">void </span><span class="s3">0</span><span class="s1">) { mainFields = [</span><span class="s0">&quot;main&quot;</span><span class="s1">]; }</span>
+    <span class="s2">var </span><span class="s1">tryPath = tryPaths[index];</span>
+    <span class="s2">if </span><span class="s1">(tryPath.type === </span><span class="s0">&quot;file&quot; </span><span class="s1">||</span>
+        <span class="s1">tryPath.type === </span><span class="s0">&quot;extension&quot; </span><span class="s1">||</span>
+        <span class="s1">tryPath.type === </span><span class="s0">&quot;index&quot;</span><span class="s1">) {</span>
+        <span class="s1">fileExists(tryPath.path, </span><span class="s2">function </span><span class="s1">(err, exists) {</span>
+            <span class="s2">if </span><span class="s1">(err) {</span>
+                <span class="s2">return </span><span class="s1">doneCallback(err);</span>
+            <span class="s1">}</span>
+            <span class="s2">if </span><span class="s1">(exists) {</span>
+                <span class="s2">return </span><span class="s1">doneCallback(undefined, TryPath.getStrippedPath(tryPath));</span>
+            <span class="s1">}</span>
+            <span class="s2">if </span><span class="s1">(index === tryPaths.length - </span><span class="s3">1</span><span class="s1">) {</span>
+                <span class="s2">return </span><span class="s1">doneCallback();</span>
+            <span class="s1">}</span>
+            <span class="s4">// Continue with the next path</span>
+            <span class="s2">return </span><span class="s1">findFirstExistingPath(tryPaths, readJson, fileExists, doneCallback, index + </span><span class="s3">1</span><span class="s1">, mainFields);</span>
+        <span class="s1">});</span>
+    <span class="s1">}</span>
+    <span class="s2">else if </span><span class="s1">(tryPath.type === </span><span class="s0">&quot;package&quot;</span><span class="s1">) {</span>
+        <span class="s1">readJson(tryPath.path, </span><span class="s2">function </span><span class="s1">(err, packageJson) {</span>
+            <span class="s2">if </span><span class="s1">(err) {</span>
+                <span class="s2">return </span><span class="s1">doneCallback(err);</span>
+            <span class="s1">}</span>
+            <span class="s2">if </span><span class="s1">(packageJson) {</span>
+                <span class="s2">return </span><span class="s1">findFirstExistingMainFieldMappedFile(packageJson, mainFields, tryPath.path, fileExists, </span><span class="s2">function </span><span class="s1">(mainFieldErr, mainFieldMappedFile) {</span>
+                    <span class="s2">if </span><span class="s1">(mainFieldErr) {</span>
+                        <span class="s2">return </span><span class="s1">doneCallback(mainFieldErr);</span>
+                    <span class="s1">}</span>
+                    <span class="s2">if </span><span class="s1">(mainFieldMappedFile) {</span>
+                        <span class="s2">return </span><span class="s1">doneCallback(undefined, mainFieldMappedFile);</span>
+                    <span class="s1">}</span>
+                    <span class="s4">// No field in package json was a valid option. Continue with the next path.</span>
+                    <span class="s2">return </span><span class="s1">findFirstExistingPath(tryPaths, readJson, fileExists, doneCallback, index + </span><span class="s3">1</span><span class="s1">, mainFields);</span>
+                <span class="s1">});</span>
+            <span class="s1">}</span>
+            <span class="s4">// This is async code, we need to return unconditionally, otherwise the code still falls</span>
+            <span class="s4">// through and keeps recursing. While this might work in general, libraries that use neo-async</span>
+            <span class="s4">// like Webpack will actually not allow you to call the same callback twice.</span>
+            <span class="s4">//</span>
+            <span class="s4">// An example of where this caused issues:</span>
+            <span class="s4">// https://github.com/dividab/tsconfig-paths-webpack-plugin/issues/11</span>
+            <span class="s4">//</span>
+            <span class="s4">// Continue with the next path</span>
+            <span class="s2">return </span><span class="s1">findFirstExistingPath(tryPaths, readJson, fileExists, doneCallback, index + </span><span class="s3">1</span><span class="s1">, mainFields);</span>
+        <span class="s1">});</span>
+    <span class="s1">}</span>
+    <span class="s2">else </span><span class="s1">{</span>
+        <span class="s1">TryPath.exhaustiveTypeException(tryPath.type);</span>
+    <span class="s1">}</span>
+<span class="s1">}</span>
+<span class="s4">//# sourceMappingURL=match-path-async.js.map</span></pre>
+</body>
+</html>

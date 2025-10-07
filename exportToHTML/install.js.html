@@ -1,0 +1,165 @@
+<html>
+<head>
+<title>install.js</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #8c8c8c; font-style: italic;}
+.s1 { color: #080808;}
+.s2 { color: #8c8c8c; font-style: italic;}
+.s3 { color: #0033b3;}
+.s4 { color: #067d17;}
+.s5 { color: #1750eb;}
+</style>
+</head>
+<body bgcolor="#ffffff">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#c0c0c0" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+install.js</font>
+</center></td></tr></table>
+<pre><span class="s0">#!/usr/bin/env node</span>
+
+<span class="s0">/**</span>
+ <span class="s0">* </span><span class="s2">@tailwindcss</span><span class="s0">/oxide postinstall script</span>
+ <span class="s0">*</span>
+ <span class="s0">* This script ensures that the correct binary for the current platform and</span>
+ <span class="s0">* architecture is downloaded and available.</span>
+ <span class="s0">*/</span>
+
+<span class="s3">const </span><span class="s1">fs = require(</span><span class="s4">'fs'</span><span class="s1">)</span>
+<span class="s3">const </span><span class="s1">path = require(</span><span class="s4">'path'</span><span class="s1">)</span>
+<span class="s3">const </span><span class="s1">https = require(</span><span class="s4">'https'</span><span class="s1">)</span>
+<span class="s3">const </span><span class="s1">{ extract } = require(</span><span class="s4">'tar'</span><span class="s1">)</span>
+<span class="s3">const </span><span class="s1">packageJson = require(</span><span class="s4">'../package.json'</span><span class="s1">)</span>
+<span class="s3">const </span><span class="s1">detectLibc = require(</span><span class="s4">'detect-libc'</span><span class="s1">)</span>
+
+<span class="s3">const </span><span class="s1">version = packageJson.version</span>
+
+<span class="s3">function </span><span class="s1">getPlatformPackageName() {</span>
+  <span class="s3">let </span><span class="s1">platform = process.platform</span>
+  <span class="s3">let </span><span class="s1">arch = process.arch</span>
+
+  <span class="s3">let </span><span class="s1">libc = </span><span class="s4">''</span>
+  <span class="s3">if </span><span class="s1">(platform === </span><span class="s4">'linux'</span><span class="s1">) {</span>
+    <span class="s1">libc = detectLibc.isNonGlibcLinuxSync() ? </span><span class="s4">'musl' </span><span class="s1">: </span><span class="s4">'gnu'</span>
+  <span class="s1">}</span>
+
+  <span class="s0">// Map to our package naming conventions</span>
+  <span class="s3">switch </span><span class="s1">(platform) {</span>
+    <span class="s3">case </span><span class="s4">'darwin'</span><span class="s1">:</span>
+      <span class="s3">return </span><span class="s1">arch === </span><span class="s4">'arm64' </span><span class="s1">? </span><span class="s4">'@tailwindcss/oxide-darwin-arm64' </span><span class="s1">: </span><span class="s4">'@tailwindcss/oxide-darwin-x64'</span>
+    <span class="s3">case </span><span class="s4">'win32'</span><span class="s1">:</span>
+      <span class="s3">if </span><span class="s1">(arch === </span><span class="s4">'arm64'</span><span class="s1">) </span><span class="s3">return </span><span class="s4">'@tailwindcss/oxide-win32-arm64-msvc'</span>
+      <span class="s3">if </span><span class="s1">(arch === </span><span class="s4">'ia32'</span><span class="s1">) </span><span class="s3">return </span><span class="s4">'@tailwindcss/oxide-win32-ia32-msvc'</span>
+      <span class="s3">return </span><span class="s4">'@tailwindcss/oxide-win32-x64-msvc'</span>
+    <span class="s3">case </span><span class="s4">'linux'</span><span class="s1">:</span>
+      <span class="s3">if </span><span class="s1">(arch === </span><span class="s4">'x64'</span><span class="s1">) {</span>
+        <span class="s3">return </span><span class="s1">libc === </span><span class="s4">'musl'</span>
+          <span class="s1">? </span><span class="s4">'@tailwindcss/oxide-linux-x64-musl'</span>
+          <span class="s1">: </span><span class="s4">'@tailwindcss/oxide-linux-x64-gnu'</span>
+      <span class="s1">} </span><span class="s3">else if </span><span class="s1">(arch === </span><span class="s4">'arm64'</span><span class="s1">) {</span>
+        <span class="s3">return </span><span class="s1">libc === </span><span class="s4">'musl'</span>
+          <span class="s1">? </span><span class="s4">'@tailwindcss/oxide-linux-arm64-musl'</span>
+          <span class="s1">: </span><span class="s4">'@tailwindcss/oxide-linux-arm64-gnu'</span>
+      <span class="s1">} </span><span class="s3">else if </span><span class="s1">(arch === </span><span class="s4">'arm'</span><span class="s1">) {</span>
+        <span class="s3">return </span><span class="s4">'@tailwindcss/oxide-linux-arm-gnueabihf'</span>
+      <span class="s1">}</span>
+      <span class="s3">break</span>
+    <span class="s3">case </span><span class="s4">'freebsd'</span><span class="s1">:</span>
+      <span class="s3">return </span><span class="s4">'@tailwindcss/oxide-freebsd-x64'</span>
+    <span class="s3">case </span><span class="s4">'android'</span><span class="s1">:</span>
+      <span class="s3">return </span><span class="s4">'@tailwindcss/oxide-android-arm64'</span>
+    <span class="s3">default</span><span class="s1">:</span>
+      <span class="s3">return </span><span class="s4">'@tailwindcss/oxide-wasm32-wasi'</span>
+  <span class="s1">}</span>
+<span class="s1">}</span>
+
+<span class="s3">function </span><span class="s1">isPackageAvailable(packageName) {</span>
+  <span class="s3">try </span><span class="s1">{</span>
+    <span class="s1">require.resolve(packageName)</span>
+    <span class="s3">return true</span>
+  <span class="s1">} </span><span class="s3">catch </span><span class="s1">(e) {</span>
+    <span class="s3">return false</span>
+  <span class="s1">}</span>
+<span class="s1">}</span>
+
+<span class="s0">// Extract all files from a tarball to a destination directory</span>
+<span class="s1">async </span><span class="s3">function </span><span class="s1">extractTarball(tarballStream, destDir) {</span>
+  <span class="s3">if </span><span class="s1">(!fs.existsSync(destDir)) {</span>
+    <span class="s1">fs.mkdirSync(destDir, { recursive: </span><span class="s3">true </span><span class="s1">})</span>
+  <span class="s1">}</span>
+
+  <span class="s3">return new </span><span class="s1">Promise((resolve, reject) =&gt; {</span>
+    <span class="s1">tarballStream</span>
+      <span class="s1">.pipe(extract({ cwd: destDir, strip: </span><span class="s5">1 </span><span class="s1">}))</span>
+      <span class="s1">.on(</span><span class="s4">'error'</span><span class="s1">, (err) =&gt; reject(err))</span>
+      <span class="s1">.on(</span><span class="s4">'end'</span><span class="s1">, () =&gt; resolve())</span>
+  <span class="s1">})</span>
+<span class="s1">}</span>
+
+<span class="s1">async </span><span class="s3">function </span><span class="s1">downloadAndExtractBinary(packageName) {</span>
+  <span class="s3">let </span><span class="s1">tarballUrl = </span><span class="s4">`https://registry.npmjs.org/</span><span class="s1">${packageName}</span><span class="s4">/-/</span><span class="s1">${packageName.replace(</span><span class="s4">'@tailwindcss/'</span><span class="s1">, </span><span class="s4">''</span><span class="s1">)}</span><span class="s4">-</span><span class="s1">${version}</span><span class="s4">.tgz`</span>
+  <span class="s1">console.log(</span><span class="s4">`Downloading </span><span class="s1">${tarballUrl}</span><span class="s4">...`</span><span class="s1">)</span>
+
+  <span class="s3">return new </span><span class="s1">Promise((resolve) =&gt; {</span>
+    <span class="s1">https</span>
+      <span class="s1">.get(tarballUrl, (response) =&gt; {</span>
+        <span class="s3">if </span><span class="s1">(response.statusCode === </span><span class="s5">302 </span><span class="s1">|| response.statusCode === </span><span class="s5">301</span><span class="s1">) {</span>
+          <span class="s0">// Handle redirects</span>
+          <span class="s1">https.get(response.headers.location, handleResponse).on(</span><span class="s4">'error'</span><span class="s1">, (err) =&gt; {</span>
+            <span class="s1">console.error(</span><span class="s4">'Download error:'</span><span class="s1">, err)</span>
+            <span class="s1">resolve()</span>
+          <span class="s1">})</span>
+          <span class="s3">return</span>
+        <span class="s1">}</span>
+
+        <span class="s1">handleResponse(response)</span>
+
+        <span class="s1">async </span><span class="s3">function </span><span class="s1">handleResponse(response) {</span>
+          <span class="s3">try </span><span class="s1">{</span>
+            <span class="s3">if </span><span class="s1">(response.statusCode !== </span><span class="s5">200</span><span class="s1">) {</span>
+              <span class="s3">throw new </span><span class="s1">Error(</span><span class="s4">`Download failed with status code: </span><span class="s1">${response.statusCode}</span><span class="s4">`</span><span class="s1">)</span>
+            <span class="s1">}</span>
+
+            <span class="s3">await </span><span class="s1">extractTarball(</span>
+              <span class="s1">response,</span>
+              <span class="s1">path.join(__dirname, </span><span class="s4">'..'</span><span class="s1">, </span><span class="s4">'node_modules'</span><span class="s1">, ...packageName.split(</span><span class="s4">'/'</span><span class="s1">)),</span>
+            <span class="s1">)</span>
+            <span class="s1">console.log(</span><span class="s4">`Successfully downloaded and installed </span><span class="s1">${packageName}</span><span class="s4">`</span><span class="s1">)</span>
+          <span class="s1">} </span><span class="s3">catch </span><span class="s1">(error) {</span>
+            <span class="s1">console.error(</span><span class="s4">'Error during extraction:'</span><span class="s1">, error)</span>
+            <span class="s1">resolve()</span>
+          <span class="s1">} </span><span class="s3">finally </span><span class="s1">{</span>
+            <span class="s1">resolve()</span>
+          <span class="s1">}</span>
+        <span class="s1">}</span>
+      <span class="s1">})</span>
+      <span class="s1">.on(</span><span class="s4">'error'</span><span class="s1">, (err) =&gt; {</span>
+        <span class="s1">console.error(</span><span class="s4">'Download error:'</span><span class="s1">, err)</span>
+        <span class="s1">resolve()</span>
+      <span class="s1">})</span>
+  <span class="s1">})</span>
+<span class="s1">}</span>
+
+<span class="s1">async </span><span class="s3">function </span><span class="s1">main() {</span>
+  <span class="s0">// Don't run this script in the package source</span>
+  <span class="s3">try </span><span class="s1">{</span>
+    <span class="s3">if </span><span class="s1">(fs.existsSync(path.join(__dirname, </span><span class="s4">'..'</span><span class="s1">, </span><span class="s4">'build.rs'</span><span class="s1">))) {</span>
+      <span class="s3">return</span>
+    <span class="s1">}</span>
+
+    <span class="s3">let </span><span class="s1">packageName = getPlatformPackageName()</span>
+    <span class="s3">if </span><span class="s1">(!packageName) </span><span class="s3">return</span>
+    <span class="s3">if </span><span class="s1">(isPackageAvailable(packageName)) </span><span class="s3">return</span>
+
+    <span class="s3">await </span><span class="s1">downloadAndExtractBinary(packageName)</span>
+  <span class="s1">} </span><span class="s3">catch </span><span class="s1">(error) {</span>
+    <span class="s1">console.error(error)</span>
+    <span class="s3">return</span>
+  <span class="s1">}</span>
+<span class="s1">}</span>
+
+<span class="s1">main()</span>
+</pre>
+</body>
+</html>

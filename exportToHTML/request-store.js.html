@@ -1,0 +1,164 @@
+<html>
+<head>
+<title>request-store.js</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #067d17;}
+.s1 { color: #080808;}
+.s2 { color: #0033b3;}
+.s3 { color: #1750eb;}
+.s4 { color: #8c8c8c; font-style: italic;}
+</style>
+</head>
+<body bgcolor="#ffffff">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#c0c0c0" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+request-store.js</font>
+</center></td></tr></table>
+<pre><span class="s0">&quot;use strict&quot;</span><span class="s1">;</span>
+<span class="s1">Object.defineProperty(exports, </span><span class="s0">&quot;__esModule&quot;</span><span class="s1">, {</span>
+    <span class="s1">value: </span><span class="s2">true</span>
+<span class="s1">});</span>
+<span class="s3">0 </span><span class="s1">&amp;&amp; (module.exports = {</span>
+    <span class="s1">createRequestStoreForAPI: </span><span class="s2">null</span><span class="s1">,</span>
+    <span class="s1">createRequestStoreForRender: </span><span class="s2">null</span><span class="s1">,</span>
+    <span class="s1">synchronizeMutableCookies: </span><span class="s2">null</span>
+<span class="s1">});</span>
+<span class="s2">function </span><span class="s1">_export(target, all) {</span>
+    <span class="s2">for</span><span class="s1">(</span><span class="s2">var </span><span class="s1">name </span><span class="s2">in </span><span class="s1">all)Object.defineProperty(target, name, {</span>
+        <span class="s1">enumerable: </span><span class="s2">true</span><span class="s1">,</span>
+        <span class="s1">get: all[name]</span>
+    <span class="s1">});</span>
+<span class="s1">}</span>
+<span class="s1">_export(exports, {</span>
+    <span class="s1">createRequestStoreForAPI: </span><span class="s2">function</span><span class="s1">() {</span>
+        <span class="s2">return </span><span class="s1">createRequestStoreForAPI;</span>
+    <span class="s1">},</span>
+    <span class="s1">createRequestStoreForRender: </span><span class="s2">function</span><span class="s1">() {</span>
+        <span class="s2">return </span><span class="s1">createRequestStoreForRender;</span>
+    <span class="s1">},</span>
+    <span class="s1">synchronizeMutableCookies: </span><span class="s2">function</span><span class="s1">() {</span>
+        <span class="s2">return </span><span class="s1">synchronizeMutableCookies;</span>
+    <span class="s1">}</span>
+<span class="s1">});</span>
+<span class="s2">const </span><span class="s1">_approuterheaders = require(</span><span class="s0">&quot;../../client/components/app-router-headers&quot;</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">_headers = require(</span><span class="s0">&quot;../web/spec-extension/adapters/headers&quot;</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">_requestcookies = require(</span><span class="s0">&quot;../web/spec-extension/adapters/request-cookies&quot;</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">_cookies = require(</span><span class="s0">&quot;../web/spec-extension/cookies&quot;</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">_draftmodeprovider = require(</span><span class="s0">&quot;./draft-mode-provider&quot;</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">_utils = require(</span><span class="s0">&quot;../web/utils&quot;</span><span class="s1">);</span>
+<span class="s2">function </span><span class="s1">getHeaders(headers) {</span>
+    <span class="s2">const </span><span class="s1">cleaned = _headers.HeadersAdapter.from(headers);</span>
+    <span class="s2">for </span><span class="s1">(</span><span class="s2">const </span><span class="s1">header of _approuterheaders.FLIGHT_HEADERS){</span>
+        <span class="s1">cleaned.delete(header);</span>
+    <span class="s1">}</span>
+    <span class="s2">return </span><span class="s1">_headers.HeadersAdapter.seal(cleaned);</span>
+<span class="s1">}</span>
+<span class="s2">function </span><span class="s1">getMutableCookies(headers, onUpdateCookies) {</span>
+    <span class="s2">const </span><span class="s1">cookies = </span><span class="s2">new </span><span class="s1">_cookies.RequestCookies(_headers.HeadersAdapter.from(headers));</span>
+    <span class="s2">return </span><span class="s1">_requestcookies.MutableRequestCookiesAdapter.wrap(cookies, onUpdateCookies);</span>
+<span class="s1">}</span>
+<span class="s4">/**</span>
+ <span class="s4">* If middleware set cookies in this request (indicated by `x-middleware-set-cookie`),</span>
+ <span class="s4">* then merge those into the existing cookie object, so that when `cookies()` is accessed</span>
+ <span class="s4">* it's able to read the newly set cookies.</span>
+ <span class="s4">*/ </span><span class="s2">function </span><span class="s1">mergeMiddlewareCookies(req, existingCookies) {</span>
+    <span class="s2">if </span><span class="s1">(</span><span class="s0">'x-middleware-set-cookie' </span><span class="s2">in </span><span class="s1">req.headers &amp;&amp; </span><span class="s2">typeof </span><span class="s1">req.headers[</span><span class="s0">'x-middleware-set-cookie'</span><span class="s1">] === </span><span class="s0">'string'</span><span class="s1">) {</span>
+        <span class="s2">const </span><span class="s1">setCookieValue = req.headers[</span><span class="s0">'x-middleware-set-cookie'</span><span class="s1">];</span>
+        <span class="s2">const </span><span class="s1">responseHeaders = </span><span class="s2">new </span><span class="s1">Headers();</span>
+        <span class="s2">for </span><span class="s1">(</span><span class="s2">const </span><span class="s1">cookie of (</span><span class="s3">0</span><span class="s1">, _utils.splitCookiesString)(setCookieValue)){</span>
+            <span class="s1">responseHeaders.append(</span><span class="s0">'set-cookie'</span><span class="s1">, cookie);</span>
+        <span class="s1">}</span>
+        <span class="s2">const </span><span class="s1">responseCookies = </span><span class="s2">new </span><span class="s1">_cookies.ResponseCookies(responseHeaders);</span>
+        <span class="s4">// Transfer cookies from ResponseCookies to RequestCookies</span>
+        <span class="s2">for </span><span class="s1">(</span><span class="s2">const </span><span class="s1">cookie of responseCookies.getAll()){</span>
+            <span class="s1">existingCookies.set(cookie);</span>
+        <span class="s1">}</span>
+    <span class="s1">}</span>
+<span class="s1">}</span>
+<span class="s2">function </span><span class="s1">createRequestStoreForRender(req, res, url, rootParams, implicitTags, onUpdateCookies, previewProps, isHmrRefresh, serverComponentsHmrCache, renderResumeDataCache, devFallbackParams) {</span>
+    <span class="s2">return </span><span class="s1">createRequestStoreImpl(</span><span class="s4">// Pages start in render phase by default</span>
+    <span class="s0">'render'</span><span class="s1">, req, res, url, rootParams, implicitTags, onUpdateCookies, renderResumeDataCache, previewProps, isHmrRefresh, serverComponentsHmrCache, devFallbackParams);</span>
+<span class="s1">}</span>
+<span class="s2">function </span><span class="s1">createRequestStoreForAPI(req, url, implicitTags, onUpdateCookies, previewProps) {</span>
+    <span class="s2">return </span><span class="s1">createRequestStoreImpl(</span><span class="s4">// API routes start in action phase by default</span>
+    <span class="s0">'action'</span><span class="s1">, req, undefined, url, {}, implicitTags, onUpdateCookies, undefined, previewProps, </span><span class="s2">false</span><span class="s1">, undefined, </span><span class="s2">null</span><span class="s1">);</span>
+<span class="s1">}</span>
+<span class="s2">function </span><span class="s1">createRequestStoreImpl(phase, req, res, url, rootParams, implicitTags, onUpdateCookies, renderResumeDataCache, previewProps, isHmrRefresh, serverComponentsHmrCache, devFallbackParams) {</span>
+    <span class="s2">function </span><span class="s1">defaultOnUpdateCookies(cookies) {</span>
+        <span class="s2">if </span><span class="s1">(res) {</span>
+            <span class="s1">res.setHeader(</span><span class="s0">'Set-Cookie'</span><span class="s1">, cookies);</span>
+        <span class="s1">}</span>
+    <span class="s1">}</span>
+    <span class="s2">const </span><span class="s1">cache = {};</span>
+    <span class="s2">return </span><span class="s1">{</span>
+        <span class="s1">type: </span><span class="s0">'request'</span><span class="s1">,</span>
+        <span class="s1">phase,</span>
+        <span class="s1">implicitTags,</span>
+        <span class="s4">// Rather than just using the whole `url` here, we pull the parts we want</span>
+        <span class="s4">// to ensure we don't use parts of the URL that we shouldn't. This also</span>
+        <span class="s4">// lets us avoid requiring an empty string for `search` in the type.</span>
+        <span class="s1">url: {</span>
+            <span class="s1">pathname: url.pathname,</span>
+            <span class="s1">search: url.search ?? </span><span class="s0">''</span>
+        <span class="s1">},</span>
+        <span class="s1">rootParams,</span>
+        <span class="s1">get headers () {</span>
+            <span class="s2">if </span><span class="s1">(!cache.headers) {</span>
+                <span class="s4">// Seal the headers object that'll freeze out any methods that could</span>
+                <span class="s4">// mutate the underlying data.</span>
+                <span class="s1">cache.headers = getHeaders(req.headers);</span>
+            <span class="s1">}</span>
+            <span class="s2">return </span><span class="s1">cache.headers;</span>
+        <span class="s1">},</span>
+        <span class="s1">get cookies () {</span>
+            <span class="s2">if </span><span class="s1">(!cache.cookies) {</span>
+                <span class="s4">// if middleware is setting cookie(s), then include those in</span>
+                <span class="s4">// the initial cached cookies so they can be read in render</span>
+                <span class="s2">const </span><span class="s1">requestCookies = </span><span class="s2">new </span><span class="s1">_cookies.RequestCookies(_headers.HeadersAdapter.from(req.headers));</span>
+                <span class="s1">mergeMiddlewareCookies(req, requestCookies);</span>
+                <span class="s4">// Seal the cookies object that'll freeze out any methods that could</span>
+                <span class="s4">// mutate the underlying data.</span>
+                <span class="s1">cache.cookies = _requestcookies.RequestCookiesAdapter.seal(requestCookies);</span>
+            <span class="s1">}</span>
+            <span class="s2">return </span><span class="s1">cache.cookies;</span>
+        <span class="s1">},</span>
+        <span class="s1">set cookies (value){</span>
+            <span class="s1">cache.cookies = value;</span>
+        <span class="s1">},</span>
+        <span class="s1">get mutableCookies () {</span>
+            <span class="s2">if </span><span class="s1">(!cache.mutableCookies) {</span>
+                <span class="s2">const </span><span class="s1">mutableCookies = getMutableCookies(req.headers, onUpdateCookies || (res ? defaultOnUpdateCookies : undefined));</span>
+                <span class="s1">mergeMiddlewareCookies(req, mutableCookies);</span>
+                <span class="s1">cache.mutableCookies = mutableCookies;</span>
+            <span class="s1">}</span>
+            <span class="s2">return </span><span class="s1">cache.mutableCookies;</span>
+        <span class="s1">},</span>
+        <span class="s1">get userspaceMutableCookies () {</span>
+            <span class="s2">if </span><span class="s1">(!cache.userspaceMutableCookies) {</span>
+                <span class="s2">const </span><span class="s1">userspaceMutableCookies = (</span><span class="s3">0</span><span class="s1">, _requestcookies.createCookiesWithMutableAccessCheck)(</span><span class="s2">this</span><span class="s1">);</span>
+                <span class="s1">cache.userspaceMutableCookies = userspaceMutableCookies;</span>
+            <span class="s1">}</span>
+            <span class="s2">return </span><span class="s1">cache.userspaceMutableCookies;</span>
+        <span class="s1">},</span>
+        <span class="s1">get draftMode () {</span>
+            <span class="s2">if </span><span class="s1">(!cache.draftMode) {</span>
+                <span class="s1">cache.draftMode = </span><span class="s2">new </span><span class="s1">_draftmodeprovider.DraftModeProvider(previewProps, req, </span><span class="s2">this</span><span class="s1">.cookies, </span><span class="s2">this</span><span class="s1">.mutableCookies);</span>
+            <span class="s1">}</span>
+            <span class="s2">return </span><span class="s1">cache.draftMode;</span>
+        <span class="s1">},</span>
+        <span class="s1">renderResumeDataCache: renderResumeDataCache ?? </span><span class="s2">null</span><span class="s1">,</span>
+        <span class="s1">isHmrRefresh,</span>
+        <span class="s1">serverComponentsHmrCache: serverComponentsHmrCache || globalThis.__serverComponentsHmrCache,</span>
+        <span class="s1">devFallbackParams</span>
+    <span class="s1">};</span>
+<span class="s1">}</span>
+<span class="s2">function </span><span class="s1">synchronizeMutableCookies(store) {</span>
+    <span class="s4">// TODO: does this need to update headers as well?</span>
+    <span class="s1">store.cookies = _requestcookies.RequestCookiesAdapter.seal((</span><span class="s3">0</span><span class="s1">, _requestcookies.responseCookiesToRequestCookies)(store.mutableCookies));</span>
+<span class="s1">}</span>
+
+<span class="s4">//# sourceMappingURL=request-store.js.map</span></pre>
+</body>
+</html>

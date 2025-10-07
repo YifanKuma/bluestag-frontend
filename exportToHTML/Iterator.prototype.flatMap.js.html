@@ -1,0 +1,259 @@
+<html>
+<head>
+<title>Iterator.prototype.flatMap.js</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #067d17;}
+.s1 { color: #080808;}
+.s2 { color: #0033b3;}
+.s3 { color: #8c8c8c; font-style: italic;}
+.s4 { color: #1750eb;}
+</style>
+</head>
+<body bgcolor="#ffffff">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#c0c0c0" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+Iterator.prototype.flatMap.js</font>
+</center></td></tr></table>
+<pre><span class="s0">'use strict'</span><span class="s1">;</span>
+
+<span class="s2">var </span><span class="s1">defineProperties = require(</span><span class="s0">'define-properties'</span><span class="s1">);</span>
+<span class="s2">var </span><span class="s1">test = require(</span><span class="s0">'tape'</span><span class="s1">);</span>
+<span class="s2">var </span><span class="s1">callBind = require(</span><span class="s0">'call-bind'</span><span class="s1">);</span>
+<span class="s2">var </span><span class="s1">functionsHaveNames = require(</span><span class="s0">'functions-have-names'</span><span class="s1">)();</span>
+<span class="s2">var </span><span class="s1">hasStrictMode = require(</span><span class="s0">'has-strict-mode'</span><span class="s1">)();</span>
+<span class="s2">var </span><span class="s1">forEach = require(</span><span class="s0">'for-each'</span><span class="s1">);</span>
+<span class="s2">var </span><span class="s1">debug = require(</span><span class="s0">'object-inspect'</span><span class="s1">);</span>
+<span class="s2">var </span><span class="s1">v = require(</span><span class="s0">'es-value-fixtures'</span><span class="s1">);</span>
+<span class="s2">var </span><span class="s1">hasSymbols = require(</span><span class="s0">'has-symbols/shams'</span><span class="s1">)();</span>
+<span class="s2">var </span><span class="s1">iterate = require(</span><span class="s0">'iterate-iterator'</span><span class="s1">);</span>
+
+<span class="s2">var </span><span class="s1">StringToCodePoints = require(</span><span class="s0">'es-abstract/2024/StringToCodePoints'</span><span class="s1">);</span>
+
+<span class="s2">var </span><span class="s1">index = require(</span><span class="s0">'../Iterator.prototype.flatMap'</span><span class="s1">);</span>
+<span class="s2">var </span><span class="s1">impl = require(</span><span class="s0">'../Iterator.prototype.flatMap/implementation'</span><span class="s1">);</span>
+
+<span class="s2">var </span><span class="s1">fnName = </span><span class="s0">'flatMap'</span><span class="s1">;</span>
+
+<span class="s2">var </span><span class="s1">isEnumerable = Object.prototype.propertyIsEnumerable;</span>
+
+<span class="s2">var </span><span class="s1">testIterator = require(</span><span class="s0">'./helpers/testIterator'</span><span class="s1">);</span>
+
+<span class="s1">module.exports = {</span>
+	<span class="s1">tests: </span><span class="s2">function </span><span class="s1">(flatMap, name, t) {</span>
+		<span class="s1">t[</span><span class="s0">'throws'</span><span class="s1">](</span>
+			<span class="s2">function </span><span class="s1">() { </span><span class="s2">return new </span><span class="s1">flatMap(); }, </span><span class="s3">// eslint-disable-line new-cap</span>
+			<span class="s1">TypeError,</span>
+			<span class="s0">'`' </span><span class="s1">+ name + </span><span class="s0">'` is not a constructor'</span>
+		<span class="s1">);</span>
+
+		<span class="s1">forEach(v.primitives.concat(v.objects), </span><span class="s2">function </span><span class="s1">(nonIterator) {</span>
+			<span class="s1">t[</span><span class="s0">'throws'</span><span class="s1">](</span>
+				<span class="s2">function </span><span class="s1">() { iterate(flatMap(nonIterator, </span><span class="s2">function </span><span class="s1">() {})); },</span>
+				<span class="s1">TypeError,</span>
+				<span class="s1">debug(nonIterator) + </span><span class="s0">' is not an Object with a callable `next` method'</span>
+			<span class="s1">);</span>
+
+			<span class="s2">var </span><span class="s1">badNext = { next: nonIterator };</span>
+			<span class="s1">t[</span><span class="s0">'throws'</span><span class="s1">](</span>
+				<span class="s2">function </span><span class="s1">() { iterate(flatMap(badNext, </span><span class="s2">function </span><span class="s1">() {})); },</span>
+				<span class="s1">TypeError,</span>
+				<span class="s1">debug(badNext) + </span><span class="s0">' is not an Object with a callable `next` method'</span>
+			<span class="s1">);</span>
+		<span class="s1">});</span>
+
+		<span class="s1">forEach(v.nonFunctions, </span><span class="s2">function </span><span class="s1">(nonFunction) {</span>
+			<span class="s1">t[</span><span class="s0">'throws'</span><span class="s1">](</span>
+				<span class="s2">function </span><span class="s1">() { flatMap({ next: </span><span class="s2">function </span><span class="s1">() {} }, nonFunction); },</span>
+				<span class="s1">TypeError,</span>
+				<span class="s1">debug(nonFunction) + </span><span class="s0">' is not a function'</span>
+			<span class="s1">);</span>
+		<span class="s1">});</span>
+
+		<span class="s1">t.test(</span><span class="s0">'actual iteration'</span><span class="s1">, { skip: !hasSymbols }, </span><span class="s2">function </span><span class="s1">(st) {</span>
+			<span class="s2">var </span><span class="s1">arr = [</span><span class="s4">1</span><span class="s1">, </span><span class="s4">2</span><span class="s1">, </span><span class="s4">3</span><span class="s1">];</span>
+			<span class="s2">var </span><span class="s1">iterator = callBind(arr[Symbol.iterator], arr);</span>
+
+			<span class="s1">st[</span><span class="s0">'throws'</span><span class="s1">](</span>
+				<span class="s2">function </span><span class="s1">() { </span><span class="s2">return new </span><span class="s1">flatMap(iterator()); }, </span><span class="s3">// eslint-disable-line new-cap</span>
+				<span class="s1">TypeError,</span>
+				<span class="s0">'`' </span><span class="s1">+ name + </span><span class="s0">'` iterator is not a constructor'</span>
+			<span class="s1">);</span>
+			<span class="s1">st[</span><span class="s0">'throws'</span><span class="s1">](</span>
+				<span class="s2">function </span><span class="s1">() { </span><span class="s2">return new </span><span class="s1">flatMap(iterator(), </span><span class="s2">function </span><span class="s1">() {}); }, </span><span class="s3">// eslint-disable-line new-cap</span>
+				<span class="s1">TypeError,</span>
+				<span class="s0">'`' </span><span class="s1">+ name + </span><span class="s0">'` iterator is not a constructor'</span>
+			<span class="s1">);</span>
+
+			<span class="s1">testIterator(iterator(), [</span><span class="s4">1</span><span class="s1">, </span><span class="s4">2</span><span class="s1">, </span><span class="s4">3</span><span class="s1">], st, </span><span class="s0">'original'</span><span class="s1">);</span>
+
+			<span class="s2">var </span><span class="s1">nonIterableFlatMap = flatMap(iterator(), </span><span class="s2">function </span><span class="s1">(x) { </span><span class="s2">return </span><span class="s1">x; });</span>
+			<span class="s1">st[</span><span class="s0">'throws'</span><span class="s1">](</span>
+				<span class="s2">function </span><span class="s1">() { nonIterableFlatMap.next(); },</span>
+				<span class="s1">TypeError,</span>
+				<span class="s0">'non-iterable return value throws'</span>
+			<span class="s1">);</span>
+
+			<span class="s1">forEach(v.strings, </span><span class="s2">function </span><span class="s1">(string) {</span>
+				<span class="s1">st[</span><span class="s0">'throws'</span><span class="s1">](</span>
+					<span class="s2">function </span><span class="s1">() { flatMap(iterator(), </span><span class="s2">function </span><span class="s1">() { </span><span class="s2">return </span><span class="s1">string; }).next(); },</span>
+					<span class="s1">TypeError,</span>
+					<span class="s0">'non-object return value throws even if iterable (' </span><span class="s1">+ debug(string) + </span><span class="s0">')'</span>
+				<span class="s1">);</span>
+
+				<span class="s1">testIterator(</span>
+					<span class="s1">flatMap(iterator(), </span><span class="s2">function </span><span class="s1">() { </span><span class="s2">return </span><span class="s1">Object(string); }),</span>
+					<span class="s1">[].concat(StringToCodePoints(string), StringToCodePoints(string), StringToCodePoints(string)),</span>
+					<span class="s1">st,</span>
+					<span class="s0">'boxed string (' </span><span class="s1">+ debug(string) + </span><span class="s0">')'</span>
+				<span class="s1">);</span>
+			<span class="s1">});</span>
+
+			<span class="s1">testIterator(flatMap(iterator(), </span><span class="s2">function </span><span class="s1">(x) { </span><span class="s2">return </span><span class="s1">[x][Symbol.iterator](); }), [</span><span class="s4">1</span><span class="s1">, </span><span class="s4">2</span><span class="s1">, </span><span class="s4">3</span><span class="s1">], st, </span><span class="s0">'identity mapper in array iterator'</span><span class="s1">);</span>
+			<span class="s1">testIterator(flatMap(iterator(), </span><span class="s2">function </span><span class="s1">(x) { </span><span class="s2">return </span><span class="s1">[</span><span class="s4">2 </span><span class="s1">* x][Symbol.iterator](); }), [</span><span class="s4">2</span><span class="s1">, </span><span class="s4">4</span><span class="s1">, </span><span class="s4">6</span><span class="s1">], st, </span><span class="s0">'doubler mapper in array iterator'</span><span class="s1">);</span>
+
+			<span class="s1">testIterator(flatMap(iterator(), </span><span class="s2">function </span><span class="s1">() { </span><span class="s2">return </span><span class="s1">[]; }), [], st, </span><span class="s0">'empty mapper in nested array iterator'</span><span class="s1">);</span>
+			<span class="s1">testIterator(flatMap(iterator(), </span><span class="s2">function </span><span class="s1">(x) { </span><span class="s2">return </span><span class="s1">[[x, x + </span><span class="s4">1</span><span class="s1">]][Symbol.iterator](); }), [[</span><span class="s4">1</span><span class="s1">, </span><span class="s4">2</span><span class="s1">], [</span><span class="s4">2</span><span class="s1">, </span><span class="s4">3</span><span class="s1">], [</span><span class="s4">3</span><span class="s1">, </span><span class="s4">4</span><span class="s1">]], st, </span><span class="s0">'identity mapper in nested array iterator'</span><span class="s1">);</span>
+			<span class="s1">testIterator(flatMap(iterator(), </span><span class="s2">function </span><span class="s1">(x) { </span><span class="s2">return </span><span class="s1">[[</span><span class="s4">2 </span><span class="s1">* x, </span><span class="s4">2 </span><span class="s1">* (x + </span><span class="s4">1</span><span class="s1">)]][Symbol.iterator](); }), [[</span><span class="s4">2</span><span class="s1">, </span><span class="s4">4</span><span class="s1">], [</span><span class="s4">4</span><span class="s1">, </span><span class="s4">6</span><span class="s1">], [</span><span class="s4">6</span><span class="s1">, </span><span class="s4">8</span><span class="s1">]], st, </span><span class="s0">'doubler mapper in nested array iterator'</span><span class="s1">);</span>
+
+			<span class="s1">testIterator(flatMap([</span><span class="s4">0</span><span class="s1">, </span><span class="s4">1</span><span class="s1">, </span><span class="s4">2</span><span class="s1">, </span><span class="s4">3</span><span class="s1">][Symbol.iterator](), </span><span class="s2">function </span><span class="s1">(value) {</span>
+				<span class="s2">var </span><span class="s1">result = [];</span>
+				<span class="s2">for </span><span class="s1">(</span><span class="s2">var </span><span class="s1">i = </span><span class="s4">0</span><span class="s1">; i &lt; value; ++i) {</span>
+					<span class="s1">result.push(value);</span>
+				<span class="s1">}</span>
+				<span class="s2">return </span><span class="s1">result;</span>
+			<span class="s1">}), [</span><span class="s4">1</span><span class="s1">, </span><span class="s4">2</span><span class="s1">, </span><span class="s4">2</span><span class="s1">, </span><span class="s4">3</span><span class="s1">, </span><span class="s4">3</span><span class="s1">, </span><span class="s4">3</span><span class="s1">], st, </span><span class="s0">'test262: test/built-ins/Iterator/prototype/flatMap/flattens-iteratable'</span><span class="s1">);</span>
+
+			<span class="s1">testIterator(flatMap([</span><span class="s4">0</span><span class="s1">, </span><span class="s4">1</span><span class="s1">, </span><span class="s4">2</span><span class="s1">, </span><span class="s4">3</span><span class="s1">][Symbol.iterator](), </span><span class="s2">function </span><span class="s1">(value) {</span>
+				<span class="s2">var </span><span class="s1">i = </span><span class="s4">0</span><span class="s1">;</span>
+				<span class="s2">return </span><span class="s1">{</span>
+					<span class="s1">next: </span><span class="s2">function </span><span class="s1">() {</span>
+						<span class="s2">if </span><span class="s1">(i &lt; value) {</span>
+							<span class="s1">i += </span><span class="s4">1</span><span class="s1">;</span>
+							<span class="s2">return </span><span class="s1">{</span>
+								<span class="s1">value: value,</span>
+								<span class="s1">done: </span><span class="s2">false</span>
+							<span class="s1">};</span>
+						<span class="s1">}</span>
+						<span class="s2">return </span><span class="s1">{</span>
+							<span class="s1">value: undefined,</span>
+							<span class="s1">done: </span><span class="s2">true</span>
+						<span class="s1">};</span>
+
+					<span class="s1">}</span>
+				<span class="s1">};</span>
+			<span class="s1">}), [</span><span class="s4">1</span><span class="s1">, </span><span class="s4">2</span><span class="s1">, </span><span class="s4">2</span><span class="s1">, </span><span class="s4">3</span><span class="s1">, </span><span class="s4">3</span><span class="s1">, </span><span class="s4">3</span><span class="s1">], st, </span><span class="s0">'test262: test/built-ins/Iterator/prototype/flatMap/flattens-iterator'</span><span class="s1">);</span>
+
+			<span class="s1">testIterator(flatMap([</span><span class="s4">0</span><span class="s1">][Symbol.iterator](), </span><span class="s2">function </span><span class="s1">() {</span>
+				<span class="s2">var </span><span class="s1">n = [</span><span class="s4">0</span><span class="s1">, </span><span class="s4">1</span><span class="s1">, </span><span class="s4">2</span><span class="s1">][Symbol.iterator]();</span>
+
+				<span class="s2">var </span><span class="s1">ret = {</span>
+					<span class="s1">next: </span><span class="s2">function </span><span class="s1">next() {</span>
+						<span class="s2">return </span><span class="s1">n.next();</span>
+					<span class="s1">}</span>
+				<span class="s1">};</span>
+				<span class="s1">ret[Symbol.iterator] = </span><span class="s2">null</span><span class="s1">;</span>
+				<span class="s2">return </span><span class="s1">ret;</span>
+			<span class="s1">}), [</span><span class="s4">0</span><span class="s1">, </span><span class="s4">1</span><span class="s1">, </span><span class="s4">2</span><span class="s1">], st, </span><span class="s0">'test262: test/built-ins/Iterator/prototype/flatMap/iterable-to-iterator-fallback'</span><span class="s1">);</span>
+
+			<span class="s2">var </span><span class="s1">counts = [];</span>
+			<span class="s1">testIterator(flatMap([</span><span class="s0">'a'</span><span class="s1">, </span><span class="s0">'b'</span><span class="s1">, </span><span class="s0">'c'</span><span class="s1">, </span><span class="s0">'d'</span><span class="s1">, </span><span class="s0">'e'</span><span class="s1">][Symbol.iterator](), </span><span class="s2">function </span><span class="s1">(value, count) {</span>
+				<span class="s1">counts.push(count);</span>
+
+				<span class="s2">if </span><span class="s1">(value === </span><span class="s0">'a' </span><span class="s1">|| value === </span><span class="s0">'b'</span><span class="s1">) {</span>
+					<span class="s2">return </span><span class="s1">[</span><span class="s4">0</span><span class="s1">];</span>
+				<span class="s1">}</span>
+				<span class="s2">if </span><span class="s1">(value === </span><span class="s0">'c'</span><span class="s1">) {</span>
+					<span class="s2">return </span><span class="s1">[</span><span class="s4">1</span><span class="s1">, </span><span class="s4">2</span><span class="s1">];</span>
+				<span class="s1">}</span>
+				<span class="s2">if </span><span class="s1">(value === </span><span class="s0">'d'</span><span class="s1">) {</span>
+					<span class="s2">return </span><span class="s1">[</span><span class="s4">3</span><span class="s1">, </span><span class="s4">4</span><span class="s1">, </span><span class="s4">5</span><span class="s1">];</span>
+				<span class="s1">}</span>
+				<span class="s2">if </span><span class="s1">(value === </span><span class="s0">'e'</span><span class="s1">) {</span>
+					<span class="s2">return </span><span class="s1">[</span><span class="s4">6</span><span class="s1">, </span><span class="s4">7</span><span class="s1">, </span><span class="s4">8</span><span class="s1">, </span><span class="s4">9</span><span class="s1">];</span>
+				<span class="s1">}</span>
+
+				<span class="s2">return </span><span class="s1">st.fail(</span><span class="s0">'got unexpected value: ' </span><span class="s1">+ debug(v));</span>
+			<span class="s1">}), [</span><span class="s4">0</span><span class="s1">, </span><span class="s4">0</span><span class="s1">, </span><span class="s4">1</span><span class="s1">, </span><span class="s4">2</span><span class="s1">, </span><span class="s4">3</span><span class="s1">, </span><span class="s4">4</span><span class="s1">, </span><span class="s4">5</span><span class="s1">, </span><span class="s4">6</span><span class="s1">, </span><span class="s4">7</span><span class="s1">, </span><span class="s4">8</span><span class="s1">, </span><span class="s4">9</span><span class="s1">], st, </span><span class="s0">'test262: test/built-ins/Iterator/prototype/flatMap/mapper-args'</span><span class="s1">);</span>
+			<span class="s1">st.deepEqual(counts, [</span><span class="s4">0</span><span class="s1">, </span><span class="s4">1</span><span class="s1">, </span><span class="s4">2</span><span class="s1">, </span><span class="s4">3</span><span class="s1">, </span><span class="s4">4</span><span class="s1">], </span><span class="s0">'count values are as expected'</span><span class="s1">);</span>
+
+			<span class="s1">st.test(</span><span class="s0">'return protocol'</span><span class="s1">, </span><span class="s2">function </span><span class="s1">(s2t) {</span>
+				<span class="s2">var </span><span class="s1">returnCount = </span><span class="s4">0</span><span class="s1">;</span>
+
+				<span class="s2">var </span><span class="s1">iter = flatMap([</span><span class="s4">0</span><span class="s1">][Symbol.iterator](), </span><span class="s2">function </span><span class="s1">() {</span>
+					<span class="s2">return </span><span class="s1">{</span>
+						<span class="s1">next: </span><span class="s2">function </span><span class="s1">next() {</span>
+							<span class="s2">return </span><span class="s1">{</span>
+								<span class="s1">done: </span><span class="s2">false</span><span class="s1">,</span>
+								<span class="s1">value: </span><span class="s4">1</span>
+							<span class="s1">};</span>
+						<span class="s1">},</span>
+						<span class="s0">'return'</span><span class="s1">: </span><span class="s2">function </span><span class="s1">() {</span>
+							<span class="s1">returnCount += </span><span class="s4">1</span><span class="s1">;</span>
+							<span class="s2">return </span><span class="s1">{};</span>
+						<span class="s1">}</span>
+					<span class="s1">};</span>
+				<span class="s1">});</span>
+				<span class="s1">s2t.equal(returnCount, </span><span class="s4">0</span><span class="s1">, </span><span class="s0">'`return` is not called yet'</span><span class="s1">);</span>
+
+				<span class="s1">s2t.deepEqual(iter.next(), {</span>
+					<span class="s1">done: </span><span class="s2">false</span><span class="s1">,</span>
+					<span class="s1">value: </span><span class="s4">1</span>
+				<span class="s1">});</span>
+
+				<span class="s1">s2t.equal(returnCount, </span><span class="s4">0</span><span class="s1">, </span><span class="s0">'`return` is not called after first yield'</span><span class="s1">);</span>
+
+				<span class="s1">iter[</span><span class="s0">'return'</span><span class="s1">]();</span>
+				<span class="s1">s2t.equal(returnCount, </span><span class="s4">1</span><span class="s1">, </span><span class="s0">'`return` is called when iterator return is called'</span><span class="s1">);</span>
+
+				<span class="s1">iter[</span><span class="s0">'return'</span><span class="s1">]();</span>
+				<span class="s1">s2t.equal(returnCount, </span><span class="s4">1</span><span class="s1">, </span><span class="s0">'`return` is not called again when iterator return is called again'</span><span class="s1">);</span>
+
+				<span class="s1">s2t.end();</span>
+			<span class="s1">});</span>
+
+			<span class="s1">st.end();</span>
+		<span class="s1">});</span>
+	<span class="s1">},</span>
+	<span class="s1">index: </span><span class="s2">function </span><span class="s1">() {</span>
+		<span class="s1">test(</span><span class="s0">'Iterator.prototype.' </span><span class="s1">+ fnName + </span><span class="s0">': index'</span><span class="s1">, </span><span class="s2">function </span><span class="s1">(t) {</span>
+			<span class="s1">module.exports.tests(index, </span><span class="s0">'Iterator.prototype.' </span><span class="s1">+ fnName, t);</span>
+
+			<span class="s1">t.end();</span>
+		<span class="s1">});</span>
+	<span class="s1">},</span>
+	<span class="s1">implementation: </span><span class="s2">function </span><span class="s1">() {</span>
+		<span class="s1">test(</span><span class="s0">'Iterator.prototype.' </span><span class="s1">+ fnName + </span><span class="s0">': implementation'</span><span class="s1">, </span><span class="s2">function </span><span class="s1">(t) {</span>
+			<span class="s1">module.exports.tests(callBind(impl), </span><span class="s0">'Iterator.prototype.' </span><span class="s1">+ fnName, t);</span>
+
+			<span class="s1">t.end();</span>
+		<span class="s1">});</span>
+	<span class="s1">},</span>
+	<span class="s1">shimmed: </span><span class="s2">function </span><span class="s1">() {</span>
+		<span class="s1">test(</span><span class="s0">'Iterator.prototype.' </span><span class="s1">+ fnName + </span><span class="s0">': shimmed'</span><span class="s1">, </span><span class="s2">function </span><span class="s1">(t) {</span>
+			<span class="s1">t.test(</span><span class="s0">'Function name'</span><span class="s1">, { skip: !functionsHaveNames }, </span><span class="s2">function </span><span class="s1">(st) {</span>
+				<span class="s1">st.equal(Iterator.prototype[fnName].name, fnName, </span><span class="s0">'Iterator#' </span><span class="s1">+ fnName + </span><span class="s0">' has name &quot;' </span><span class="s1">+ fnName + </span><span class="s0">'&quot;'</span><span class="s1">);</span>
+				<span class="s1">st.end();</span>
+			<span class="s1">});</span>
+
+			<span class="s1">t.test(</span><span class="s0">'enumerability'</span><span class="s1">, { skip: !defineProperties.supportsDescriptors }, </span><span class="s2">function </span><span class="s1">(et) {</span>
+				<span class="s1">et.equal(</span><span class="s2">false</span><span class="s1">, isEnumerable.call(Iterator.prototype, fnName), </span><span class="s0">'Iterator#' </span><span class="s1">+ fnName + </span><span class="s0">' is not enumerable'</span><span class="s1">);</span>
+				<span class="s1">et.end();</span>
+			<span class="s1">});</span>
+
+			<span class="s1">t.test(</span><span class="s0">'bad string/this value'</span><span class="s1">, { skip: !hasStrictMode }, </span><span class="s2">function </span><span class="s1">(st) {</span>
+				<span class="s1">st[</span><span class="s0">'throws'</span><span class="s1">](</span><span class="s2">function </span><span class="s1">() { </span><span class="s2">return </span><span class="s1">Iterator.prototype[fnName].call(undefined, </span><span class="s0">'a'</span><span class="s1">); }, TypeError, </span><span class="s0">'undefined is not an object'</span><span class="s1">);</span>
+				<span class="s1">st[</span><span class="s0">'throws'</span><span class="s1">](</span><span class="s2">function </span><span class="s1">() { </span><span class="s2">return </span><span class="s1">Iterator.prototype[fnName].call(</span><span class="s2">null</span><span class="s1">, </span><span class="s0">'a'</span><span class="s1">); }, TypeError, </span><span class="s0">'null is not an object'</span><span class="s1">);</span>
+				<span class="s1">st.end();</span>
+			<span class="s1">});</span>
+
+			<span class="s1">module.exports.tests(callBind(Iterator.prototype[fnName]), </span><span class="s0">'Iterator.prototype.' </span><span class="s1">+ fnName, t);</span>
+
+			<span class="s1">t.end();</span>
+		<span class="s1">});</span>
+	<span class="s1">}</span>
+<span class="s1">};</span>
+</pre>
+</body>
+</html>

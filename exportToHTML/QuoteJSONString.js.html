@@ -1,0 +1,74 @@
+<html>
+<head>
+<title>QuoteJSONString.js</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #067d17;}
+.s1 { color: #080808;}
+.s2 { color: #0033b3;}
+.s3 { color: #8c8c8c; font-style: italic;}
+.s4 { color: #0037a6;}
+.s5 { color: #1750eb;}
+</style>
+</head>
+<body bgcolor="#ffffff">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#c0c0c0" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+QuoteJSONString.js</font>
+</center></td></tr></table>
+<pre><span class="s0">'use strict'</span><span class="s1">;</span>
+
+<span class="s2">var </span><span class="s1">$TypeError = require(</span><span class="s0">'es-errors/type'</span><span class="s1">);</span>
+
+<span class="s2">var </span><span class="s1">callBound = require(</span><span class="s0">'call-bound'</span><span class="s1">);</span>
+<span class="s2">var </span><span class="s1">forEach = require(</span><span class="s0">'../helpers/forEach'</span><span class="s1">);</span>
+<span class="s2">var </span><span class="s1">isLeadingSurrogate = require(</span><span class="s0">'../helpers/isLeadingSurrogate'</span><span class="s1">);</span>
+<span class="s2">var </span><span class="s1">isTrailingSurrogate = require(</span><span class="s0">'../helpers/isTrailingSurrogate'</span><span class="s1">);</span>
+
+<span class="s2">var </span><span class="s1">$charCodeAt = callBound(</span><span class="s0">'String.prototype.charCodeAt'</span><span class="s1">);</span>
+<span class="s2">var </span><span class="s1">$strSplit = callBound(</span><span class="s0">'String.prototype.split'</span><span class="s1">);</span>
+
+<span class="s2">var </span><span class="s1">StringToCodePoints = require(</span><span class="s0">'./StringToCodePoints'</span><span class="s1">);</span>
+<span class="s2">var </span><span class="s1">UnicodeEscape = require(</span><span class="s0">'./UnicodeEscape'</span><span class="s1">);</span>
+<span class="s2">var </span><span class="s1">UTF16EncodeCodePoint = require(</span><span class="s0">'./UTF16EncodeCodePoint'</span><span class="s1">);</span>
+
+<span class="s2">var </span><span class="s1">hasOwn = require(</span><span class="s0">'hasown'</span><span class="s1">);</span>
+
+<span class="s3">// https://262.ecma-international.org/12.0/#sec-quotejsonstring</span>
+
+<span class="s2">var </span><span class="s1">escapes = {</span>
+	<span class="s0">'</span><span class="s4">\u0008</span><span class="s0">'</span><span class="s1">: </span><span class="s0">'</span><span class="s4">\\</span><span class="s0">b'</span><span class="s1">,</span>
+	<span class="s0">'</span><span class="s4">\u0009</span><span class="s0">'</span><span class="s1">: </span><span class="s0">'</span><span class="s4">\\</span><span class="s0">t'</span><span class="s1">,</span>
+	<span class="s0">'</span><span class="s4">\u000A</span><span class="s0">'</span><span class="s1">: </span><span class="s0">'</span><span class="s4">\\</span><span class="s0">n'</span><span class="s1">,</span>
+	<span class="s0">'</span><span class="s4">\u000C</span><span class="s0">'</span><span class="s1">: </span><span class="s0">'</span><span class="s4">\\</span><span class="s0">f'</span><span class="s1">,</span>
+	<span class="s0">'</span><span class="s4">\u000D</span><span class="s0">'</span><span class="s1">: </span><span class="s0">'</span><span class="s4">\\</span><span class="s0">r'</span><span class="s1">,</span>
+	<span class="s0">'</span><span class="s4">\u0022</span><span class="s0">'</span><span class="s1">: </span><span class="s0">'</span><span class="s4">\\</span><span class="s0">&quot;'</span><span class="s1">,</span>
+	<span class="s0">'</span><span class="s4">\u005c</span><span class="s0">'</span><span class="s1">: </span><span class="s0">'</span><span class="s4">\\\\</span><span class="s0">'</span>
+<span class="s1">};</span>
+
+<span class="s1">module.exports = </span><span class="s2">function </span><span class="s1">QuoteJSONString(value) {</span>
+	<span class="s2">if </span><span class="s1">(</span><span class="s2">typeof </span><span class="s1">value !== </span><span class="s0">'string'</span><span class="s1">) {</span>
+		<span class="s2">throw new </span><span class="s1">$TypeError(</span><span class="s0">'Assertion failed: `value` must be a String'</span><span class="s1">);</span>
+	<span class="s1">}</span>
+	<span class="s2">var </span><span class="s1">product = </span><span class="s0">'&quot;'</span><span class="s1">;</span>
+	<span class="s2">if </span><span class="s1">(value) {</span>
+		<span class="s1">forEach($strSplit(StringToCodePoints(value), </span><span class="s0">''</span><span class="s1">), </span><span class="s2">function </span><span class="s1">(C) {</span>
+			<span class="s2">if </span><span class="s1">(hasOwn(escapes, C)) {</span>
+				<span class="s1">product += escapes[C];</span>
+			<span class="s1">} </span><span class="s2">else </span><span class="s1">{</span>
+				<span class="s2">var </span><span class="s1">cCharCode = $charCodeAt(C, </span><span class="s5">0</span><span class="s1">);</span>
+				<span class="s2">if </span><span class="s1">(cCharCode &lt; </span><span class="s5">0x20 </span><span class="s1">|| isLeadingSurrogate(cCharCode) || isTrailingSurrogate(cCharCode)) {</span>
+					<span class="s1">product += UnicodeEscape(C);</span>
+				<span class="s1">} </span><span class="s2">else </span><span class="s1">{</span>
+					<span class="s1">product += UTF16EncodeCodePoint(cCharCode);</span>
+				<span class="s1">}</span>
+			<span class="s1">}</span>
+		<span class="s1">});</span>
+	<span class="s1">}</span>
+	<span class="s1">product += </span><span class="s0">'&quot;'</span><span class="s1">;</span>
+	<span class="s2">return </span><span class="s1">product;</span>
+<span class="s1">};</span>
+</pre>
+</body>
+</html>

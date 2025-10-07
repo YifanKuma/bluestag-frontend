@@ -1,0 +1,108 @@
+<html>
+<head>
+<title>isValidCandidate.js</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #8c8c8c; font-style: italic;}
+.s1 { color: #080808;}
+.s2 { color: #0033b3;}
+.s3 { color: #067d17;}
+.s4 { color: #0037a6;}
+.s5 { color: #1750eb;}
+.s6 { color: #264eff;}
+</style>
+</head>
+<body bgcolor="#ffffff">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#c0c0c0" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+isValidCandidate.js</font>
+</center></td></tr></table>
+<pre><span class="s0">// Copy-pasted from `PhoneNumberMatcher.js`.</span>
+
+<span class="s2">import </span><span class="s1">{ PLUS_CHARS } from </span><span class="s3">'../constants.js'</span>
+<span class="s2">import </span><span class="s1">{ limit } from </span><span class="s3">'./util.js'</span>
+
+<span class="s2">import </span><span class="s1">{</span>
+	<span class="s1">isLatinLetter,</span>
+	<span class="s1">isInvalidPunctuationSymbol</span>
+<span class="s1">} from </span><span class="s3">'./utf-8.js'</span>
+
+<span class="s2">const </span><span class="s1">OPENING_PARENS = </span><span class="s3">'(</span><span class="s4">\\</span><span class="s3">[</span><span class="s4">\uFF08\uFF3B</span><span class="s3">'</span>
+<span class="s2">const </span><span class="s1">CLOSING_PARENS = </span><span class="s3">')</span><span class="s4">\\</span><span class="s3">]</span><span class="s4">\uFF09\uFF3D</span><span class="s3">'</span>
+<span class="s2">const </span><span class="s1">NON_PARENS = </span><span class="s3">`[^</span><span class="s1">${OPENING_PARENS}${CLOSING_PARENS}</span><span class="s3">]`</span>
+
+<span class="s2">export const </span><span class="s1">LEAD_CLASS = </span><span class="s3">`[</span><span class="s1">${OPENING_PARENS}${PLUS_CHARS}</span><span class="s3">]`</span>
+
+<span class="s0">// Punctuation that may be at the start of a phone number - brackets and plus signs.</span>
+<span class="s2">const </span><span class="s1">LEAD_CLASS_LEADING = </span><span class="s2">new </span><span class="s1">RegExp(</span><span class="s3">'^' </span><span class="s1">+ LEAD_CLASS)</span>
+
+<span class="s0">// Limit on the number of pairs of brackets in a phone number.</span>
+<span class="s2">const </span><span class="s1">BRACKET_PAIR_LIMIT = limit(</span><span class="s5">0</span><span class="s1">, </span><span class="s5">3</span><span class="s1">)</span>
+
+<span class="s0">/**</span>
+ <span class="s0">* Pattern to check that brackets match. Opening brackets should be closed within a phone number.</span>
+ <span class="s0">* This also checks that there is something inside the brackets. Having no brackets at all is also</span>
+ <span class="s0">* fine.</span>
+ <span class="s0">*</span>
+ <span class="s0">* An opening bracket at the beginning may not be closed, but subsequent ones should be.  It's</span>
+ <span class="s0">* also possible that the leading bracket was dropped, so we shouldn't be surprised if we see a</span>
+ <span class="s0">* closing bracket first. We limit the sets of brackets in a phone number to four.</span>
+ <span class="s0">*/</span>
+<span class="s2">const </span><span class="s1">MATCHING_BRACKETS_ENTIRE = </span><span class="s2">new </span><span class="s1">RegExp</span>
+<span class="s1">(</span>
+	<span class="s3">'^'</span>
+	<span class="s1">+ </span><span class="s3">&quot;(?:[&quot; </span><span class="s1">+ OPENING_PARENS + </span><span class="s3">&quot;])?&quot; </span><span class="s1">+ </span><span class="s3">&quot;(?:&quot; </span><span class="s1">+ NON_PARENS + </span><span class="s3">&quot;+&quot; </span><span class="s1">+ </span><span class="s3">&quot;[&quot; </span><span class="s1">+ CLOSING_PARENS + </span><span class="s3">&quot;])?&quot;</span>
+	<span class="s1">+ NON_PARENS + </span><span class="s3">&quot;+&quot;</span>
+	<span class="s1">+ </span><span class="s3">&quot;(?:[&quot; </span><span class="s1">+ OPENING_PARENS + </span><span class="s3">&quot;]&quot; </span><span class="s1">+ NON_PARENS + </span><span class="s3">&quot;+[&quot; </span><span class="s1">+ CLOSING_PARENS + </span><span class="s3">&quot;])&quot; </span><span class="s1">+ BRACKET_PAIR_LIMIT</span>
+	<span class="s1">+ NON_PARENS + </span><span class="s3">&quot;*&quot;</span>
+	<span class="s1">+ </span><span class="s3">'$'</span>
+<span class="s1">)</span>
+
+<span class="s0">/**</span>
+ <span class="s0">* Matches strings that look like publication pages. Example:</span>
+ <span class="s0">* &lt;pre&gt;Computing Complete Answers to Queries in the Presence of Limited Access Patterns.</span>
+ <span class="s0">* Chen Li. VLDB J. 12(3): 211-227 (2003).&lt;/pre&gt;</span>
+ <span class="s0">*</span>
+ <span class="s0">* The string &quot;211-227 (2003)&quot; is not a telephone number.</span>
+ <span class="s0">*/</span>
+<span class="s2">const </span><span class="s1">PUB_PAGES = </span><span class="s6">/\d{1,5}-+\d{1,5}\s{0,4}\(\d{1,4}/</span>
+
+<span class="s2">export default function </span><span class="s1">isValidCandidate(candidate, offset, text, leniency)</span>
+<span class="s1">{</span>
+	<span class="s0">// Check the candidate doesn't contain any formatting</span>
+	<span class="s0">// which would indicate that it really isn't a phone number.</span>
+	<span class="s2">if </span><span class="s1">(!MATCHING_BRACKETS_ENTIRE.test(candidate) || PUB_PAGES.test(candidate)) {</span>
+		<span class="s2">return</span>
+	<span class="s1">}</span>
+
+	<span class="s0">// If leniency is set to VALID or stricter, we also want to skip numbers that are surrounded</span>
+	<span class="s0">// by Latin alphabetic characters, to skip cases like abc8005001234 or 8005001234def.</span>
+	<span class="s2">if </span><span class="s1">(leniency !== </span><span class="s3">'POSSIBLE'</span><span class="s1">)</span>
+	<span class="s1">{</span>
+		<span class="s0">// If the candidate is not at the start of the text,</span>
+		<span class="s0">// and does not start with phone-number punctuation,</span>
+		<span class="s0">// check the previous character.</span>
+		<span class="s2">if </span><span class="s1">(offset &gt; </span><span class="s5">0 </span><span class="s1">&amp;&amp; !LEAD_CLASS_LEADING.test(candidate))</span>
+		<span class="s1">{</span>
+			<span class="s2">const </span><span class="s1">previousChar = text[offset - </span><span class="s5">1</span><span class="s1">]</span>
+			<span class="s0">// We return null if it is a latin letter or an invalid punctuation symbol.</span>
+			<span class="s2">if </span><span class="s1">(isInvalidPunctuationSymbol(previousChar) || isLatinLetter(previousChar)) {</span>
+				<span class="s2">return false</span>
+			<span class="s1">}</span>
+		<span class="s1">}</span>
+
+		<span class="s2">const </span><span class="s1">lastCharIndex = offset + candidate.length</span>
+		<span class="s2">if </span><span class="s1">(lastCharIndex &lt; text.length)</span>
+		<span class="s1">{</span>
+			<span class="s2">const </span><span class="s1">nextChar = text[lastCharIndex]</span>
+			<span class="s2">if </span><span class="s1">(isInvalidPunctuationSymbol(nextChar) || isLatinLetter(nextChar)) {</span>
+				<span class="s2">return false</span>
+			<span class="s1">}</span>
+		<span class="s1">}</span>
+	<span class="s1">}</span>
+
+	<span class="s2">return true</span>
+<span class="s1">}</span></pre>
+</body>
+</html>

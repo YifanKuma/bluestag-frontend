@@ -1,0 +1,79 @@
+<html>
+<head>
+<title>RawBytesToNumber.js</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #067d17;}
+.s1 { color: #080808;}
+.s2 { color: #0033b3;}
+.s3 { color: #8c8c8c; font-style: italic;}
+.s4 { color: #1750eb;}
+</style>
+</head>
+<body bgcolor="#ffffff">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#c0c0c0" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+RawBytesToNumber.js</font>
+</center></td></tr></table>
+<pre><span class="s0">'use strict'</span><span class="s1">;</span>
+
+<span class="s2">var </span><span class="s1">callBound = require(</span><span class="s0">'call-bound'</span><span class="s1">);</span>
+
+<span class="s2">var </span><span class="s1">$RangeError = require(</span><span class="s0">'es-errors/range'</span><span class="s1">);</span>
+<span class="s2">var </span><span class="s1">$TypeError = require(</span><span class="s0">'es-errors/type'</span><span class="s1">);</span>
+
+<span class="s2">var </span><span class="s1">$charAt = callBound(</span><span class="s0">'String.prototype.charAt'</span><span class="s1">);</span>
+<span class="s2">var </span><span class="s1">$reverse = callBound(</span><span class="s0">'Array.prototype.reverse'</span><span class="s1">);</span>
+<span class="s2">var </span><span class="s1">$slice = callBound(</span><span class="s0">'Array.prototype.slice'</span><span class="s1">);</span>
+
+<span class="s2">var </span><span class="s1">hasOwnProperty = require(</span><span class="s0">'./HasOwnProperty'</span><span class="s1">);</span>
+<span class="s2">var </span><span class="s1">IsArray = require(</span><span class="s0">'./IsArray'</span><span class="s1">);</span>
+
+<span class="s2">var </span><span class="s1">bytesAsFloat32 = require(</span><span class="s0">'../helpers/bytesAsFloat32'</span><span class="s1">);</span>
+<span class="s2">var </span><span class="s1">bytesAsFloat64 = require(</span><span class="s0">'../helpers/bytesAsFloat64'</span><span class="s1">);</span>
+<span class="s2">var </span><span class="s1">bytesAsInteger = require(</span><span class="s0">'../helpers/bytesAsInteger'</span><span class="s1">);</span>
+<span class="s2">var </span><span class="s1">every = require(</span><span class="s0">'../helpers/every'</span><span class="s1">);</span>
+<span class="s2">var </span><span class="s1">isByteValue = require(</span><span class="s0">'../helpers/isByteValue'</span><span class="s1">);</span>
+
+<span class="s2">var </span><span class="s1">tableTAO = require(</span><span class="s0">'./tables/typed-array-objects'</span><span class="s1">);</span>
+
+<span class="s3">// https://262.ecma-international.org/8.0/#sec-rawbytestonumber</span>
+
+<span class="s1">module.exports = </span><span class="s2">function </span><span class="s1">RawBytesToNumber(type, rawBytes, isLittleEndian) {</span>
+	<span class="s2">if </span><span class="s1">(</span><span class="s2">typeof </span><span class="s1">type !== </span><span class="s0">'string' </span><span class="s1">|| !hasOwnProperty(tableTAO.size, </span><span class="s0">'$' </span><span class="s1">+ type)) {</span>
+		<span class="s2">throw new </span><span class="s1">$TypeError(</span><span class="s0">'Assertion failed: `type` must be a TypedArray element type'</span><span class="s1">);</span>
+	<span class="s1">}</span>
+	<span class="s2">if </span><span class="s1">(!IsArray(rawBytes) || !every(rawBytes, isByteValue)) {</span>
+		<span class="s2">throw new </span><span class="s1">$TypeError(</span><span class="s0">'Assertion failed: `rawBytes` must be an Array of bytes'</span><span class="s1">);</span>
+	<span class="s1">}</span>
+	<span class="s2">if </span><span class="s1">(</span><span class="s2">typeof </span><span class="s1">isLittleEndian !== </span><span class="s0">'boolean'</span><span class="s1">) {</span>
+		<span class="s2">throw new </span><span class="s1">$TypeError(</span><span class="s0">'Assertion failed: `isLittleEndian` must be a Boolean'</span><span class="s1">);</span>
+	<span class="s1">}</span>
+
+	<span class="s2">var </span><span class="s1">elementSize = tableTAO.size[</span><span class="s0">'$' </span><span class="s1">+ type]; </span><span class="s3">// step 1</span>
+
+	<span class="s2">if </span><span class="s1">(rawBytes.length !== elementSize) {</span>
+		<span class="s3">// this assertion is not in the spec, but it'd be an editorial error if it were ever violated</span>
+		<span class="s2">throw new </span><span class="s1">$RangeError(</span><span class="s0">'Assertion failed: `rawBytes` must have a length of ' </span><span class="s1">+ elementSize + </span><span class="s0">' for type ' </span><span class="s1">+ type);</span>
+	<span class="s1">}</span>
+
+	<span class="s3">// eslint-disable-next-line no-param-reassign</span>
+	<span class="s1">rawBytes = $slice(rawBytes, </span><span class="s4">0</span><span class="s1">, elementSize);</span>
+	<span class="s2">if </span><span class="s1">(!isLittleEndian) {</span>
+		<span class="s1">$reverse(rawBytes); </span><span class="s3">// step 2</span>
+	<span class="s1">}</span>
+
+	<span class="s2">if </span><span class="s1">(type === </span><span class="s0">'Float32'</span><span class="s1">) { </span><span class="s3">// step 3</span>
+		<span class="s2">return </span><span class="s1">bytesAsFloat32(rawBytes);</span>
+	<span class="s1">}</span>
+
+	<span class="s2">if </span><span class="s1">(type === </span><span class="s0">'Float64'</span><span class="s1">) { </span><span class="s3">// step 4</span>
+		<span class="s2">return </span><span class="s1">bytesAsFloat64(rawBytes);</span>
+	<span class="s1">}</span>
+
+	<span class="s2">return </span><span class="s1">bytesAsInteger(rawBytes, elementSize, $charAt(type, </span><span class="s4">0</span><span class="s1">) === </span><span class="s0">'U'</span><span class="s1">, </span><span class="s2">false</span><span class="s1">);</span>
+<span class="s1">};</span>
+</pre>
+</body>
+</html>

@@ -1,0 +1,198 @@
+<html>
+<head>
+<title>AliasPlugin.js</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #8c8c8c; font-style: italic;}
+.s1 { color: #080808;}
+.s2 { color: #067d17;}
+.s3 { color: #0033b3;}
+.s4 { color: #8c8c8c; font-style: italic;}
+.s5 { color: #1750eb;}
+</style>
+</head>
+<body bgcolor="#ffffff">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#c0c0c0" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+AliasPlugin.js</font>
+</center></td></tr></table>
+<pre><span class="s0">/* 
+    MIT License http://www.opensource.org/licenses/mit-license.php 
+    Author Tobias Koppers @sokra 
+*/</span>
+
+<span class="s2">&quot;use strict&quot;</span><span class="s1">;</span>
+
+<span class="s3">const </span><span class="s1">forEachBail = require(</span><span class="s2">&quot;./forEachBail&quot;</span><span class="s1">);</span>
+<span class="s3">const </span><span class="s1">{ PathType, getType } = require(</span><span class="s2">&quot;./util/path&quot;</span><span class="s1">);</span>
+
+<span class="s0">/** </span><span class="s4">@typedef </span><span class="s0">{import(&quot;./Resolver&quot;)} Resolver */</span>
+<span class="s0">/** </span><span class="s4">@typedef </span><span class="s0">{import(&quot;./Resolver&quot;).ResolveRequest} ResolveRequest */</span>
+<span class="s0">/** </span><span class="s4">@typedef </span><span class="s0">{import(&quot;./Resolver&quot;).ResolveStepHook} ResolveStepHook */</span>
+<span class="s0">/** </span><span class="s4">@typedef </span><span class="s0">{string | Array&lt;string&gt; | false} Alias */</span>
+<span class="s0">/** </span><span class="s4">@typedef </span><span class="s0">{{alias: Alias, name: string, onlyModule?: boolean}} AliasOption */</span>
+
+<span class="s1">module.exports = </span><span class="s3">class </span><span class="s1">AliasPlugin {</span>
+	<span class="s0">/**</span>
+	 <span class="s0">* </span><span class="s4">@param </span><span class="s0">{string | ResolveStepHook} source source</span>
+	 <span class="s0">* </span><span class="s4">@param </span><span class="s0">{AliasOption | Array&lt;AliasOption&gt;} options options</span>
+	 <span class="s0">* </span><span class="s4">@param </span><span class="s0">{string | ResolveStepHook} target target</span>
+	 <span class="s0">*/</span>
+	<span class="s1">constructor(source, options, target) {</span>
+		<span class="s3">this</span><span class="s1">.source = source;</span>
+		<span class="s3">this</span><span class="s1">.options = Array.isArray(options) ? options : [options];</span>
+		<span class="s3">this</span><span class="s1">.target = target;</span>
+	<span class="s1">}</span>
+
+	<span class="s0">/**</span>
+	 <span class="s0">* </span><span class="s4">@param </span><span class="s0">{Resolver} resolver the resolver</span>
+	 <span class="s0">* </span><span class="s4">@returns </span><span class="s0">{void}</span>
+	 <span class="s0">*/</span>
+	<span class="s1">apply(resolver) {</span>
+		<span class="s3">const </span><span class="s1">target = resolver.ensureHook(</span><span class="s3">this</span><span class="s1">.target);</span>
+		<span class="s0">/**</span>
+		 <span class="s0">* </span><span class="s4">@param </span><span class="s0">{string} maybeAbsolutePath path</span>
+		 <span class="s0">* </span><span class="s4">@returns </span><span class="s0">{null|string} absolute path with slash ending</span>
+		 <span class="s0">*/</span>
+		<span class="s3">const </span><span class="s1">getAbsolutePathWithSlashEnding = (maybeAbsolutePath) =&gt; {</span>
+			<span class="s3">const </span><span class="s1">type = getType(maybeAbsolutePath);</span>
+			<span class="s3">if </span><span class="s1">(type === PathType.AbsolutePosix || type === PathType.AbsoluteWin) {</span>
+				<span class="s3">return </span><span class="s1">resolver.join(maybeAbsolutePath, </span><span class="s2">&quot;_&quot;</span><span class="s1">).slice(</span><span class="s5">0</span><span class="s1">, -</span><span class="s5">1</span><span class="s1">);</span>
+			<span class="s1">}</span>
+			<span class="s3">return null</span><span class="s1">;</span>
+		<span class="s1">};</span>
+		<span class="s0">/**</span>
+		 <span class="s0">* </span><span class="s4">@param </span><span class="s0">{string} path path</span>
+		 <span class="s0">* </span><span class="s4">@param </span><span class="s0">{string} maybeSubPath sub path</span>
+		 <span class="s0">* </span><span class="s4">@returns </span><span class="s0">{boolean} true, if path is sub path</span>
+		 <span class="s0">*/</span>
+		<span class="s3">const </span><span class="s1">isSubPath = (path, maybeSubPath) =&gt; {</span>
+			<span class="s3">const </span><span class="s1">absolutePath = getAbsolutePathWithSlashEnding(maybeSubPath);</span>
+			<span class="s3">if </span><span class="s1">(!absolutePath) </span><span class="s3">return false</span><span class="s1">;</span>
+			<span class="s3">return </span><span class="s1">path.startsWith(absolutePath);</span>
+		<span class="s1">};</span>
+		<span class="s1">resolver</span>
+			<span class="s1">.getHook(</span><span class="s3">this</span><span class="s1">.source)</span>
+			<span class="s1">.tapAsync(</span><span class="s2">&quot;AliasPlugin&quot;</span><span class="s1">, (request, resolveContext, callback) =&gt; {</span>
+				<span class="s3">const </span><span class="s1">innerRequest = request.request || request.path;</span>
+				<span class="s3">if </span><span class="s1">(!innerRequest) </span><span class="s3">return </span><span class="s1">callback();</span>
+
+				<span class="s1">forEachBail(</span>
+					<span class="s3">this</span><span class="s1">.options,</span>
+					<span class="s1">(item, callback) =&gt; {</span>
+						<span class="s0">/** </span><span class="s4">@type </span><span class="s0">{boolean} */</span>
+						<span class="s3">let </span><span class="s1">shouldStop = </span><span class="s3">false</span><span class="s1">;</span>
+
+						<span class="s3">const </span><span class="s1">matchRequest =</span>
+							<span class="s1">innerRequest === item.name ||</span>
+							<span class="s1">(!item.onlyModule &amp;&amp;</span>
+								<span class="s1">(request.request</span>
+									<span class="s1">? innerRequest.startsWith(</span><span class="s2">`</span><span class="s1">${item.name}</span><span class="s2">/`</span><span class="s1">)</span>
+									<span class="s1">: isSubPath(innerRequest, item.name)));</span>
+
+						<span class="s3">const </span><span class="s1">splitName = item.name.split(</span><span class="s2">&quot;*&quot;</span><span class="s1">);</span>
+						<span class="s3">const </span><span class="s1">matchWildcard = !item.onlyModule &amp;&amp; splitName.length === </span><span class="s5">2</span><span class="s1">;</span>
+
+						<span class="s3">if </span><span class="s1">(matchRequest || matchWildcard) {</span>
+							<span class="s0">/**</span>
+							 <span class="s0">* </span><span class="s4">@param </span><span class="s0">{Alias} alias alias</span>
+							 <span class="s0">* </span><span class="s4">@param </span><span class="s0">{(err?: null|Error, result?: null|ResolveRequest) =&gt; void} callback callback</span>
+							 <span class="s0">* </span><span class="s4">@returns </span><span class="s0">{void}</span>
+							 <span class="s0">*/</span>
+							<span class="s3">const </span><span class="s1">resolveWithAlias = (alias, callback) =&gt; {</span>
+								<span class="s3">if </span><span class="s1">(alias === </span><span class="s3">false</span><span class="s1">) {</span>
+									<span class="s0">/** </span><span class="s4">@type </span><span class="s0">{ResolveRequest} */</span>
+									<span class="s3">const </span><span class="s1">ignoreObj = {</span>
+										<span class="s1">...request,</span>
+										<span class="s1">path: </span><span class="s3">false</span><span class="s1">,</span>
+									<span class="s1">};</span>
+									<span class="s3">if </span><span class="s1">(</span><span class="s3">typeof </span><span class="s1">resolveContext.yield === </span><span class="s2">&quot;function&quot;</span><span class="s1">) {</span>
+										<span class="s1">resolveContext.yield(ignoreObj);</span>
+										<span class="s3">return </span><span class="s1">callback(</span><span class="s3">null</span><span class="s1">, </span><span class="s3">null</span><span class="s1">);</span>
+									<span class="s1">}</span>
+									<span class="s3">return </span><span class="s1">callback(</span><span class="s3">null</span><span class="s1">, ignoreObj);</span>
+								<span class="s1">}</span>
+
+								<span class="s3">let </span><span class="s1">newRequestStr;</span>
+
+								<span class="s3">const </span><span class="s1">[prefix, suffix] = splitName;</span>
+								<span class="s3">if </span><span class="s1">(</span>
+									<span class="s1">matchWildcard &amp;&amp;</span>
+									<span class="s1">innerRequest.startsWith(prefix) &amp;&amp;</span>
+									<span class="s1">innerRequest.endsWith(suffix)</span>
+								<span class="s1">) {</span>
+									<span class="s3">const </span><span class="s1">match = innerRequest.slice(</span>
+										<span class="s1">prefix.length,</span>
+										<span class="s1">innerRequest.length - suffix.length,</span>
+									<span class="s1">);</span>
+									<span class="s1">newRequestStr = item.alias.toString().replace(</span><span class="s2">&quot;*&quot;</span><span class="s1">, match);</span>
+								<span class="s1">}</span>
+
+								<span class="s3">if </span><span class="s1">(</span>
+									<span class="s1">matchRequest &amp;&amp;</span>
+									<span class="s1">innerRequest !== alias &amp;&amp;</span>
+									<span class="s1">!innerRequest.startsWith(</span><span class="s2">`</span><span class="s1">${alias}</span><span class="s2">/`</span><span class="s1">)</span>
+								<span class="s1">) {</span>
+									<span class="s0">/** </span><span class="s4">@type </span><span class="s0">{string} */</span>
+									<span class="s3">const </span><span class="s1">remainingRequest = innerRequest.slice(item.name.length);</span>
+									<span class="s1">newRequestStr = alias + remainingRequest;</span>
+								<span class="s1">}</span>
+
+								<span class="s3">if </span><span class="s1">(newRequestStr !== undefined) {</span>
+									<span class="s1">shouldStop = </span><span class="s3">true</span><span class="s1">;</span>
+									<span class="s0">/** </span><span class="s4">@type </span><span class="s0">{ResolveRequest} */</span>
+									<span class="s3">const </span><span class="s1">obj = {</span>
+										<span class="s1">...request,</span>
+										<span class="s1">request: newRequestStr,</span>
+										<span class="s1">fullySpecified: </span><span class="s3">false</span><span class="s1">,</span>
+									<span class="s1">};</span>
+									<span class="s3">return </span><span class="s1">resolver.doResolve(</span>
+										<span class="s1">target,</span>
+										<span class="s1">obj,</span>
+										<span class="s2">`aliased with mapping '</span><span class="s1">${item.name}</span><span class="s2">': '</span><span class="s1">${alias}</span><span class="s2">' to '</span><span class="s1">${newRequestStr}</span><span class="s2">'`</span><span class="s1">,</span>
+										<span class="s1">resolveContext,</span>
+										<span class="s1">(err, result) =&gt; {</span>
+											<span class="s3">if </span><span class="s1">(err) </span><span class="s3">return </span><span class="s1">callback(err);</span>
+											<span class="s3">if </span><span class="s1">(result) </span><span class="s3">return </span><span class="s1">callback(</span><span class="s3">null</span><span class="s1">, result);</span>
+											<span class="s3">return </span><span class="s1">callback();</span>
+										<span class="s1">},</span>
+									<span class="s1">);</span>
+								<span class="s1">}</span>
+								<span class="s3">return </span><span class="s1">callback();</span>
+							<span class="s1">};</span>
+
+							<span class="s0">/**</span>
+							 <span class="s0">* </span><span class="s4">@param </span><span class="s0">{(null | Error)=} err error</span>
+							 <span class="s0">* </span><span class="s4">@param </span><span class="s0">{(null | ResolveRequest)=} result result</span>
+							 <span class="s0">* </span><span class="s4">@returns </span><span class="s0">{void}</span>
+							 <span class="s0">*/</span>
+							<span class="s3">const </span><span class="s1">stoppingCallback = (err, result) =&gt; {</span>
+								<span class="s3">if </span><span class="s1">(err) </span><span class="s3">return </span><span class="s1">callback(err);</span>
+
+								<span class="s3">if </span><span class="s1">(result) </span><span class="s3">return </span><span class="s1">callback(</span><span class="s3">null</span><span class="s1">, result);</span>
+								<span class="s0">// Don't allow other aliasing or raw request</span>
+								<span class="s3">if </span><span class="s1">(shouldStop) </span><span class="s3">return </span><span class="s1">callback(</span><span class="s3">null</span><span class="s1">, </span><span class="s3">null</span><span class="s1">);</span>
+								<span class="s3">return </span><span class="s1">callback();</span>
+							<span class="s1">};</span>
+
+							<span class="s3">if </span><span class="s1">(Array.isArray(item.alias)) {</span>
+								<span class="s3">return </span><span class="s1">forEachBail(</span>
+									<span class="s1">item.alias,</span>
+									<span class="s1">resolveWithAlias,</span>
+									<span class="s1">stoppingCallback,</span>
+								<span class="s1">);</span>
+							<span class="s1">}</span>
+							<span class="s3">return </span><span class="s1">resolveWithAlias(item.alias, stoppingCallback);</span>
+						<span class="s1">}</span>
+
+						<span class="s3">return </span><span class="s1">callback();</span>
+					<span class="s1">},</span>
+					<span class="s1">callback,</span>
+				<span class="s1">);</span>
+			<span class="s1">});</span>
+	<span class="s1">}</span>
+<span class="s1">};</span>
+</pre>
+</body>
+</html>

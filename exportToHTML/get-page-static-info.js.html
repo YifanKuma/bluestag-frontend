@@ -1,0 +1,509 @@
+<html>
+<head>
+<title>get-page-static-info.js</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #067d17;}
+.s1 { color: #080808;}
+.s2 { color: #0033b3;}
+.s3 { color: #1750eb;}
+.s4 { color: #8c8c8c; font-style: italic;}
+.s5 { color: #264eff;}
+.s6 { color: #0037a6;}
+</style>
+</head>
+<body bgcolor="#ffffff">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#c0c0c0" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+get-page-static-info.js</font>
+</center></td></tr></table>
+<pre><span class="s0">&quot;use strict&quot;</span><span class="s1">;</span>
+<span class="s1">Object.defineProperty(exports, </span><span class="s0">&quot;__esModule&quot;</span><span class="s1">, {</span>
+    <span class="s1">value: </span><span class="s2">true</span>
+<span class="s1">});</span>
+<span class="s3">0 </span><span class="s1">&amp;&amp; (module.exports = {</span>
+    <span class="s1">getAppPageStaticInfo: </span><span class="s2">null</span><span class="s1">,</span>
+    <span class="s1">getMiddlewareMatchers: </span><span class="s2">null</span><span class="s1">,</span>
+    <span class="s1">getPageStaticInfo: </span><span class="s2">null</span><span class="s1">,</span>
+    <span class="s1">getPagesPageStaticInfo: </span><span class="s2">null</span><span class="s1">,</span>
+    <span class="s1">getRSCModuleInformation: </span><span class="s2">null</span>
+<span class="s1">});</span>
+<span class="s2">function </span><span class="s1">_export(target, all) {</span>
+    <span class="s2">for</span><span class="s1">(</span><span class="s2">var </span><span class="s1">name </span><span class="s2">in </span><span class="s1">all)Object.defineProperty(target, name, {</span>
+        <span class="s1">enumerable: </span><span class="s2">true</span><span class="s1">,</span>
+        <span class="s1">get: all[name]</span>
+    <span class="s1">});</span>
+<span class="s1">}</span>
+<span class="s1">_export(exports, {</span>
+    <span class="s1">getAppPageStaticInfo: </span><span class="s2">function</span><span class="s1">() {</span>
+        <span class="s2">return </span><span class="s1">getAppPageStaticInfo;</span>
+    <span class="s1">},</span>
+    <span class="s1">getMiddlewareMatchers: </span><span class="s2">function</span><span class="s1">() {</span>
+        <span class="s2">return </span><span class="s1">getMiddlewareMatchers;</span>
+    <span class="s1">},</span>
+    <span class="s1">getPageStaticInfo: </span><span class="s2">function</span><span class="s1">() {</span>
+        <span class="s2">return </span><span class="s1">getPageStaticInfo;</span>
+    <span class="s1">},</span>
+    <span class="s1">getPagesPageStaticInfo: </span><span class="s2">function</span><span class="s1">() {</span>
+        <span class="s2">return </span><span class="s1">getPagesPageStaticInfo;</span>
+    <span class="s1">},</span>
+    <span class="s1">getRSCModuleInformation: </span><span class="s2">function</span><span class="s1">() {</span>
+        <span class="s2">return </span><span class="s1">getRSCModuleInformation;</span>
+    <span class="s1">}</span>
+<span class="s1">});</span>
+<span class="s2">const </span><span class="s1">_fs = require(</span><span class="s0">&quot;fs&quot;</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">_lrucache = require(</span><span class="s0">&quot;../../server/lib/lru-cache&quot;</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">_extractconstvalue = require(</span><span class="s0">&quot;./extract-const-value&quot;</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">_parsemodule = require(</span><span class="s0">&quot;./parse-module&quot;</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">_log = </span><span class="s4">/*#__PURE__*/ </span><span class="s1">_interop_require_wildcard(require(</span><span class="s0">&quot;../output/log&quot;</span><span class="s1">));</span>
+<span class="s2">const </span><span class="s1">_constants = require(</span><span class="s0">&quot;../../lib/constants&quot;</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">_trytoparsepath = require(</span><span class="s0">&quot;../../lib/try-to-parse-path&quot;</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">_isapiroute = require(</span><span class="s0">&quot;../../lib/is-api-route&quot;</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">_isedgeruntime = require(</span><span class="s0">&quot;../../lib/is-edge-runtime&quot;</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">_constants1 = require(</span><span class="s0">&quot;../../shared/lib/constants&quot;</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">_pagetypes = require(</span><span class="s0">&quot;../../lib/page-types&quot;</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">_appsegmentconfig = require(</span><span class="s0">&quot;../segment-config/app/app-segment-config&quot;</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">_zod = require(</span><span class="s0">&quot;../../shared/lib/zod&quot;</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">_pagessegmentconfig = require(</span><span class="s0">&quot;../segment-config/pages/pages-segment-config&quot;</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">_middlewareconfig = require(</span><span class="s0">&quot;../segment-config/middleware/middleware-config&quot;</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">_apppaths = require(</span><span class="s0">&quot;../../shared/lib/router/utils/app-paths&quot;</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">_normalizepagepath = require(</span><span class="s0">&quot;../../shared/lib/page-path/normalize-page-path&quot;</span><span class="s1">);</span>
+<span class="s2">function </span><span class="s1">_getRequireWildcardCache(nodeInterop) {</span>
+    <span class="s2">if </span><span class="s1">(</span><span class="s2">typeof </span><span class="s1">WeakMap !== </span><span class="s0">&quot;function&quot;</span><span class="s1">) </span><span class="s2">return null</span><span class="s1">;</span>
+    <span class="s2">var </span><span class="s1">cacheBabelInterop = </span><span class="s2">new </span><span class="s1">WeakMap();</span>
+    <span class="s2">var </span><span class="s1">cacheNodeInterop = </span><span class="s2">new </span><span class="s1">WeakMap();</span>
+    <span class="s2">return </span><span class="s1">(_getRequireWildcardCache = </span><span class="s2">function</span><span class="s1">(nodeInterop) {</span>
+        <span class="s2">return </span><span class="s1">nodeInterop ? cacheNodeInterop : cacheBabelInterop;</span>
+    <span class="s1">})(nodeInterop);</span>
+<span class="s1">}</span>
+<span class="s2">function </span><span class="s1">_interop_require_wildcard(obj, nodeInterop) {</span>
+    <span class="s2">if </span><span class="s1">(!nodeInterop &amp;&amp; obj &amp;&amp; obj.__esModule) {</span>
+        <span class="s2">return </span><span class="s1">obj;</span>
+    <span class="s1">}</span>
+    <span class="s2">if </span><span class="s1">(obj === </span><span class="s2">null </span><span class="s1">|| </span><span class="s2">typeof </span><span class="s1">obj !== </span><span class="s0">&quot;object&quot; </span><span class="s1">&amp;&amp; </span><span class="s2">typeof </span><span class="s1">obj !== </span><span class="s0">&quot;function&quot;</span><span class="s1">) {</span>
+        <span class="s2">return </span><span class="s1">{</span>
+            <span class="s2">default</span><span class="s1">: obj</span>
+        <span class="s1">};</span>
+    <span class="s1">}</span>
+    <span class="s2">var </span><span class="s1">cache = _getRequireWildcardCache(nodeInterop);</span>
+    <span class="s2">if </span><span class="s1">(cache &amp;&amp; cache.has(obj)) {</span>
+        <span class="s2">return </span><span class="s1">cache.get(obj);</span>
+    <span class="s1">}</span>
+    <span class="s2">var </span><span class="s1">newObj = {</span>
+        <span class="s1">__proto__: </span><span class="s2">null</span>
+    <span class="s1">};</span>
+    <span class="s2">var </span><span class="s1">hasPropertyDescriptor = Object.defineProperty &amp;&amp; Object.getOwnPropertyDescriptor;</span>
+    <span class="s2">for</span><span class="s1">(</span><span class="s2">var </span><span class="s1">key </span><span class="s2">in </span><span class="s1">obj){</span>
+        <span class="s2">if </span><span class="s1">(key !== </span><span class="s0">&quot;default&quot; </span><span class="s1">&amp;&amp; Object.prototype.hasOwnProperty.call(obj, key)) {</span>
+            <span class="s2">var </span><span class="s1">desc = hasPropertyDescriptor ? Object.getOwnPropertyDescriptor(obj, key) : </span><span class="s2">null</span><span class="s1">;</span>
+            <span class="s2">if </span><span class="s1">(desc &amp;&amp; (desc.get || desc.set)) {</span>
+                <span class="s1">Object.defineProperty(newObj, key, desc);</span>
+            <span class="s1">} </span><span class="s2">else </span><span class="s1">{</span>
+                <span class="s1">newObj[key] = obj[key];</span>
+            <span class="s1">}</span>
+        <span class="s1">}</span>
+    <span class="s1">}</span>
+    <span class="s1">newObj.default = obj;</span>
+    <span class="s2">if </span><span class="s1">(cache) {</span>
+        <span class="s1">cache.set(obj, newObj);</span>
+    <span class="s1">}</span>
+    <span class="s2">return </span><span class="s1">newObj;</span>
+<span class="s1">}</span>
+<span class="s2">const </span><span class="s1">PARSE_PATTERN = </span><span class="s5">/(?&lt;!(_jsx|jsx-))runtime|preferredRegion|getStaticProps|getServerSideProps|generateStaticParams|export const|generateImageMetadata|generateSitemaps/</span><span class="s1">;</span>
+<span class="s2">const </span><span class="s1">CLIENT_MODULE_LABEL = </span><span class="s5">/\/\* __next_internal_client_entry_do_not_use__ ([^ ]*) (cjs|auto) \*\//</span><span class="s1">;</span>
+<span class="s2">const </span><span class="s1">ACTION_MODULE_LABEL = </span><span class="s5">/\/\* __next_internal_action_entry_do_not_use__ (\{[^}]+\}) \*\//</span><span class="s1">;</span>
+<span class="s2">const </span><span class="s1">CLIENT_DIRECTIVE = </span><span class="s0">'use client'</span><span class="s1">;</span>
+<span class="s2">const </span><span class="s1">SERVER_ACTION_DIRECTIVE = </span><span class="s0">'use server'</span><span class="s1">;</span>
+<span class="s2">function </span><span class="s1">getRSCModuleInformation(source, isReactServerLayer) {</span>
+    <span class="s2">const </span><span class="s1">actionsJson = source.match(ACTION_MODULE_LABEL);</span>
+    <span class="s2">const </span><span class="s1">parsedActionsMeta = actionsJson ? JSON.parse(actionsJson[</span><span class="s3">1</span><span class="s1">]) : undefined;</span>
+    <span class="s2">const </span><span class="s1">clientInfoMatch = source.match(CLIENT_MODULE_LABEL);</span>
+    <span class="s2">const </span><span class="s1">isClientRef = !!clientInfoMatch;</span>
+    <span class="s2">if </span><span class="s1">(!isReactServerLayer) {</span>
+        <span class="s2">return </span><span class="s1">{</span>
+            <span class="s1">type: _constants1.RSC_MODULE_TYPES.client,</span>
+            <span class="s1">actionIds: parsedActionsMeta,</span>
+            <span class="s1">isClientRef</span>
+        <span class="s1">};</span>
+    <span class="s1">}</span>
+    <span class="s2">const </span><span class="s1">clientRefsString = clientInfoMatch == </span><span class="s2">null </span><span class="s1">? </span><span class="s2">void </span><span class="s3">0 </span><span class="s1">: clientInfoMatch[</span><span class="s3">1</span><span class="s1">];</span>
+    <span class="s2">const </span><span class="s1">clientRefs = clientRefsString ? clientRefsString.split(</span><span class="s0">','</span><span class="s1">) : [];</span>
+    <span class="s2">const </span><span class="s1">clientEntryType = clientInfoMatch == </span><span class="s2">null </span><span class="s1">? </span><span class="s2">void </span><span class="s3">0 </span><span class="s1">: clientInfoMatch[</span><span class="s3">2</span><span class="s1">];</span>
+    <span class="s2">const </span><span class="s1">type = clientInfoMatch ? _constants1.RSC_MODULE_TYPES.client : _constants1.RSC_MODULE_TYPES.server;</span>
+    <span class="s2">return </span><span class="s1">{</span>
+        <span class="s1">type,</span>
+        <span class="s1">actionIds: parsedActionsMeta,</span>
+        <span class="s1">clientRefs,</span>
+        <span class="s1">clientEntryType,</span>
+        <span class="s1">isClientRef</span>
+    <span class="s1">};</span>
+<span class="s1">}</span>
+<span class="s4">/**</span>
+ <span class="s4">* Receives a parsed AST from SWC and checks if it belongs to a module that</span>
+ <span class="s4">* requires a runtime to be specified. Those are:</span>
+ <span class="s4">*   - Modules with `export function getStaticProps | getServerSideProps`</span>
+ <span class="s4">*   - Modules with `export { getStaticProps | getServerSideProps } &lt;from ...&gt;`</span>
+ <span class="s4">*   - Modules with `export const runtime = ...`</span>
+ <span class="s4">*/ </span><span class="s2">function </span><span class="s1">checkExports(ast, expectedExports, page) {</span>
+    <span class="s2">const </span><span class="s1">exportsSet = </span><span class="s2">new </span><span class="s1">Set([</span>
+        <span class="s0">'getStaticProps'</span><span class="s1">,</span>
+        <span class="s0">'getServerSideProps'</span><span class="s1">,</span>
+        <span class="s0">'generateImageMetadata'</span><span class="s1">,</span>
+        <span class="s0">'generateSitemaps'</span><span class="s1">,</span>
+        <span class="s0">'generateStaticParams'</span>
+    <span class="s1">]);</span>
+    <span class="s2">if </span><span class="s1">(!Array.isArray(ast == </span><span class="s2">null </span><span class="s1">? </span><span class="s2">void </span><span class="s3">0 </span><span class="s1">: ast.body)) {</span>
+        <span class="s2">return </span><span class="s1">{};</span>
+    <span class="s1">}</span>
+    <span class="s2">try </span><span class="s1">{</span>
+        <span class="s2">let </span><span class="s1">getStaticProps = </span><span class="s2">false</span><span class="s1">;</span>
+        <span class="s2">let </span><span class="s1">getServerSideProps = </span><span class="s2">false</span><span class="s1">;</span>
+        <span class="s2">let </span><span class="s1">generateImageMetadata = </span><span class="s2">false</span><span class="s1">;</span>
+        <span class="s2">let </span><span class="s1">generateSitemaps = </span><span class="s2">false</span><span class="s1">;</span>
+        <span class="s2">let </span><span class="s1">generateStaticParams = </span><span class="s2">false</span><span class="s1">;</span>
+        <span class="s2">let </span><span class="s1">exports1 = </span><span class="s2">new </span><span class="s1">Set();</span>
+        <span class="s2">let </span><span class="s1">directives = </span><span class="s2">new </span><span class="s1">Set();</span>
+        <span class="s2">let </span><span class="s1">hasLeadingNonDirectiveNode = </span><span class="s2">false</span><span class="s1">;</span>
+        <span class="s2">for </span><span class="s1">(</span><span class="s2">const </span><span class="s1">node of ast.body){</span>
+            <span class="s2">var </span><span class="s1">_node_declaration, _node_declaration1, _node_declaration_identifier, _node_declaration2;</span>
+            <span class="s4">// There should be no non-string literals nodes before directives</span>
+            <span class="s2">if </span><span class="s1">(node.type === </span><span class="s0">'ExpressionStatement' </span><span class="s1">&amp;&amp; node.expression.type === </span><span class="s0">'StringLiteral'</span><span class="s1">) {</span>
+                <span class="s2">if </span><span class="s1">(!hasLeadingNonDirectiveNode) {</span>
+                    <span class="s2">const </span><span class="s1">directive = node.expression.value;</span>
+                    <span class="s2">if </span><span class="s1">(CLIENT_DIRECTIVE === directive) {</span>
+                        <span class="s1">directives.add(</span><span class="s0">'client'</span><span class="s1">);</span>
+                    <span class="s1">}</span>
+                    <span class="s2">if </span><span class="s1">(SERVER_ACTION_DIRECTIVE === directive) {</span>
+                        <span class="s1">directives.add(</span><span class="s0">'server'</span><span class="s1">);</span>
+                    <span class="s1">}</span>
+                <span class="s1">}</span>
+            <span class="s1">} </span><span class="s2">else </span><span class="s1">{</span>
+                <span class="s1">hasLeadingNonDirectiveNode = </span><span class="s2">true</span><span class="s1">;</span>
+            <span class="s1">}</span>
+            <span class="s2">if </span><span class="s1">(node.type === </span><span class="s0">'ExportDeclaration' </span><span class="s1">&amp;&amp; ((_node_declaration = node.declaration) == </span><span class="s2">null </span><span class="s1">? </span><span class="s2">void </span><span class="s3">0 </span><span class="s1">: _node_declaration.type) === </span><span class="s0">'VariableDeclaration'</span><span class="s1">) {</span>
+                <span class="s2">var </span><span class="s1">_node_declaration3;</span>
+                <span class="s2">for </span><span class="s1">(</span><span class="s2">const </span><span class="s1">declaration of (_node_declaration3 = node.declaration) == </span><span class="s2">null </span><span class="s1">? </span><span class="s2">void </span><span class="s3">0 </span><span class="s1">: _node_declaration3.declarations){</span>
+                    <span class="s2">if </span><span class="s1">(expectedExports.includes(declaration.id.value)) {</span>
+                        <span class="s1">exports1.add(declaration.id.value);</span>
+                    <span class="s1">}</span>
+                <span class="s1">}</span>
+            <span class="s1">}</span>
+            <span class="s2">if </span><span class="s1">(node.type === </span><span class="s0">'ExportDeclaration' </span><span class="s1">&amp;&amp; ((_node_declaration1 = node.declaration) == </span><span class="s2">null </span><span class="s1">? </span><span class="s2">void </span><span class="s3">0 </span><span class="s1">: _node_declaration1.type) === </span><span class="s0">'FunctionDeclaration' </span><span class="s1">&amp;&amp; exportsSet.has((_node_declaration_identifier = node.declaration.identifier) == </span><span class="s2">null </span><span class="s1">? </span><span class="s2">void </span><span class="s3">0 </span><span class="s1">: _node_declaration_identifier.value)) {</span>
+                <span class="s2">const </span><span class="s1">id = node.declaration.identifier.value;</span>
+                <span class="s1">getServerSideProps = id === </span><span class="s0">'getServerSideProps'</span><span class="s1">;</span>
+                <span class="s1">getStaticProps = id === </span><span class="s0">'getStaticProps'</span><span class="s1">;</span>
+                <span class="s1">generateImageMetadata = id === </span><span class="s0">'generateImageMetadata'</span><span class="s1">;</span>
+                <span class="s1">generateSitemaps = id === </span><span class="s0">'generateSitemaps'</span><span class="s1">;</span>
+                <span class="s1">generateStaticParams = id === </span><span class="s0">'generateStaticParams'</span><span class="s1">;</span>
+            <span class="s1">}</span>
+            <span class="s2">if </span><span class="s1">(node.type === </span><span class="s0">'ExportDeclaration' </span><span class="s1">&amp;&amp; ((_node_declaration2 = node.declaration) == </span><span class="s2">null </span><span class="s1">? </span><span class="s2">void </span><span class="s3">0 </span><span class="s1">: _node_declaration2.type) === </span><span class="s0">'VariableDeclaration'</span><span class="s1">) {</span>
+                <span class="s2">var </span><span class="s1">_node_declaration_declarations_, _node_declaration4;</span>
+                <span class="s2">const </span><span class="s1">id = (_node_declaration4 = node.declaration) == </span><span class="s2">null </span><span class="s1">? </span><span class="s2">void </span><span class="s3">0 </span><span class="s1">: (_node_declaration_declarations_ = _node_declaration4.declarations[</span><span class="s3">0</span><span class="s1">]) == </span><span class="s2">null </span><span class="s1">? </span><span class="s2">void </span><span class="s3">0 </span><span class="s1">: _node_declaration_declarations_.id.value;</span>
+                <span class="s2">if </span><span class="s1">(exportsSet.has(id)) {</span>
+                    <span class="s1">getServerSideProps = id === </span><span class="s0">'getServerSideProps'</span><span class="s1">;</span>
+                    <span class="s1">getStaticProps = id === </span><span class="s0">'getStaticProps'</span><span class="s1">;</span>
+                    <span class="s1">generateImageMetadata = id === </span><span class="s0">'generateImageMetadata'</span><span class="s1">;</span>
+                    <span class="s1">generateSitemaps = id === </span><span class="s0">'generateSitemaps'</span><span class="s1">;</span>
+                    <span class="s1">generateStaticParams = id === </span><span class="s0">'generateStaticParams'</span><span class="s1">;</span>
+                <span class="s1">}</span>
+            <span class="s1">}</span>
+            <span class="s2">if </span><span class="s1">(node.type === </span><span class="s0">'ExportNamedDeclaration'</span><span class="s1">) {</span>
+                <span class="s2">for </span><span class="s1">(</span><span class="s2">const </span><span class="s1">specifier of node.specifiers){</span>
+                    <span class="s2">var </span><span class="s1">_specifier_orig;</span>
+                    <span class="s2">if </span><span class="s1">(specifier.type === </span><span class="s0">'ExportSpecifier' </span><span class="s1">&amp;&amp; ((_specifier_orig = specifier.orig) == </span><span class="s2">null </span><span class="s1">? </span><span class="s2">void </span><span class="s3">0 </span><span class="s1">: _specifier_orig.type) === </span><span class="s0">'Identifier'</span><span class="s1">) {</span>
+                        <span class="s2">const </span><span class="s1">value = specifier.orig.value;</span>
+                        <span class="s2">if </span><span class="s1">(!getServerSideProps &amp;&amp; value === </span><span class="s0">'getServerSideProps'</span><span class="s1">) {</span>
+                            <span class="s1">getServerSideProps = </span><span class="s2">true</span><span class="s1">;</span>
+                        <span class="s1">}</span>
+                        <span class="s2">if </span><span class="s1">(!getStaticProps &amp;&amp; value === </span><span class="s0">'getStaticProps'</span><span class="s1">) {</span>
+                            <span class="s1">getStaticProps = </span><span class="s2">true</span><span class="s1">;</span>
+                        <span class="s1">}</span>
+                        <span class="s2">if </span><span class="s1">(!generateImageMetadata &amp;&amp; value === </span><span class="s0">'generateImageMetadata'</span><span class="s1">) {</span>
+                            <span class="s1">generateImageMetadata = </span><span class="s2">true</span><span class="s1">;</span>
+                        <span class="s1">}</span>
+                        <span class="s2">if </span><span class="s1">(!generateSitemaps &amp;&amp; value === </span><span class="s0">'generateSitemaps'</span><span class="s1">) {</span>
+                            <span class="s1">generateSitemaps = </span><span class="s2">true</span><span class="s1">;</span>
+                        <span class="s1">}</span>
+                        <span class="s2">if </span><span class="s1">(!generateStaticParams &amp;&amp; value === </span><span class="s0">'generateStaticParams'</span><span class="s1">) {</span>
+                            <span class="s1">generateStaticParams = </span><span class="s2">true</span><span class="s1">;</span>
+                        <span class="s1">}</span>
+                        <span class="s2">if </span><span class="s1">(expectedExports.includes(value) &amp;&amp; !exports1.has(value)) {</span>
+                            <span class="s4">// An export was found that was actually a re-export, and not a</span>
+                            <span class="s4">// literal value. We should warn here.</span>
+                            <span class="s1">_log.warn(</span><span class="s0">`Next.js can't recognize the exported </span><span class="s6">\`</span><span class="s1">${value}</span><span class="s6">\` </span><span class="s0">field in &quot;</span><span class="s1">${page}</span><span class="s0">&quot;, it may be re-exported from another file. The default config will be used instead.`</span><span class="s1">);</span>
+                        <span class="s1">}</span>
+                    <span class="s1">}</span>
+                <span class="s1">}</span>
+            <span class="s1">}</span>
+        <span class="s1">}</span>
+        <span class="s2">return </span><span class="s1">{</span>
+            <span class="s1">getStaticProps,</span>
+            <span class="s1">getServerSideProps,</span>
+            <span class="s1">generateImageMetadata,</span>
+            <span class="s1">generateSitemaps,</span>
+            <span class="s1">generateStaticParams,</span>
+            <span class="s1">directives,</span>
+            <span class="s1">exports: exports1</span>
+        <span class="s1">};</span>
+    <span class="s1">} </span><span class="s2">catch  </span><span class="s1">{}</span>
+    <span class="s2">return </span><span class="s1">{};</span>
+<span class="s1">}</span>
+<span class="s1">async </span><span class="s2">function </span><span class="s1">tryToReadFile(filePath, shouldThrow) {</span>
+    <span class="s2">try </span><span class="s1">{</span>
+        <span class="s2">return await </span><span class="s1">_fs.promises.readFile(filePath, {</span>
+            <span class="s1">encoding: </span><span class="s0">'utf8'</span>
+        <span class="s1">});</span>
+    <span class="s1">} </span><span class="s2">catch </span><span class="s1">(error) {</span>
+        <span class="s2">if </span><span class="s1">(shouldThrow) {</span>
+            <span class="s1">error.message = </span><span class="s0">`Next.js ERROR: Failed to read file </span><span class="s1">${filePath}</span><span class="s0">:</span><span class="s6">\n</span><span class="s1">${error.message}</span><span class="s0">`</span><span class="s1">;</span>
+            <span class="s2">throw </span><span class="s1">error;</span>
+        <span class="s1">}</span>
+    <span class="s1">}</span>
+<span class="s1">}</span>
+<span class="s2">function </span><span class="s1">getMiddlewareMatchers(matcherOrMatchers, nextConfig) {</span>
+    <span class="s2">const </span><span class="s1">matchers = Array.isArray(matcherOrMatchers) ? matcherOrMatchers : [</span>
+        <span class="s1">matcherOrMatchers</span>
+    <span class="s1">];</span>
+    <span class="s2">const </span><span class="s1">{ i18n } = nextConfig;</span>
+    <span class="s2">return </span><span class="s1">matchers.map((matcher)=&gt;{</span>
+        <span class="s1">matcher = </span><span class="s2">typeof </span><span class="s1">matcher === </span><span class="s0">'string' </span><span class="s1">? {</span>
+            <span class="s1">source: matcher</span>
+        <span class="s1">} : matcher;</span>
+        <span class="s2">const </span><span class="s1">originalSource = matcher.source;</span>
+        <span class="s2">let </span><span class="s1">{ source, ...rest } = matcher;</span>
+        <span class="s2">const </span><span class="s1">isRoot = source === </span><span class="s0">'/'</span><span class="s1">;</span>
+        <span class="s2">if </span><span class="s1">((i18n == </span><span class="s2">null </span><span class="s1">? </span><span class="s2">void </span><span class="s3">0 </span><span class="s1">: i18n.locales) &amp;&amp; matcher.locale !== </span><span class="s2">false</span><span class="s1">) {</span>
+            <span class="s1">source = </span><span class="s0">`/:nextInternalLocale((?!_next/)[^/.]{1,})</span><span class="s1">${isRoot ? </span><span class="s0">'' </span><span class="s1">: source}</span><span class="s0">`</span><span class="s1">;</span>
+        <span class="s1">}</span>
+        <span class="s1">source = </span><span class="s0">`/:nextData(_next/data/[^/]{1,})?</span><span class="s1">${source}${isRoot ? </span><span class="s0">`(</span><span class="s1">${nextConfig.i18n ? </span><span class="s0">'|</span><span class="s6">\\</span><span class="s0">.json|' </span><span class="s1">: </span><span class="s0">''</span><span class="s1">}</span><span class="s0">/?index|/?index</span><span class="s6">\\</span><span class="s0">.json)?` </span><span class="s1">: </span><span class="s0">'{(</span><span class="s6">\\</span><span class="s0">.json)}?'</span><span class="s1">}</span><span class="s0">`</span><span class="s1">;</span>
+        <span class="s2">if </span><span class="s1">(nextConfig.basePath) {</span>
+            <span class="s1">source = </span><span class="s0">`</span><span class="s1">${nextConfig.basePath}${source}</span><span class="s0">`</span><span class="s1">;</span>
+        <span class="s1">}</span>
+        <span class="s4">// Validate that the source is still.</span>
+        <span class="s2">const </span><span class="s1">result = _middlewareconfig.SourceSchema.safeParse(source);</span>
+        <span class="s2">if </span><span class="s1">(!result.success) {</span>
+            <span class="s1">(</span><span class="s3">0</span><span class="s1">, _zod.reportZodError)(</span><span class="s0">'Failed to parse middleware source'</span><span class="s1">, result.error);</span>
+            <span class="s4">// We need to exit here because middleware being built occurs before we</span>
+            <span class="s4">// finish setting up the server. Exiting here is the only way to ensure</span>
+            <span class="s4">// that we don't hang.</span>
+            <span class="s1">process.exit(</span><span class="s3">1</span><span class="s1">);</span>
+        <span class="s1">}</span>
+        <span class="s2">return </span><span class="s1">{</span>
+            <span class="s1">...rest,</span>
+            <span class="s4">// We know that parsed.regexStr is not undefined because we already</span>
+            <span class="s4">// checked that the source is valid.</span>
+            <span class="s1">regexp: (</span><span class="s3">0</span><span class="s1">, _trytoparsepath.tryToParsePath)(result.data).regexStr,</span>
+            <span class="s1">originalSource: originalSource || source</span>
+        <span class="s1">};</span>
+    <span class="s1">});</span>
+<span class="s1">}</span>
+<span class="s2">function </span><span class="s1">parseMiddlewareConfig(page, rawConfig, nextConfig) {</span>
+    <span class="s4">// If there's no config to parse, then return nothing.</span>
+    <span class="s2">if </span><span class="s1">(</span><span class="s2">typeof </span><span class="s1">rawConfig !== </span><span class="s0">'object' </span><span class="s1">|| !rawConfig) </span><span class="s2">return </span><span class="s1">{};</span>
+    <span class="s2">const </span><span class="s1">input = _middlewareconfig.MiddlewareConfigInputSchema.safeParse(rawConfig);</span>
+    <span class="s2">if </span><span class="s1">(!input.success) {</span>
+        <span class="s1">(</span><span class="s3">0</span><span class="s1">, _zod.reportZodError)(</span><span class="s0">`</span><span class="s1">${page} </span><span class="s0">contains invalid middleware config`</span><span class="s1">, input.error);</span>
+        <span class="s4">// We need to exit here because middleware being built occurs before we</span>
+        <span class="s4">// finish setting up the server. Exiting here is the only way to ensure</span>
+        <span class="s4">// that we don't hang.</span>
+        <span class="s1">process.exit(</span><span class="s3">1</span><span class="s1">);</span>
+    <span class="s1">}</span>
+    <span class="s2">const </span><span class="s1">config = {};</span>
+    <span class="s2">if </span><span class="s1">(input.data.matcher) {</span>
+        <span class="s1">config.matchers = getMiddlewareMatchers(input.data.matcher, nextConfig);</span>
+    <span class="s1">}</span>
+    <span class="s2">if </span><span class="s1">(input.data.unstable_allowDynamic) {</span>
+        <span class="s1">config.unstable_allowDynamic = Array.isArray(input.data.unstable_allowDynamic) ? input.data.unstable_allowDynamic : [</span>
+            <span class="s1">input.data.unstable_allowDynamic</span>
+        <span class="s1">];</span>
+    <span class="s1">}</span>
+    <span class="s2">if </span><span class="s1">(input.data.regions) {</span>
+        <span class="s1">config.regions = input.data.regions;</span>
+    <span class="s1">}</span>
+    <span class="s2">return </span><span class="s1">config;</span>
+<span class="s1">}</span>
+<span class="s2">const </span><span class="s1">apiRouteWarnings = </span><span class="s2">new </span><span class="s1">_lrucache.LRUCache(</span><span class="s3">250</span><span class="s1">);</span>
+<span class="s2">function </span><span class="s1">warnAboutExperimentalEdge(apiRoute) {</span>
+    <span class="s2">if </span><span class="s1">(process.env.NODE_ENV === </span><span class="s0">'production' </span><span class="s1">&amp;&amp; process.env.NEXT_PRIVATE_BUILD_WORKER === </span><span class="s0">'1'</span><span class="s1">) {</span>
+        <span class="s2">return</span><span class="s1">;</span>
+    <span class="s1">}</span>
+    <span class="s2">if </span><span class="s1">(apiRoute &amp;&amp; apiRouteWarnings.has(apiRoute)) {</span>
+        <span class="s2">return</span><span class="s1">;</span>
+    <span class="s1">}</span>
+    <span class="s1">_log.warn(apiRoute ? </span><span class="s0">`</span><span class="s1">${apiRoute} </span><span class="s0">provided runtime 'experimental-edge'. It can be updated to 'edge' instead.` </span><span class="s1">: </span><span class="s0">`You are using an experimental edge runtime, the API might change.`</span><span class="s1">);</span>
+    <span class="s2">if </span><span class="s1">(apiRoute) {</span>
+        <span class="s1">apiRouteWarnings.set(apiRoute, </span><span class="s3">1</span><span class="s1">);</span>
+    <span class="s1">}</span>
+<span class="s1">}</span>
+<span class="s2">let </span><span class="s1">hadUnsupportedValue = </span><span class="s2">false</span><span class="s1">;</span>
+<span class="s2">const </span><span class="s1">warnedUnsupportedValueMap = </span><span class="s2">new </span><span class="s1">_lrucache.LRUCache(</span><span class="s3">250</span><span class="s1">, ()=&gt;</span><span class="s3">1</span><span class="s1">);</span>
+<span class="s2">function </span><span class="s1">warnAboutUnsupportedValue(pageFilePath, page, error) {</span>
+    <span class="s1">hadUnsupportedValue = </span><span class="s2">true</span><span class="s1">;</span>
+    <span class="s2">const </span><span class="s1">isProductionBuild = process.env.NODE_ENV === </span><span class="s0">'production'</span><span class="s1">;</span>
+    <span class="s2">if </span><span class="s1">(</span><span class="s4">// we only log for the server compilation so it's not</span>
+    <span class="s4">// duplicated due to webpack build worker having fresh</span>
+    <span class="s4">// module scope for each compiler</span>
+    <span class="s1">process.env.NEXT_COMPILER_NAME !== </span><span class="s0">'server' </span><span class="s1">|| isProductionBuild &amp;&amp; warnedUnsupportedValueMap.has(pageFilePath)) {</span>
+        <span class="s2">return</span><span class="s1">;</span>
+    <span class="s1">}</span>
+    <span class="s1">warnedUnsupportedValueMap.set(pageFilePath, </span><span class="s2">true</span><span class="s1">);</span>
+    <span class="s2">const </span><span class="s1">message = </span><span class="s0">`Next.js can't recognize the exported </span><span class="s6">\`</span><span class="s0">config</span><span class="s6">\` </span><span class="s0">field in ` </span><span class="s1">+ (page ? </span><span class="s0">`route &quot;</span><span class="s1">${page}</span><span class="s0">&quot;` </span><span class="s1">: </span><span class="s0">`&quot;</span><span class="s1">${pageFilePath}</span><span class="s0">&quot;`</span><span class="s1">) + </span><span class="s0">':</span><span class="s6">\n</span><span class="s0">' </span><span class="s1">+ error.message + (error.path ? </span><span class="s0">` at &quot;</span><span class="s1">${error.path}</span><span class="s0">&quot;` </span><span class="s1">: </span><span class="s0">''</span><span class="s1">) + </span><span class="s0">'.</span><span class="s6">\n</span><span class="s0">' </span><span class="s1">+ </span><span class="s0">'Read More - https://nextjs.org/docs/messages/invalid-page-config'</span><span class="s1">;</span>
+    <span class="s4">// for a build we use `Log.error` instead of throwing</span>
+    <span class="s4">// so that all errors can be logged before exiting the process</span>
+    <span class="s2">if </span><span class="s1">(isProductionBuild) {</span>
+        <span class="s1">_log.error(message);</span>
+    <span class="s1">} </span><span class="s2">else </span><span class="s1">{</span>
+        <span class="s2">throw </span><span class="s1">Object.defineProperty(</span><span class="s2">new </span><span class="s1">Error(message), </span><span class="s0">&quot;__NEXT_ERROR_CODE&quot;</span><span class="s1">, {</span>
+            <span class="s1">value: </span><span class="s0">&quot;E394&quot;</span><span class="s1">,</span>
+            <span class="s1">enumerable: </span><span class="s2">false</span><span class="s1">,</span>
+            <span class="s1">configurable: </span><span class="s2">true</span>
+        <span class="s1">});</span>
+    <span class="s1">}</span>
+<span class="s1">}</span>
+<span class="s1">async </span><span class="s2">function </span><span class="s1">getAppPageStaticInfo({ pageFilePath, nextConfig, isDev, page }) {</span>
+    <span class="s2">const </span><span class="s1">content = </span><span class="s2">await </span><span class="s1">tryToReadFile(pageFilePath, !isDev);</span>
+    <span class="s2">if </span><span class="s1">(!content || !PARSE_PATTERN.test(content)) {</span>
+        <span class="s2">return </span><span class="s1">{</span>
+            <span class="s1">type: _pagetypes.PAGE_TYPES.APP,</span>
+            <span class="s1">config: undefined,</span>
+            <span class="s1">runtime: undefined,</span>
+            <span class="s1">preferredRegion: undefined,</span>
+            <span class="s1">maxDuration: undefined,</span>
+            <span class="s1">hadUnsupportedValue: </span><span class="s2">false</span>
+        <span class="s1">};</span>
+    <span class="s1">}</span>
+    <span class="s2">const </span><span class="s1">ast = </span><span class="s2">await </span><span class="s1">(</span><span class="s3">0</span><span class="s1">, _parsemodule.parseModule)(pageFilePath, content);</span>
+    <span class="s2">const </span><span class="s1">{ generateStaticParams, generateImageMetadata, generateSitemaps, exports: exports1, directives } = checkExports(ast, _appsegmentconfig.AppSegmentConfigSchemaKeys, page);</span>
+    <span class="s2">const </span><span class="s1">{ type: rsc } = getRSCModuleInformation(content, </span><span class="s2">true</span><span class="s1">);</span>
+    <span class="s2">const </span><span class="s1">exportedConfig = {};</span>
+    <span class="s2">if </span><span class="s1">(exports1) {</span>
+        <span class="s2">for </span><span class="s1">(</span><span class="s2">const </span><span class="s1">property of exports1){</span>
+            <span class="s2">try </span><span class="s1">{</span>
+                <span class="s1">exportedConfig[property] = (</span><span class="s3">0</span><span class="s1">, _extractconstvalue.extractExportedConstValue)(ast, property);</span>
+            <span class="s1">} </span><span class="s2">catch </span><span class="s1">(e) {</span>
+                <span class="s2">if </span><span class="s1">(e </span><span class="s2">instanceof </span><span class="s1">_extractconstvalue.UnsupportedValueError) {</span>
+                    <span class="s1">warnAboutUnsupportedValue(pageFilePath, page, e);</span>
+                <span class="s1">}</span>
+            <span class="s1">}</span>
+        <span class="s1">}</span>
+    <span class="s1">}</span>
+    <span class="s2">try </span><span class="s1">{</span>
+        <span class="s1">exportedConfig.config = (</span><span class="s3">0</span><span class="s1">, _extractconstvalue.extractExportedConstValue)(ast, </span><span class="s0">'config'</span><span class="s1">);</span>
+    <span class="s1">} </span><span class="s2">catch </span><span class="s1">(e) {</span>
+        <span class="s2">if </span><span class="s1">(e </span><span class="s2">instanceof </span><span class="s1">_extractconstvalue.UnsupportedValueError) {</span>
+            <span class="s1">warnAboutUnsupportedValue(pageFilePath, page, e);</span>
+        <span class="s1">}</span>
+    <span class="s4">// `export config` doesn't exist, or other unknown error thrown by swc, silence them</span>
+    <span class="s1">}</span>
+    <span class="s2">const </span><span class="s1">route = (</span><span class="s3">0</span><span class="s1">, _apppaths.normalizeAppPath)(page);</span>
+    <span class="s2">const </span><span class="s1">config = (</span><span class="s3">0</span><span class="s1">, _appsegmentconfig.parseAppSegmentConfig)(exportedConfig, route);</span>
+    <span class="s4">// Prevent edge runtime and generateStaticParams in the same file.</span>
+    <span class="s2">if </span><span class="s1">((</span><span class="s3">0</span><span class="s1">, _isedgeruntime.isEdgeRuntime)(config.runtime) &amp;&amp; generateStaticParams) {</span>
+        <span class="s2">throw </span><span class="s1">Object.defineProperty(</span><span class="s2">new </span><span class="s1">Error(</span><span class="s0">`Page &quot;</span><span class="s1">${page}</span><span class="s0">&quot; cannot use both </span><span class="s6">\`</span><span class="s0">export const runtime = 'edge'</span><span class="s6">\` </span><span class="s0">and export </span><span class="s6">\`</span><span class="s0">generateStaticParams</span><span class="s6">\`</span><span class="s0">.`</span><span class="s1">), </span><span class="s0">&quot;__NEXT_ERROR_CODE&quot;</span><span class="s1">, {</span>
+            <span class="s1">value: </span><span class="s0">&quot;E42&quot;</span><span class="s1">,</span>
+            <span class="s1">enumerable: </span><span class="s2">false</span><span class="s1">,</span>
+            <span class="s1">configurable: </span><span class="s2">true</span>
+        <span class="s1">});</span>
+    <span class="s1">}</span>
+    <span class="s4">// Prevent use client and generateStaticParams in the same file.</span>
+    <span class="s2">if </span><span class="s1">((directives == </span><span class="s2">null </span><span class="s1">? </span><span class="s2">void </span><span class="s3">0 </span><span class="s1">: directives.has(</span><span class="s0">'client'</span><span class="s1">)) &amp;&amp; generateStaticParams) {</span>
+        <span class="s2">throw </span><span class="s1">Object.defineProperty(</span><span class="s2">new </span><span class="s1">Error(</span><span class="s0">`Page &quot;</span><span class="s1">${page}</span><span class="s0">&quot; cannot use both &quot;use client&quot; and export function &quot;generateStaticParams()&quot;.`</span><span class="s1">), </span><span class="s0">&quot;__NEXT_ERROR_CODE&quot;</span><span class="s1">, {</span>
+            <span class="s1">value: </span><span class="s0">&quot;E475&quot;</span><span class="s1">,</span>
+            <span class="s1">enumerable: </span><span class="s2">false</span><span class="s1">,</span>
+            <span class="s1">configurable: </span><span class="s2">true</span>
+        <span class="s1">});</span>
+    <span class="s1">}</span>
+    <span class="s2">return </span><span class="s1">{</span>
+        <span class="s1">type: _pagetypes.PAGE_TYPES.APP,</span>
+        <span class="s1">rsc,</span>
+        <span class="s1">generateImageMetadata,</span>
+        <span class="s1">generateSitemaps,</span>
+        <span class="s1">generateStaticParams,</span>
+        <span class="s1">config,</span>
+        <span class="s1">middleware: parseMiddlewareConfig(page, exportedConfig.config, nextConfig),</span>
+        <span class="s1">runtime: config.runtime,</span>
+        <span class="s1">preferredRegion: config.preferredRegion,</span>
+        <span class="s1">maxDuration: config.maxDuration,</span>
+        <span class="s1">hadUnsupportedValue</span>
+    <span class="s1">};</span>
+<span class="s1">}</span>
+<span class="s1">async </span><span class="s2">function </span><span class="s1">getPagesPageStaticInfo({ pageFilePath, nextConfig, isDev, page }) {</span>
+    <span class="s2">var </span><span class="s1">_config_config, _config_config1, _config_config2;</span>
+    <span class="s2">const </span><span class="s1">content = </span><span class="s2">await </span><span class="s1">tryToReadFile(pageFilePath, !isDev);</span>
+    <span class="s2">if </span><span class="s1">(!content || !PARSE_PATTERN.test(content)) {</span>
+        <span class="s2">return </span><span class="s1">{</span>
+            <span class="s1">type: _pagetypes.PAGE_TYPES.PAGES,</span>
+            <span class="s1">config: undefined,</span>
+            <span class="s1">runtime: undefined,</span>
+            <span class="s1">preferredRegion: undefined,</span>
+            <span class="s1">maxDuration: undefined,</span>
+            <span class="s1">hadUnsupportedValue: </span><span class="s2">false</span>
+        <span class="s1">};</span>
+    <span class="s1">}</span>
+    <span class="s2">const </span><span class="s1">ast = </span><span class="s2">await </span><span class="s1">(</span><span class="s3">0</span><span class="s1">, _parsemodule.parseModule)(pageFilePath, content);</span>
+    <span class="s2">const </span><span class="s1">{ getServerSideProps, getStaticProps, exports: exports1 } = checkExports(ast, _pagessegmentconfig.PagesSegmentConfigSchemaKeys, page);</span>
+    <span class="s2">const </span><span class="s1">{ type: rsc } = getRSCModuleInformation(content, </span><span class="s2">true</span><span class="s1">);</span>
+    <span class="s2">const </span><span class="s1">exportedConfig = {};</span>
+    <span class="s2">if </span><span class="s1">(exports1) {</span>
+        <span class="s2">for </span><span class="s1">(</span><span class="s2">const </span><span class="s1">property of exports1){</span>
+            <span class="s2">try </span><span class="s1">{</span>
+                <span class="s1">exportedConfig[property] = (</span><span class="s3">0</span><span class="s1">, _extractconstvalue.extractExportedConstValue)(ast, property);</span>
+            <span class="s1">} </span><span class="s2">catch </span><span class="s1">(e) {</span>
+                <span class="s2">if </span><span class="s1">(e </span><span class="s2">instanceof </span><span class="s1">_extractconstvalue.UnsupportedValueError) {</span>
+                    <span class="s1">warnAboutUnsupportedValue(pageFilePath, page, e);</span>
+                <span class="s1">}</span>
+            <span class="s1">}</span>
+        <span class="s1">}</span>
+    <span class="s1">}</span>
+    <span class="s2">try </span><span class="s1">{</span>
+        <span class="s1">exportedConfig.config = (</span><span class="s3">0</span><span class="s1">, _extractconstvalue.extractExportedConstValue)(ast, </span><span class="s0">'config'</span><span class="s1">);</span>
+    <span class="s1">} </span><span class="s2">catch </span><span class="s1">(e) {</span>
+        <span class="s2">if </span><span class="s1">(e </span><span class="s2">instanceof </span><span class="s1">_extractconstvalue.UnsupportedValueError) {</span>
+            <span class="s1">warnAboutUnsupportedValue(pageFilePath, page, e);</span>
+        <span class="s1">}</span>
+    <span class="s4">// `export config` doesn't exist, or other unknown error thrown by swc, silence them</span>
+    <span class="s1">}</span>
+    <span class="s4">// Validate the config.</span>
+    <span class="s2">const </span><span class="s1">route = (</span><span class="s3">0</span><span class="s1">, _normalizepagepath.normalizePagePath)(page);</span>
+    <span class="s2">const </span><span class="s1">config = (</span><span class="s3">0</span><span class="s1">, _pagessegmentconfig.parsePagesSegmentConfig)(exportedConfig, route);</span>
+    <span class="s2">const </span><span class="s1">isAnAPIRoute = (</span><span class="s3">0</span><span class="s1">, _isapiroute.isAPIRoute)(route);</span>
+    <span class="s2">const </span><span class="s1">resolvedRuntime = config.runtime ?? ((_config_config = config.config) == </span><span class="s2">null </span><span class="s1">? </span><span class="s2">void </span><span class="s3">0 </span><span class="s1">: _config_config.runtime);</span>
+    <span class="s2">if </span><span class="s1">(resolvedRuntime === _constants.SERVER_RUNTIME.experimentalEdge) {</span>
+        <span class="s1">warnAboutExperimentalEdge(isAnAPIRoute ? page : </span><span class="s2">null</span><span class="s1">);</span>
+    <span class="s1">}</span>
+    <span class="s2">if </span><span class="s1">(resolvedRuntime === _constants.SERVER_RUNTIME.edge &amp;&amp; page &amp;&amp; !isAnAPIRoute) {</span>
+        <span class="s2">const </span><span class="s1">message = </span><span class="s0">`Page </span><span class="s1">${page} </span><span class="s0">provided runtime 'edge', the edge runtime for rendering is currently experimental. Use runtime 'experimental-edge' instead.`</span><span class="s1">;</span>
+        <span class="s2">if </span><span class="s1">(isDev) {</span>
+            <span class="s1">_log.error(message);</span>
+        <span class="s1">} </span><span class="s2">else </span><span class="s1">{</span>
+            <span class="s2">throw </span><span class="s1">Object.defineProperty(</span><span class="s2">new </span><span class="s1">Error(message), </span><span class="s0">&quot;__NEXT_ERROR_CODE&quot;</span><span class="s1">, {</span>
+                <span class="s1">value: </span><span class="s0">&quot;E394&quot;</span><span class="s1">,</span>
+                <span class="s1">enumerable: </span><span class="s2">false</span><span class="s1">,</span>
+                <span class="s1">configurable: </span><span class="s2">true</span>
+            <span class="s1">});</span>
+        <span class="s1">}</span>
+    <span class="s1">}</span>
+    <span class="s2">return </span><span class="s1">{</span>
+        <span class="s1">type: _pagetypes.PAGE_TYPES.PAGES,</span>
+        <span class="s1">getStaticProps,</span>
+        <span class="s1">getServerSideProps,</span>
+        <span class="s1">rsc,</span>
+        <span class="s1">config,</span>
+        <span class="s1">middleware: parseMiddlewareConfig(page, exportedConfig.config, nextConfig),</span>
+        <span class="s1">runtime: resolvedRuntime,</span>
+        <span class="s1">preferredRegion: (_config_config1 = config.config) == </span><span class="s2">null </span><span class="s1">? </span><span class="s2">void </span><span class="s3">0 </span><span class="s1">: _config_config1.regions,</span>
+        <span class="s1">maxDuration: config.maxDuration ?? ((_config_config2 = config.config) == </span><span class="s2">null </span><span class="s1">? </span><span class="s2">void </span><span class="s3">0 </span><span class="s1">: _config_config2.maxDuration),</span>
+        <span class="s1">hadUnsupportedValue</span>
+    <span class="s1">};</span>
+<span class="s1">}</span>
+<span class="s1">async </span><span class="s2">function </span><span class="s1">getPageStaticInfo(params) {</span>
+    <span class="s2">if </span><span class="s1">(params.pageType === _pagetypes.PAGE_TYPES.APP) {</span>
+        <span class="s2">return </span><span class="s1">getAppPageStaticInfo(params);</span>
+    <span class="s1">}</span>
+    <span class="s2">return </span><span class="s1">getPagesPageStaticInfo(params);</span>
+<span class="s1">}</span>
+
+<span class="s4">//# sourceMappingURL=get-page-static-info.js.map</span></pre>
+</body>
+</html>

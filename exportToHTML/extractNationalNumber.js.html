@@ -1,0 +1,136 @@
+<html>
+<head>
+<title>extractNationalNumber.js</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #0033b3;}
+.s1 { color: #080808;}
+.s2 { color: #067d17;}
+.s3 { color: #8c8c8c; font-style: italic;}
+.s4 { color: #8c8c8c; font-style: italic;}
+</style>
+</head>
+<body bgcolor="#ffffff">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#c0c0c0" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+extractNationalNumber.js</font>
+</center></td></tr></table>
+<pre><span class="s0">import </span><span class="s1">extractNationalNumberFromPossiblyIncompleteNumber from </span><span class="s2">'./extractNationalNumberFromPossiblyIncompleteNumber.js'</span>
+<span class="s0">import </span><span class="s1">matchesEntirely from </span><span class="s2">'./matchesEntirely.js'</span>
+<span class="s0">import </span><span class="s1">checkNumberLength from </span><span class="s2">'./checkNumberLength.js'</span>
+<span class="s0">import </span><span class="s1">getCountryByCallingCode from </span><span class="s2">'./getCountryByCallingCode.js'</span>
+
+<span class="s3">/**</span>
+ <span class="s3">* Strips national prefix and carrier code from a complete phone number.</span>
+ <span class="s3">* The difference from the non-&quot;FromCompleteNumber&quot; function is that</span>
+ <span class="s3">* it won't extract national prefix if the resultant number is too short</span>
+ <span class="s3">* to be a complete number for the selected phone numbering plan.</span>
+ <span class="s3">* </span><span class="s4">@param  </span><span class="s3">{string} number — Complete phone number digits.</span>
+ <span class="s3">* </span><span class="s4">@param  </span><span class="s3">{string?} country — Country, if known.</span>
+ <span class="s3">* </span><span class="s4">@param  </span><span class="s3">{Metadata} metadata — Metadata with a phone numbering plan selected.</span>
+ <span class="s3">* </span><span class="s4">@return </span><span class="s3">{object} `{ nationalNumber: string, carrierCode: string? }`.</span>
+ <span class="s3">*/</span>
+<span class="s0">export default function </span><span class="s1">extractNationalNumber(number, country, metadata) {</span>
+	<span class="s3">// Parsing national prefixes and carrier codes</span>
+	<span class="s3">// is only required for local phone numbers</span>
+	<span class="s3">// but some people don't understand that</span>
+	<span class="s3">// and sometimes write international phone numbers</span>
+	<span class="s3">// with national prefixes (or maybe even carrier codes).</span>
+	<span class="s3">// http://ucken.blogspot.ru/2016/03/trunk-prefixes-in-skype4b.html</span>
+	<span class="s3">// Google's original library forgives such mistakes</span>
+	<span class="s3">// and so does this library, because it has been requested:</span>
+	<span class="s3">// https://github.com/catamphetamine/libphonenumber-js/issues/127</span>
+	<span class="s0">const </span><span class="s1">{</span>
+		<span class="s1">carrierCode,</span>
+		<span class="s1">nationalNumber</span>
+	<span class="s1">} = extractNationalNumberFromPossiblyIncompleteNumber(</span>
+		<span class="s1">number,</span>
+		<span class="s1">metadata</span>
+	<span class="s1">)</span>
+
+	<span class="s0">if </span><span class="s1">(nationalNumber !== number) {</span>
+		<span class="s0">if </span><span class="s1">(!shouldHaveExtractedNationalPrefix(number, nationalNumber, metadata)) {</span>
+			<span class="s3">// Don't strip the national prefix.</span>
+			<span class="s0">return </span><span class="s1">{ nationalNumber: number }</span>
+		<span class="s1">}</span>
+		<span class="s3">// Check the national (significant) number length after extracting national prefix and carrier code.</span>
+		<span class="s3">// Legacy generated metadata (before `1.0.18`) didn't support the &quot;possible lengths&quot; feature.</span>
+		<span class="s0">if </span><span class="s1">(metadata.numberingPlan.possibleLengths()) {</span>
+			<span class="s3">// If an exact `country` is not specified, attempt to detect it from the assumed national number.</span>
+			<span class="s0">if </span><span class="s1">(!country) {</span>
+				<span class="s1">country = getCountryByCallingCode(metadata.numberingPlan.callingCode(), {</span>
+					<span class="s1">nationalNumber,</span>
+					<span class="s1">metadata</span>
+				<span class="s1">})</span>
+			<span class="s1">}</span>
+
+			<span class="s3">// The number remaining after stripping the national prefix and carrier code</span>
+			<span class="s3">// should be long enough to have a possible length for the country.</span>
+			<span class="s3">// Otherwise, don't strip the national prefix and carrier code,</span>
+			<span class="s3">// since the original number could be a valid number.</span>
+			<span class="s3">// This check has been copy-pasted &quot;as is&quot; from Google's original library:</span>
+			<span class="s3">// https://github.com/google/libphonenumber/blob/876268eb1ad6cdc1b7b5bef17fc5e43052702d57/java/libphonenumber/src/com/google/i18n/phonenumbers/PhoneNumberUtil.java#L3236-L3250</span>
+			<span class="s3">// It doesn't check for the &quot;possibility&quot; of the original `number`.</span>
+			<span class="s3">// I guess it's fine not checking that one. It works as is anyway.</span>
+			<span class="s0">if </span><span class="s1">(!isPossibleIncompleteNationalNumber(nationalNumber, country, metadata)) {</span>
+				<span class="s3">// Don't strip the national prefix.</span>
+				<span class="s0">return </span><span class="s1">{ nationalNumber: number }</span>
+			<span class="s1">}</span>
+		<span class="s1">}</span>
+	<span class="s1">}</span>
+
+	<span class="s0">return </span><span class="s1">{ nationalNumber, carrierCode }</span>
+<span class="s1">}</span>
+
+<span class="s3">// In some countries, the same digit could be a national prefix</span>
+<span class="s3">// or a leading digit of a valid phone number.</span>
+<span class="s3">// For example, in Russia, national prefix is `8`,</span>
+<span class="s3">// and also `800 555 35 35` is a valid number</span>
+<span class="s3">// in which `8` is not a national prefix, but the first digit</span>
+<span class="s3">// of a national (significant) number.</span>
+<span class="s3">// Same's with Belarus:</span>
+<span class="s3">// `82004910060` is a valid national (significant) number,</span>
+<span class="s3">// but `2004910060` is not.</span>
+<span class="s3">// To support such cases (to prevent the code from always stripping</span>
+<span class="s3">// national prefix), a condition is imposed: a national prefix</span>
+<span class="s3">// is not extracted when the original number is &quot;viable&quot; and the</span>
+<span class="s3">// resultant number is not, a &quot;viable&quot; national number being the one</span>
+<span class="s3">// that matches `national_number_pattern`.</span>
+<span class="s0">function </span><span class="s1">shouldHaveExtractedNationalPrefix(nationalNumberBefore, nationalNumberAfter, metadata) {</span>
+	<span class="s3">// The equivalent in Google's code is:</span>
+	<span class="s3">// https://github.com/google/libphonenumber/blob/e326fa1fc4283bb05eb35cb3c15c18f98a31af33/java/libphonenumber/src/com/google/i18n/phonenumbers/PhoneNumberUtil.java#L2969-L3004</span>
+	<span class="s0">if </span><span class="s1">(matchesEntirely(nationalNumberBefore, metadata.nationalNumberPattern()) &amp;&amp;</span>
+		<span class="s1">!matchesEntirely(nationalNumberAfter, metadata.nationalNumberPattern())) {</span>
+		<span class="s0">return false</span>
+	<span class="s1">}</span>
+	<span class="s3">// This &quot;is possible&quot; national number (length) check has been commented out</span>
+	<span class="s3">// because it's superceded by the (effectively) same check done in the</span>
+	<span class="s3">// `extractNationalNumber()` function after it calls `shouldHaveExtractedNationalPrefix()`.</span>
+	<span class="s3">// In other words, why run the same check twice if it could only be run once.</span>
+	<span class="s3">// // Check the national (significant) number length after extracting national prefix and carrier code.</span>
+	<span class="s3">// // Fixes a minor &quot;weird behavior&quot; bug: https://gitlab.com/catamphetamine/libphonenumber-js/-/issues/57</span>
+	<span class="s3">// // (Legacy generated metadata (before `1.0.18`) didn't support the &quot;possible lengths&quot; feature).</span>
+	<span class="s3">// if (metadata.possibleLengths()) {</span>
+	<span class="s3">//  if (isPossibleIncompleteNationalNumber(nationalNumberBefore, metadata) &amp;&amp;</span>
+	<span class="s3">//      !isPossibleIncompleteNationalNumber(nationalNumberAfter, metadata)) {</span>
+	<span class="s3">//      return false</span>
+	<span class="s3">//  }</span>
+	<span class="s3">// }</span>
+	<span class="s0">return true</span>
+<span class="s1">}</span>
+
+<span class="s0">function </span><span class="s1">isPossibleIncompleteNationalNumber(nationalNumber, country, metadata) {</span>
+	<span class="s0">switch </span><span class="s1">(checkNumberLength(nationalNumber, country, metadata)) {</span>
+		<span class="s0">case </span><span class="s2">'TOO_SHORT'</span><span class="s1">:</span>
+		<span class="s0">case </span><span class="s2">'INVALID_LENGTH'</span><span class="s1">:</span>
+		<span class="s3">// This library ignores &quot;local-only&quot; phone numbers (for simplicity).</span>
+		<span class="s3">// See the readme for more info on what are &quot;local-only&quot; phone numbers.</span>
+		<span class="s3">// case 'IS_POSSIBLE_LOCAL_ONLY':</span>
+			<span class="s0">return false</span>
+		<span class="s0">default</span><span class="s1">:</span>
+			<span class="s0">return true</span>
+	<span class="s1">}</span>
+<span class="s1">}</span></pre>
+</body>
+</html>

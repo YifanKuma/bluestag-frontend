@@ -1,0 +1,247 @@
+<html>
+<head>
+<title>max-statements-per-line.js</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #8c8c8c; font-style: italic;}
+.s1 { color: #8c8c8c; font-style: italic;}
+.s2 { color: #080808;}
+.s3 { color: #067d17;}
+.s4 { color: #0033b3;}
+.s5 { color: #1750eb;}
+.s6 { color: #264eff;}
+</style>
+</head>
+<body bgcolor="#ffffff">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#c0c0c0" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+max-statements-per-line.js</font>
+</center></td></tr></table>
+<pre><span class="s0">/**</span>
+ <span class="s0">* </span><span class="s1">@fileoverview </span><span class="s0">Specify the maximum number of statements allowed per line.</span>
+ <span class="s0">* </span><span class="s1">@author </span><span class="s0">Kenneth Williams</span>
+ <span class="s0">* </span><span class="s1">@deprecated </span><span class="s0">in ESLint v8.53.0</span>
+ <span class="s0">*/</span>
+<span class="s3">&quot;use strict&quot;</span><span class="s2">;</span>
+
+<span class="s0">//------------------------------------------------------------------------------</span>
+<span class="s0">// Requirements</span>
+<span class="s0">//------------------------------------------------------------------------------</span>
+
+<span class="s4">const </span><span class="s2">astUtils = require(</span><span class="s3">&quot;./utils/ast-utils&quot;</span><span class="s2">);</span>
+
+<span class="s0">//------------------------------------------------------------------------------</span>
+<span class="s0">// Rule Definition</span>
+<span class="s0">//------------------------------------------------------------------------------</span>
+
+<span class="s0">/** </span><span class="s1">@type </span><span class="s0">{import('../types').Rule.RuleModule} */</span>
+<span class="s2">module.exports = {</span>
+	<span class="s2">meta: {</span>
+		<span class="s2">deprecated: {</span>
+			<span class="s2">message: </span><span class="s3">&quot;Formatting rules are being moved out of ESLint core.&quot;</span><span class="s2">,</span>
+			<span class="s2">url: </span><span class="s3">&quot;https://eslint.org/blog/2023/10/deprecating-formatting-rules/&quot;</span><span class="s2">,</span>
+			<span class="s2">deprecatedSince: </span><span class="s3">&quot;8.53.0&quot;</span><span class="s2">,</span>
+			<span class="s2">availableUntil: </span><span class="s3">&quot;10.0.0&quot;</span><span class="s2">,</span>
+			<span class="s2">replacedBy: [</span>
+				<span class="s2">{</span>
+					<span class="s2">message:</span>
+						<span class="s3">&quot;ESLint Stylistic now maintains deprecated stylistic core rules.&quot;</span><span class="s2">,</span>
+					<span class="s2">url: </span><span class="s3">&quot;https://eslint.style/guide/migration&quot;</span><span class="s2">,</span>
+					<span class="s2">plugin: {</span>
+						<span class="s2">name: </span><span class="s3">&quot;@stylistic/eslint-plugin&quot;</span><span class="s2">,</span>
+						<span class="s2">url: </span><span class="s3">&quot;https://eslint.style&quot;</span><span class="s2">,</span>
+					<span class="s2">},</span>
+					<span class="s2">rule: {</span>
+						<span class="s2">name: </span><span class="s3">&quot;max-statements-per-line&quot;</span><span class="s2">,</span>
+						<span class="s2">url: </span><span class="s3">&quot;https://eslint.style/rules/max-statements-per-line&quot;</span><span class="s2">,</span>
+					<span class="s2">},</span>
+				<span class="s2">},</span>
+			<span class="s2">],</span>
+		<span class="s2">},</span>
+		<span class="s2">type: </span><span class="s3">&quot;layout&quot;</span><span class="s2">,</span>
+
+		<span class="s2">docs: {</span>
+			<span class="s2">description:</span>
+				<span class="s3">&quot;Enforce a maximum number of statements allowed per line&quot;</span><span class="s2">,</span>
+			<span class="s2">recommended: </span><span class="s4">false</span><span class="s2">,</span>
+			<span class="s2">url: </span><span class="s3">&quot;https://eslint.org/docs/latest/rules/max-statements-per-line&quot;</span><span class="s2">,</span>
+		<span class="s2">},</span>
+
+		<span class="s2">schema: [</span>
+			<span class="s2">{</span>
+				<span class="s2">type: </span><span class="s3">&quot;object&quot;</span><span class="s2">,</span>
+				<span class="s2">properties: {</span>
+					<span class="s2">max: {</span>
+						<span class="s2">type: </span><span class="s3">&quot;integer&quot;</span><span class="s2">,</span>
+						<span class="s2">minimum: </span><span class="s5">1</span><span class="s2">,</span>
+						<span class="s4">default</span><span class="s2">: </span><span class="s5">1</span><span class="s2">,</span>
+					<span class="s2">},</span>
+				<span class="s2">},</span>
+				<span class="s2">additionalProperties: </span><span class="s4">false</span><span class="s2">,</span>
+			<span class="s2">},</span>
+		<span class="s2">],</span>
+		<span class="s2">messages: {</span>
+			<span class="s2">exceed: </span><span class="s3">&quot;This line has {{numberOfStatementsOnThisLine}} {{statements}}. Maximum allowed is {{maxStatementsPerLine}}.&quot;</span><span class="s2">,</span>
+		<span class="s2">},</span>
+	<span class="s2">},</span>
+
+	<span class="s2">create(context) {</span>
+		<span class="s4">const </span><span class="s2">sourceCode = context.sourceCode,</span>
+			<span class="s2">options = context.options[</span><span class="s5">0</span><span class="s2">] || {},</span>
+			<span class="s2">maxStatementsPerLine =</span>
+				<span class="s4">typeof </span><span class="s2">options.max !== </span><span class="s3">&quot;undefined&quot; </span><span class="s2">? options.max : </span><span class="s5">1</span><span class="s2">;</span>
+
+		<span class="s4">let </span><span class="s2">lastStatementLine = </span><span class="s5">0</span><span class="s2">,</span>
+			<span class="s2">numberOfStatementsOnThisLine = </span><span class="s5">0</span><span class="s2">,</span>
+			<span class="s2">firstExtraStatement;</span>
+
+		<span class="s0">//--------------------------------------------------------------------------</span>
+		<span class="s0">// Helpers</span>
+		<span class="s0">//--------------------------------------------------------------------------</span>
+
+		<span class="s4">const </span><span class="s2">SINGLE_CHILD_ALLOWED =</span>
+			<span class="s6">/^(?:(?:DoWhile|For|ForIn|ForOf|If|Labeled|While)Statement|Export(?:Default|Named)Declaration)$/u</span><span class="s2">;</span>
+
+		<span class="s0">/**</span>
+		 <span class="s0">* Reports with the first extra statement, and clears it.</span>
+		 <span class="s0">* </span><span class="s1">@returns </span><span class="s0">{void}</span>
+		 <span class="s0">*/</span>
+		<span class="s4">function </span><span class="s2">reportFirstExtraStatementAndClear() {</span>
+			<span class="s4">if </span><span class="s2">(firstExtraStatement) {</span>
+				<span class="s2">context.report({</span>
+					<span class="s2">node: firstExtraStatement,</span>
+					<span class="s2">messageId: </span><span class="s3">&quot;exceed&quot;</span><span class="s2">,</span>
+					<span class="s2">data: {</span>
+						<span class="s2">numberOfStatementsOnThisLine,</span>
+						<span class="s2">maxStatementsPerLine,</span>
+						<span class="s2">statements:</span>
+							<span class="s2">numberOfStatementsOnThisLine === </span><span class="s5">1</span>
+								<span class="s2">? </span><span class="s3">&quot;statement&quot;</span>
+								<span class="s2">: </span><span class="s3">&quot;statements&quot;</span><span class="s2">,</span>
+					<span class="s2">},</span>
+				<span class="s2">});</span>
+			<span class="s2">}</span>
+			<span class="s2">firstExtraStatement = </span><span class="s4">null</span><span class="s2">;</span>
+		<span class="s2">}</span>
+
+		<span class="s0">/**</span>
+		 <span class="s0">* Gets the actual last token of a given node.</span>
+		 <span class="s0">* </span><span class="s1">@param </span><span class="s0">{ASTNode} node A node to get. This is a node except EmptyStatement.</span>
+		 <span class="s0">* </span><span class="s1">@returns </span><span class="s0">{Token} The actual last token.</span>
+		 <span class="s0">*/</span>
+		<span class="s4">function </span><span class="s2">getActualLastToken(node) {</span>
+			<span class="s4">return </span><span class="s2">sourceCode.getLastToken(node, astUtils.isNotSemicolonToken);</span>
+		<span class="s2">}</span>
+
+		<span class="s0">/**</span>
+		 <span class="s0">* Addresses a given node.</span>
+		 <span class="s0">* It updates the state of this rule, then reports the node if the node violated this rule.</span>
+		 <span class="s0">* </span><span class="s1">@param </span><span class="s0">{ASTNode} node A node to check.</span>
+		 <span class="s0">* </span><span class="s1">@returns </span><span class="s0">{void}</span>
+		 <span class="s0">*/</span>
+		<span class="s4">function </span><span class="s2">enterStatement(node) {</span>
+			<span class="s4">const </span><span class="s2">line = node.loc.start.line;</span>
+
+			<span class="s0">/* 
+             * Skip to allow non-block statements if this is direct child of control statements. 
+             * `if (a) foo();` is counted as 1. 
+             * But `if (a) foo(); else foo();` should be counted as 2. 
+             */</span>
+			<span class="s4">if </span><span class="s2">(</span>
+				<span class="s2">SINGLE_CHILD_ALLOWED.test(node.parent.type) &amp;&amp;</span>
+				<span class="s2">node.parent.alternate !== node</span>
+			<span class="s2">) {</span>
+				<span class="s4">return</span><span class="s2">;</span>
+			<span class="s2">}</span>
+
+			<span class="s0">// Update state.</span>
+			<span class="s4">if </span><span class="s2">(line === lastStatementLine) {</span>
+				<span class="s2">numberOfStatementsOnThisLine += </span><span class="s5">1</span><span class="s2">;</span>
+			<span class="s2">} </span><span class="s4">else </span><span class="s2">{</span>
+				<span class="s2">reportFirstExtraStatementAndClear();</span>
+				<span class="s2">numberOfStatementsOnThisLine = </span><span class="s5">1</span><span class="s2">;</span>
+				<span class="s2">lastStatementLine = line;</span>
+			<span class="s2">}</span>
+
+			<span class="s0">// Reports if the node violated this rule.</span>
+			<span class="s4">if </span><span class="s2">(numberOfStatementsOnThisLine === maxStatementsPerLine + </span><span class="s5">1</span><span class="s2">) {</span>
+				<span class="s2">firstExtraStatement = firstExtraStatement || node;</span>
+			<span class="s2">}</span>
+		<span class="s2">}</span>
+
+		<span class="s0">/**</span>
+		 <span class="s0">* Updates the state of this rule with the end line of leaving node to check with the next statement.</span>
+		 <span class="s0">* </span><span class="s1">@param </span><span class="s0">{ASTNode} node A node to check.</span>
+		 <span class="s0">* </span><span class="s1">@returns </span><span class="s0">{void}</span>
+		 <span class="s0">*/</span>
+		<span class="s4">function </span><span class="s2">leaveStatement(node) {</span>
+			<span class="s4">const </span><span class="s2">line = getActualLastToken(node).loc.end.line;</span>
+
+			<span class="s0">// Update state.</span>
+			<span class="s4">if </span><span class="s2">(line !== lastStatementLine) {</span>
+				<span class="s2">reportFirstExtraStatementAndClear();</span>
+				<span class="s2">numberOfStatementsOnThisLine = </span><span class="s5">1</span><span class="s2">;</span>
+				<span class="s2">lastStatementLine = line;</span>
+			<span class="s2">}</span>
+		<span class="s2">}</span>
+
+		<span class="s0">//--------------------------------------------------------------------------</span>
+		<span class="s0">// Public API</span>
+		<span class="s0">//--------------------------------------------------------------------------</span>
+
+		<span class="s4">return </span><span class="s2">{</span>
+			<span class="s2">BreakStatement: enterStatement,</span>
+			<span class="s2">ClassDeclaration: enterStatement,</span>
+			<span class="s2">ContinueStatement: enterStatement,</span>
+			<span class="s2">DebuggerStatement: enterStatement,</span>
+			<span class="s2">DoWhileStatement: enterStatement,</span>
+			<span class="s2">ExpressionStatement: enterStatement,</span>
+			<span class="s2">ForInStatement: enterStatement,</span>
+			<span class="s2">ForOfStatement: enterStatement,</span>
+			<span class="s2">ForStatement: enterStatement,</span>
+			<span class="s2">FunctionDeclaration: enterStatement,</span>
+			<span class="s2">IfStatement: enterStatement,</span>
+			<span class="s2">ImportDeclaration: enterStatement,</span>
+			<span class="s2">LabeledStatement: enterStatement,</span>
+			<span class="s2">ReturnStatement: enterStatement,</span>
+			<span class="s2">SwitchStatement: enterStatement,</span>
+			<span class="s2">ThrowStatement: enterStatement,</span>
+			<span class="s2">TryStatement: enterStatement,</span>
+			<span class="s2">VariableDeclaration: enterStatement,</span>
+			<span class="s2">WhileStatement: enterStatement,</span>
+			<span class="s2">WithStatement: enterStatement,</span>
+			<span class="s2">ExportNamedDeclaration: enterStatement,</span>
+			<span class="s2">ExportDefaultDeclaration: enterStatement,</span>
+			<span class="s2">ExportAllDeclaration: enterStatement,</span>
+
+			<span class="s3">&quot;BreakStatement:exit&quot;</span><span class="s2">: leaveStatement,</span>
+			<span class="s3">&quot;ClassDeclaration:exit&quot;</span><span class="s2">: leaveStatement,</span>
+			<span class="s3">&quot;ContinueStatement:exit&quot;</span><span class="s2">: leaveStatement,</span>
+			<span class="s3">&quot;DebuggerStatement:exit&quot;</span><span class="s2">: leaveStatement,</span>
+			<span class="s3">&quot;DoWhileStatement:exit&quot;</span><span class="s2">: leaveStatement,</span>
+			<span class="s3">&quot;ExpressionStatement:exit&quot;</span><span class="s2">: leaveStatement,</span>
+			<span class="s3">&quot;ForInStatement:exit&quot;</span><span class="s2">: leaveStatement,</span>
+			<span class="s3">&quot;ForOfStatement:exit&quot;</span><span class="s2">: leaveStatement,</span>
+			<span class="s3">&quot;ForStatement:exit&quot;</span><span class="s2">: leaveStatement,</span>
+			<span class="s3">&quot;FunctionDeclaration:exit&quot;</span><span class="s2">: leaveStatement,</span>
+			<span class="s3">&quot;IfStatement:exit&quot;</span><span class="s2">: leaveStatement,</span>
+			<span class="s3">&quot;ImportDeclaration:exit&quot;</span><span class="s2">: leaveStatement,</span>
+			<span class="s3">&quot;LabeledStatement:exit&quot;</span><span class="s2">: leaveStatement,</span>
+			<span class="s3">&quot;ReturnStatement:exit&quot;</span><span class="s2">: leaveStatement,</span>
+			<span class="s3">&quot;SwitchStatement:exit&quot;</span><span class="s2">: leaveStatement,</span>
+			<span class="s3">&quot;ThrowStatement:exit&quot;</span><span class="s2">: leaveStatement,</span>
+			<span class="s3">&quot;TryStatement:exit&quot;</span><span class="s2">: leaveStatement,</span>
+			<span class="s3">&quot;VariableDeclaration:exit&quot;</span><span class="s2">: leaveStatement,</span>
+			<span class="s3">&quot;WhileStatement:exit&quot;</span><span class="s2">: leaveStatement,</span>
+			<span class="s3">&quot;WithStatement:exit&quot;</span><span class="s2">: leaveStatement,</span>
+			<span class="s3">&quot;ExportNamedDeclaration:exit&quot;</span><span class="s2">: leaveStatement,</span>
+			<span class="s3">&quot;ExportDefaultDeclaration:exit&quot;</span><span class="s2">: leaveStatement,</span>
+			<span class="s3">&quot;ExportAllDeclaration:exit&quot;</span><span class="s2">: leaveStatement,</span>
+			<span class="s3">&quot;Program:exit&quot;</span><span class="s2">: reportFirstExtraStatementAndClear,</span>
+		<span class="s2">};</span>
+	<span class="s2">},</span>
+<span class="s2">};</span>
+</pre>
+</body>
+</html>

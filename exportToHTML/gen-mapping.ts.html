@@ -1,0 +1,635 @@
+<html>
+<head>
+<title>gen-mapping.ts</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #0033b3;}
+.s1 { color: #080808;}
+.s2 { color: #067d17;}
+.s3 { color: #8c8c8c; font-style: italic;}
+.s4 { color: #1750eb;}
+</style>
+</head>
+<body bgcolor="#ffffff">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#c0c0c0" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+gen-mapping.ts</font>
+</center></td></tr></table>
+<pre><span class="s0">import </span><span class="s1">{ SetArray, put, remove } from </span><span class="s2">'./set-array'</span><span class="s1">;</span>
+<span class="s0">import </span><span class="s1">{</span>
+  <span class="s1">encode,</span>
+  <span class="s3">// encodeGeneratedRanges,</span>
+  <span class="s3">// encodeOriginalScopes</span>
+<span class="s1">} from </span><span class="s2">'@jridgewell/sourcemap-codec'</span><span class="s1">;</span>
+<span class="s0">import </span><span class="s1">{ TraceMap, decodedMappings } from </span><span class="s2">'@jridgewell/trace-mapping'</span><span class="s1">;</span>
+
+<span class="s0">import </span><span class="s1">{</span>
+  <span class="s1">COLUMN,</span>
+  <span class="s1">SOURCES_INDEX,</span>
+  <span class="s1">SOURCE_LINE,</span>
+  <span class="s1">SOURCE_COLUMN,</span>
+  <span class="s1">NAMES_INDEX,</span>
+<span class="s1">} from </span><span class="s2">'./sourcemap-segment'</span><span class="s1">;</span>
+
+<span class="s0">import </span><span class="s1">type { SourceMapInput } from </span><span class="s2">'@jridgewell/trace-mapping'</span><span class="s1">;</span>
+<span class="s3">// import type { OriginalScope, GeneratedRange } from '@jridgewell/sourcemap-codec';</span>
+<span class="s0">import </span><span class="s1">type { SourceMapSegment } from </span><span class="s2">'./sourcemap-segment'</span><span class="s1">;</span>
+<span class="s0">import </span><span class="s1">type {</span>
+  <span class="s1">DecodedSourceMap,</span>
+  <span class="s1">EncodedSourceMap,</span>
+  <span class="s1">Pos,</span>
+  <span class="s1">Mapping,</span>
+  <span class="s3">// BindingExpressionRange,</span>
+  <span class="s3">// OriginalPos,</span>
+  <span class="s3">// OriginalScopeInfo,</span>
+  <span class="s3">// GeneratedRangeInfo,</span>
+<span class="s1">} from </span><span class="s2">'./types'</span><span class="s1">;</span>
+
+<span class="s0">export </span><span class="s1">type { DecodedSourceMap, EncodedSourceMap, Mapping };</span>
+
+<span class="s0">export </span><span class="s1">type Options = {</span>
+  <span class="s1">file?: string | </span><span class="s0">null</span><span class="s1">;</span>
+  <span class="s1">sourceRoot?: string | </span><span class="s0">null</span><span class="s1">;</span>
+<span class="s1">};</span>
+
+<span class="s0">const </span><span class="s1">NO_NAME = -</span><span class="s4">1</span><span class="s1">;</span>
+
+<span class="s3">/**</span>
+ <span class="s3">* Provides the state to generate a sourcemap.</span>
+ <span class="s3">*/</span>
+<span class="s0">export class </span><span class="s1">GenMapping {</span>
+  <span class="s1">declare </span><span class="s0">private </span><span class="s1">_names: SetArray&lt;string&gt;;</span>
+  <span class="s1">declare </span><span class="s0">private </span><span class="s1">_sources: SetArray&lt;string&gt;;</span>
+  <span class="s1">declare </span><span class="s0">private </span><span class="s1">_sourcesContent: (string | </span><span class="s0">null</span><span class="s1">)[];</span>
+  <span class="s1">declare </span><span class="s0">private </span><span class="s1">_mappings: SourceMapSegment[][];</span>
+  <span class="s3">// private declare _originalScopes: OriginalScope[][];</span>
+  <span class="s3">// private declare _generatedRanges: GeneratedRange[];</span>
+  <span class="s1">declare </span><span class="s0">private </span><span class="s1">_ignoreList: SetArray&lt;number&gt;;</span>
+  <span class="s1">declare file: string | </span><span class="s0">null </span><span class="s1">| undefined;</span>
+  <span class="s1">declare sourceRoot: string | </span><span class="s0">null </span><span class="s1">| undefined;</span>
+
+  <span class="s1">constructor({ file, sourceRoot }: Options = {}) {</span>
+    <span class="s0">this</span><span class="s1">._names = </span><span class="s0">new </span><span class="s1">SetArray();</span>
+    <span class="s0">this</span><span class="s1">._sources = </span><span class="s0">new </span><span class="s1">SetArray();</span>
+    <span class="s0">this</span><span class="s1">._sourcesContent = [];</span>
+    <span class="s0">this</span><span class="s1">._mappings = [];</span>
+    <span class="s3">// this._originalScopes = [];</span>
+    <span class="s3">// this._generatedRanges = [];</span>
+    <span class="s0">this</span><span class="s1">.file = file;</span>
+    <span class="s0">this</span><span class="s1">.sourceRoot = sourceRoot;</span>
+    <span class="s0">this</span><span class="s1">._ignoreList = </span><span class="s0">new </span><span class="s1">SetArray();</span>
+  <span class="s1">}</span>
+<span class="s1">}</span>
+
+<span class="s0">interface </span><span class="s1">PublicMap {</span>
+  <span class="s1">_names: GenMapping[</span><span class="s2">'_names'</span><span class="s1">];</span>
+  <span class="s1">_sources: GenMapping[</span><span class="s2">'_sources'</span><span class="s1">];</span>
+  <span class="s1">_sourcesContent: GenMapping[</span><span class="s2">'_sourcesContent'</span><span class="s1">];</span>
+  <span class="s1">_mappings: GenMapping[</span><span class="s2">'_mappings'</span><span class="s1">];</span>
+  <span class="s3">// _originalScopes: GenMapping['_originalScopes'];</span>
+  <span class="s3">// _generatedRanges: GenMapping['_generatedRanges'];</span>
+  <span class="s1">_ignoreList: GenMapping[</span><span class="s2">'_ignoreList'</span><span class="s1">];</span>
+<span class="s1">}</span>
+
+<span class="s3">/**</span>
+ <span class="s3">* Typescript doesn't allow friend access to private fields, so this just casts the map into a type</span>
+ <span class="s3">* with public access modifiers.</span>
+ <span class="s3">*/</span>
+<span class="s0">function </span><span class="s1">cast(map: unknown): PublicMap {</span>
+  <span class="s0">return </span><span class="s1">map as any;</span>
+<span class="s1">}</span>
+
+<span class="s3">/**</span>
+ <span class="s3">* A low-level API to associate a generated position with an original source position. Line and</span>
+ <span class="s3">* column here are 0-based, unlike `addMapping`.</span>
+ <span class="s3">*/</span>
+<span class="s0">export function </span><span class="s1">addSegment(</span>
+  <span class="s1">map: GenMapping,</span>
+  <span class="s1">genLine: number,</span>
+  <span class="s1">genColumn: number,</span>
+  <span class="s1">source?: </span><span class="s0">null</span><span class="s1">,</span>
+  <span class="s1">sourceLine?: </span><span class="s0">null</span><span class="s1">,</span>
+  <span class="s1">sourceColumn?: </span><span class="s0">null</span><span class="s1">,</span>
+  <span class="s1">name?: </span><span class="s0">null</span><span class="s1">,</span>
+  <span class="s1">content?: </span><span class="s0">null</span><span class="s1">,</span>
+<span class="s1">): </span><span class="s0">void</span><span class="s1">;</span>
+<span class="s0">export function </span><span class="s1">addSegment(</span>
+  <span class="s1">map: GenMapping,</span>
+  <span class="s1">genLine: number,</span>
+  <span class="s1">genColumn: number,</span>
+  <span class="s1">source: string,</span>
+  <span class="s1">sourceLine: number,</span>
+  <span class="s1">sourceColumn: number,</span>
+  <span class="s1">name?: </span><span class="s0">null</span><span class="s1">,</span>
+  <span class="s1">content?: string | </span><span class="s0">null</span><span class="s1">,</span>
+<span class="s1">): </span><span class="s0">void</span><span class="s1">;</span>
+<span class="s0">export function </span><span class="s1">addSegment(</span>
+  <span class="s1">map: GenMapping,</span>
+  <span class="s1">genLine: number,</span>
+  <span class="s1">genColumn: number,</span>
+  <span class="s1">source: string,</span>
+  <span class="s1">sourceLine: number,</span>
+  <span class="s1">sourceColumn: number,</span>
+  <span class="s1">name: string,</span>
+  <span class="s1">content?: string | </span><span class="s0">null</span><span class="s1">,</span>
+<span class="s1">): </span><span class="s0">void</span><span class="s1">;</span>
+<span class="s0">export function </span><span class="s1">addSegment(</span>
+  <span class="s1">map: GenMapping,</span>
+  <span class="s1">genLine: number,</span>
+  <span class="s1">genColumn: number,</span>
+  <span class="s1">source?: string | </span><span class="s0">null</span><span class="s1">,</span>
+  <span class="s1">sourceLine?: number | </span><span class="s0">null</span><span class="s1">,</span>
+  <span class="s1">sourceColumn?: number | </span><span class="s0">null</span><span class="s1">,</span>
+  <span class="s1">name?: string | </span><span class="s0">null</span><span class="s1">,</span>
+  <span class="s1">content?: string | </span><span class="s0">null</span><span class="s1">,</span>
+<span class="s1">): </span><span class="s0">void </span><span class="s1">{</span>
+  <span class="s0">return </span><span class="s1">addSegmentInternal(</span>
+    <span class="s0">false</span><span class="s1">,</span>
+    <span class="s1">map,</span>
+    <span class="s1">genLine,</span>
+    <span class="s1">genColumn,</span>
+    <span class="s1">source,</span>
+    <span class="s1">sourceLine,</span>
+    <span class="s1">sourceColumn,</span>
+    <span class="s1">name,</span>
+    <span class="s1">content,</span>
+  <span class="s1">);</span>
+<span class="s1">}</span>
+
+<span class="s3">/**</span>
+ <span class="s3">* A high-level API to associate a generated position with an original source position. Line is</span>
+ <span class="s3">* 1-based, but column is 0-based, due to legacy behavior in `source-map` library.</span>
+ <span class="s3">*/</span>
+<span class="s0">export function </span><span class="s1">addMapping(</span>
+  <span class="s1">map: GenMapping,</span>
+  <span class="s1">mapping: {</span>
+    <span class="s1">generated: Pos;</span>
+    <span class="s1">source?: </span><span class="s0">null</span><span class="s1">;</span>
+    <span class="s1">original?: </span><span class="s0">null</span><span class="s1">;</span>
+    <span class="s1">name?: </span><span class="s0">null</span><span class="s1">;</span>
+    <span class="s1">content?: </span><span class="s0">null</span><span class="s1">;</span>
+  <span class="s1">},</span>
+<span class="s1">): </span><span class="s0">void</span><span class="s1">;</span>
+<span class="s0">export function </span><span class="s1">addMapping(</span>
+  <span class="s1">map: GenMapping,</span>
+  <span class="s1">mapping: {</span>
+    <span class="s1">generated: Pos;</span>
+    <span class="s1">source: string;</span>
+    <span class="s1">original: Pos;</span>
+    <span class="s1">name?: </span><span class="s0">null</span><span class="s1">;</span>
+    <span class="s1">content?: string | </span><span class="s0">null</span><span class="s1">;</span>
+  <span class="s1">},</span>
+<span class="s1">): </span><span class="s0">void</span><span class="s1">;</span>
+<span class="s0">export function </span><span class="s1">addMapping(</span>
+  <span class="s1">map: GenMapping,</span>
+  <span class="s1">mapping: {</span>
+    <span class="s1">generated: Pos;</span>
+    <span class="s1">source: string;</span>
+    <span class="s1">original: Pos;</span>
+    <span class="s1">name: string;</span>
+    <span class="s1">content?: string | </span><span class="s0">null</span><span class="s1">;</span>
+  <span class="s1">},</span>
+<span class="s1">): </span><span class="s0">void</span><span class="s1">;</span>
+<span class="s0">export function </span><span class="s1">addMapping(</span>
+  <span class="s1">map: GenMapping,</span>
+  <span class="s1">mapping: {</span>
+    <span class="s1">generated: Pos;</span>
+    <span class="s1">source?: string | </span><span class="s0">null</span><span class="s1">;</span>
+    <span class="s1">original?: Pos | </span><span class="s0">null</span><span class="s1">;</span>
+    <span class="s1">name?: string | </span><span class="s0">null</span><span class="s1">;</span>
+    <span class="s1">content?: string | </span><span class="s0">null</span><span class="s1">;</span>
+  <span class="s1">},</span>
+<span class="s1">): </span><span class="s0">void </span><span class="s1">{</span>
+  <span class="s0">return </span><span class="s1">addMappingInternal(</span><span class="s0">false</span><span class="s1">, map, mapping as Parameters&lt;</span><span class="s0">typeof </span><span class="s1">addMappingInternal&gt;[</span><span class="s4">2</span><span class="s1">]);</span>
+<span class="s1">}</span>
+
+<span class="s3">/**</span>
+ <span class="s3">* Same as `addSegment`, but will only add the segment if it generates useful information in the</span>
+ <span class="s3">* resulting map. This only works correctly if segments are added **in order**, meaning you should</span>
+ <span class="s3">* not add a segment with a lower generated line/column than one that came before.</span>
+ <span class="s3">*/</span>
+<span class="s0">export const </span><span class="s1">maybeAddSegment: </span><span class="s0">typeof </span><span class="s1">addSegment = (</span>
+  <span class="s1">map,</span>
+  <span class="s1">genLine,</span>
+  <span class="s1">genColumn,</span>
+  <span class="s1">source,</span>
+  <span class="s1">sourceLine,</span>
+  <span class="s1">sourceColumn,</span>
+  <span class="s1">name,</span>
+  <span class="s1">content,</span>
+<span class="s1">) =&gt; {</span>
+  <span class="s0">return </span><span class="s1">addSegmentInternal(</span>
+    <span class="s0">true</span><span class="s1">,</span>
+    <span class="s1">map,</span>
+    <span class="s1">genLine,</span>
+    <span class="s1">genColumn,</span>
+    <span class="s1">source,</span>
+    <span class="s1">sourceLine,</span>
+    <span class="s1">sourceColumn,</span>
+    <span class="s1">name,</span>
+    <span class="s1">content,</span>
+  <span class="s1">);</span>
+<span class="s1">};</span>
+
+<span class="s3">/**</span>
+ <span class="s3">* Same as `addMapping`, but will only add the mapping if it generates useful information in the</span>
+ <span class="s3">* resulting map. This only works correctly if mappings are added **in order**, meaning you should</span>
+ <span class="s3">* not add a mapping with a lower generated line/column than one that came before.</span>
+ <span class="s3">*/</span>
+<span class="s0">export const </span><span class="s1">maybeAddMapping: </span><span class="s0">typeof </span><span class="s1">addMapping = (map, mapping) =&gt; {</span>
+  <span class="s0">return </span><span class="s1">addMappingInternal(</span><span class="s0">true</span><span class="s1">, map, mapping as Parameters&lt;</span><span class="s0">typeof </span><span class="s1">addMappingInternal&gt;[</span><span class="s4">2</span><span class="s1">]);</span>
+<span class="s1">};</span>
+
+<span class="s3">/**</span>
+ <span class="s3">* Adds/removes the content of the source file to the source map.</span>
+ <span class="s3">*/</span>
+<span class="s0">export function </span><span class="s1">setSourceContent(map: GenMapping, source: string, content: string | </span><span class="s0">null</span><span class="s1">): </span><span class="s0">void </span><span class="s1">{</span>
+  <span class="s0">const </span><span class="s1">{</span>
+    <span class="s1">_sources: sources,</span>
+    <span class="s1">_sourcesContent: sourcesContent,</span>
+    <span class="s3">// _originalScopes: originalScopes,</span>
+  <span class="s1">} = cast(map);</span>
+  <span class="s0">const </span><span class="s1">index = put(sources, source);</span>
+  <span class="s1">sourcesContent[index] = content;</span>
+  <span class="s3">// if (index === originalScopes.length) originalScopes[index] = [];</span>
+<span class="s1">}</span>
+
+<span class="s0">export function </span><span class="s1">setIgnore(map: GenMapping, source: string, ignore = </span><span class="s0">true</span><span class="s1">) {</span>
+  <span class="s0">const </span><span class="s1">{</span>
+    <span class="s1">_sources: sources,</span>
+    <span class="s1">_sourcesContent: sourcesContent,</span>
+    <span class="s1">_ignoreList: ignoreList,</span>
+    <span class="s3">// _originalScopes: originalScopes,</span>
+  <span class="s1">} = cast(map);</span>
+  <span class="s0">const </span><span class="s1">index = put(sources, source);</span>
+  <span class="s0">if </span><span class="s1">(index === sourcesContent.length) sourcesContent[index] = </span><span class="s0">null</span><span class="s1">;</span>
+  <span class="s3">// if (index === originalScopes.length) originalScopes[index] = [];</span>
+  <span class="s0">if </span><span class="s1">(ignore) put(ignoreList, index);</span>
+  <span class="s0">else </span><span class="s1">remove(ignoreList, index);</span>
+<span class="s1">}</span>
+
+<span class="s3">/**</span>
+ <span class="s3">* Returns a sourcemap object (with decoded mappings) suitable for passing to a library that expects</span>
+ <span class="s3">* a sourcemap, or to JSON.stringify.</span>
+ <span class="s3">*/</span>
+<span class="s0">export function </span><span class="s1">toDecodedMap(map: GenMapping): DecodedSourceMap {</span>
+  <span class="s0">const </span><span class="s1">{</span>
+    <span class="s1">_mappings: mappings,</span>
+    <span class="s1">_sources: sources,</span>
+    <span class="s1">_sourcesContent: sourcesContent,</span>
+    <span class="s1">_names: names,</span>
+    <span class="s1">_ignoreList: ignoreList,</span>
+    <span class="s3">// _originalScopes: originalScopes,</span>
+    <span class="s3">// _generatedRanges: generatedRanges,</span>
+  <span class="s1">} = cast(map);</span>
+  <span class="s1">removeEmptyFinalLines(mappings);</span>
+
+  <span class="s0">return </span><span class="s1">{</span>
+    <span class="s1">version: </span><span class="s4">3</span><span class="s1">,</span>
+    <span class="s1">file: map.file || undefined,</span>
+    <span class="s1">names: names.array,</span>
+    <span class="s1">sourceRoot: map.sourceRoot || undefined,</span>
+    <span class="s1">sources: sources.array,</span>
+    <span class="s1">sourcesContent,</span>
+    <span class="s1">mappings,</span>
+    <span class="s3">// originalScopes,</span>
+    <span class="s3">// generatedRanges,</span>
+    <span class="s1">ignoreList: ignoreList.array,</span>
+  <span class="s1">};</span>
+<span class="s1">}</span>
+
+<span class="s3">/**</span>
+ <span class="s3">* Returns a sourcemap object (with encoded mappings) suitable for passing to a library that expects</span>
+ <span class="s3">* a sourcemap, or to JSON.stringify.</span>
+ <span class="s3">*/</span>
+<span class="s0">export function </span><span class="s1">toEncodedMap(map: GenMapping): EncodedSourceMap {</span>
+  <span class="s0">const </span><span class="s1">decoded = toDecodedMap(map);</span>
+  <span class="s0">return </span><span class="s1">Object.assign({}, decoded, {</span>
+    <span class="s3">// originalScopes: decoded.originalScopes.map((os) =&gt; encodeOriginalScopes(os)),</span>
+    <span class="s3">// generatedRanges: encodeGeneratedRanges(decoded.generatedRanges as GeneratedRange[]),</span>
+    <span class="s1">mappings: encode(decoded.mappings as SourceMapSegment[][]),</span>
+  <span class="s1">});</span>
+<span class="s1">}</span>
+
+<span class="s3">/**</span>
+ <span class="s3">* Constructs a new GenMapping, using the already present mappings of the input.</span>
+ <span class="s3">*/</span>
+<span class="s0">export function </span><span class="s1">fromMap(input: SourceMapInput): GenMapping {</span>
+  <span class="s0">const </span><span class="s1">map = </span><span class="s0">new </span><span class="s1">TraceMap(input);</span>
+  <span class="s0">const </span><span class="s1">gen = </span><span class="s0">new </span><span class="s1">GenMapping({ file: map.file, sourceRoot: map.sourceRoot });</span>
+
+  <span class="s1">putAll(cast(gen)._names, map.names);</span>
+  <span class="s1">putAll(cast(gen)._sources, map.sources as string[]);</span>
+  <span class="s1">cast(gen)._sourcesContent = map.sourcesContent || map.sources.map(() =&gt; </span><span class="s0">null</span><span class="s1">);</span>
+  <span class="s1">cast(gen)._mappings = decodedMappings(map) as GenMapping[</span><span class="s2">'_mappings'</span><span class="s1">];</span>
+  <span class="s3">// TODO: implement originalScopes/generatedRanges</span>
+  <span class="s0">if </span><span class="s1">(map.ignoreList) putAll(cast(gen)._ignoreList, map.ignoreList);</span>
+
+  <span class="s0">return </span><span class="s1">gen;</span>
+<span class="s1">}</span>
+
+<span class="s3">/**</span>
+ <span class="s3">* Returns an array of high-level mapping objects for every recorded segment, which could then be</span>
+ <span class="s3">* passed to the `source-map` library.</span>
+ <span class="s3">*/</span>
+<span class="s0">export function </span><span class="s1">allMappings(map: GenMapping): Mapping[] {</span>
+  <span class="s0">const </span><span class="s1">out: Mapping[] = [];</span>
+  <span class="s0">const </span><span class="s1">{ _mappings: mappings, _sources: sources, _names: names } = cast(map);</span>
+
+  <span class="s0">for </span><span class="s1">(</span><span class="s0">let </span><span class="s1">i = </span><span class="s4">0</span><span class="s1">; i &lt; mappings.length; i++) {</span>
+    <span class="s0">const </span><span class="s1">line = mappings[i];</span>
+    <span class="s0">for </span><span class="s1">(</span><span class="s0">let </span><span class="s1">j = </span><span class="s4">0</span><span class="s1">; j &lt; line.length; j++) {</span>
+      <span class="s0">const </span><span class="s1">seg = line[j];</span>
+
+      <span class="s0">const </span><span class="s1">generated = { line: i + </span><span class="s4">1</span><span class="s1">, column: seg[COLUMN] };</span>
+      <span class="s0">let </span><span class="s1">source: string | undefined = undefined;</span>
+      <span class="s0">let </span><span class="s1">original: Pos | undefined = undefined;</span>
+      <span class="s0">let </span><span class="s1">name: string | undefined = undefined;</span>
+
+      <span class="s0">if </span><span class="s1">(seg.length !== </span><span class="s4">1</span><span class="s1">) {</span>
+        <span class="s1">source = sources.array[seg[SOURCES_INDEX]];</span>
+        <span class="s1">original = { line: seg[SOURCE_LINE] + </span><span class="s4">1</span><span class="s1">, column: seg[SOURCE_COLUMN] };</span>
+
+        <span class="s0">if </span><span class="s1">(seg.length === </span><span class="s4">5</span><span class="s1">) name = names.array[seg[NAMES_INDEX]];</span>
+      <span class="s1">}</span>
+
+      <span class="s1">out.push({ generated, source, original, name } as Mapping);</span>
+    <span class="s1">}</span>
+  <span class="s1">}</span>
+
+  <span class="s0">return </span><span class="s1">out;</span>
+<span class="s1">}</span>
+
+<span class="s3">// This split declaration is only so that terser can elminiate the static initialization block.</span>
+<span class="s0">function </span><span class="s1">addSegmentInternal&lt;S </span><span class="s0">extends </span><span class="s1">string | </span><span class="s0">null </span><span class="s1">| undefined&gt;(</span>
+  <span class="s1">skipable: boolean,</span>
+  <span class="s1">map: GenMapping,</span>
+  <span class="s1">genLine: number,</span>
+  <span class="s1">genColumn: number,</span>
+  <span class="s1">source: S,</span>
+  <span class="s1">sourceLine: S </span><span class="s0">extends </span><span class="s1">string ? number : </span><span class="s0">null </span><span class="s1">| undefined,</span>
+  <span class="s1">sourceColumn: S </span><span class="s0">extends </span><span class="s1">string ? number : </span><span class="s0">null </span><span class="s1">| undefined,</span>
+  <span class="s1">name: S </span><span class="s0">extends </span><span class="s1">string ? string | </span><span class="s0">null </span><span class="s1">| undefined : </span><span class="s0">null </span><span class="s1">| undefined,</span>
+  <span class="s1">content: S </span><span class="s0">extends </span><span class="s1">string ? string | </span><span class="s0">null </span><span class="s1">| undefined : </span><span class="s0">null </span><span class="s1">| undefined,</span>
+<span class="s1">): </span><span class="s0">void </span><span class="s1">{</span>
+  <span class="s0">const </span><span class="s1">{</span>
+    <span class="s1">_mappings: mappings,</span>
+    <span class="s1">_sources: sources,</span>
+    <span class="s1">_sourcesContent: sourcesContent,</span>
+    <span class="s1">_names: names,</span>
+    <span class="s3">// _originalScopes: originalScopes,</span>
+  <span class="s1">} = cast(map);</span>
+  <span class="s0">const </span><span class="s1">line = getIndex(mappings, genLine);</span>
+  <span class="s0">const </span><span class="s1">index = getColumnIndex(line, genColumn);</span>
+
+  <span class="s0">if </span><span class="s1">(!source) {</span>
+    <span class="s0">if </span><span class="s1">(skipable &amp;&amp; skipSourceless(line, index)) </span><span class="s0">return</span><span class="s1">;</span>
+    <span class="s0">return </span><span class="s1">insert(line, index, [genColumn]);</span>
+  <span class="s1">}</span>
+
+  <span class="s3">// Sigh, TypeScript can't figure out sourceLine and sourceColumn aren't nullish if source</span>
+  <span class="s3">// isn't nullish.</span>
+  <span class="s1">assert&lt;number&gt;(sourceLine);</span>
+  <span class="s1">assert&lt;number&gt;(sourceColumn);</span>
+
+  <span class="s0">const </span><span class="s1">sourcesIndex = put(sources, source);</span>
+  <span class="s0">const </span><span class="s1">namesIndex = name ? put(names, name) : NO_NAME;</span>
+  <span class="s0">if </span><span class="s1">(sourcesIndex === sourcesContent.length) sourcesContent[sourcesIndex] = content ?? </span><span class="s0">null</span><span class="s1">;</span>
+  <span class="s3">// if (sourcesIndex === originalScopes.length) originalScopes[sourcesIndex] = [];</span>
+
+  <span class="s0">if </span><span class="s1">(skipable &amp;&amp; skipSource(line, index, sourcesIndex, sourceLine, sourceColumn, namesIndex)) {</span>
+    <span class="s0">return</span><span class="s1">;</span>
+  <span class="s1">}</span>
+
+  <span class="s0">return </span><span class="s1">insert(</span>
+    <span class="s1">line,</span>
+    <span class="s1">index,</span>
+    <span class="s1">name</span>
+      <span class="s1">? [genColumn, sourcesIndex, sourceLine, sourceColumn, namesIndex]</span>
+      <span class="s1">: [genColumn, sourcesIndex, sourceLine, sourceColumn],</span>
+  <span class="s1">);</span>
+<span class="s1">}</span>
+
+<span class="s0">function </span><span class="s1">assert&lt;T&gt;(_val: unknown): asserts _val is T {</span>
+  <span class="s3">// noop.</span>
+<span class="s1">}</span>
+
+<span class="s0">function </span><span class="s1">getIndex&lt;T&gt;(arr: T[][], index: number): T[] {</span>
+  <span class="s0">for </span><span class="s1">(</span><span class="s0">let </span><span class="s1">i = arr.length; i &lt;= index; i++) {</span>
+    <span class="s1">arr[i] = [];</span>
+  <span class="s1">}</span>
+  <span class="s0">return </span><span class="s1">arr[index];</span>
+<span class="s1">}</span>
+
+<span class="s0">function </span><span class="s1">getColumnIndex(line: SourceMapSegment[], genColumn: number): number {</span>
+  <span class="s0">let </span><span class="s1">index = line.length;</span>
+  <span class="s0">for </span><span class="s1">(</span><span class="s0">let </span><span class="s1">i = index - </span><span class="s4">1</span><span class="s1">; i &gt;= </span><span class="s4">0</span><span class="s1">; index = i--) {</span>
+    <span class="s0">const </span><span class="s1">current = line[i];</span>
+    <span class="s0">if </span><span class="s1">(genColumn &gt;= current[COLUMN]) </span><span class="s0">break</span><span class="s1">;</span>
+  <span class="s1">}</span>
+  <span class="s0">return </span><span class="s1">index;</span>
+<span class="s1">}</span>
+
+<span class="s0">function </span><span class="s1">insert&lt;T&gt;(array: T[], index: number, value: T) {</span>
+  <span class="s0">for </span><span class="s1">(</span><span class="s0">let </span><span class="s1">i = array.length; i &gt; index; i--) {</span>
+    <span class="s1">array[i] = array[i - </span><span class="s4">1</span><span class="s1">];</span>
+  <span class="s1">}</span>
+  <span class="s1">array[index] = value;</span>
+<span class="s1">}</span>
+
+<span class="s0">function </span><span class="s1">removeEmptyFinalLines(mappings: SourceMapSegment[][]) {</span>
+  <span class="s0">const </span><span class="s1">{ length } = mappings;</span>
+  <span class="s0">let </span><span class="s1">len = length;</span>
+  <span class="s0">for </span><span class="s1">(</span><span class="s0">let </span><span class="s1">i = len - </span><span class="s4">1</span><span class="s1">; i &gt;= </span><span class="s4">0</span><span class="s1">; len = i, i--) {</span>
+    <span class="s0">if </span><span class="s1">(mappings[i].length &gt; </span><span class="s4">0</span><span class="s1">) </span><span class="s0">break</span><span class="s1">;</span>
+  <span class="s1">}</span>
+  <span class="s0">if </span><span class="s1">(len &lt; length) mappings.length = len;</span>
+<span class="s1">}</span>
+
+<span class="s0">function </span><span class="s1">putAll&lt;T </span><span class="s0">extends </span><span class="s1">string | number&gt;(setarr: SetArray&lt;T&gt;, array: T[]) {</span>
+  <span class="s0">for </span><span class="s1">(</span><span class="s0">let </span><span class="s1">i = </span><span class="s4">0</span><span class="s1">; i &lt; array.length; i++) put(setarr, array[i]);</span>
+<span class="s1">}</span>
+
+<span class="s0">function </span><span class="s1">skipSourceless(line: SourceMapSegment[], index: number): boolean {</span>
+  <span class="s3">// The start of a line is already sourceless, so adding a sourceless segment to the beginning</span>
+  <span class="s3">// doesn't generate any useful information.</span>
+  <span class="s0">if </span><span class="s1">(index === </span><span class="s4">0</span><span class="s1">) </span><span class="s0">return true</span><span class="s1">;</span>
+
+  <span class="s0">const </span><span class="s1">prev = line[index - </span><span class="s4">1</span><span class="s1">];</span>
+  <span class="s3">// If the previous segment is also sourceless, then adding another sourceless segment doesn't</span>
+  <span class="s3">// genrate any new information. Else, this segment will end the source/named segment and point to</span>
+  <span class="s3">// a sourceless position, which is useful.</span>
+  <span class="s0">return </span><span class="s1">prev.length === </span><span class="s4">1</span><span class="s1">;</span>
+<span class="s1">}</span>
+
+<span class="s0">function </span><span class="s1">skipSource(</span>
+  <span class="s1">line: SourceMapSegment[],</span>
+  <span class="s1">index: number,</span>
+  <span class="s1">sourcesIndex: number,</span>
+  <span class="s1">sourceLine: number,</span>
+  <span class="s1">sourceColumn: number,</span>
+  <span class="s1">namesIndex: number,</span>
+<span class="s1">): boolean {</span>
+  <span class="s3">// A source/named segment at the start of a line gives position at that genColumn</span>
+  <span class="s0">if </span><span class="s1">(index === </span><span class="s4">0</span><span class="s1">) </span><span class="s0">return false</span><span class="s1">;</span>
+
+  <span class="s0">const </span><span class="s1">prev = line[index - </span><span class="s4">1</span><span class="s1">];</span>
+
+  <span class="s3">// If the previous segment is sourceless, then we're transitioning to a source.</span>
+  <span class="s0">if </span><span class="s1">(prev.length === </span><span class="s4">1</span><span class="s1">) </span><span class="s0">return false</span><span class="s1">;</span>
+
+  <span class="s3">// If the previous segment maps to the exact same source position, then this segment doesn't</span>
+  <span class="s3">// provide any new position information.</span>
+  <span class="s0">return </span><span class="s1">(</span>
+    <span class="s1">sourcesIndex === prev[SOURCES_INDEX] &amp;&amp;</span>
+    <span class="s1">sourceLine === prev[SOURCE_LINE] &amp;&amp;</span>
+    <span class="s1">sourceColumn === prev[SOURCE_COLUMN] &amp;&amp;</span>
+    <span class="s1">namesIndex === (prev.length === </span><span class="s4">5 </span><span class="s1">? prev[NAMES_INDEX] : NO_NAME)</span>
+  <span class="s1">);</span>
+<span class="s1">}</span>
+
+<span class="s0">function </span><span class="s1">addMappingInternal&lt;S </span><span class="s0">extends </span><span class="s1">string | </span><span class="s0">null </span><span class="s1">| undefined&gt;(</span>
+  <span class="s1">skipable: boolean,</span>
+  <span class="s1">map: GenMapping,</span>
+  <span class="s1">mapping: {</span>
+    <span class="s1">generated: Pos;</span>
+    <span class="s1">source: S;</span>
+    <span class="s1">original: S </span><span class="s0">extends </span><span class="s1">string ? Pos : </span><span class="s0">null </span><span class="s1">| undefined;</span>
+    <span class="s1">name: S </span><span class="s0">extends </span><span class="s1">string ? string | </span><span class="s0">null </span><span class="s1">| undefined : </span><span class="s0">null </span><span class="s1">| undefined;</span>
+    <span class="s1">content: S </span><span class="s0">extends </span><span class="s1">string ? string | </span><span class="s0">null </span><span class="s1">| undefined : </span><span class="s0">null </span><span class="s1">| undefined;</span>
+  <span class="s1">},</span>
+<span class="s1">) {</span>
+  <span class="s0">const </span><span class="s1">{ generated, source, original, name, content } = mapping;</span>
+  <span class="s0">if </span><span class="s1">(!source) {</span>
+    <span class="s0">return </span><span class="s1">addSegmentInternal(</span>
+      <span class="s1">skipable,</span>
+      <span class="s1">map,</span>
+      <span class="s1">generated.line - </span><span class="s4">1</span><span class="s1">,</span>
+      <span class="s1">generated.column,</span>
+      <span class="s0">null</span><span class="s1">,</span>
+      <span class="s0">null</span><span class="s1">,</span>
+      <span class="s0">null</span><span class="s1">,</span>
+      <span class="s0">null</span><span class="s1">,</span>
+      <span class="s0">null</span><span class="s1">,</span>
+    <span class="s1">);</span>
+  <span class="s1">}</span>
+  <span class="s1">assert&lt;Pos&gt;(original);</span>
+  <span class="s0">return </span><span class="s1">addSegmentInternal(</span>
+    <span class="s1">skipable,</span>
+    <span class="s1">map,</span>
+    <span class="s1">generated.line - </span><span class="s4">1</span><span class="s1">,</span>
+    <span class="s1">generated.column,</span>
+    <span class="s1">source as string,</span>
+    <span class="s1">original.line - </span><span class="s4">1</span><span class="s1">,</span>
+    <span class="s1">original.column,</span>
+    <span class="s1">name,</span>
+    <span class="s1">content,</span>
+  <span class="s1">);</span>
+<span class="s1">}</span>
+
+<span class="s3">/* 
+export function addOriginalScope( 
+  map: GenMapping, 
+  data: { 
+    start: Pos; 
+    end: Pos; 
+    source: string; 
+    kind: string; 
+    name?: string; 
+    variables?: string[]; 
+  }, 
+): OriginalScopeInfo { 
+  const { start, end, source, kind, name, variables } = data; 
+  const { 
+    _sources: sources, 
+    _sourcesContent: sourcesContent, 
+    _originalScopes: originalScopes, 
+    _names: names, 
+  } = cast(map); 
+  const index = put(sources, source); 
+  if (index === sourcesContent.length) sourcesContent[index] = null; 
+  if (index === originalScopes.length) originalScopes[index] = []; 
+ 
+  const kindIndex = put(names, kind); 
+  const scope: OriginalScope = name 
+    ? [start.line - 1, start.column, end.line - 1, end.column, kindIndex, put(names, name)] 
+    : [start.line - 1, start.column, end.line - 1, end.column, kindIndex]; 
+  if (variables) { 
+    scope.vars = variables.map((v) =&gt; put(names, v)); 
+  } 
+  const len = originalScopes[index].push(scope); 
+  return [index, len - 1, variables]; 
+} 
+*/</span>
+
+<span class="s3">// Generated Ranges</span>
+<span class="s3">/* 
+export function addGeneratedRange( 
+  map: GenMapping, 
+  data: { 
+    start: Pos; 
+    isScope: boolean; 
+    originalScope?: OriginalScopeInfo; 
+    callsite?: OriginalPos; 
+  }, 
+): GeneratedRangeInfo { 
+  const { start, isScope, originalScope, callsite } = data; 
+  const { 
+    _originalScopes: originalScopes, 
+    _sources: sources, 
+    _sourcesContent: sourcesContent, 
+    _generatedRanges: generatedRanges, 
+  } = cast(map); 
+ 
+  const range: GeneratedRange = [ 
+    start.line - 1, 
+    start.column, 
+    0, 
+    0, 
+    originalScope ? originalScope[0] : -1, 
+    originalScope ? originalScope[1] : -1, 
+  ]; 
+  if (originalScope?.[2]) { 
+    range.bindings = originalScope[2].map(() =&gt; [[-1]]); 
+  } 
+  if (callsite) { 
+    const index = put(sources, callsite.source); 
+    if (index === sourcesContent.length) sourcesContent[index] = null; 
+    if (index === originalScopes.length) originalScopes[index] = []; 
+    range.callsite = [index, callsite.line - 1, callsite.column]; 
+  } 
+  if (isScope) range.isScope = true; 
+  generatedRanges.push(range); 
+ 
+  return [range, originalScope?.[2]]; 
+} 
+ 
+export function setEndPosition(range: GeneratedRangeInfo, pos: Pos) { 
+  range[0][2] = pos.line - 1; 
+  range[0][3] = pos.column; 
+} 
+ 
+export function addBinding( 
+  map: GenMapping, 
+  range: GeneratedRangeInfo, 
+  variable: string, 
+  expression: string | BindingExpressionRange, 
+) { 
+  const { _names: names } = cast(map); 
+  const bindings = (range[0].bindings ||= []); 
+  const vars = range[1]; 
+ 
+  const index = vars!.indexOf(variable); 
+  const binding = getIndex(bindings, index); 
+ 
+  if (typeof expression === 'string') binding[0] = [put(names, expression)]; 
+  else { 
+    const { start } = expression; 
+    binding.push([put(names, expression.expression), start.line - 1, start.column]); 
+  } 
+} 
+*/</span>
+</pre>
+</body>
+</html>

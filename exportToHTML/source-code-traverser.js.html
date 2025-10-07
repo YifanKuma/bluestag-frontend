@@ -1,0 +1,349 @@
+<html>
+<head>
+<title>source-code-traverser.js</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #8c8c8c; font-style: italic;}
+.s1 { color: #8c8c8c; font-style: italic;}
+.s2 { color: #080808;}
+.s3 { color: #067d17;}
+.s4 { color: #0033b3;}
+.s5 { color: #1750eb;}
+</style>
+</head>
+<body bgcolor="#ffffff">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#c0c0c0" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+source-code-traverser.js</font>
+</center></td></tr></table>
+<pre><span class="s0">/**</span>
+ <span class="s0">* </span><span class="s1">@fileoverview </span><span class="s0">Traverser for SourceCode objects.</span>
+ <span class="s0">* </span><span class="s1">@author </span><span class="s0">Nicholas C. Zakas</span>
+ <span class="s0">*/</span>
+
+<span class="s3">&quot;use strict&quot;</span><span class="s2">;</span>
+
+<span class="s0">//------------------------------------------------------------------------------</span>
+<span class="s0">// Requirements</span>
+<span class="s0">//------------------------------------------------------------------------------</span>
+
+<span class="s4">const </span><span class="s2">{ parse, matches } = require(</span><span class="s3">&quot;./esquery&quot;</span><span class="s2">);</span>
+<span class="s4">const </span><span class="s2">vk = require(</span><span class="s3">&quot;eslint-visitor-keys&quot;</span><span class="s2">);</span>
+
+<span class="s0">//-----------------------------------------------------------------------------</span>
+<span class="s0">// Typedefs</span>
+<span class="s0">//-----------------------------------------------------------------------------</span>
+
+<span class="s0">/**</span>
+ <span class="s0">* </span><span class="s1">@import </span><span class="s0">{ ESQueryParsedSelector } from &quot;./esquery.js&quot;;</span>
+ <span class="s0">* </span><span class="s1">@import </span><span class="s0">{ Language, SourceCode } from &quot;@eslint/core&quot;;</span>
+ <span class="s0">* </span><span class="s1">@import </span><span class="s0">{ SourceCodeVisitor } from &quot;./source-code-visitor.js&quot;;</span>
+ <span class="s0">*/</span>
+
+<span class="s0">//-----------------------------------------------------------------------------</span>
+<span class="s0">// Helpers</span>
+<span class="s0">//-----------------------------------------------------------------------------</span>
+
+<span class="s4">const </span><span class="s2">STEP_KIND_VISIT = </span><span class="s5">1</span><span class="s2">;</span>
+<span class="s4">const </span><span class="s2">STEP_KIND_CALL = </span><span class="s5">2</span><span class="s2">;</span>
+
+<span class="s0">/**</span>
+ <span class="s0">* Compares two ESQuery selectors by specificity.</span>
+ <span class="s0">* </span><span class="s1">@param </span><span class="s0">{ESQueryParsedSelector} a The first selector to compare.</span>
+ <span class="s0">* </span><span class="s1">@param </span><span class="s0">{ESQueryParsedSelector} b The second selector to compare.</span>
+ <span class="s0">* </span><span class="s1">@returns </span><span class="s0">{number} A negative number if `a` is less specific than `b` or they are equally specific and `a` &lt;= `b` alphabetically, a positive number if `a` is more specific than `b`.</span>
+ <span class="s0">*/</span>
+<span class="s4">function </span><span class="s2">compareSpecificity(a, b) {</span>
+	<span class="s4">return </span><span class="s2">a.compare(b);</span>
+<span class="s2">}</span>
+
+<span class="s0">/**</span>
+ <span class="s0">* Helper to wrap ESQuery operations.</span>
+ <span class="s0">*/</span>
+<span class="s4">class </span><span class="s2">ESQueryHelper {</span>
+	<span class="s0">/**</span>
+	 <span class="s0">* Creates a new instance.</span>
+	 <span class="s0">* </span><span class="s1">@param </span><span class="s0">{SourceCodeVisitor} visitor The visitor containing the functions to call.</span>
+	 <span class="s0">* </span><span class="s1">@param </span><span class="s0">{ESQueryOptions} esqueryOptions `esquery` options for traversing custom nodes.</span>
+	 <span class="s0">* </span><span class="s1">@returns </span><span class="s0">{NodeEventGenerator} new instance</span>
+	 <span class="s0">*/</span>
+	<span class="s2">constructor(visitor, esqueryOptions) {</span>
+		<span class="s0">/**</span>
+		 <span class="s0">* The emitter to use during traversal.</span>
+		 <span class="s0">* </span><span class="s1">@type </span><span class="s0">{SourceCodeVisitor}</span>
+		 <span class="s0">*/</span>
+		<span class="s4">this</span><span class="s2">.visitor = visitor;</span>
+
+		<span class="s0">/**</span>
+		 <span class="s0">* The options for `esquery` to use during matching.</span>
+		 <span class="s0">* </span><span class="s1">@type </span><span class="s0">{ESQueryOptions}</span>
+		 <span class="s0">*/</span>
+		<span class="s4">this</span><span class="s2">.esqueryOptions = esqueryOptions;</span>
+
+		<span class="s0">/**</span>
+		 <span class="s0">* A map of node type to selectors targeting that node type on the</span>
+		 <span class="s0">* enter phase of traversal.</span>
+		 <span class="s0">* </span><span class="s1">@type </span><span class="s0">{Map&lt;string, ESQueryParsedSelector[]&gt;}</span>
+		 <span class="s0">*/</span>
+		<span class="s4">this</span><span class="s2">.enterSelectorsByNodeType = </span><span class="s4">new </span><span class="s2">Map();</span>
+
+		<span class="s0">/**</span>
+		 <span class="s0">* A map of node type to selectors targeting that node type on the</span>
+		 <span class="s0">* exit phase of traversal.</span>
+		 <span class="s0">* </span><span class="s1">@type </span><span class="s0">{Map&lt;string, ESQueryParsedSelector[]&gt;}</span>
+		 <span class="s0">*/</span>
+		<span class="s4">this</span><span class="s2">.exitSelectorsByNodeType = </span><span class="s4">new </span><span class="s2">Map();</span>
+
+		<span class="s0">/**</span>
+		 <span class="s0">* An array of selectors that match any node type on the</span>
+		 <span class="s0">* enter phase of traversal.</span>
+		 <span class="s0">* </span><span class="s1">@type </span><span class="s0">{ESQueryParsedSelector[]}</span>
+		 <span class="s0">*/</span>
+		<span class="s4">this</span><span class="s2">.anyTypeEnterSelectors = [];</span>
+
+		<span class="s0">/**</span>
+		 <span class="s0">* An array of selectors that match any node type on the</span>
+		 <span class="s0">* exit phase of traversal.</span>
+		 <span class="s0">* </span><span class="s1">@type </span><span class="s0">{ESQueryParsedSelector[]}</span>
+		 <span class="s0">*/</span>
+		<span class="s4">this</span><span class="s2">.anyTypeExitSelectors = [];</span>
+
+		<span class="s2">visitor.forEachName(rawSelector =&gt; {</span>
+			<span class="s4">const </span><span class="s2">selector = parse(rawSelector);</span>
+
+			<span class="s0">/* 
+             * If this selector has identified specific node types, 
+             * add it to the map for these node types for faster lookup. 
+             */</span>
+			<span class="s4">if </span><span class="s2">(selector.nodeTypes) {</span>
+				<span class="s4">const </span><span class="s2">typeMap = selector.isExit</span>
+					<span class="s2">? </span><span class="s4">this</span><span class="s2">.exitSelectorsByNodeType</span>
+					<span class="s2">: </span><span class="s4">this</span><span class="s2">.enterSelectorsByNodeType;</span>
+
+				<span class="s2">selector.nodeTypes.forEach(nodeType =&gt; {</span>
+					<span class="s4">if </span><span class="s2">(!typeMap.has(nodeType)) {</span>
+						<span class="s2">typeMap.set(nodeType, []);</span>
+					<span class="s2">}</span>
+					<span class="s2">typeMap.get(nodeType).push(selector);</span>
+				<span class="s2">});</span>
+				<span class="s4">return</span><span class="s2">;</span>
+			<span class="s2">}</span>
+
+			<span class="s0">/* 
+             * Remaining selectors are added to the &quot;any type&quot; selectors 
+             * list for the appropriate phase of traversal. This ensures 
+             * that all selectors will still be applied even if no 
+             * specific node type is matched. 
+             */</span>
+			<span class="s4">const </span><span class="s2">selectors = selector.isExit</span>
+				<span class="s2">? </span><span class="s4">this</span><span class="s2">.anyTypeExitSelectors</span>
+				<span class="s2">: </span><span class="s4">this</span><span class="s2">.anyTypeEnterSelectors;</span>
+
+			<span class="s2">selectors.push(selector);</span>
+		<span class="s2">});</span>
+
+		<span class="s0">// sort all selectors by specificity for prioritizing call order</span>
+		<span class="s4">this</span><span class="s2">.anyTypeEnterSelectors.sort(compareSpecificity);</span>
+		<span class="s4">this</span><span class="s2">.anyTypeExitSelectors.sort(compareSpecificity);</span>
+		<span class="s4">this</span><span class="s2">.enterSelectorsByNodeType.forEach(selectorList =&gt;</span>
+			<span class="s2">selectorList.sort(compareSpecificity),</span>
+		<span class="s2">);</span>
+		<span class="s4">this</span><span class="s2">.exitSelectorsByNodeType.forEach(selectorList =&gt;</span>
+			<span class="s2">selectorList.sort(compareSpecificity),</span>
+		<span class="s2">);</span>
+	<span class="s2">}</span>
+
+	<span class="s0">/**</span>
+	 <span class="s0">* Checks if a node matches a given selector.</span>
+	 <span class="s0">* </span><span class="s1">@param </span><span class="s0">{ASTNode} node The node to check</span>
+	 <span class="s0">* </span><span class="s1">@param </span><span class="s0">{ASTNode[]} ancestry The ancestry of the node being checked.</span>
+	 <span class="s0">* </span><span class="s1">@param </span><span class="s0">{ESQueryParsedSelector} selector An AST selector descriptor</span>
+	 <span class="s0">* </span><span class="s1">@returns </span><span class="s0">{boolean} `true` if the selector matches the node, `false` otherwise</span>
+	 <span class="s0">*/</span>
+	<span class="s2">matches(node, ancestry, selector) {</span>
+		<span class="s4">return </span><span class="s2">matches(node, selector.root, ancestry, </span><span class="s4">this</span><span class="s2">.esqueryOptions);</span>
+	<span class="s2">}</span>
+
+	<span class="s0">/**</span>
+	 <span class="s0">* Calculates all appropriate selectors to a node, in specificity order</span>
+	 <span class="s0">* </span><span class="s1">@param </span><span class="s0">{ASTNode} node The node to check</span>
+	 <span class="s0">* </span><span class="s1">@param </span><span class="s0">{ASTNode[]} ancestry The ancestry of the node being checked.</span>
+	 <span class="s0">* </span><span class="s1">@param </span><span class="s0">{boolean} isExit `false` if the node is currently being entered, `true` if it's currently being exited</span>
+	 <span class="s0">* </span><span class="s1">@returns </span><span class="s0">{string[]} An array of selectors that match the node.</span>
+	 <span class="s0">*/</span>
+	<span class="s2">calculateSelectors(node, ancestry, isExit) {</span>
+		<span class="s4">const </span><span class="s2">nodeTypeKey = </span><span class="s4">this</span><span class="s2">.esqueryOptions?.nodeTypeKey || </span><span class="s3">&quot;type&quot;</span><span class="s2">;</span>
+		<span class="s4">const </span><span class="s2">selectors = [];</span>
+
+		<span class="s0">/* 
+         * Get the selectors that may match this node. First, check 
+         * to see if the node type has specific selectors, 
+         * then gather the &quot;any type&quot; selectors. 
+         */</span>
+		<span class="s4">const </span><span class="s2">selectorsByNodeType =</span>
+			<span class="s2">(isExit</span>
+				<span class="s2">? </span><span class="s4">this</span><span class="s2">.exitSelectorsByNodeType</span>
+				<span class="s2">: </span><span class="s4">this</span><span class="s2">.enterSelectorsByNodeType</span>
+			<span class="s2">).get(node[nodeTypeKey]) || [];</span>
+		<span class="s4">const </span><span class="s2">anyTypeSelectors = isExit</span>
+			<span class="s2">? </span><span class="s4">this</span><span class="s2">.anyTypeExitSelectors</span>
+			<span class="s2">: </span><span class="s4">this</span><span class="s2">.anyTypeEnterSelectors;</span>
+
+		<span class="s0">/* 
+         * selectorsByNodeType and anyTypeSelectors were already sorted by specificity in the constructor. 
+         * Iterate through each of them, applying selectors in the right order. 
+         */</span>
+		<span class="s4">let </span><span class="s2">selectorsByNodeTypeIndex = </span><span class="s5">0</span><span class="s2">;</span>
+		<span class="s4">let </span><span class="s2">anyTypeSelectorsIndex = </span><span class="s5">0</span><span class="s2">;</span>
+
+		<span class="s4">while </span><span class="s2">(</span>
+			<span class="s2">selectorsByNodeTypeIndex &lt; selectorsByNodeType.length ||</span>
+			<span class="s2">anyTypeSelectorsIndex &lt; anyTypeSelectors.length</span>
+		<span class="s2">) {</span>
+			<span class="s0">/* 
+             * If we've already exhausted the selectors for this node type, 
+             * or if the next any type selector is more specific than the 
+             * next selector for this node type, apply the any type selector. 
+             */</span>
+			<span class="s4">const </span><span class="s2">hasMoreNodeTypeSelectors =</span>
+				<span class="s2">selectorsByNodeTypeIndex &lt; selectorsByNodeType.length;</span>
+			<span class="s4">const </span><span class="s2">hasMoreAnyTypeSelectors =</span>
+				<span class="s2">anyTypeSelectorsIndex &lt; anyTypeSelectors.length;</span>
+			<span class="s4">const </span><span class="s2">anyTypeSelector = anyTypeSelectors[anyTypeSelectorsIndex];</span>
+			<span class="s4">const </span><span class="s2">nodeTypeSelector =</span>
+				<span class="s2">selectorsByNodeType[selectorsByNodeTypeIndex];</span>
+
+			<span class="s0">// Only compare specificity if both selectors exist</span>
+			<span class="s4">const </span><span class="s2">isAnyTypeSelectorLessSpecific =</span>
+				<span class="s2">hasMoreAnyTypeSelectors &amp;&amp;</span>
+				<span class="s2">hasMoreNodeTypeSelectors &amp;&amp;</span>
+				<span class="s2">anyTypeSelector.compare(nodeTypeSelector) &lt; </span><span class="s5">0</span><span class="s2">;</span>
+
+			<span class="s4">if </span><span class="s2">(!hasMoreNodeTypeSelectors || isAnyTypeSelectorLessSpecific) {</span>
+				<span class="s2">anyTypeSelectorsIndex++;</span>
+
+				<span class="s4">if </span><span class="s2">(</span><span class="s4">this</span><span class="s2">.matches(node, ancestry, anyTypeSelector)) {</span>
+					<span class="s2">selectors.push(anyTypeSelector.source);</span>
+				<span class="s2">}</span>
+			<span class="s2">} </span><span class="s4">else </span><span class="s2">{</span>
+				<span class="s2">selectorsByNodeTypeIndex++;</span>
+
+				<span class="s4">if </span><span class="s2">(</span><span class="s4">this</span><span class="s2">.matches(node, ancestry, nodeTypeSelector)) {</span>
+					<span class="s2">selectors.push(nodeTypeSelector.source);</span>
+				<span class="s2">}</span>
+			<span class="s2">}</span>
+		<span class="s2">}</span>
+
+		<span class="s4">return </span><span class="s2">selectors;</span>
+	<span class="s2">}</span>
+<span class="s2">}</span>
+
+<span class="s0">//------------------------------------------------------------------------------</span>
+<span class="s0">// Public Interface</span>
+<span class="s0">//------------------------------------------------------------------------------</span>
+
+<span class="s0">/**</span>
+ <span class="s0">* Traverses source code and ensures that visitor methods are called when</span>
+ <span class="s0">* entering and leaving each node.</span>
+ <span class="s0">*/</span>
+<span class="s4">class </span><span class="s2">SourceCodeTraverser {</span>
+	<span class="s0">/**</span>
+	 <span class="s0">* The language of the source code being traversed.</span>
+	 <span class="s0">* </span><span class="s1">@type </span><span class="s0">{Language}</span>
+	 <span class="s0">*/</span>
+	<span class="s2">#language;</span>
+
+	<span class="s0">/**</span>
+	 <span class="s0">* Map of languages to instances of this class.</span>
+	 <span class="s0">* </span><span class="s1">@type </span><span class="s0">{WeakMap&lt;Language, SourceCodeTraverser&gt;}</span>
+	 <span class="s0">*/</span>
+	<span class="s4">static </span><span class="s2">instances = </span><span class="s4">new </span><span class="s2">WeakMap();</span>
+
+	<span class="s0">/**</span>
+	 <span class="s0">* Creates a new instance.</span>
+	 <span class="s0">* </span><span class="s1">@param </span><span class="s0">{Language} language The language of the source code being traversed.</span>
+	 <span class="s0">*/</span>
+	<span class="s2">constructor(language) {</span>
+		<span class="s4">this</span><span class="s2">.#language = language;</span>
+	<span class="s2">}</span>
+
+	<span class="s4">static </span><span class="s2">getInstance(language) {</span>
+		<span class="s4">if </span><span class="s2">(!</span><span class="s4">this</span><span class="s2">.instances.has(language)) {</span>
+			<span class="s4">this</span><span class="s2">.instances.set(language, </span><span class="s4">new this</span><span class="s2">(language));</span>
+		<span class="s2">}</span>
+
+		<span class="s4">return this</span><span class="s2">.instances.get(language);</span>
+	<span class="s2">}</span>
+
+	<span class="s0">/**</span>
+	 <span class="s0">* Traverses the given source code synchronously.</span>
+	 <span class="s0">* </span><span class="s1">@param </span><span class="s0">{SourceCode} sourceCode The source code to traverse.</span>
+	 <span class="s0">* </span><span class="s1">@param </span><span class="s0">{SourceCodeVisitor} visitor The emitter to use for events.</span>
+	 <span class="s0">* </span><span class="s1">@param </span><span class="s0">{Object} options Options for traversal.</span>
+	 <span class="s0">* </span><span class="s1">@param </span><span class="s0">{ReturnType&lt;SourceCode[&quot;traverse&quot;]&gt;} options.steps The steps to take during traversal.</span>
+	 <span class="s0">* </span><span class="s1">@returns </span><span class="s0">{void}</span>
+	 <span class="s0">* </span><span class="s1">@throws </span><span class="s0">{Error} If an error occurs during traversal.</span>
+	 <span class="s0">*/</span>
+	<span class="s2">traverseSync(sourceCode, visitor, { steps } = {}) {</span>
+		<span class="s4">const </span><span class="s2">esquery = </span><span class="s4">new </span><span class="s2">ESQueryHelper(visitor, {</span>
+			<span class="s2">visitorKeys: sourceCode.visitorKeys ?? </span><span class="s4">this</span><span class="s2">.#language.visitorKeys,</span>
+			<span class="s2">fallback: vk.getKeys,</span>
+			<span class="s2">matchClass: </span><span class="s4">this</span><span class="s2">.#language.matchesSelectorClass ?? (() =&gt; </span><span class="s4">false</span><span class="s2">),</span>
+			<span class="s2">nodeTypeKey: </span><span class="s4">this</span><span class="s2">.#language.nodeTypeKey,</span>
+		<span class="s2">});</span>
+
+		<span class="s4">const </span><span class="s2">currentAncestry = [];</span>
+
+		<span class="s4">for </span><span class="s2">(</span><span class="s4">const </span><span class="s2">step of steps ?? sourceCode.traverse()) {</span>
+			<span class="s4">switch </span><span class="s2">(step.kind) {</span>
+				<span class="s4">case </span><span class="s2">STEP_KIND_VISIT: {</span>
+					<span class="s4">try </span><span class="s2">{</span>
+						<span class="s4">if </span><span class="s2">(step.phase === </span><span class="s5">1</span><span class="s2">) {</span>
+							<span class="s2">esquery</span>
+								<span class="s2">.calculateSelectors(</span>
+									<span class="s2">step.target,</span>
+									<span class="s2">currentAncestry,</span>
+									<span class="s4">false</span><span class="s2">,</span>
+								<span class="s2">)</span>
+								<span class="s2">.forEach(selector =&gt; {</span>
+									<span class="s2">visitor.callSync(selector, step.target);</span>
+								<span class="s2">});</span>
+							<span class="s2">currentAncestry.unshift(step.target);</span>
+						<span class="s2">} </span><span class="s4">else </span><span class="s2">{</span>
+							<span class="s2">currentAncestry.shift();</span>
+							<span class="s2">esquery</span>
+								<span class="s2">.calculateSelectors(</span>
+									<span class="s2">step.target,</span>
+									<span class="s2">currentAncestry,</span>
+									<span class="s4">true</span><span class="s2">,</span>
+								<span class="s2">)</span>
+								<span class="s2">.forEach(selector =&gt; {</span>
+									<span class="s2">visitor.callSync(selector, step.target);</span>
+								<span class="s2">});</span>
+						<span class="s2">}</span>
+					<span class="s2">} </span><span class="s4">catch </span><span class="s2">(err) {</span>
+						<span class="s2">err.currentNode = step.target;</span>
+						<span class="s4">throw </span><span class="s2">err;</span>
+					<span class="s2">}</span>
+					<span class="s4">break</span><span class="s2">;</span>
+				<span class="s2">}</span>
+
+				<span class="s4">case </span><span class="s2">STEP_KIND_CALL: {</span>
+					<span class="s2">visitor.callSync(step.target, ...step.args);</span>
+					<span class="s4">break</span><span class="s2">;</span>
+				<span class="s2">}</span>
+
+				<span class="s4">default</span><span class="s2">:</span>
+					<span class="s4">throw new </span><span class="s2">Error(</span>
+						<span class="s3">`Invalid traversal step found: &quot;</span><span class="s2">${step.kind}</span><span class="s3">&quot;.`</span><span class="s2">,</span>
+					<span class="s2">);</span>
+			<span class="s2">}</span>
+		<span class="s2">}</span>
+	<span class="s2">}</span>
+<span class="s2">}</span>
+
+<span class="s2">module.exports = { SourceCodeTraverser };</span>
+</pre>
+</body>
+</html>

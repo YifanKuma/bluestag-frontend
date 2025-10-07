@@ -1,0 +1,246 @@
+<html>
+<head>
+<title>no-extra-bind.js</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #8c8c8c; font-style: italic;}
+.s1 { color: #8c8c8c; font-style: italic;}
+.s2 { color: #080808;}
+.s3 { color: #067d17;}
+.s4 { color: #0033b3;}
+.s5 { color: #1750eb;}
+</style>
+</head>
+<body bgcolor="#ffffff">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#c0c0c0" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+no-extra-bind.js</font>
+</center></td></tr></table>
+<pre><span class="s0">/**</span>
+ <span class="s0">* </span><span class="s1">@fileoverview </span><span class="s0">Rule to flag unnecessary bind calls</span>
+ <span class="s0">* </span><span class="s1">@author </span><span class="s0">Bence Dányi &lt;bence@danyi.me&gt;</span>
+ <span class="s0">*/</span>
+<span class="s3">&quot;use strict&quot;</span><span class="s2">;</span>
+
+<span class="s0">//------------------------------------------------------------------------------</span>
+<span class="s0">// Requirements</span>
+<span class="s0">//------------------------------------------------------------------------------</span>
+
+<span class="s4">const </span><span class="s2">astUtils = require(</span><span class="s3">&quot;./utils/ast-utils&quot;</span><span class="s2">);</span>
+
+<span class="s0">//------------------------------------------------------------------------------</span>
+<span class="s0">// Helpers</span>
+<span class="s0">//------------------------------------------------------------------------------</span>
+
+<span class="s4">const </span><span class="s2">SIDE_EFFECT_FREE_NODE_TYPES = </span><span class="s4">new </span><span class="s2">Set([</span>
+	<span class="s3">&quot;Literal&quot;</span><span class="s2">,</span>
+	<span class="s3">&quot;Identifier&quot;</span><span class="s2">,</span>
+	<span class="s3">&quot;ThisExpression&quot;</span><span class="s2">,</span>
+	<span class="s3">&quot;FunctionExpression&quot;</span><span class="s2">,</span>
+<span class="s2">]);</span>
+
+<span class="s0">//------------------------------------------------------------------------------</span>
+<span class="s0">// Rule Definition</span>
+<span class="s0">//------------------------------------------------------------------------------</span>
+
+<span class="s0">/** </span><span class="s1">@type </span><span class="s0">{import('../types').Rule.RuleModule} */</span>
+<span class="s2">module.exports = {</span>
+	<span class="s2">meta: {</span>
+		<span class="s2">type: </span><span class="s3">&quot;suggestion&quot;</span><span class="s2">,</span>
+
+		<span class="s2">docs: {</span>
+			<span class="s2">description: </span><span class="s3">&quot;Disallow unnecessary calls to `.bind()`&quot;</span><span class="s2">,</span>
+			<span class="s2">recommended: </span><span class="s4">false</span><span class="s2">,</span>
+			<span class="s2">url: </span><span class="s3">&quot;https://eslint.org/docs/latest/rules/no-extra-bind&quot;</span><span class="s2">,</span>
+		<span class="s2">},</span>
+
+		<span class="s2">schema: [],</span>
+		<span class="s2">fixable: </span><span class="s3">&quot;code&quot;</span><span class="s2">,</span>
+
+		<span class="s2">messages: {</span>
+			<span class="s2">unexpected: </span><span class="s3">&quot;The function binding is unnecessary.&quot;</span><span class="s2">,</span>
+		<span class="s2">},</span>
+	<span class="s2">},</span>
+
+	<span class="s2">create(context) {</span>
+		<span class="s4">const </span><span class="s2">sourceCode = context.sourceCode;</span>
+		<span class="s4">let </span><span class="s2">scopeInfo = </span><span class="s4">null</span><span class="s2">;</span>
+
+		<span class="s0">/**</span>
+		 <span class="s0">* Checks if a node is free of side effects.</span>
+		 <span class="s0">*</span>
+		 <span class="s0">* This check is stricter than it needs to be, in order to keep the implementation simple.</span>
+		 <span class="s0">* </span><span class="s1">@param </span><span class="s0">{ASTNode} node A node to check.</span>
+		 <span class="s0">* </span><span class="s1">@returns </span><span class="s0">{boolean} True if the node is known to be side-effect free, false otherwise.</span>
+		 <span class="s0">*/</span>
+		<span class="s4">function </span><span class="s2">isSideEffectFree(node) {</span>
+			<span class="s4">return </span><span class="s2">SIDE_EFFECT_FREE_NODE_TYPES.has(node.type);</span>
+		<span class="s2">}</span>
+
+		<span class="s0">/**</span>
+		 <span class="s0">* Reports a given function node.</span>
+		 <span class="s0">* </span><span class="s1">@param </span><span class="s0">{ASTNode} node A node to report. This is a FunctionExpression or</span>
+		 <span class="s0">*      an ArrowFunctionExpression.</span>
+		 <span class="s0">* </span><span class="s1">@returns </span><span class="s0">{void}</span>
+		 <span class="s0">*/</span>
+		<span class="s4">function </span><span class="s2">report(node) {</span>
+			<span class="s4">const </span><span class="s2">memberNode = node.parent;</span>
+			<span class="s4">const </span><span class="s2">callNode =</span>
+				<span class="s2">memberNode.parent.type === </span><span class="s3">&quot;ChainExpression&quot;</span>
+					<span class="s2">? memberNode.parent.parent</span>
+					<span class="s2">: memberNode.parent;</span>
+
+			<span class="s2">context.report({</span>
+				<span class="s2">node: callNode,</span>
+				<span class="s2">messageId: </span><span class="s3">&quot;unexpected&quot;</span><span class="s2">,</span>
+				<span class="s2">loc: memberNode.property.loc,</span>
+
+				<span class="s2">fix(fixer) {</span>
+					<span class="s4">if </span><span class="s2">(!isSideEffectFree(callNode.arguments[</span><span class="s5">0</span><span class="s2">])) {</span>
+						<span class="s4">return null</span><span class="s2">;</span>
+					<span class="s2">}</span>
+
+					<span class="s0">/* 
+                     * The list of the first/last token pair of a removal range. 
+                     * This is two parts because closing parentheses may exist between the method name and arguments. 
+                     * E.g. `(function(){}.bind ) (obj)` 
+                     *                    ^^^^^   ^^^^^ &lt; removal ranges 
+                     * E.g. `(function(){}?.['bind'] ) ?.(obj)` 
+                     *                    ^^^^^^^^^^   ^^^^^^^ &lt; removal ranges 
+                     */</span>
+					<span class="s4">const </span><span class="s2">tokenPairs = [</span>
+						<span class="s2">[</span>
+							<span class="s0">// `.`, `?.`, or `[` token.</span>
+							<span class="s2">sourceCode.getTokenAfter(</span>
+								<span class="s2">memberNode.object,</span>
+								<span class="s2">astUtils.isNotClosingParenToken,</span>
+							<span class="s2">),</span>
+
+							<span class="s0">// property name or `]` token.</span>
+							<span class="s2">sourceCode.getLastToken(memberNode),</span>
+						<span class="s2">],</span>
+						<span class="s2">[</span>
+							<span class="s0">// `?.` or `(` token of arguments.</span>
+							<span class="s2">sourceCode.getTokenAfter(</span>
+								<span class="s2">memberNode,</span>
+								<span class="s2">astUtils.isNotClosingParenToken,</span>
+							<span class="s2">),</span>
+
+							<span class="s0">// `)` token of arguments.</span>
+							<span class="s2">sourceCode.getLastToken(callNode),</span>
+						<span class="s2">],</span>
+					<span class="s2">];</span>
+					<span class="s4">const </span><span class="s2">firstTokenToRemove = tokenPairs[</span><span class="s5">0</span><span class="s2">][</span><span class="s5">0</span><span class="s2">];</span>
+					<span class="s4">const </span><span class="s2">lastTokenToRemove = tokenPairs[</span><span class="s5">1</span><span class="s2">][</span><span class="s5">1</span><span class="s2">];</span>
+
+					<span class="s4">if </span><span class="s2">(</span>
+						<span class="s2">sourceCode.commentsExistBetween(</span>
+							<span class="s2">firstTokenToRemove,</span>
+							<span class="s2">lastTokenToRemove,</span>
+						<span class="s2">)</span>
+					<span class="s2">) {</span>
+						<span class="s4">return null</span><span class="s2">;</span>
+					<span class="s2">}</span>
+
+					<span class="s4">return </span><span class="s2">tokenPairs.map(([start, end]) =&gt;</span>
+						<span class="s2">fixer.removeRange([start.range[</span><span class="s5">0</span><span class="s2">], end.range[</span><span class="s5">1</span><span class="s2">]]),</span>
+					<span class="s2">);</span>
+				<span class="s2">},</span>
+			<span class="s2">});</span>
+		<span class="s2">}</span>
+
+		<span class="s0">/**</span>
+		 <span class="s0">* Checks whether or not a given function node is the callee of `.bind()`</span>
+		 <span class="s0">* method.</span>
+		 <span class="s0">*</span>
+		 <span class="s0">* e.g. `(function() {}.bind(foo))`</span>
+		 <span class="s0">* </span><span class="s1">@param </span><span class="s0">{ASTNode} node A node to report. This is a FunctionExpression or</span>
+		 <span class="s0">*      an ArrowFunctionExpression.</span>
+		 <span class="s0">* </span><span class="s1">@returns </span><span class="s0">{boolean} `true` if the node is the callee of `.bind()` method.</span>
+		 <span class="s0">*/</span>
+		<span class="s4">function </span><span class="s2">isCalleeOfBindMethod(node) {</span>
+			<span class="s4">if </span><span class="s2">(!astUtils.isSpecificMemberAccess(node.parent, </span><span class="s4">null</span><span class="s2">, </span><span class="s3">&quot;bind&quot;</span><span class="s2">)) {</span>
+				<span class="s4">return false</span><span class="s2">;</span>
+			<span class="s2">}</span>
+
+			<span class="s0">// The node of `*.bind` member access.</span>
+			<span class="s4">const </span><span class="s2">bindNode =</span>
+				<span class="s2">node.parent.parent.type === </span><span class="s3">&quot;ChainExpression&quot;</span>
+					<span class="s2">? node.parent.parent</span>
+					<span class="s2">: node.parent;</span>
+
+			<span class="s4">return </span><span class="s2">(</span>
+				<span class="s2">bindNode.parent.type === </span><span class="s3">&quot;CallExpression&quot; </span><span class="s2">&amp;&amp;</span>
+				<span class="s2">bindNode.parent.callee === bindNode &amp;&amp;</span>
+				<span class="s2">bindNode.parent.arguments.length === </span><span class="s5">1 </span><span class="s2">&amp;&amp;</span>
+				<span class="s2">bindNode.parent.arguments[</span><span class="s5">0</span><span class="s2">].type !== </span><span class="s3">&quot;SpreadElement&quot;</span>
+			<span class="s2">);</span>
+		<span class="s2">}</span>
+
+		<span class="s0">/**</span>
+		 <span class="s0">* Adds a scope information object to the stack.</span>
+		 <span class="s0">* </span><span class="s1">@param </span><span class="s0">{ASTNode} node A node to add. This node is a FunctionExpression</span>
+		 <span class="s0">*      or a FunctionDeclaration node.</span>
+		 <span class="s0">* </span><span class="s1">@returns </span><span class="s0">{void}</span>
+		 <span class="s0">*/</span>
+		<span class="s4">function </span><span class="s2">enterFunction(node) {</span>
+			<span class="s2">scopeInfo = {</span>
+				<span class="s2">isBound: isCalleeOfBindMethod(node),</span>
+				<span class="s2">thisFound: </span><span class="s4">false</span><span class="s2">,</span>
+				<span class="s2">upper: scopeInfo,</span>
+			<span class="s2">};</span>
+		<span class="s2">}</span>
+
+		<span class="s0">/**</span>
+		 <span class="s0">* Removes the scope information object from the top of the stack.</span>
+		 <span class="s0">* At the same time, this reports the function node if the function has</span>
+		 <span class="s0">* `.bind()` and the `this` keywords found.</span>
+		 <span class="s0">* </span><span class="s1">@param </span><span class="s0">{ASTNode} node A node to remove. This node is a</span>
+		 <span class="s0">*      FunctionExpression or a FunctionDeclaration node.</span>
+		 <span class="s0">* </span><span class="s1">@returns </span><span class="s0">{void}</span>
+		 <span class="s0">*/</span>
+		<span class="s4">function </span><span class="s2">exitFunction(node) {</span>
+			<span class="s4">if </span><span class="s2">(scopeInfo.isBound &amp;&amp; !scopeInfo.thisFound) {</span>
+				<span class="s2">report(node);</span>
+			<span class="s2">}</span>
+
+			<span class="s2">scopeInfo = scopeInfo.upper;</span>
+		<span class="s2">}</span>
+
+		<span class="s0">/**</span>
+		 <span class="s0">* Reports a given arrow function if the function is callee of `.bind()`</span>
+		 <span class="s0">* method.</span>
+		 <span class="s0">* </span><span class="s1">@param </span><span class="s0">{ASTNode} node A node to report. This node is an</span>
+		 <span class="s0">*      ArrowFunctionExpression.</span>
+		 <span class="s0">* </span><span class="s1">@returns </span><span class="s0">{void}</span>
+		 <span class="s0">*/</span>
+		<span class="s4">function </span><span class="s2">exitArrowFunction(node) {</span>
+			<span class="s4">if </span><span class="s2">(isCalleeOfBindMethod(node)) {</span>
+				<span class="s2">report(node);</span>
+			<span class="s2">}</span>
+		<span class="s2">}</span>
+
+		<span class="s0">/**</span>
+		 <span class="s0">* Set the mark as the `this` keyword was found in this scope.</span>
+		 <span class="s0">* </span><span class="s1">@returns </span><span class="s0">{void}</span>
+		 <span class="s0">*/</span>
+		<span class="s4">function </span><span class="s2">markAsThisFound() {</span>
+			<span class="s4">if </span><span class="s2">(scopeInfo) {</span>
+				<span class="s2">scopeInfo.thisFound = </span><span class="s4">true</span><span class="s2">;</span>
+			<span class="s2">}</span>
+		<span class="s2">}</span>
+
+		<span class="s4">return </span><span class="s2">{</span>
+			<span class="s3">&quot;ArrowFunctionExpression:exit&quot;</span><span class="s2">: exitArrowFunction,</span>
+			<span class="s2">FunctionDeclaration: enterFunction,</span>
+			<span class="s3">&quot;FunctionDeclaration:exit&quot;</span><span class="s2">: exitFunction,</span>
+			<span class="s2">FunctionExpression: enterFunction,</span>
+			<span class="s3">&quot;FunctionExpression:exit&quot;</span><span class="s2">: exitFunction,</span>
+			<span class="s2">ThisExpression: markAsThisFound,</span>
+		<span class="s2">};</span>
+	<span class="s2">},</span>
+<span class="s2">};</span>
+</pre>
+</body>
+</html>

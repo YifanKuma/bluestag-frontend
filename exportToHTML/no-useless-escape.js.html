@@ -1,0 +1,430 @@
+<html>
+<head>
+<title>no-useless-escape.js</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #8c8c8c; font-style: italic;}
+.s1 { color: #8c8c8c; font-style: italic;}
+.s2 { color: #080808;}
+.s3 { color: #067d17;}
+.s4 { color: #0033b3;}
+.s5 { color: #0037a6;}
+.s6 { color: #1750eb;}
+.s7 { color: #264eff;}
+</style>
+</head>
+<body bgcolor="#ffffff">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#c0c0c0" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+no-useless-escape.js</font>
+</center></td></tr></table>
+<pre><span class="s0">/**</span>
+ <span class="s0">* </span><span class="s1">@fileoverview </span><span class="s0">Look for useless escapes in strings and regexes</span>
+ <span class="s0">* </span><span class="s1">@author </span><span class="s0">Onur Temizkan</span>
+ <span class="s0">*/</span>
+
+<span class="s3">&quot;use strict&quot;</span><span class="s2">;</span>
+
+<span class="s4">const </span><span class="s2">astUtils = require(</span><span class="s3">&quot;./utils/ast-utils&quot;</span><span class="s2">);</span>
+<span class="s4">const </span><span class="s2">{ RegExpParser, visitRegExpAST } = require(</span><span class="s3">&quot;@eslint-community/regexpp&quot;</span><span class="s2">);</span>
+
+<span class="s0">/**</span>
+ <span class="s0">* </span><span class="s1">@typedef </span><span class="s0">{import('@eslint-community/regexpp').AST.CharacterClass} CharacterClass</span>
+ <span class="s0">* </span><span class="s1">@typedef </span><span class="s0">{import('@eslint-community/regexpp').AST.ExpressionCharacterClass} ExpressionCharacterClass</span>
+ <span class="s0">*/</span>
+<span class="s0">//------------------------------------------------------------------------------</span>
+<span class="s0">// Rule Definition</span>
+<span class="s0">//------------------------------------------------------------------------------</span>
+
+<span class="s0">/**</span>
+ <span class="s0">* Returns the union of two sets.</span>
+ <span class="s0">* </span><span class="s1">@param </span><span class="s0">{Set} setA The first set</span>
+ <span class="s0">* </span><span class="s1">@param </span><span class="s0">{Set} setB The second set</span>
+ <span class="s0">* </span><span class="s1">@returns </span><span class="s0">{Set} The union of the two sets</span>
+ <span class="s0">*/</span>
+<span class="s4">function </span><span class="s2">union(setA, setB) {</span>
+	<span class="s4">return new </span><span class="s2">Set(</span>
+		<span class="s2">(</span><span class="s4">function</span><span class="s2">* () {</span>
+			<span class="s4">yield</span><span class="s2">* setA;</span>
+			<span class="s4">yield</span><span class="s2">* setB;</span>
+		<span class="s2">})(),</span>
+	<span class="s2">);</span>
+<span class="s2">}</span>
+
+<span class="s4">const </span><span class="s2">VALID_STRING_ESCAPES = union(</span><span class="s4">new </span><span class="s2">Set(</span><span class="s3">&quot;</span><span class="s5">\\</span><span class="s3">nrvtbfux&quot;</span><span class="s2">), astUtils.LINEBREAKS);</span>
+<span class="s4">const </span><span class="s2">REGEX_GENERAL_ESCAPES = </span><span class="s4">new </span><span class="s2">Set(</span><span class="s3">&quot;</span><span class="s5">\\</span><span class="s3">bcdDfnpPrsStvwWxu0123456789]&quot;</span><span class="s2">);</span>
+<span class="s4">const </span><span class="s2">REGEX_NON_CHARCLASS_ESCAPES = union(</span>
+	<span class="s2">REGEX_GENERAL_ESCAPES,</span>
+	<span class="s4">new </span><span class="s2">Set(</span><span class="s3">&quot;^/.$*+?[{}|()Bk&quot;</span><span class="s2">),</span>
+<span class="s2">);</span>
+
+<span class="s0">/* 
+ * Set of characters that require escaping in character classes in `unicodeSets` mode. 
+ * ( ) [ ] { } / - \ | are ClassSetSyntaxCharacter 
+ */</span>
+<span class="s4">const </span><span class="s2">REGEX_CLASSSET_CHARACTER_ESCAPES = union(</span>
+	<span class="s2">REGEX_GENERAL_ESCAPES,</span>
+	<span class="s4">new </span><span class="s2">Set(</span><span class="s3">&quot;q/[{}|()-&quot;</span><span class="s2">),</span>
+<span class="s2">);</span>
+
+<span class="s0">/* 
+ * A single character set of ClassSetReservedDoublePunctuator. 
+ * &amp;&amp; !! ## $$ %% ** ++ ,, .. :: ;; &lt;&lt; == &gt;&gt; ?? @@ ^^ `` ~~ are ClassSetReservedDoublePunctuator 
+ */</span>
+<span class="s4">const </span><span class="s2">REGEX_CLASS_SET_RESERVED_DOUBLE_PUNCTUATOR = </span><span class="s4">new </span><span class="s2">Set(</span>
+	<span class="s3">&quot;!#$%&amp;*+,.:;&lt;=&gt;?@^`~&quot;</span><span class="s2">,</span>
+<span class="s2">);</span>
+
+<span class="s0">/** </span><span class="s1">@type </span><span class="s0">{import('../types').Rule.RuleModule} */</span>
+<span class="s2">module.exports = {</span>
+	<span class="s2">meta: {</span>
+		<span class="s2">type: </span><span class="s3">&quot;suggestion&quot;</span><span class="s2">,</span>
+
+		<span class="s2">defaultOptions: [</span>
+			<span class="s2">{</span>
+				<span class="s2">allowRegexCharacters: [],</span>
+			<span class="s2">},</span>
+		<span class="s2">],</span>
+
+		<span class="s2">docs: {</span>
+			<span class="s2">description: </span><span class="s3">&quot;Disallow unnecessary escape characters&quot;</span><span class="s2">,</span>
+			<span class="s2">recommended: </span><span class="s4">true</span><span class="s2">,</span>
+			<span class="s2">url: </span><span class="s3">&quot;https://eslint.org/docs/latest/rules/no-useless-escape&quot;</span><span class="s2">,</span>
+		<span class="s2">},</span>
+
+		<span class="s2">hasSuggestions: </span><span class="s4">true</span><span class="s2">,</span>
+
+		<span class="s2">messages: {</span>
+			<span class="s2">unnecessaryEscape: </span><span class="s3">&quot;Unnecessary escape character: </span><span class="s5">\\</span><span class="s3">{{character}}.&quot;</span><span class="s2">,</span>
+			<span class="s2">removeEscape:</span>
+				<span class="s3">&quot;Remove the `</span><span class="s5">\\</span><span class="s3">`. This maintains the current functionality.&quot;</span><span class="s2">,</span>
+			<span class="s2">removeEscapeDoNotKeepSemantics:</span>
+				<span class="s3">&quot;Remove the `</span><span class="s5">\\</span><span class="s3">` if it was inserted by mistake.&quot;</span><span class="s2">,</span>
+			<span class="s2">escapeBackslash:</span>
+				<span class="s3">&quot;Replace the `</span><span class="s5">\\</span><span class="s3">` with `</span><span class="s5">\\\\</span><span class="s3">` to include the actual backslash character.&quot;</span><span class="s2">,</span>
+		<span class="s2">},</span>
+
+		<span class="s2">schema: [</span>
+			<span class="s2">{</span>
+				<span class="s2">type: </span><span class="s3">&quot;object&quot;</span><span class="s2">,</span>
+				<span class="s2">properties: {</span>
+					<span class="s2">allowRegexCharacters: {</span>
+						<span class="s2">type: </span><span class="s3">&quot;array&quot;</span><span class="s2">,</span>
+						<span class="s2">items: {</span>
+							<span class="s2">type: </span><span class="s3">&quot;string&quot;</span><span class="s2">,</span>
+						<span class="s2">},</span>
+						<span class="s2">uniqueItems: </span><span class="s4">true</span><span class="s2">,</span>
+					<span class="s2">},</span>
+				<span class="s2">},</span>
+				<span class="s2">additionalProperties: </span><span class="s4">false</span><span class="s2">,</span>
+			<span class="s2">},</span>
+		<span class="s2">],</span>
+	<span class="s2">},</span>
+
+	<span class="s2">create(context) {</span>
+		<span class="s4">const </span><span class="s2">sourceCode = context.sourceCode;</span>
+		<span class="s4">const </span><span class="s2">[{ allowRegexCharacters }] = context.options;</span>
+		<span class="s4">const </span><span class="s2">parser = </span><span class="s4">new </span><span class="s2">RegExpParser();</span>
+
+		<span class="s0">/**</span>
+		 <span class="s0">* Reports a node</span>
+		 <span class="s0">* </span><span class="s1">@param </span><span class="s0">{ASTNode} node The node to report</span>
+		 <span class="s0">* </span><span class="s1">@param </span><span class="s0">{number} startOffset The backslash's offset from the start of the node</span>
+		 <span class="s0">* </span><span class="s1">@param </span><span class="s0">{string} character The uselessly escaped character (not including the backslash)</span>
+		 <span class="s0">* </span><span class="s1">@param </span><span class="s0">{boolean} [disableEscapeBackslashSuggest] `true` if escapeBackslash suggestion should be turned off.</span>
+		 <span class="s0">* </span><span class="s1">@returns </span><span class="s0">{void}</span>
+		 <span class="s0">*/</span>
+		<span class="s4">function </span><span class="s2">report(</span>
+			<span class="s2">node,</span>
+			<span class="s2">startOffset,</span>
+			<span class="s2">character,</span>
+			<span class="s2">disableEscapeBackslashSuggest,</span>
+		<span class="s2">) {</span>
+			<span class="s4">const </span><span class="s2">rangeStart = node.range[</span><span class="s6">0</span><span class="s2">] + startOffset;</span>
+			<span class="s4">const </span><span class="s2">range = [rangeStart, rangeStart + </span><span class="s6">1</span><span class="s2">];</span>
+			<span class="s4">const </span><span class="s2">start = sourceCode.getLocFromIndex(rangeStart);</span>
+
+			<span class="s2">context.report({</span>
+				<span class="s2">node,</span>
+				<span class="s2">loc: {</span>
+					<span class="s2">start,</span>
+					<span class="s2">end: { line: start.line, column: start.column + </span><span class="s6">1 </span><span class="s2">},</span>
+				<span class="s2">},</span>
+				<span class="s2">messageId: </span><span class="s3">&quot;unnecessaryEscape&quot;</span><span class="s2">,</span>
+				<span class="s2">data: { character },</span>
+				<span class="s2">suggest: [</span>
+					<span class="s2">{</span>
+						<span class="s0">// Removing unnecessary `\` characters in a directive is not guaranteed to maintain functionality.</span>
+						<span class="s2">messageId: astUtils.isDirective(node.parent)</span>
+							<span class="s2">? </span><span class="s3">&quot;removeEscapeDoNotKeepSemantics&quot;</span>
+							<span class="s2">: </span><span class="s3">&quot;removeEscape&quot;</span><span class="s2">,</span>
+						<span class="s2">fix(fixer) {</span>
+							<span class="s4">return </span><span class="s2">fixer.removeRange(range);</span>
+						<span class="s2">},</span>
+					<span class="s2">},</span>
+					<span class="s2">...(disableEscapeBackslashSuggest</span>
+						<span class="s2">? []</span>
+						<span class="s2">: [</span>
+								<span class="s2">{</span>
+									<span class="s2">messageId: </span><span class="s3">&quot;escapeBackslash&quot;</span><span class="s2">,</span>
+									<span class="s2">fix(fixer) {</span>
+										<span class="s4">return </span><span class="s2">fixer.insertTextBeforeRange(</span>
+											<span class="s2">range,</span>
+											<span class="s3">&quot;</span><span class="s5">\\</span><span class="s3">&quot;</span><span class="s2">,</span>
+										<span class="s2">);</span>
+									<span class="s2">},</span>
+								<span class="s2">},</span>
+							<span class="s2">]),</span>
+				<span class="s2">],</span>
+			<span class="s2">});</span>
+		<span class="s2">}</span>
+
+		<span class="s0">/**</span>
+		 <span class="s0">* Checks if the escape character in given string slice is unnecessary.</span>
+		 <span class="s0">* </span><span class="s1">@private</span>
+		 <span class="s0">* </span><span class="s1">@param </span><span class="s0">{ASTNode} node node to validate.</span>
+		 <span class="s0">* </span><span class="s1">@param </span><span class="s0">{string} match string slice to validate.</span>
+		 <span class="s0">* </span><span class="s1">@returns </span><span class="s0">{void}</span>
+		 <span class="s0">*/</span>
+		<span class="s4">function </span><span class="s2">validateString(node, match) {</span>
+			<span class="s4">const </span><span class="s2">isTemplateElement = node.type === </span><span class="s3">&quot;TemplateElement&quot;</span><span class="s2">;</span>
+			<span class="s4">const </span><span class="s2">escapedChar = match[</span><span class="s6">0</span><span class="s2">][</span><span class="s6">1</span><span class="s2">];</span>
+			<span class="s4">let </span><span class="s2">isUnnecessaryEscape = !VALID_STRING_ESCAPES.has(escapedChar);</span>
+			<span class="s4">let </span><span class="s2">isQuoteEscape;</span>
+
+			<span class="s4">if </span><span class="s2">(isTemplateElement) {</span>
+				<span class="s2">isQuoteEscape = escapedChar === </span><span class="s3">&quot;`&quot;</span><span class="s2">;</span>
+
+				<span class="s4">if </span><span class="s2">(escapedChar === </span><span class="s3">&quot;$&quot;</span><span class="s2">) {</span>
+					<span class="s0">// Warn if `\$` is not followed by `{`</span>
+					<span class="s2">isUnnecessaryEscape = match.input[match.index + </span><span class="s6">2</span><span class="s2">] !== </span><span class="s3">&quot;{&quot;</span><span class="s2">;</span>
+				<span class="s2">} </span><span class="s4">else if </span><span class="s2">(escapedChar === </span><span class="s3">&quot;{&quot;</span><span class="s2">) {</span>
+					<span class="s0">/* 
+                     * Warn if `\{` is not preceded by `$`. If preceded by `$`, escaping 
+                     * is necessary and the rule should not warn. If preceded by `/$`, the rule 
+                     * will warn for the `/$` instead, as it is the first unnecessarily escaped character. 
+                     */</span>
+					<span class="s2">isUnnecessaryEscape = match.input[match.index - </span><span class="s6">1</span><span class="s2">] !== </span><span class="s3">&quot;$&quot;</span><span class="s2">;</span>
+				<span class="s2">}</span>
+			<span class="s2">} </span><span class="s4">else </span><span class="s2">{</span>
+				<span class="s2">isQuoteEscape = escapedChar === node.raw[</span><span class="s6">0</span><span class="s2">];</span>
+			<span class="s2">}</span>
+
+			<span class="s4">if </span><span class="s2">(isUnnecessaryEscape &amp;&amp; !isQuoteEscape) {</span>
+				<span class="s2">report(node, match.index, match[</span><span class="s6">0</span><span class="s2">].slice(</span><span class="s6">1</span><span class="s2">));</span>
+			<span class="s2">}</span>
+		<span class="s2">}</span>
+
+		<span class="s0">/**</span>
+		 <span class="s0">* Checks if the escape character in given regexp is unnecessary.</span>
+		 <span class="s0">* </span><span class="s1">@private</span>
+		 <span class="s0">* </span><span class="s1">@param </span><span class="s0">{ASTNode} node node to validate.</span>
+		 <span class="s0">* </span><span class="s1">@returns </span><span class="s0">{void}</span>
+		 <span class="s0">*/</span>
+		<span class="s4">function </span><span class="s2">validateRegExp(node) {</span>
+			<span class="s4">const </span><span class="s2">{ pattern, flags } = node.regex;</span>
+			<span class="s4">let </span><span class="s2">patternNode;</span>
+			<span class="s4">const </span><span class="s2">unicode = flags.includes(</span><span class="s3">&quot;u&quot;</span><span class="s2">);</span>
+			<span class="s4">const </span><span class="s2">unicodeSets = flags.includes(</span><span class="s3">&quot;v&quot;</span><span class="s2">);</span>
+
+			<span class="s4">try </span><span class="s2">{</span>
+				<span class="s2">patternNode = parser.parsePattern(pattern, </span><span class="s6">0</span><span class="s2">, pattern.length, {</span>
+					<span class="s2">unicode,</span>
+					<span class="s2">unicodeSets,</span>
+				<span class="s2">});</span>
+			<span class="s2">} </span><span class="s4">catch </span><span class="s2">{</span>
+				<span class="s0">// Ignore regular expressions with syntax errors</span>
+				<span class="s4">return</span><span class="s2">;</span>
+			<span class="s2">}</span>
+
+			<span class="s0">/** </span><span class="s1">@type </span><span class="s0">{(CharacterClass | ExpressionCharacterClass)[]} */</span>
+			<span class="s4">const </span><span class="s2">characterClassStack = [];</span>
+
+			<span class="s2">visitRegExpAST(patternNode, {</span>
+				<span class="s2">onCharacterClassEnter: characterClassNode =&gt;</span>
+					<span class="s2">characterClassStack.unshift(characterClassNode),</span>
+				<span class="s2">onCharacterClassLeave: () =&gt; characterClassStack.shift(),</span>
+				<span class="s2">onExpressionCharacterClassEnter: characterClassNode =&gt;</span>
+					<span class="s2">characterClassStack.unshift(characterClassNode),</span>
+				<span class="s2">onExpressionCharacterClassLeave: () =&gt;</span>
+					<span class="s2">characterClassStack.shift(),</span>
+				<span class="s2">onCharacterEnter(characterNode) {</span>
+					<span class="s4">if </span><span class="s2">(!characterNode.raw.startsWith(</span><span class="s3">&quot;</span><span class="s5">\\</span><span class="s3">&quot;</span><span class="s2">)) {</span>
+						<span class="s0">// It's not an escaped character.</span>
+						<span class="s4">return</span><span class="s2">;</span>
+					<span class="s2">}</span>
+
+					<span class="s4">const </span><span class="s2">escapedChar = characterNode.raw.slice(</span><span class="s6">1</span><span class="s2">);</span>
+
+					<span class="s4">if </span><span class="s2">(</span>
+						<span class="s2">escapedChar !==</span>
+							<span class="s2">String.fromCodePoint(characterNode.value) ||</span>
+						<span class="s2">allowRegexCharacters.includes(escapedChar)</span>
+					<span class="s2">) {</span>
+						<span class="s0">// It's a valid escape.</span>
+						<span class="s4">return</span><span class="s2">;</span>
+					<span class="s2">}</span>
+					<span class="s4">let </span><span class="s2">allowedEscapes;</span>
+
+					<span class="s4">if </span><span class="s2">(characterClassStack.length) {</span>
+						<span class="s2">allowedEscapes = unicodeSets</span>
+							<span class="s2">? REGEX_CLASSSET_CHARACTER_ESCAPES</span>
+							<span class="s2">: REGEX_GENERAL_ESCAPES;</span>
+					<span class="s2">} </span><span class="s4">else </span><span class="s2">{</span>
+						<span class="s2">allowedEscapes = REGEX_NON_CHARCLASS_ESCAPES;</span>
+					<span class="s2">}</span>
+					<span class="s4">if </span><span class="s2">(allowedEscapes.has(escapedChar)) {</span>
+						<span class="s4">return</span><span class="s2">;</span>
+					<span class="s2">}</span>
+
+					<span class="s4">const </span><span class="s2">reportedIndex = characterNode.start + </span><span class="s6">1</span><span class="s2">;</span>
+					<span class="s4">let </span><span class="s2">disableEscapeBackslashSuggest = </span><span class="s4">false</span><span class="s2">;</span>
+
+					<span class="s4">if </span><span class="s2">(characterClassStack.length) {</span>
+						<span class="s4">const </span><span class="s2">characterClassNode = characterClassStack[</span><span class="s6">0</span><span class="s2">];</span>
+
+						<span class="s4">if </span><span class="s2">(escapedChar === </span><span class="s3">&quot;^&quot;</span><span class="s2">) {</span>
+							<span class="s0">/* 
+                             * The '^' character is also a special case; it must always be escaped outside of character classes, but 
+                             * it only needs to be escaped in character classes if it's at the beginning of the character class. To 
+                             * account for this, consider it to be a valid escape character outside of character classes, and filter 
+                             * out '^' characters that appear at the start of a character class. 
+                             */</span>
+							<span class="s4">if </span><span class="s2">(</span>
+								<span class="s2">characterClassNode.start + </span><span class="s6">1 </span><span class="s2">===</span>
+								<span class="s2">characterNode.start</span>
+							<span class="s2">) {</span>
+								<span class="s4">return</span><span class="s2">;</span>
+							<span class="s2">}</span>
+						<span class="s2">}</span>
+						<span class="s4">if </span><span class="s2">(!unicodeSets) {</span>
+							<span class="s4">if </span><span class="s2">(escapedChar === </span><span class="s3">&quot;-&quot;</span><span class="s2">) {</span>
+								<span class="s0">/* 
+                                 * The '-' character is a special case, because it's only valid to escape it if it's in a character 
+                                 * class, and is not at either edge of the character class. To account for this, don't consider '-' 
+                                 * characters to be valid in general, and filter out '-' characters that appear in the middle of a 
+                                 * character class. 
+                                 */</span>
+								<span class="s4">if </span><span class="s2">(</span>
+									<span class="s2">characterClassNode.start + </span><span class="s6">1 </span><span class="s2">!==</span>
+										<span class="s2">characterNode.start &amp;&amp;</span>
+									<span class="s2">characterNode.end !==</span>
+										<span class="s2">characterClassNode.end - </span><span class="s6">1</span>
+								<span class="s2">) {</span>
+									<span class="s4">return</span><span class="s2">;</span>
+								<span class="s2">}</span>
+							<span class="s2">}</span>
+						<span class="s2">} </span><span class="s4">else </span><span class="s2">{</span>
+							<span class="s0">// unicodeSets mode</span>
+							<span class="s4">if </span><span class="s2">(</span>
+								<span class="s2">REGEX_CLASS_SET_RESERVED_DOUBLE_PUNCTUATOR.has(</span>
+									<span class="s2">escapedChar,</span>
+								<span class="s2">)</span>
+							<span class="s2">) {</span>
+								<span class="s0">// Escaping is valid if it is a ClassSetReservedDoublePunctuator.</span>
+								<span class="s4">if </span><span class="s2">(</span>
+									<span class="s2">pattern[characterNode.end] === escapedChar</span>
+								<span class="s2">) {</span>
+									<span class="s4">return</span><span class="s2">;</span>
+								<span class="s2">}</span>
+								<span class="s4">if </span><span class="s2">(</span>
+									<span class="s2">pattern[characterNode.start - </span><span class="s6">1</span><span class="s2">] ===</span>
+									<span class="s2">escapedChar</span>
+								<span class="s2">) {</span>
+									<span class="s4">if </span><span class="s2">(escapedChar !== </span><span class="s3">&quot;^&quot;</span><span class="s2">) {</span>
+										<span class="s4">return</span><span class="s2">;</span>
+									<span class="s2">}</span>
+
+									<span class="s0">// If the previous character is a `negate` caret(`^`), escape to caret is unnecessary.</span>
+
+									<span class="s4">if </span><span class="s2">(!characterClassNode.negate) {</span>
+										<span class="s4">return</span><span class="s2">;</span>
+									<span class="s2">}</span>
+									<span class="s4">const </span><span class="s2">negateCaretIndex =</span>
+										<span class="s2">characterClassNode.start + </span><span class="s6">1</span><span class="s2">;</span>
+
+									<span class="s4">if </span><span class="s2">(</span>
+										<span class="s2">negateCaretIndex &lt;</span>
+										<span class="s2">characterNode.start - </span><span class="s6">1</span>
+									<span class="s2">) {</span>
+										<span class="s4">return</span><span class="s2">;</span>
+									<span class="s2">}</span>
+								<span class="s2">}</span>
+							<span class="s2">}</span>
+
+							<span class="s4">if </span><span class="s2">(</span>
+								<span class="s2">characterNode.parent.type ===</span>
+									<span class="s3">&quot;ClassIntersection&quot; </span><span class="s2">||</span>
+								<span class="s2">characterNode.parent.type === </span><span class="s3">&quot;ClassSubtraction&quot;</span>
+							<span class="s2">) {</span>
+								<span class="s2">disableEscapeBackslashSuggest = </span><span class="s4">true</span><span class="s2">;</span>
+							<span class="s2">}</span>
+						<span class="s2">}</span>
+					<span class="s2">}</span>
+
+					<span class="s2">report(</span>
+						<span class="s2">node,</span>
+						<span class="s2">reportedIndex,</span>
+						<span class="s2">escapedChar,</span>
+						<span class="s2">disableEscapeBackslashSuggest,</span>
+					<span class="s2">);</span>
+				<span class="s2">},</span>
+			<span class="s2">});</span>
+		<span class="s2">}</span>
+
+		<span class="s0">/**</span>
+		 <span class="s0">* Checks if a node has an escape.</span>
+		 <span class="s0">* </span><span class="s1">@param </span><span class="s0">{ASTNode} node node to check.</span>
+		 <span class="s0">* </span><span class="s1">@returns </span><span class="s0">{void}</span>
+		 <span class="s0">*/</span>
+		<span class="s4">function </span><span class="s2">check(node) {</span>
+			<span class="s4">const </span><span class="s2">isTemplateElement = node.type === </span><span class="s3">&quot;TemplateElement&quot;</span><span class="s2">;</span>
+
+			<span class="s4">if </span><span class="s2">(</span>
+				<span class="s2">isTemplateElement &amp;&amp;</span>
+				<span class="s2">node.parent &amp;&amp;</span>
+				<span class="s2">node.parent.parent &amp;&amp;</span>
+				<span class="s2">node.parent.parent.type === </span><span class="s3">&quot;TaggedTemplateExpression&quot; </span><span class="s2">&amp;&amp;</span>
+				<span class="s2">node.parent === node.parent.parent.quasi</span>
+			<span class="s2">) {</span>
+				<span class="s0">// Don't report tagged template literals, because the backslash character is accessible to the tag function.</span>
+				<span class="s4">return</span><span class="s2">;</span>
+			<span class="s2">}</span>
+
+			<span class="s4">if </span><span class="s2">(</span><span class="s4">typeof </span><span class="s2">node.value === </span><span class="s3">&quot;string&quot; </span><span class="s2">|| isTemplateElement) {</span>
+				<span class="s0">/* 
+                 * JSXAttribute doesn't have any escape sequence: https://facebook.github.io/jsx/. 
+                 * In addition, backticks are not supported by JSX yet: https://github.com/facebook/jsx/issues/25. 
+                 */</span>
+				<span class="s4">if </span><span class="s2">(</span>
+					<span class="s2">node.parent.type === </span><span class="s3">&quot;JSXAttribute&quot; </span><span class="s2">||</span>
+					<span class="s2">node.parent.type === </span><span class="s3">&quot;JSXElement&quot; </span><span class="s2">||</span>
+					<span class="s2">node.parent.type === </span><span class="s3">&quot;JSXFragment&quot;</span>
+				<span class="s2">) {</span>
+					<span class="s4">return</span><span class="s2">;</span>
+				<span class="s2">}</span>
+
+				<span class="s4">const </span><span class="s2">value = isTemplateElement</span>
+					<span class="s2">? sourceCode.getText(node)</span>
+					<span class="s2">: node.raw;</span>
+				<span class="s4">const </span><span class="s2">pattern = </span><span class="s7">/\\\D/gu</span><span class="s2">;</span>
+				<span class="s4">let </span><span class="s2">match;</span>
+
+				<span class="s4">while </span><span class="s2">((match = pattern.exec(value))) {</span>
+					<span class="s2">validateString(node, match);</span>
+				<span class="s2">}</span>
+			<span class="s2">} </span><span class="s4">else if </span><span class="s2">(node.regex) {</span>
+				<span class="s2">validateRegExp(node);</span>
+			<span class="s2">}</span>
+		<span class="s2">}</span>
+
+		<span class="s4">return </span><span class="s2">{</span>
+			<span class="s2">Literal: check,</span>
+			<span class="s2">TemplateElement: check,</span>
+		<span class="s2">};</span>
+	<span class="s2">},</span>
+<span class="s2">};</span>
+</pre>
+</body>
+</html>

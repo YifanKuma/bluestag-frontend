@@ -1,0 +1,217 @@
+<html>
+<head>
+<title>static-property-placement.js</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #8c8c8c; font-style: italic;}
+.s1 { color: #8c8c8c; font-style: italic;}
+.s2 { color: #080808;}
+.s3 { color: #067d17;}
+.s4 { color: #0033b3;}
+.s5 { color: #0037a6;}
+.s6 { color: #1750eb;}
+</style>
+</head>
+<body bgcolor="#ffffff">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#c0c0c0" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+static-property-placement.js</font>
+</center></td></tr></table>
+<pre><span class="s0">/**</span>
+ <span class="s0">* </span><span class="s1">@fileoverview </span><span class="s0">Defines where React component static properties should be positioned.</span>
+ <span class="s0">* </span><span class="s1">@author </span><span class="s0">Daniel Mason</span>
+ <span class="s0">*/</span>
+
+<span class="s3">'use strict'</span><span class="s2">;</span>
+
+<span class="s4">const </span><span class="s2">fromEntries = require(</span><span class="s3">'object.fromentries'</span><span class="s2">);</span>
+<span class="s4">const </span><span class="s2">Components = require(</span><span class="s3">'../util/Components'</span><span class="s2">);</span>
+<span class="s4">const </span><span class="s2">docsUrl = require(</span><span class="s3">'../util/docsUrl'</span><span class="s2">);</span>
+<span class="s4">const </span><span class="s2">astUtil = require(</span><span class="s3">'../util/ast'</span><span class="s2">);</span>
+<span class="s4">const </span><span class="s2">componentUtil = require(</span><span class="s3">'../util/componentUtil'</span><span class="s2">);</span>
+<span class="s4">const </span><span class="s2">propsUtil = require(</span><span class="s3">'../util/props'</span><span class="s2">);</span>
+<span class="s4">const </span><span class="s2">report = require(</span><span class="s3">'../util/report'</span><span class="s2">);</span>
+<span class="s4">const </span><span class="s2">getScope = require(</span><span class="s3">'../util/eslint'</span><span class="s2">).getScope;</span>
+
+<span class="s0">// ------------------------------------------------------------------------------</span>
+<span class="s0">// Positioning Options</span>
+<span class="s0">// ------------------------------------------------------------------------------</span>
+<span class="s4">const </span><span class="s2">STATIC_PUBLIC_FIELD = </span><span class="s3">'static public field'</span><span class="s2">;</span>
+<span class="s4">const </span><span class="s2">STATIC_GETTER = </span><span class="s3">'static getter'</span><span class="s2">;</span>
+<span class="s4">const </span><span class="s2">PROPERTY_ASSIGNMENT = </span><span class="s3">'property assignment'</span><span class="s2">;</span>
+<span class="s4">const </span><span class="s2">POSITION_SETTINGS = [STATIC_PUBLIC_FIELD, STATIC_GETTER, PROPERTY_ASSIGNMENT];</span>
+
+<span class="s0">// ------------------------------------------------------------------------------</span>
+<span class="s0">// Rule messages</span>
+<span class="s0">// ------------------------------------------------------------------------------</span>
+<span class="s4">const </span><span class="s2">ERROR_MESSAGES = {</span>
+  <span class="s2">[STATIC_PUBLIC_FIELD]: </span><span class="s3">'notStaticClassProp'</span><span class="s2">,</span>
+  <span class="s2">[STATIC_GETTER]: </span><span class="s3">'notGetterClassFunc'</span><span class="s2">,</span>
+  <span class="s2">[PROPERTY_ASSIGNMENT]: </span><span class="s3">'declareOutsideClass'</span><span class="s2">,</span>
+<span class="s2">};</span>
+
+<span class="s0">// ------------------------------------------------------------------------------</span>
+<span class="s0">// Properties to check</span>
+<span class="s0">// ------------------------------------------------------------------------------</span>
+<span class="s4">const </span><span class="s2">propertiesToCheck = {</span>
+  <span class="s2">propTypes: propsUtil.isPropTypesDeclaration,</span>
+  <span class="s2">defaultProps: propsUtil.isDefaultPropsDeclaration,</span>
+  <span class="s2">childContextTypes: propsUtil.isChildContextTypesDeclaration,</span>
+  <span class="s2">contextTypes: propsUtil.isContextTypesDeclaration,</span>
+  <span class="s2">contextType: propsUtil.isContextTypeDeclaration,</span>
+  <span class="s2">displayName: (node) =&gt; propsUtil.isDisplayNameDeclaration(astUtil.getPropertyNameNode(node)),</span>
+<span class="s2">};</span>
+
+<span class="s4">const </span><span class="s2">classProperties = Object.keys(propertiesToCheck);</span>
+<span class="s4">const </span><span class="s2">schemaProperties = fromEntries(classProperties.map((property) =&gt; [property, { </span><span class="s4">enum</span><span class="s2">: POSITION_SETTINGS }]));</span>
+
+<span class="s0">// ------------------------------------------------------------------------------</span>
+<span class="s0">// Rule Definition</span>
+<span class="s0">// ------------------------------------------------------------------------------</span>
+
+<span class="s4">const </span><span class="s2">messages = {</span>
+  <span class="s2">notStaticClassProp: </span><span class="s3">'</span><span class="s5">\'</span><span class="s3">{{name}}</span><span class="s5">\' </span><span class="s3">should be declared as a static class property.'</span><span class="s2">,</span>
+  <span class="s2">notGetterClassFunc: </span><span class="s3">'</span><span class="s5">\'</span><span class="s3">{{name}}</span><span class="s5">\' </span><span class="s3">should be declared as a static getter class function.'</span><span class="s2">,</span>
+  <span class="s2">declareOutsideClass: </span><span class="s3">'</span><span class="s5">\'</span><span class="s3">{{name}}</span><span class="s5">\' </span><span class="s3">should be declared outside the class body.'</span><span class="s2">,</span>
+<span class="s2">};</span>
+
+<span class="s0">/** </span><span class="s1">@type </span><span class="s0">{import('eslint').Rule.RuleModule} */</span>
+<span class="s2">module.exports = {</span>
+  <span class="s2">meta: {</span>
+    <span class="s2">docs: {</span>
+      <span class="s2">description: </span><span class="s3">'Enforces where React component static properties should be positioned.'</span><span class="s2">,</span>
+      <span class="s2">category: </span><span class="s3">'Stylistic Issues'</span><span class="s2">,</span>
+      <span class="s2">recommended: </span><span class="s4">false</span><span class="s2">,</span>
+      <span class="s2">url: docsUrl(</span><span class="s3">'static-property-placement'</span><span class="s2">),</span>
+    <span class="s2">},</span>
+    <span class="s2">fixable: </span><span class="s4">null</span><span class="s2">, </span><span class="s0">// or 'code' or 'whitespace'</span>
+
+    <span class="s2">messages,</span>
+
+    <span class="s2">schema: [</span>
+      <span class="s2">{ </span><span class="s4">enum</span><span class="s2">: POSITION_SETTINGS },</span>
+      <span class="s2">{</span>
+        <span class="s2">type: </span><span class="s3">'object'</span><span class="s2">,</span>
+        <span class="s2">properties: schemaProperties,</span>
+        <span class="s2">additionalProperties: </span><span class="s4">false</span><span class="s2">,</span>
+      <span class="s2">},</span>
+    <span class="s2">],</span>
+  <span class="s2">},</span>
+
+  <span class="s2">create: Components.detect((context, components, utils) =&gt; {</span>
+    <span class="s0">// variables should be defined here</span>
+    <span class="s4">const </span><span class="s2">options = context.options;</span>
+    <span class="s4">const </span><span class="s2">defaultCheckType = options[</span><span class="s6">0</span><span class="s2">] || STATIC_PUBLIC_FIELD;</span>
+    <span class="s4">const </span><span class="s2">hasAdditionalConfig = options.length &gt; </span><span class="s6">1</span><span class="s2">;</span>
+    <span class="s4">const </span><span class="s2">additionalConfig = hasAdditionalConfig ? options[</span><span class="s6">1</span><span class="s2">] : {};</span>
+
+    <span class="s0">// Set config</span>
+    <span class="s4">const </span><span class="s2">config = fromEntries(classProperties.map((property) =&gt; [</span>
+      <span class="s2">property,</span>
+      <span class="s2">additionalConfig[property] || defaultCheckType,</span>
+    <span class="s2">]));</span>
+
+    <span class="s0">// ----------------------------------------------------------------------</span>
+    <span class="s0">// Helpers</span>
+    <span class="s0">// ----------------------------------------------------------------------</span>
+
+    <span class="s0">/**</span>
+      <span class="s0">* Checks if we are declaring context in class</span>
+      <span class="s0">* </span><span class="s1">@param </span><span class="s0">{ASTNode} node</span>
+      <span class="s0">* </span><span class="s1">@returns </span><span class="s0">{boolean} True if we are declaring context in class, false if not.</span>
+     <span class="s0">*/</span>
+    <span class="s4">function </span><span class="s2">isContextInClass(node) {</span>
+      <span class="s4">let </span><span class="s2">blockNode;</span>
+      <span class="s4">let </span><span class="s2">scope = getScope(context, node);</span>
+      <span class="s4">while </span><span class="s2">(scope) {</span>
+        <span class="s2">blockNode = scope.block;</span>
+        <span class="s4">if </span><span class="s2">(blockNode &amp;&amp; blockNode.type === </span><span class="s3">'ClassDeclaration'</span><span class="s2">) {</span>
+          <span class="s4">return true</span><span class="s2">;</span>
+        <span class="s2">}</span>
+        <span class="s2">scope = scope.upper;</span>
+      <span class="s2">}</span>
+
+      <span class="s4">return false</span><span class="s2">;</span>
+    <span class="s2">}</span>
+
+    <span class="s0">/**</span>
+     <span class="s0">* Check if we should report this property node</span>
+     <span class="s0">* </span><span class="s1">@param </span><span class="s0">{ASTNode} node</span>
+     <span class="s0">* </span><span class="s1">@param </span><span class="s0">{string} expectedRule</span>
+     <span class="s0">*/</span>
+    <span class="s4">function </span><span class="s2">reportNodeIncorrectlyPositioned(node, expectedRule) {</span>
+      <span class="s0">// Detect if this node is an expected property declaration adn return the property name</span>
+      <span class="s4">const </span><span class="s2">name = classProperties.find((propertyName) =&gt; {</span>
+        <span class="s4">if </span><span class="s2">(propertiesToCheck[propertyName](node)) {</span>
+          <span class="s4">return </span><span class="s2">!!propertyName;</span>
+        <span class="s2">}</span>
+
+        <span class="s4">return false</span><span class="s2">;</span>
+      <span class="s2">});</span>
+
+      <span class="s0">// If name is set but the configured rule does not match expected then report error</span>
+      <span class="s4">if </span><span class="s2">(</span>
+        <span class="s2">name</span>
+        <span class="s2">&amp;&amp; (</span>
+          <span class="s2">config[name] !== expectedRule</span>
+          <span class="s2">|| (!node.static &amp;&amp; (config[name] === STATIC_PUBLIC_FIELD || config[name] === STATIC_GETTER))</span>
+        <span class="s2">)</span>
+      <span class="s2">) {</span>
+        <span class="s4">const </span><span class="s2">messageId = ERROR_MESSAGES[config[name]];</span>
+        <span class="s2">report(context, messages[messageId], messageId, {</span>
+          <span class="s2">node,</span>
+          <span class="s2">data: { name },</span>
+        <span class="s2">});</span>
+      <span class="s2">}</span>
+    <span class="s2">}</span>
+
+    <span class="s0">// ----------------------------------------------------------------------</span>
+    <span class="s0">// Public</span>
+    <span class="s0">// ----------------------------------------------------------------------</span>
+    <span class="s4">return </span><span class="s2">{</span>
+      <span class="s3">'ClassProperty, PropertyDefinition'</span><span class="s2">(node) {</span>
+        <span class="s4">if </span><span class="s2">(!componentUtil.getParentES6Component(context, node)) {</span>
+          <span class="s4">return</span><span class="s2">;</span>
+        <span class="s2">}</span>
+
+        <span class="s2">reportNodeIncorrectlyPositioned(node, STATIC_PUBLIC_FIELD);</span>
+      <span class="s2">},</span>
+
+      <span class="s2">MemberExpression(node) {</span>
+        <span class="s0">// If definition type is undefined then it must not be a defining expression or if the definition is inside a</span>
+        <span class="s0">// class body then skip this node.</span>
+        <span class="s4">const </span><span class="s2">right = node.parent.right;</span>
+        <span class="s4">if </span><span class="s2">(!right || right.type === </span><span class="s3">'undefined' </span><span class="s2">|| isContextInClass(node)) {</span>
+          <span class="s4">return</span><span class="s2">;</span>
+        <span class="s2">}</span>
+
+        <span class="s0">// Get the related component</span>
+        <span class="s4">const </span><span class="s2">relatedComponent = utils.getRelatedComponent(node);</span>
+
+        <span class="s0">// If the related component is not an ES6 component then skip this node</span>
+        <span class="s4">if </span><span class="s2">(!relatedComponent || !componentUtil.isES6Component(relatedComponent.node, context)) {</span>
+          <span class="s4">return</span><span class="s2">;</span>
+        <span class="s2">}</span>
+
+        <span class="s0">// Report if needed</span>
+        <span class="s2">reportNodeIncorrectlyPositioned(node, PROPERTY_ASSIGNMENT);</span>
+      <span class="s2">},</span>
+
+      <span class="s2">MethodDefinition(node) {</span>
+        <span class="s0">// If the function is inside a class and is static getter then check if correctly positioned</span>
+        <span class="s4">if </span><span class="s2">(</span>
+          <span class="s2">componentUtil.getParentES6Component(context, node)</span>
+          <span class="s2">&amp;&amp; node.static</span>
+          <span class="s2">&amp;&amp; node.kind === </span><span class="s3">'get'</span>
+        <span class="s2">) {</span>
+          <span class="s0">// Report error if needed</span>
+          <span class="s2">reportNodeIncorrectlyPositioned(node, STATIC_GETTER);</span>
+        <span class="s2">}</span>
+      <span class="s2">},</span>
+    <span class="s2">};</span>
+  <span class="s2">}),</span>
+<span class="s2">};</span>
+</pre>
+</body>
+</html>

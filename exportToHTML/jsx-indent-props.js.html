@@ -1,0 +1,242 @@
+<html>
+<head>
+<title>jsx-indent-props.js</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #8c8c8c; font-style: italic;}
+.s1 { color: #8c8c8c; font-style: italic;}
+.s2 { color: #080808;}
+.s3 { color: #067d17;}
+.s4 { color: #0033b3;}
+.s5 { color: #1750eb;}
+.s6 { color: #0037a6;}
+.s7 { color: #264eff;}
+</style>
+</head>
+<body bgcolor="#ffffff">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#c0c0c0" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+jsx-indent-props.js</font>
+</center></td></tr></table>
+<pre><span class="s0">/**</span>
+ <span class="s0">* </span><span class="s1">@fileoverview </span><span class="s0">Validate props indentation in JSX</span>
+ <span class="s0">* </span><span class="s1">@author </span><span class="s0">Yannick Croissant</span>
+
+ <span class="s0">* This rule has been ported and modified from eslint and nodeca.</span>
+ <span class="s0">* </span><span class="s1">@author </span><span class="s0">Vitaly Puzrin</span>
+ <span class="s0">* </span><span class="s1">@author </span><span class="s0">Gyandeep Singh</span>
+ <span class="s0">* </span><span class="s1">@copyright </span><span class="s0">2015 Vitaly Puzrin. All rights reserved.</span>
+ <span class="s0">* </span><span class="s1">@copyright </span><span class="s0">2015 Gyandeep Singh. All rights reserved.</span>
+ <span class="s0">Copyright (C) 2014 by Vitaly Puzrin</span>
+
+ <span class="s0">Permission is hereby granted, free of charge, to any person obtaining a copy</span>
+ <span class="s0">of this software and associated documentation files (the 'Software'), to deal</span>
+ <span class="s0">in the Software without restriction, including without limitation the rights</span>
+ <span class="s0">to use, copy, modify, merge, publish, distribute, sublicense, and/or sell</span>
+ <span class="s0">copies of the Software, and to permit persons to whom the Software is</span>
+ <span class="s0">furnished to do so, subject to the following conditions:</span>
+
+ <span class="s0">The above copyright notice and this permission notice shall be included in</span>
+ <span class="s0">all copies or substantial portions of the Software.</span>
+
+ <span class="s0">THE SOFTWARE IS PROVIDED 'AS IS', WITHOUT WARRANTY OF ANY KIND, EXPRESS OR</span>
+ <span class="s0">IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,</span>
+ <span class="s0">FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE</span>
+ <span class="s0">AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER</span>
+ <span class="s0">LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,</span>
+ <span class="s0">OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN</span>
+ <span class="s0">THE SOFTWARE.</span>
+ <span class="s0">*/</span>
+
+<span class="s3">'use strict'</span><span class="s2">;</span>
+
+<span class="s4">const </span><span class="s2">repeat = require(</span><span class="s3">'string.prototype.repeat'</span><span class="s2">);</span>
+
+<span class="s4">const </span><span class="s2">astUtil = require(</span><span class="s3">'../util/ast'</span><span class="s2">);</span>
+<span class="s4">const </span><span class="s2">docsUrl = require(</span><span class="s3">'../util/docsUrl'</span><span class="s2">);</span>
+<span class="s4">const </span><span class="s2">getText = require(</span><span class="s3">'../util/eslint'</span><span class="s2">).getText;</span>
+<span class="s4">const </span><span class="s2">reportC = require(</span><span class="s3">'../util/report'</span><span class="s2">);</span>
+
+<span class="s0">// ------------------------------------------------------------------------------</span>
+<span class="s0">// Rule Definition</span>
+<span class="s0">// ------------------------------------------------------------------------------</span>
+
+<span class="s4">const </span><span class="s2">messages = {</span>
+  <span class="s2">wrongIndent: </span><span class="s3">'Expected indentation of {{needed}} {{type}} {{characters}} but found {{gotten}}.'</span><span class="s2">,</span>
+<span class="s2">};</span>
+
+<span class="s0">/** </span><span class="s1">@type </span><span class="s0">{import('eslint').Rule.RuleModule} */</span>
+<span class="s2">module.exports = {</span>
+  <span class="s2">meta: {</span>
+    <span class="s2">docs: {</span>
+      <span class="s2">description: </span><span class="s3">'Enforce props indentation in JSX'</span><span class="s2">,</span>
+      <span class="s2">category: </span><span class="s3">'Stylistic Issues'</span><span class="s2">,</span>
+      <span class="s2">recommended: </span><span class="s4">false</span><span class="s2">,</span>
+      <span class="s2">url: docsUrl(</span><span class="s3">'jsx-indent-props'</span><span class="s2">),</span>
+    <span class="s2">},</span>
+    <span class="s2">fixable: </span><span class="s3">'code'</span><span class="s2">,</span>
+
+    <span class="s2">messages,</span>
+
+    <span class="s2">schema: [{</span>
+      <span class="s2">anyOf: [{</span>
+        <span class="s4">enum</span><span class="s2">: [</span><span class="s3">'tab'</span><span class="s2">, </span><span class="s3">'first'</span><span class="s2">],</span>
+      <span class="s2">}, {</span>
+        <span class="s2">type: </span><span class="s3">'integer'</span><span class="s2">,</span>
+      <span class="s2">}, {</span>
+        <span class="s2">type: </span><span class="s3">'object'</span><span class="s2">,</span>
+        <span class="s2">properties: {</span>
+          <span class="s2">indentMode: {</span>
+            <span class="s2">anyOf: [{</span>
+              <span class="s4">enum</span><span class="s2">: [</span><span class="s3">'tab'</span><span class="s2">, </span><span class="s3">'first'</span><span class="s2">],</span>
+            <span class="s2">}, {</span>
+              <span class="s2">type: </span><span class="s3">'integer'</span><span class="s2">,</span>
+            <span class="s2">}],</span>
+          <span class="s2">},</span>
+          <span class="s2">ignoreTernaryOperator: {</span>
+            <span class="s2">type: </span><span class="s3">'boolean'</span><span class="s2">,</span>
+          <span class="s2">},</span>
+        <span class="s2">},</span>
+      <span class="s2">}],</span>
+    <span class="s2">}],</span>
+  <span class="s2">},</span>
+
+  <span class="s2">create(context) {</span>
+    <span class="s4">const </span><span class="s2">extraColumnStart = </span><span class="s5">0</span><span class="s2">;</span>
+    <span class="s4">let </span><span class="s2">indentType = </span><span class="s3">'space'</span><span class="s2">;</span>
+    <span class="s0">/** </span><span class="s1">@type </span><span class="s0">{number|'first'} */</span>
+    <span class="s4">let </span><span class="s2">indentSize = </span><span class="s5">4</span><span class="s2">;</span>
+    <span class="s4">const </span><span class="s2">line = {</span>
+      <span class="s2">isUsingOperator: </span><span class="s4">false</span><span class="s2">,</span>
+      <span class="s2">currentOperator: </span><span class="s4">false</span><span class="s2">,</span>
+    <span class="s2">};</span>
+    <span class="s4">let </span><span class="s2">ignoreTernaryOperator = </span><span class="s4">false</span><span class="s2">;</span>
+
+    <span class="s4">if </span><span class="s2">(context.options.length) {</span>
+      <span class="s4">const </span><span class="s2">isConfigObject = </span><span class="s4">typeof </span><span class="s2">context.options[</span><span class="s5">0</span><span class="s2">] === </span><span class="s3">'object'</span><span class="s2">;</span>
+      <span class="s4">const </span><span class="s2">indentMode = isConfigObject</span>
+        <span class="s2">? context.options[</span><span class="s5">0</span><span class="s2">].indentMode</span>
+        <span class="s2">: context.options[</span><span class="s5">0</span><span class="s2">];</span>
+
+      <span class="s4">if </span><span class="s2">(indentMode === </span><span class="s3">'first'</span><span class="s2">) {</span>
+        <span class="s2">indentSize = </span><span class="s3">'first'</span><span class="s2">;</span>
+        <span class="s2">indentType = </span><span class="s3">'space'</span><span class="s2">;</span>
+      <span class="s2">} </span><span class="s4">else if </span><span class="s2">(indentMode === </span><span class="s3">'tab'</span><span class="s2">) {</span>
+        <span class="s2">indentSize = </span><span class="s5">1</span><span class="s2">;</span>
+        <span class="s2">indentType = </span><span class="s3">'tab'</span><span class="s2">;</span>
+      <span class="s2">} </span><span class="s4">else if </span><span class="s2">(</span><span class="s4">typeof </span><span class="s2">indentMode === </span><span class="s3">'number'</span><span class="s2">) {</span>
+        <span class="s2">indentSize = indentMode;</span>
+        <span class="s2">indentType = </span><span class="s3">'space'</span><span class="s2">;</span>
+      <span class="s2">}</span>
+
+      <span class="s4">if </span><span class="s2">(isConfigObject &amp;&amp; context.options[</span><span class="s5">0</span><span class="s2">].ignoreTernaryOperator) {</span>
+        <span class="s2">ignoreTernaryOperator = </span><span class="s4">true</span><span class="s2">;</span>
+      <span class="s2">}</span>
+    <span class="s2">}</span>
+
+    <span class="s0">/**</span>
+     <span class="s0">* Reports a given indent violation and properly pluralizes the message</span>
+     <span class="s0">* </span><span class="s1">@param </span><span class="s0">{ASTNode} node Node violating the indent rule</span>
+     <span class="s0">* </span><span class="s1">@param </span><span class="s0">{number} needed Expected indentation character count</span>
+     <span class="s0">* </span><span class="s1">@param </span><span class="s0">{number} gotten Indentation character count in the actual node/code</span>
+     <span class="s0">*/</span>
+    <span class="s4">function </span><span class="s2">report(node, needed, gotten) {</span>
+      <span class="s4">const </span><span class="s2">msgContext = {</span>
+        <span class="s2">needed,</span>
+        <span class="s2">type: indentType,</span>
+        <span class="s2">characters: needed === </span><span class="s5">1 </span><span class="s2">? </span><span class="s3">'character' </span><span class="s2">: </span><span class="s3">'characters'</span><span class="s2">,</span>
+        <span class="s2">gotten,</span>
+      <span class="s2">};</span>
+
+      <span class="s2">reportC(context, messages.wrongIndent, </span><span class="s3">'wrongIndent'</span><span class="s2">, {</span>
+        <span class="s2">node,</span>
+        <span class="s2">data: msgContext,</span>
+        <span class="s2">fix(fixer) {</span>
+          <span class="s4">return </span><span class="s2">fixer.replaceTextRange([node.range[</span><span class="s5">0</span><span class="s2">] - node.loc.start.column, node.range[</span><span class="s5">0</span><span class="s2">]],</span>
+            <span class="s2">repeat(indentType === </span><span class="s3">'space' </span><span class="s2">? </span><span class="s3">' ' </span><span class="s2">: </span><span class="s3">'</span><span class="s6">\t</span><span class="s3">'</span><span class="s2">, needed)</span>
+          <span class="s2">);</span>
+        <span class="s2">},</span>
+      <span class="s2">});</span>
+    <span class="s2">}</span>
+
+    <span class="s0">/**</span>
+     <span class="s0">* Get node indent</span>
+     <span class="s0">* </span><span class="s1">@param </span><span class="s0">{ASTNode} node Node to examine</span>
+     <span class="s0">* </span><span class="s1">@return </span><span class="s0">{number} Indent</span>
+     <span class="s0">*/</span>
+    <span class="s4">function </span><span class="s2">getNodeIndent(node) {</span>
+      <span class="s4">let </span><span class="s2">src = getText(context, node, node.loc.start.column + extraColumnStart);</span>
+      <span class="s4">const </span><span class="s2">lines = src.split(</span><span class="s3">'</span><span class="s6">\n</span><span class="s3">'</span><span class="s2">);</span>
+      <span class="s2">src = lines[</span><span class="s5">0</span><span class="s2">];</span>
+
+      <span class="s4">let </span><span class="s2">regExp;</span>
+      <span class="s4">if </span><span class="s2">(indentType === </span><span class="s3">'space'</span><span class="s2">) {</span>
+        <span class="s2">regExp = </span><span class="s7">/^[ ]+/</span><span class="s2">;</span>
+      <span class="s2">} </span><span class="s4">else </span><span class="s2">{</span>
+        <span class="s2">regExp = </span><span class="s7">/^[\t]+/</span><span class="s2">;</span>
+      <span class="s2">}</span>
+
+      <span class="s4">const </span><span class="s2">indent = regExp.exec(src);</span>
+      <span class="s4">const </span><span class="s2">useOperator = </span><span class="s7">/^([ ]|[\t])*[:]/</span><span class="s2">.test(src) || </span><span class="s7">/^([ ]|[\t])*[?]/</span><span class="s2">.test(src);</span>
+      <span class="s4">const </span><span class="s2">useBracket = </span><span class="s7">/[&lt;]/</span><span class="s2">.test(src);</span>
+
+      <span class="s2">line.currentOperator = </span><span class="s4">false</span><span class="s2">;</span>
+      <span class="s4">if </span><span class="s2">(useOperator) {</span>
+        <span class="s2">line.isUsingOperator = </span><span class="s4">true</span><span class="s2">;</span>
+        <span class="s2">line.currentOperator = </span><span class="s4">true</span><span class="s2">;</span>
+      <span class="s2">} </span><span class="s4">else if </span><span class="s2">(useBracket) {</span>
+        <span class="s2">line.isUsingOperator = </span><span class="s4">false</span><span class="s2">;</span>
+      <span class="s2">}</span>
+
+      <span class="s4">return </span><span class="s2">indent ? indent[</span><span class="s5">0</span><span class="s2">].length : </span><span class="s5">0</span><span class="s2">;</span>
+    <span class="s2">}</span>
+
+    <span class="s0">/**</span>
+     <span class="s0">* Check indent for nodes list</span>
+     <span class="s0">* </span><span class="s1">@param </span><span class="s0">{ASTNode[]} nodes list of node objects</span>
+     <span class="s0">* </span><span class="s1">@param </span><span class="s0">{number} indent needed indent</span>
+     <span class="s0">*/</span>
+    <span class="s4">function </span><span class="s2">checkNodesIndent(nodes, indent) {</span>
+      <span class="s4">let </span><span class="s2">nestedIndent = indent;</span>
+      <span class="s2">nodes.forEach((node) =&gt; {</span>
+        <span class="s4">const </span><span class="s2">nodeIndent = getNodeIndent(node);</span>
+        <span class="s4">if </span><span class="s2">(</span>
+          <span class="s2">line.isUsingOperator</span>
+          <span class="s2">&amp;&amp; !line.currentOperator</span>
+          <span class="s2">&amp;&amp; indentSize !== </span><span class="s3">'first'</span>
+          <span class="s2">&amp;&amp; !ignoreTernaryOperator</span>
+        <span class="s2">) {</span>
+          <span class="s2">nestedIndent += indentSize;</span>
+          <span class="s2">line.isUsingOperator = </span><span class="s4">false</span><span class="s2">;</span>
+        <span class="s2">}</span>
+        <span class="s4">if </span><span class="s2">(</span>
+          <span class="s2">node.type !== </span><span class="s3">'ArrayExpression' </span><span class="s2">&amp;&amp; node.type !== </span><span class="s3">'ObjectExpression'</span>
+          <span class="s2">&amp;&amp; nodeIndent !== nestedIndent &amp;&amp; astUtil.isNodeFirstInLine(context, node)</span>
+        <span class="s2">) {</span>
+          <span class="s2">report(node, nestedIndent, nodeIndent);</span>
+        <span class="s2">}</span>
+      <span class="s2">});</span>
+    <span class="s2">}</span>
+
+    <span class="s4">return </span><span class="s2">{</span>
+      <span class="s2">JSXOpeningElement(node) {</span>
+        <span class="s4">if </span><span class="s2">(!node.attributes.length) {</span>
+          <span class="s4">return</span><span class="s2">;</span>
+        <span class="s2">}</span>
+        <span class="s4">let </span><span class="s2">propIndent;</span>
+        <span class="s4">if </span><span class="s2">(indentSize === </span><span class="s3">'first'</span><span class="s2">) {</span>
+          <span class="s4">const </span><span class="s2">firstPropNode = node.attributes[</span><span class="s5">0</span><span class="s2">];</span>
+          <span class="s2">propIndent = firstPropNode.loc.start.column;</span>
+        <span class="s2">} </span><span class="s4">else </span><span class="s2">{</span>
+          <span class="s4">const </span><span class="s2">elementIndent = getNodeIndent(node);</span>
+          <span class="s2">propIndent = elementIndent + indentSize;</span>
+        <span class="s2">}</span>
+        <span class="s2">checkNodesIndent(node.attributes, propIndent);</span>
+      <span class="s2">},</span>
+    <span class="s2">};</span>
+  <span class="s2">},</span>
+<span class="s2">};</span>
+</pre>
+</body>
+</html>

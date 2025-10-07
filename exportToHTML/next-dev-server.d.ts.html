@@ -1,0 +1,158 @@
+<html>
+<head>
+<title>next-dev-server.d.ts</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #0033b3;}
+.s1 { color: #080808;}
+.s2 { color: #067d17;}
+.s3 { color: #8c8c8c; font-style: italic;}
+</style>
+</head>
+<body bgcolor="#ffffff">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#c0c0c0" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+next-dev-server.d.ts</font>
+</center></td></tr></table>
+<pre><span class="s0">import </span><span class="s1">type { FindComponentsResult, NodeRequestHandler } from </span><span class="s2">'../next-server'</span><span class="s1">;</span>
+<span class="s0">import </span><span class="s1">type { LoadComponentsReturnType } from </span><span class="s2">'../load-components'</span><span class="s1">;</span>
+<span class="s0">import </span><span class="s1">type { Options as ServerOptions } from </span><span class="s2">'../next-server'</span><span class="s1">;</span>
+<span class="s0">import </span><span class="s1">type { Params } from </span><span class="s2">'../request/params'</span><span class="s1">;</span>
+<span class="s0">import </span><span class="s1">type { ParsedUrl } from </span><span class="s2">'../../shared/lib/router/utils/parse-url'</span><span class="s1">;</span>
+<span class="s0">import </span><span class="s1">type { ParsedUrlQuery } from </span><span class="s2">'querystring'</span><span class="s1">;</span>
+<span class="s0">import </span><span class="s1">type { UrlWithParsedQuery } from </span><span class="s2">'url'</span><span class="s1">;</span>
+<span class="s0">import </span><span class="s1">type { MiddlewareRoutingItem } from </span><span class="s2">'../base-server'</span><span class="s1">;</span>
+<span class="s0">import </span><span class="s1">type { RouteDefinition } from </span><span class="s2">'../route-definitions/route-definition'</span><span class="s1">;</span>
+<span class="s0">import </span><span class="s1">type { RouteMatcherManager } from </span><span class="s2">'../route-matcher-managers/route-matcher-manager'</span><span class="s1">;</span>
+<span class="s0">import </span><span class="s1">{ type NextParsedUrlQuery, type NextUrlWithParsedQuery } from </span><span class="s2">'../request-meta'</span><span class="s1">;</span>
+<span class="s0">import </span><span class="s1">type { DevBundlerService } from </span><span class="s2">'../lib/dev-bundler-service'</span><span class="s1">;</span>
+<span class="s0">import </span><span class="s1">type { IncrementalCache } from </span><span class="s2">'../lib/incremental-cache'</span><span class="s1">;</span>
+<span class="s0">import </span><span class="s1">type { NodeNextResponse, NodeNextRequest } from </span><span class="s2">'../base-http/node'</span><span class="s1">;</span>
+<span class="s0">import </span><span class="s1">type { PagesManifest } from </span><span class="s2">'../../build/webpack/plugins/pages-manifest-plugin'</span><span class="s1">;</span>
+<span class="s0">import </span><span class="s1">Server from </span><span class="s2">'../next-server'</span><span class="s1">;</span>
+<span class="s0">import </span><span class="s1">{ type Span } from </span><span class="s2">'../../trace'</span><span class="s1">;</span>
+<span class="s0">import </span><span class="s1">type { ServerOnInstrumentationRequestError } from </span><span class="s2">'../app-render/types'</span><span class="s1">;</span>
+<span class="s0">import </span><span class="s1">type { ServerComponentsHmrCache } from </span><span class="s2">'../response-cache'</span><span class="s1">;</span>
+<span class="s0">import </span><span class="s1">{ FallbackMode } from </span><span class="s2">'../../lib/fallback'</span><span class="s1">;</span>
+<span class="s0">import </span><span class="s1">type { PrerenderedRoute } from </span><span class="s2">'../../build/static-paths/types'</span><span class="s1">;</span>
+<span class="s0">export interface </span><span class="s1">Options </span><span class="s0">extends </span><span class="s1">ServerOptions {</span>
+    <span class="s3">/**</span>
+     <span class="s3">* Tells of Next.js is running from the `next dev` command</span>
+     <span class="s3">*/</span>
+    <span class="s1">isNextDevCommand?: boolean;</span>
+    <span class="s3">/**</span>
+     <span class="s3">* Interface to the development bundler.</span>
+     <span class="s3">*/</span>
+    <span class="s1">bundlerService: DevBundlerService;</span>
+    <span class="s3">/**</span>
+     <span class="s3">* Trace span for server startup.</span>
+     <span class="s3">*/</span>
+    <span class="s1">startServerSpan: Span;</span>
+<span class="s1">}</span>
+<span class="s0">export default class </span><span class="s1">DevServer </span><span class="s0">extends </span><span class="s1">Server {</span>
+    <span class="s3">/**</span>
+     <span class="s3">* The promise that resolves when the server is ready. When this is unset</span>
+     <span class="s3">* the server is ready.</span>
+     <span class="s3">*/</span>
+    <span class="s0">private </span><span class="s1">ready?;</span>
+    <span class="s0">protected </span><span class="s1">sortedRoutes?: string[];</span>
+    <span class="s0">private </span><span class="s1">pagesDir?;</span>
+    <span class="s0">private </span><span class="s1">appDir?;</span>
+    <span class="s0">private </span><span class="s1">actualMiddlewareFile?;</span>
+    <span class="s0">private </span><span class="s1">actualInstrumentationHookFile?;</span>
+    <span class="s0">private </span><span class="s1">middleware?;</span>
+    <span class="s0">private </span><span class="s1">readonly bundlerService;</span>
+    <span class="s0">private </span><span class="s1">staticPathsCache;</span>
+    <span class="s0">private </span><span class="s1">startServerSpan;</span>
+    <span class="s0">private </span><span class="s1">readonly serverComponentsHmrCache;</span>
+    <span class="s0">protected </span><span class="s1">staticPathsWorker?: {</span>
+        <span class="s1">[key: string]: any;</span>
+    <span class="s1">} &amp; {</span>
+        <span class="s1">loadStaticPaths: </span><span class="s0">typeof import</span><span class="s1">(</span><span class="s2">'./static-paths-worker'</span><span class="s1">).loadStaticPaths;</span>
+    <span class="s1">};</span>
+    <span class="s0">private </span><span class="s1">getStaticPathsWorker;</span>
+    <span class="s1">constructor(options: Options);</span>
+    <span class="s0">protected </span><span class="s1">getServerComponentsHmrCache(): ServerComponentsHmrCache | undefined;</span>
+    <span class="s0">protected </span><span class="s1">getRouteMatchers(): RouteMatcherManager;</span>
+    <span class="s0">protected </span><span class="s1">getBuildId(): string;</span>
+    <span class="s0">protected </span><span class="s1">prepareImpl(): Promise&lt;</span><span class="s0">void</span><span class="s1">&gt;;</span>
+    <span class="s0">protected </span><span class="s1">hasPage(pathname: string): Promise&lt;boolean&gt;;</span>
+    <span class="s1">runMiddleware(params: {</span>
+        <span class="s1">request: NodeNextRequest;</span>
+        <span class="s1">response: NodeNextResponse;</span>
+        <span class="s1">parsedUrl: ParsedUrl;</span>
+        <span class="s1">parsed: UrlWithParsedQuery;</span>
+        <span class="s1">middlewareList: MiddlewareRoutingItem[];</span>
+    <span class="s1">}): Promise&lt;</span><span class="s0">import</span><span class="s1">(</span><span class="s2">&quot;../web/types&quot;</span><span class="s1">).FetchEventResult | {</span>
+        <span class="s1">finished: boolean;</span>
+    <span class="s1">}&gt;;</span>
+    <span class="s1">runEdgeFunction(params: {</span>
+        <span class="s1">req: NodeNextRequest;</span>
+        <span class="s1">res: NodeNextResponse;</span>
+        <span class="s1">query: ParsedUrlQuery;</span>
+        <span class="s1">params: Params | undefined;</span>
+        <span class="s1">page: string;</span>
+        <span class="s1">appPaths: string[] | </span><span class="s0">null</span><span class="s1">;</span>
+        <span class="s1">isAppPath: boolean;</span>
+    <span class="s1">}): Promise&lt;</span><span class="s0">import</span><span class="s1">(</span><span class="s2">&quot;../web/types&quot;</span><span class="s1">).FetchEventResult | </span><span class="s0">null</span><span class="s1">&gt;;</span>
+    <span class="s1">getRequestHandler(): NodeRequestHandler;</span>
+    <span class="s1">handleRequest(req: NodeNextRequest, res: NodeNextResponse, parsedUrl?: NextUrlWithParsedQuery): Promise&lt;</span><span class="s0">void</span><span class="s1">&gt;;</span>
+    <span class="s1">run(req: NodeNextRequest, res: NodeNextResponse, parsedUrl: UrlWithParsedQuery): Promise&lt;</span><span class="s0">void</span><span class="s1">&gt;;</span>
+    <span class="s0">protected </span><span class="s1">logErrorWithOriginalStack(err?: unknown, type?: </span><span class="s2">'unhandledRejection' </span><span class="s1">| </span><span class="s2">'uncaughtException' </span><span class="s1">| </span><span class="s2">'warning' </span><span class="s1">| </span><span class="s2">'app-dir'</span><span class="s1">): </span><span class="s0">void</span><span class="s1">;</span>
+    <span class="s0">protected </span><span class="s1">getPagesManifest(): PagesManifest | undefined;</span>
+    <span class="s0">protected </span><span class="s1">getAppPathsManifest(): PagesManifest | undefined;</span>
+    <span class="s0">protected </span><span class="s1">getinterceptionRoutePatterns(): RegExp[];</span>
+    <span class="s0">protected </span><span class="s1">getMiddleware(): Promise&lt;MiddlewareRoutingItem | undefined&gt;;</span>
+    <span class="s0">protected </span><span class="s1">getNextFontManifest(): undefined;</span>
+    <span class="s0">protected </span><span class="s1">hasMiddleware(): Promise&lt;boolean&gt;;</span>
+    <span class="s0">protected </span><span class="s1">ensureMiddleware(url: string): Promise&lt;</span><span class="s0">void</span><span class="s1">&gt;;</span>
+    <span class="s0">protected </span><span class="s1">loadInstrumentationModule(): Promise&lt;any&gt;;</span>
+    <span class="s0">protected </span><span class="s1">runInstrumentationHookIfAvailable(): Promise&lt;</span><span class="s0">void</span><span class="s1">&gt;;</span>
+    <span class="s0">protected </span><span class="s1">ensureEdgeFunction({ page, appPaths, url, }: {</span>
+        <span class="s1">page: string;</span>
+        <span class="s1">appPaths: string[] | </span><span class="s0">null</span><span class="s1">;</span>
+        <span class="s1">url: string;</span>
+    <span class="s1">}): Promise&lt;</span><span class="s0">void</span><span class="s1">&gt;;</span>
+    <span class="s1">generateRoutes(_dev?: boolean): </span><span class="s0">void</span><span class="s1">;</span>
+    <span class="s1">_filterAmpDevelopmentScript(html: string, event: {</span>
+        <span class="s1">line: number;</span>
+        <span class="s1">col: number;</span>
+        <span class="s1">code: string;</span>
+    <span class="s1">}): boolean;</span>
+    <span class="s0">protected </span><span class="s1">getStaticPaths({ pathname, urlPathname, requestHeaders, page, isAppPath, }: {</span>
+        <span class="s1">pathname: string;</span>
+        <span class="s1">urlPathname: string;</span>
+        <span class="s1">requestHeaders: IncrementalCache[</span><span class="s2">'requestHeaders'</span><span class="s1">];</span>
+        <span class="s1">page: string;</span>
+        <span class="s1">isAppPath: boolean;</span>
+    <span class="s1">}): Promise&lt;{</span>
+        <span class="s1">prerenderedRoutes?: PrerenderedRoute[];</span>
+        <span class="s1">staticPaths?: string[];</span>
+        <span class="s1">fallbackMode?: FallbackMode;</span>
+    <span class="s1">}&gt;;</span>
+    <span class="s0">protected </span><span class="s1">ensurePage(opts: {</span>
+        <span class="s1">page: string;</span>
+        <span class="s1">clientOnly: boolean;</span>
+        <span class="s1">appPaths?: ReadonlyArray&lt;string&gt; | </span><span class="s0">null</span><span class="s1">;</span>
+        <span class="s1">definition: RouteDefinition | undefined;</span>
+        <span class="s1">url?: string;</span>
+    <span class="s1">}): Promise&lt;</span><span class="s0">void</span><span class="s1">&gt;;</span>
+    <span class="s0">protected </span><span class="s1">findPageComponents({ locale, page, query, params, isAppPath, appPaths, shouldEnsure, url, }: {</span>
+        <span class="s1">locale: string | undefined;</span>
+        <span class="s1">page: string;</span>
+        <span class="s1">query: NextParsedUrlQuery;</span>
+        <span class="s1">params: Params;</span>
+        <span class="s1">isAppPath: boolean;</span>
+        <span class="s1">sriEnabled?: boolean;</span>
+        <span class="s1">appPaths?: ReadonlyArray&lt;string&gt; | </span><span class="s0">null</span><span class="s1">;</span>
+        <span class="s1">shouldEnsure: boolean;</span>
+        <span class="s1">url?: string;</span>
+    <span class="s1">}): Promise&lt;FindComponentsResult | </span><span class="s0">null</span><span class="s1">&gt;;</span>
+    <span class="s0">protected </span><span class="s1">getFallbackErrorComponents(url?: string): Promise&lt;LoadComponentsReturnType | </span><span class="s0">null</span><span class="s1">&gt;;</span>
+    <span class="s1">getCompilationError(page: string): Promise&lt;any&gt;;</span>
+    <span class="s0">protected </span><span class="s1">instrumentationOnRequestError(...args: Parameters&lt;ServerOnInstrumentationRequestError&gt;): Promise&lt;</span><span class="s0">void</span><span class="s1">&gt;;</span>
+<span class="s1">}</span>
+</pre>
+</body>
+</html>

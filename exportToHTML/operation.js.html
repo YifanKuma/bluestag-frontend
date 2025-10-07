@@ -1,0 +1,1040 @@
+<html>
+<head>
+<title>operation.js</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #8c8c8c; font-style: italic;}
+.s1 { color: #080808;}
+.s2 { color: #067d17;}
+.s3 { color: #0033b3;}
+.s4 { color: #8c8c8c; font-style: italic;}
+.s5 { color: #1750eb;}
+</style>
+</head>
+<body bgcolor="#ffffff">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#c0c0c0" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+operation.js</font>
+</center></td></tr></table>
+<pre><span class="s0">// Copyright 2013 Lovell Fuller and others.</span>
+<span class="s0">// SPDX-License-Identifier: Apache-2.0</span>
+
+<span class="s2">'use strict'</span><span class="s1">;</span>
+
+<span class="s3">const </span><span class="s1">is = require(</span><span class="s2">'./is'</span><span class="s1">);</span>
+
+<span class="s0">/**</span>
+ <span class="s0">* How accurate an operation should be.</span>
+ <span class="s0">* </span><span class="s4">@member</span>
+ <span class="s0">* </span><span class="s4">@private</span>
+ <span class="s0">*/</span>
+<span class="s3">const </span><span class="s1">vipsPrecision = {</span>
+  <span class="s1">integer: </span><span class="s2">'integer'</span><span class="s1">,</span>
+  <span class="s1">float: </span><span class="s2">'float'</span><span class="s1">,</span>
+  <span class="s1">approximate: </span><span class="s2">'approximate'</span>
+<span class="s1">};</span>
+
+<span class="s0">/**</span>
+ <span class="s0">* Rotate the output image.</span>
+ <span class="s0">*</span>
+ <span class="s0">* The provided angle is converted to a valid positive degree rotation.</span>
+ <span class="s0">* For example, `-450` will produce a 270 degree rotation.</span>
+ <span class="s0">*</span>
+ <span class="s0">* When rotating by an angle other than a multiple of 90,</span>
+ <span class="s0">* the background colour can be provided with the `background` option.</span>
+ <span class="s0">*</span>
+ <span class="s0">* For backwards compatibility, if no angle is provided, `.autoOrient()` will be called.</span>
+ <span class="s0">*</span>
+ <span class="s0">* Only one rotation can occur per pipeline (aside from an initial call without</span>
+ <span class="s0">* arguments to orient via EXIF data). Previous calls to `rotate` in the same</span>
+ <span class="s0">* pipeline will be ignored.</span>
+ <span class="s0">*</span>
+ <span class="s0">* Multi-page images can only be rotated by 180 degrees.</span>
+ <span class="s0">*</span>
+ <span class="s0">* Method order is important when rotating, resizing and/or extracting regions,</span>
+ <span class="s0">* for example `.rotate(x).extract(y)` will produce a different result to `.extract(y).rotate(x)`.</span>
+ <span class="s0">*</span>
+ <span class="s0">* </span><span class="s4">@example</span>
+ <span class="s0">* const rotateThenResize = await sharp(input)</span>
+ <span class="s0">*   .rotate(90)</span>
+ <span class="s0">*   .resize({ width: 16, height: 8, fit: 'fill' })</span>
+ <span class="s0">*   .toBuffer();</span>
+ <span class="s0">* const resizeThenRotate = await sharp(input)</span>
+ <span class="s0">*   .resize({ width: 16, height: 8, fit: 'fill' })</span>
+ <span class="s0">*   .rotate(90)</span>
+ <span class="s0">*   .toBuffer();</span>
+ <span class="s0">*</span>
+ <span class="s0">* </span><span class="s4">@param </span><span class="s0">{number} [angle=auto] angle of rotation.</span>
+ <span class="s0">* </span><span class="s4">@param </span><span class="s0">{Object} [options] - if present, is an Object with optional attributes.</span>
+ <span class="s0">* </span><span class="s4">@param </span><span class="s0">{string|Object} [options.background=&quot;#000000&quot;] parsed by the [color](https://www.npmjs.org/package/color) module to extract values for red, green, blue and alpha.</span>
+ <span class="s0">* </span><span class="s4">@returns </span><span class="s0">{Sharp}</span>
+ <span class="s0">* </span><span class="s4">@throws </span><span class="s0">{Error} Invalid parameters</span>
+ <span class="s0">*/</span>
+<span class="s3">function </span><span class="s1">rotate (angle, options) {</span>
+  <span class="s3">if </span><span class="s1">(!is.defined(angle)) {</span>
+    <span class="s3">return this</span><span class="s1">.autoOrient();</span>
+  <span class="s1">}</span>
+  <span class="s3">if </span><span class="s1">(</span><span class="s3">this</span><span class="s1">.options.angle || </span><span class="s3">this</span><span class="s1">.options.rotationAngle) {</span>
+    <span class="s3">this</span><span class="s1">.options.debuglog(</span><span class="s2">'ignoring previous rotate options'</span><span class="s1">);</span>
+    <span class="s3">this</span><span class="s1">.options.angle = </span><span class="s5">0</span><span class="s1">;</span>
+    <span class="s3">this</span><span class="s1">.options.rotationAngle = </span><span class="s5">0</span><span class="s1">;</span>
+  <span class="s1">}</span>
+  <span class="s3">if </span><span class="s1">(is.integer(angle) &amp;&amp; !(angle % </span><span class="s5">90</span><span class="s1">)) {</span>
+    <span class="s3">this</span><span class="s1">.options.angle = angle;</span>
+  <span class="s1">} </span><span class="s3">else if </span><span class="s1">(is.number(angle)) {</span>
+    <span class="s3">this</span><span class="s1">.options.rotationAngle = angle;</span>
+    <span class="s3">if </span><span class="s1">(is.object(options) &amp;&amp; options.background) {</span>
+      <span class="s3">this</span><span class="s1">._setBackgroundColourOption(</span><span class="s2">'rotationBackground'</span><span class="s1">, options.background);</span>
+    <span class="s1">}</span>
+  <span class="s1">} </span><span class="s3">else </span><span class="s1">{</span>
+    <span class="s3">throw </span><span class="s1">is.invalidParameterError(</span><span class="s2">'angle'</span><span class="s1">, </span><span class="s2">'numeric'</span><span class="s1">, angle);</span>
+  <span class="s1">}</span>
+  <span class="s3">return this</span><span class="s1">;</span>
+<span class="s1">}</span>
+
+<span class="s0">/**</span>
+ <span class="s0">* Auto-orient based on the EXIF `Orientation` tag, then remove the tag.</span>
+ <span class="s0">* Mirroring is supported and may infer the use of a flip operation.</span>
+ <span class="s0">*</span>
+ <span class="s0">* Previous or subsequent use of `rotate(angle)` and either `flip()` or `flop()`</span>
+ <span class="s0">* will logically occur after auto-orientation, regardless of call order.</span>
+ <span class="s0">*</span>
+ <span class="s0">* </span><span class="s4">@example</span>
+ <span class="s0">* const output = await sharp(input).autoOrient().toBuffer();</span>
+ <span class="s0">*</span>
+ <span class="s0">* </span><span class="s4">@example</span>
+ <span class="s0">* const pipeline = sharp()</span>
+ <span class="s0">*   .autoOrient()</span>
+ <span class="s0">*   .resize(null, 200)</span>
+ <span class="s0">*   .toBuffer(function (err, outputBuffer, info) {</span>
+ <span class="s0">*     // outputBuffer contains 200px high JPEG image data,</span>
+ <span class="s0">*     // auto-oriented using EXIF Orientation tag</span>
+ <span class="s0">*     // info.width and info.height contain the dimensions of the resized image</span>
+ <span class="s0">*   });</span>
+ <span class="s0">* readableStream.pipe(pipeline);</span>
+ <span class="s0">*</span>
+ <span class="s0">* </span><span class="s4">@returns </span><span class="s0">{Sharp}</span>
+ <span class="s0">*/</span>
+<span class="s3">function </span><span class="s1">autoOrient () {</span>
+  <span class="s3">this</span><span class="s1">.options.input.autoOrient = </span><span class="s3">true</span><span class="s1">;</span>
+  <span class="s3">return this</span><span class="s1">;</span>
+<span class="s1">}</span>
+
+<span class="s0">/**</span>
+ <span class="s0">* Mirror the image vertically (up-down) about the x-axis.</span>
+ <span class="s0">* This always occurs before rotation, if any.</span>
+ <span class="s0">*</span>
+ <span class="s0">* This operation does not work correctly with multi-page images.</span>
+ <span class="s0">*</span>
+ <span class="s0">* </span><span class="s4">@example</span>
+ <span class="s0">* const output = await sharp(input).flip().toBuffer();</span>
+ <span class="s0">*</span>
+ <span class="s0">* </span><span class="s4">@param </span><span class="s0">{Boolean} [flip=true]</span>
+ <span class="s0">* </span><span class="s4">@returns </span><span class="s0">{Sharp}</span>
+ <span class="s0">*/</span>
+<span class="s3">function </span><span class="s1">flip (flip) {</span>
+  <span class="s3">this</span><span class="s1">.options.flip = is.bool(flip) ? flip : </span><span class="s3">true</span><span class="s1">;</span>
+  <span class="s3">return this</span><span class="s1">;</span>
+<span class="s1">}</span>
+
+<span class="s0">/**</span>
+ <span class="s0">* Mirror the image horizontally (left-right) about the y-axis.</span>
+ <span class="s0">* This always occurs before rotation, if any.</span>
+ <span class="s0">*</span>
+ <span class="s0">* </span><span class="s4">@example</span>
+ <span class="s0">* const output = await sharp(input).flop().toBuffer();</span>
+ <span class="s0">*</span>
+ <span class="s0">* </span><span class="s4">@param </span><span class="s0">{Boolean} [flop=true]</span>
+ <span class="s0">* </span><span class="s4">@returns </span><span class="s0">{Sharp}</span>
+ <span class="s0">*/</span>
+<span class="s3">function </span><span class="s1">flop (flop) {</span>
+  <span class="s3">this</span><span class="s1">.options.flop = is.bool(flop) ? flop : </span><span class="s3">true</span><span class="s1">;</span>
+  <span class="s3">return this</span><span class="s1">;</span>
+<span class="s1">}</span>
+
+<span class="s0">/**</span>
+ <span class="s0">* Perform an affine transform on an image. This operation will always occur after resizing, extraction and rotation, if any.</span>
+ <span class="s0">*</span>
+ <span class="s0">* You must provide an array of length 4 or a 2x2 affine transformation matrix.</span>
+ <span class="s0">* By default, new pixels are filled with a black background. You can provide a background colour with the `background` option.</span>
+ <span class="s0">* A particular interpolator may also be specified. Set the `interpolator` option to an attribute of the `sharp.interpolators` Object e.g. `sharp.interpolators.nohalo`.</span>
+ <span class="s0">*</span>
+ <span class="s0">* In the case of a 2x2 matrix, the transform is:</span>
+ <span class="s0">* - X = `matrix[0, 0]` \* (x + `idx`) + `matrix[0, 1]` \* (y + `idy`) + `odx`</span>
+ <span class="s0">* - Y = `matrix[1, 0]` \* (x + `idx`) + `matrix[1, 1]` \* (y + `idy`) + `ody`</span>
+ <span class="s0">*</span>
+ <span class="s0">* where:</span>
+ <span class="s0">* - x and y are the coordinates in input image.</span>
+ <span class="s0">* - X and Y are the coordinates in output image.</span>
+ <span class="s0">* - (0,0) is the upper left corner.</span>
+ <span class="s0">*</span>
+ <span class="s0">* </span><span class="s4">@since </span><span class="s0">0.27.0</span>
+ <span class="s0">*</span>
+ <span class="s0">* </span><span class="s4">@example</span>
+ <span class="s0">* const pipeline = sharp()</span>
+ <span class="s0">*   .affine([[1, 0.3], [0.1, 0.7]], {</span>
+ <span class="s0">*      background: 'white',</span>
+ <span class="s0">*      interpolator: sharp.interpolators.nohalo</span>
+ <span class="s0">*   })</span>
+ <span class="s0">*   .toBuffer((err, outputBuffer, info) =&gt; {</span>
+ <span class="s0">*      // outputBuffer contains the transformed image</span>
+ <span class="s0">*      // info.width and info.height contain the new dimensions</span>
+ <span class="s0">*   });</span>
+ <span class="s0">*</span>
+ <span class="s0">* inputStream</span>
+ <span class="s0">*   .pipe(pipeline);</span>
+ <span class="s0">*</span>
+ <span class="s0">* </span><span class="s4">@param </span><span class="s0">{Array&lt;Array&lt;number&gt;&gt;|Array&lt;number&gt;} matrix - affine transformation matrix</span>
+ <span class="s0">* </span><span class="s4">@param </span><span class="s0">{Object} [options] - if present, is an Object with optional attributes.</span>
+ <span class="s0">* </span><span class="s4">@param </span><span class="s0">{String|Object} [options.background=&quot;#000000&quot;] - parsed by the [color](https://www.npmjs.org/package/color) module to extract values for red, green, blue and alpha.</span>
+ <span class="s0">* </span><span class="s4">@param </span><span class="s0">{Number} [options.idx=0] - input horizontal offset</span>
+ <span class="s0">* </span><span class="s4">@param </span><span class="s0">{Number} [options.idy=0] - input vertical offset</span>
+ <span class="s0">* </span><span class="s4">@param </span><span class="s0">{Number} [options.odx=0] - output horizontal offset</span>
+ <span class="s0">* </span><span class="s4">@param </span><span class="s0">{Number} [options.ody=0] - output vertical offset</span>
+ <span class="s0">* </span><span class="s4">@param </span><span class="s0">{String} [options.interpolator=sharp.interpolators.bicubic] - interpolator</span>
+ <span class="s0">* </span><span class="s4">@returns </span><span class="s0">{Sharp}</span>
+ <span class="s0">* </span><span class="s4">@throws </span><span class="s0">{Error} Invalid parameters</span>
+ <span class="s0">*/</span>
+<span class="s3">function </span><span class="s1">affine (matrix, options) {</span>
+  <span class="s3">const </span><span class="s1">flatMatrix = [].concat(...matrix);</span>
+  <span class="s3">if </span><span class="s1">(flatMatrix.length === </span><span class="s5">4 </span><span class="s1">&amp;&amp; flatMatrix.every(is.number)) {</span>
+    <span class="s3">this</span><span class="s1">.options.affineMatrix = flatMatrix;</span>
+  <span class="s1">} </span><span class="s3">else </span><span class="s1">{</span>
+    <span class="s3">throw </span><span class="s1">is.invalidParameterError(</span><span class="s2">'matrix'</span><span class="s1">, </span><span class="s2">'1x4 or 2x2 array'</span><span class="s1">, matrix);</span>
+  <span class="s1">}</span>
+
+  <span class="s3">if </span><span class="s1">(is.defined(options)) {</span>
+    <span class="s3">if </span><span class="s1">(is.object(options)) {</span>
+      <span class="s3">this</span><span class="s1">._setBackgroundColourOption(</span><span class="s2">'affineBackground'</span><span class="s1">, options.background);</span>
+      <span class="s3">if </span><span class="s1">(is.defined(options.idx)) {</span>
+        <span class="s3">if </span><span class="s1">(is.number(options.idx)) {</span>
+          <span class="s3">this</span><span class="s1">.options.affineIdx = options.idx;</span>
+        <span class="s1">} </span><span class="s3">else </span><span class="s1">{</span>
+          <span class="s3">throw </span><span class="s1">is.invalidParameterError(</span><span class="s2">'options.idx'</span><span class="s1">, </span><span class="s2">'number'</span><span class="s1">, options.idx);</span>
+        <span class="s1">}</span>
+      <span class="s1">}</span>
+      <span class="s3">if </span><span class="s1">(is.defined(options.idy)) {</span>
+        <span class="s3">if </span><span class="s1">(is.number(options.idy)) {</span>
+          <span class="s3">this</span><span class="s1">.options.affineIdy = options.idy;</span>
+        <span class="s1">} </span><span class="s3">else </span><span class="s1">{</span>
+          <span class="s3">throw </span><span class="s1">is.invalidParameterError(</span><span class="s2">'options.idy'</span><span class="s1">, </span><span class="s2">'number'</span><span class="s1">, options.idy);</span>
+        <span class="s1">}</span>
+      <span class="s1">}</span>
+      <span class="s3">if </span><span class="s1">(is.defined(options.odx)) {</span>
+        <span class="s3">if </span><span class="s1">(is.number(options.odx)) {</span>
+          <span class="s3">this</span><span class="s1">.options.affineOdx = options.odx;</span>
+        <span class="s1">} </span><span class="s3">else </span><span class="s1">{</span>
+          <span class="s3">throw </span><span class="s1">is.invalidParameterError(</span><span class="s2">'options.odx'</span><span class="s1">, </span><span class="s2">'number'</span><span class="s1">, options.odx);</span>
+        <span class="s1">}</span>
+      <span class="s1">}</span>
+      <span class="s3">if </span><span class="s1">(is.defined(options.ody)) {</span>
+        <span class="s3">if </span><span class="s1">(is.number(options.ody)) {</span>
+          <span class="s3">this</span><span class="s1">.options.affineOdy = options.ody;</span>
+        <span class="s1">} </span><span class="s3">else </span><span class="s1">{</span>
+          <span class="s3">throw </span><span class="s1">is.invalidParameterError(</span><span class="s2">'options.ody'</span><span class="s1">, </span><span class="s2">'number'</span><span class="s1">, options.ody);</span>
+        <span class="s1">}</span>
+      <span class="s1">}</span>
+      <span class="s3">if </span><span class="s1">(is.defined(options.interpolator)) {</span>
+        <span class="s3">if </span><span class="s1">(is.inArray(options.interpolator, Object.values(</span><span class="s3">this</span><span class="s1">.constructor.interpolators))) {</span>
+          <span class="s3">this</span><span class="s1">.options.affineInterpolator = options.interpolator;</span>
+        <span class="s1">} </span><span class="s3">else </span><span class="s1">{</span>
+          <span class="s3">throw </span><span class="s1">is.invalidParameterError(</span><span class="s2">'options.interpolator'</span><span class="s1">, </span><span class="s2">'valid interpolator name'</span><span class="s1">, options.interpolator);</span>
+        <span class="s1">}</span>
+      <span class="s1">}</span>
+    <span class="s1">} </span><span class="s3">else </span><span class="s1">{</span>
+      <span class="s3">throw </span><span class="s1">is.invalidParameterError(</span><span class="s2">'options'</span><span class="s1">, </span><span class="s2">'object'</span><span class="s1">, options);</span>
+    <span class="s1">}</span>
+  <span class="s1">}</span>
+
+  <span class="s3">return this</span><span class="s1">;</span>
+<span class="s1">}</span>
+
+<span class="s0">/**</span>
+ <span class="s0">* Sharpen the image.</span>
+ <span class="s0">*</span>
+ <span class="s0">* When used without parameters, performs a fast, mild sharpen of the output image.</span>
+ <span class="s0">*</span>
+ <span class="s0">* When a `sigma` is provided, performs a slower, more accurate sharpen of the L channel in the LAB colour space.</span>
+ <span class="s0">* Fine-grained control over the level of sharpening in &quot;flat&quot; (m1) and &quot;jagged&quot; (m2) areas is available.</span>
+ <span class="s0">*</span>
+ <span class="s0">* See {</span><span class="s4">@link </span><span class="s0">https://www.libvips.org/API/current/libvips-convolution.html#vips-sharpen|libvips sharpen} operation.</span>
+ <span class="s0">*</span>
+ <span class="s0">* </span><span class="s4">@example</span>
+ <span class="s0">* const data = await sharp(input).sharpen().toBuffer();</span>
+ <span class="s0">*</span>
+ <span class="s0">* </span><span class="s4">@example</span>
+ <span class="s0">* const data = await sharp(input).sharpen({ sigma: 2 }).toBuffer();</span>
+ <span class="s0">*</span>
+ <span class="s0">* </span><span class="s4">@example</span>
+ <span class="s0">* const data = await sharp(input)</span>
+ <span class="s0">*   .sharpen({</span>
+ <span class="s0">*     sigma: 2,</span>
+ <span class="s0">*     m1: 0,</span>
+ <span class="s0">*     m2: 3,</span>
+ <span class="s0">*     x1: 3,</span>
+ <span class="s0">*     y2: 15,</span>
+ <span class="s0">*     y3: 15,</span>
+ <span class="s0">*   })</span>
+ <span class="s0">*   .toBuffer();</span>
+ <span class="s0">*</span>
+ <span class="s0">* </span><span class="s4">@param </span><span class="s0">{Object|number} [options] - if present, is an Object with attributes</span>
+ <span class="s0">* </span><span class="s4">@param </span><span class="s0">{number} [options.sigma] - the sigma of the Gaussian mask, where `sigma = 1 + radius / 2`, between 0.000001 and 10</span>
+ <span class="s0">* </span><span class="s4">@param </span><span class="s0">{number} [options.m1=1.0] - the level of sharpening to apply to &quot;flat&quot; areas, between 0 and 1000000</span>
+ <span class="s0">* </span><span class="s4">@param </span><span class="s0">{number} [options.m2=2.0] - the level of sharpening to apply to &quot;jagged&quot; areas, between 0 and 1000000</span>
+ <span class="s0">* </span><span class="s4">@param </span><span class="s0">{number} [options.x1=2.0] - threshold between &quot;flat&quot; and &quot;jagged&quot;, between 0 and 1000000</span>
+ <span class="s0">* </span><span class="s4">@param </span><span class="s0">{number} [options.y2=10.0] - maximum amount of brightening, between 0 and 1000000</span>
+ <span class="s0">* </span><span class="s4">@param </span><span class="s0">{number} [options.y3=20.0] - maximum amount of darkening, between 0 and 1000000</span>
+ <span class="s0">* </span><span class="s4">@param </span><span class="s0">{number} [flat] - (deprecated) see `options.m1`.</span>
+ <span class="s0">* </span><span class="s4">@param </span><span class="s0">{number} [jagged] - (deprecated) see `options.m2`.</span>
+ <span class="s0">* </span><span class="s4">@returns </span><span class="s0">{Sharp}</span>
+ <span class="s0">* </span><span class="s4">@throws </span><span class="s0">{Error} Invalid parameters</span>
+ <span class="s0">*/</span>
+<span class="s3">function </span><span class="s1">sharpen (options, flat, jagged) {</span>
+  <span class="s3">if </span><span class="s1">(!is.defined(options)) {</span>
+    <span class="s0">// No arguments: default to mild sharpen</span>
+    <span class="s3">this</span><span class="s1">.options.sharpenSigma = -</span><span class="s5">1</span><span class="s1">;</span>
+  <span class="s1">} </span><span class="s3">else if </span><span class="s1">(is.bool(options)) {</span>
+    <span class="s0">// Deprecated boolean argument: apply mild sharpen?</span>
+    <span class="s3">this</span><span class="s1">.options.sharpenSigma = options ? -</span><span class="s5">1 </span><span class="s1">: </span><span class="s5">0</span><span class="s1">;</span>
+  <span class="s1">} </span><span class="s3">else if </span><span class="s1">(is.number(options) &amp;&amp; is.inRange(options, </span><span class="s5">0.01</span><span class="s1">, </span><span class="s5">10000</span><span class="s1">)) {</span>
+    <span class="s0">// Deprecated numeric argument: specific sigma</span>
+    <span class="s3">this</span><span class="s1">.options.sharpenSigma = options;</span>
+    <span class="s0">// Deprecated control over flat areas</span>
+    <span class="s3">if </span><span class="s1">(is.defined(flat)) {</span>
+      <span class="s3">if </span><span class="s1">(is.number(flat) &amp;&amp; is.inRange(flat, </span><span class="s5">0</span><span class="s1">, </span><span class="s5">10000</span><span class="s1">)) {</span>
+        <span class="s3">this</span><span class="s1">.options.sharpenM1 = flat;</span>
+      <span class="s1">} </span><span class="s3">else </span><span class="s1">{</span>
+        <span class="s3">throw </span><span class="s1">is.invalidParameterError(</span><span class="s2">'flat'</span><span class="s1">, </span><span class="s2">'number between 0 and 10000'</span><span class="s1">, flat);</span>
+      <span class="s1">}</span>
+    <span class="s1">}</span>
+    <span class="s0">// Deprecated control over jagged areas</span>
+    <span class="s3">if </span><span class="s1">(is.defined(jagged)) {</span>
+      <span class="s3">if </span><span class="s1">(is.number(jagged) &amp;&amp; is.inRange(jagged, </span><span class="s5">0</span><span class="s1">, </span><span class="s5">10000</span><span class="s1">)) {</span>
+        <span class="s3">this</span><span class="s1">.options.sharpenM2 = jagged;</span>
+      <span class="s1">} </span><span class="s3">else </span><span class="s1">{</span>
+        <span class="s3">throw </span><span class="s1">is.invalidParameterError(</span><span class="s2">'jagged'</span><span class="s1">, </span><span class="s2">'number between 0 and 10000'</span><span class="s1">, jagged);</span>
+      <span class="s1">}</span>
+    <span class="s1">}</span>
+  <span class="s1">} </span><span class="s3">else if </span><span class="s1">(is.plainObject(options)) {</span>
+    <span class="s3">if </span><span class="s1">(is.number(options.sigma) &amp;&amp; is.inRange(options.sigma, </span><span class="s5">0.000001</span><span class="s1">, </span><span class="s5">10</span><span class="s1">)) {</span>
+      <span class="s3">this</span><span class="s1">.options.sharpenSigma = options.sigma;</span>
+    <span class="s1">} </span><span class="s3">else </span><span class="s1">{</span>
+      <span class="s3">throw </span><span class="s1">is.invalidParameterError(</span><span class="s2">'options.sigma'</span><span class="s1">, </span><span class="s2">'number between 0.000001 and 10'</span><span class="s1">, options.sigma);</span>
+    <span class="s1">}</span>
+    <span class="s3">if </span><span class="s1">(is.defined(options.m1)) {</span>
+      <span class="s3">if </span><span class="s1">(is.number(options.m1) &amp;&amp; is.inRange(options.m1, </span><span class="s5">0</span><span class="s1">, </span><span class="s5">1000000</span><span class="s1">)) {</span>
+        <span class="s3">this</span><span class="s1">.options.sharpenM1 = options.m1;</span>
+      <span class="s1">} </span><span class="s3">else </span><span class="s1">{</span>
+        <span class="s3">throw </span><span class="s1">is.invalidParameterError(</span><span class="s2">'options.m1'</span><span class="s1">, </span><span class="s2">'number between 0 and 1000000'</span><span class="s1">, options.m1);</span>
+      <span class="s1">}</span>
+    <span class="s1">}</span>
+    <span class="s3">if </span><span class="s1">(is.defined(options.m2)) {</span>
+      <span class="s3">if </span><span class="s1">(is.number(options.m2) &amp;&amp; is.inRange(options.m2, </span><span class="s5">0</span><span class="s1">, </span><span class="s5">1000000</span><span class="s1">)) {</span>
+        <span class="s3">this</span><span class="s1">.options.sharpenM2 = options.m2;</span>
+      <span class="s1">} </span><span class="s3">else </span><span class="s1">{</span>
+        <span class="s3">throw </span><span class="s1">is.invalidParameterError(</span><span class="s2">'options.m2'</span><span class="s1">, </span><span class="s2">'number between 0 and 1000000'</span><span class="s1">, options.m2);</span>
+      <span class="s1">}</span>
+    <span class="s1">}</span>
+    <span class="s3">if </span><span class="s1">(is.defined(options.x1)) {</span>
+      <span class="s3">if </span><span class="s1">(is.number(options.x1) &amp;&amp; is.inRange(options.x1, </span><span class="s5">0</span><span class="s1">, </span><span class="s5">1000000</span><span class="s1">)) {</span>
+        <span class="s3">this</span><span class="s1">.options.sharpenX1 = options.x1;</span>
+      <span class="s1">} </span><span class="s3">else </span><span class="s1">{</span>
+        <span class="s3">throw </span><span class="s1">is.invalidParameterError(</span><span class="s2">'options.x1'</span><span class="s1">, </span><span class="s2">'number between 0 and 1000000'</span><span class="s1">, options.x1);</span>
+      <span class="s1">}</span>
+    <span class="s1">}</span>
+    <span class="s3">if </span><span class="s1">(is.defined(options.y2)) {</span>
+      <span class="s3">if </span><span class="s1">(is.number(options.y2) &amp;&amp; is.inRange(options.y2, </span><span class="s5">0</span><span class="s1">, </span><span class="s5">1000000</span><span class="s1">)) {</span>
+        <span class="s3">this</span><span class="s1">.options.sharpenY2 = options.y2;</span>
+      <span class="s1">} </span><span class="s3">else </span><span class="s1">{</span>
+        <span class="s3">throw </span><span class="s1">is.invalidParameterError(</span><span class="s2">'options.y2'</span><span class="s1">, </span><span class="s2">'number between 0 and 1000000'</span><span class="s1">, options.y2);</span>
+      <span class="s1">}</span>
+    <span class="s1">}</span>
+    <span class="s3">if </span><span class="s1">(is.defined(options.y3)) {</span>
+      <span class="s3">if </span><span class="s1">(is.number(options.y3) &amp;&amp; is.inRange(options.y3, </span><span class="s5">0</span><span class="s1">, </span><span class="s5">1000000</span><span class="s1">)) {</span>
+        <span class="s3">this</span><span class="s1">.options.sharpenY3 = options.y3;</span>
+      <span class="s1">} </span><span class="s3">else </span><span class="s1">{</span>
+        <span class="s3">throw </span><span class="s1">is.invalidParameterError(</span><span class="s2">'options.y3'</span><span class="s1">, </span><span class="s2">'number between 0 and 1000000'</span><span class="s1">, options.y3);</span>
+      <span class="s1">}</span>
+    <span class="s1">}</span>
+  <span class="s1">} </span><span class="s3">else </span><span class="s1">{</span>
+    <span class="s3">throw </span><span class="s1">is.invalidParameterError(</span><span class="s2">'sigma'</span><span class="s1">, </span><span class="s2">'number between 0.01 and 10000'</span><span class="s1">, options);</span>
+  <span class="s1">}</span>
+  <span class="s3">return this</span><span class="s1">;</span>
+<span class="s1">}</span>
+
+<span class="s0">/**</span>
+ <span class="s0">* Apply median filter.</span>
+ <span class="s0">* When used without parameters the default window is 3x3.</span>
+ <span class="s0">*</span>
+ <span class="s0">* </span><span class="s4">@example</span>
+ <span class="s0">* const output = await sharp(input).median().toBuffer();</span>
+ <span class="s0">*</span>
+ <span class="s0">* </span><span class="s4">@example</span>
+ <span class="s0">* const output = await sharp(input).median(5).toBuffer();</span>
+ <span class="s0">*</span>
+ <span class="s0">* </span><span class="s4">@param </span><span class="s0">{number} [size=3] square mask size: size x size</span>
+ <span class="s0">* </span><span class="s4">@returns </span><span class="s0">{Sharp}</span>
+ <span class="s0">* </span><span class="s4">@throws </span><span class="s0">{Error} Invalid parameters</span>
+ <span class="s0">*/</span>
+<span class="s3">function </span><span class="s1">median (size) {</span>
+  <span class="s3">if </span><span class="s1">(!is.defined(size)) {</span>
+    <span class="s0">// No arguments: default to 3x3</span>
+    <span class="s3">this</span><span class="s1">.options.medianSize = </span><span class="s5">3</span><span class="s1">;</span>
+  <span class="s1">} </span><span class="s3">else if </span><span class="s1">(is.integer(size) &amp;&amp; is.inRange(size, </span><span class="s5">1</span><span class="s1">, </span><span class="s5">1000</span><span class="s1">)) {</span>
+    <span class="s0">// Numeric argument: specific sigma</span>
+    <span class="s3">this</span><span class="s1">.options.medianSize = size;</span>
+  <span class="s1">} </span><span class="s3">else </span><span class="s1">{</span>
+    <span class="s3">throw </span><span class="s1">is.invalidParameterError(</span><span class="s2">'size'</span><span class="s1">, </span><span class="s2">'integer between 1 and 1000'</span><span class="s1">, size);</span>
+  <span class="s1">}</span>
+  <span class="s3">return this</span><span class="s1">;</span>
+<span class="s1">}</span>
+
+<span class="s0">/**</span>
+ <span class="s0">* Blur the image.</span>
+ <span class="s0">*</span>
+ <span class="s0">* When used without parameters, performs a fast 3x3 box blur (equivalent to a box linear filter).</span>
+ <span class="s0">*</span>
+ <span class="s0">* When a `sigma` is provided, performs a slower, more accurate Gaussian blur.</span>
+ <span class="s0">*</span>
+ <span class="s0">* </span><span class="s4">@example</span>
+ <span class="s0">* const boxBlurred = await sharp(input)</span>
+ <span class="s0">*   .blur()</span>
+ <span class="s0">*   .toBuffer();</span>
+ <span class="s0">*</span>
+ <span class="s0">* </span><span class="s4">@example</span>
+ <span class="s0">* const gaussianBlurred = await sharp(input)</span>
+ <span class="s0">*   .blur(5)</span>
+ <span class="s0">*   .toBuffer();</span>
+ <span class="s0">*</span>
+ <span class="s0">* </span><span class="s4">@param </span><span class="s0">{Object|number|Boolean} [options]</span>
+ <span class="s0">* </span><span class="s4">@param </span><span class="s0">{number} [options.sigma] a value between 0.3 and 1000 representing the sigma of the Gaussian mask, where `sigma = 1 + radius / 2`.</span>
+ <span class="s0">* </span><span class="s4">@param </span><span class="s0">{string} [options.precision='integer'] How accurate the operation should be, one of: integer, float, approximate.</span>
+ <span class="s0">* </span><span class="s4">@param </span><span class="s0">{number} [options.minAmplitude=0.2] A value between 0.001 and 1. A smaller value will generate a larger, more accurate mask.</span>
+ <span class="s0">* </span><span class="s4">@returns </span><span class="s0">{Sharp}</span>
+ <span class="s0">* </span><span class="s4">@throws </span><span class="s0">{Error} Invalid parameters</span>
+ <span class="s0">*/</span>
+<span class="s3">function </span><span class="s1">blur (options) {</span>
+  <span class="s3">let </span><span class="s1">sigma;</span>
+  <span class="s3">if </span><span class="s1">(is.number(options)) {</span>
+    <span class="s1">sigma = options;</span>
+  <span class="s1">} </span><span class="s3">else if </span><span class="s1">(is.plainObject(options)) {</span>
+    <span class="s3">if </span><span class="s1">(!is.number(options.sigma)) {</span>
+      <span class="s3">throw </span><span class="s1">is.invalidParameterError(</span><span class="s2">'options.sigma'</span><span class="s1">, </span><span class="s2">'number between 0.3 and 1000'</span><span class="s1">, sigma);</span>
+    <span class="s1">}</span>
+    <span class="s1">sigma = options.sigma;</span>
+    <span class="s3">if </span><span class="s1">(</span><span class="s2">'precision' </span><span class="s3">in </span><span class="s1">options) {</span>
+      <span class="s3">if </span><span class="s1">(is.string(vipsPrecision[options.precision])) {</span>
+        <span class="s3">this</span><span class="s1">.options.precision = vipsPrecision[options.precision];</span>
+      <span class="s1">} </span><span class="s3">else </span><span class="s1">{</span>
+        <span class="s3">throw </span><span class="s1">is.invalidParameterError(</span><span class="s2">'precision'</span><span class="s1">, </span><span class="s2">'one of: integer, float, approximate'</span><span class="s1">, options.precision);</span>
+      <span class="s1">}</span>
+    <span class="s1">}</span>
+    <span class="s3">if </span><span class="s1">(</span><span class="s2">'minAmplitude' </span><span class="s3">in </span><span class="s1">options) {</span>
+      <span class="s3">if </span><span class="s1">(is.number(options.minAmplitude) &amp;&amp; is.inRange(options.minAmplitude, </span><span class="s5">0.001</span><span class="s1">, </span><span class="s5">1</span><span class="s1">)) {</span>
+        <span class="s3">this</span><span class="s1">.options.minAmpl = options.minAmplitude;</span>
+      <span class="s1">} </span><span class="s3">else </span><span class="s1">{</span>
+        <span class="s3">throw </span><span class="s1">is.invalidParameterError(</span><span class="s2">'minAmplitude'</span><span class="s1">, </span><span class="s2">'number between 0.001 and 1'</span><span class="s1">, options.minAmplitude);</span>
+      <span class="s1">}</span>
+    <span class="s1">}</span>
+  <span class="s1">}</span>
+
+  <span class="s3">if </span><span class="s1">(!is.defined(options)) {</span>
+    <span class="s0">// No arguments: default to mild blur</span>
+    <span class="s3">this</span><span class="s1">.options.blurSigma = -</span><span class="s5">1</span><span class="s1">;</span>
+  <span class="s1">} </span><span class="s3">else if </span><span class="s1">(is.bool(options)) {</span>
+    <span class="s0">// Boolean argument: apply mild blur?</span>
+    <span class="s3">this</span><span class="s1">.options.blurSigma = options ? -</span><span class="s5">1 </span><span class="s1">: </span><span class="s5">0</span><span class="s1">;</span>
+  <span class="s1">} </span><span class="s3">else if </span><span class="s1">(is.number(sigma) &amp;&amp; is.inRange(sigma, </span><span class="s5">0.3</span><span class="s1">, </span><span class="s5">1000</span><span class="s1">)) {</span>
+    <span class="s0">// Numeric argument: specific sigma</span>
+    <span class="s3">this</span><span class="s1">.options.blurSigma = sigma;</span>
+  <span class="s1">} </span><span class="s3">else </span><span class="s1">{</span>
+    <span class="s3">throw </span><span class="s1">is.invalidParameterError(</span><span class="s2">'sigma'</span><span class="s1">, </span><span class="s2">'number between 0.3 and 1000'</span><span class="s1">, sigma);</span>
+  <span class="s1">}</span>
+
+  <span class="s3">return this</span><span class="s1">;</span>
+<span class="s1">}</span>
+
+<span class="s0">/**</span>
+ <span class="s0">* Expand foreground objects using the dilate morphological operator.</span>
+ <span class="s0">*</span>
+ <span class="s0">* </span><span class="s4">@example</span>
+ <span class="s0">* const output = await sharp(input)</span>
+ <span class="s0">*   .dilate()</span>
+ <span class="s0">*   .toBuffer();</span>
+ <span class="s0">*</span>
+ <span class="s0">* </span><span class="s4">@param </span><span class="s0">{Number} [width=1] dilation width in pixels.</span>
+ <span class="s0">* </span><span class="s4">@returns </span><span class="s0">{Sharp}</span>
+ <span class="s0">* </span><span class="s4">@throws </span><span class="s0">{Error} Invalid parameters</span>
+ <span class="s0">*/</span>
+<span class="s3">function </span><span class="s1">dilate (width) {</span>
+  <span class="s3">if </span><span class="s1">(!is.defined(width)) {</span>
+    <span class="s3">this</span><span class="s1">.options.dilateWidth = </span><span class="s5">1</span><span class="s1">;</span>
+  <span class="s1">} </span><span class="s3">else if </span><span class="s1">(is.integer(width) &amp;&amp; width &gt; </span><span class="s5">0</span><span class="s1">) {</span>
+    <span class="s3">this</span><span class="s1">.options.dilateWidth = width;</span>
+  <span class="s1">} </span><span class="s3">else </span><span class="s1">{</span>
+    <span class="s3">throw </span><span class="s1">is.invalidParameterError(</span><span class="s2">'dilate'</span><span class="s1">, </span><span class="s2">'positive integer'</span><span class="s1">, dilate);</span>
+  <span class="s1">}</span>
+  <span class="s3">return this</span><span class="s1">;</span>
+<span class="s1">}</span>
+
+<span class="s0">/**</span>
+ <span class="s0">* Shrink foreground objects using the erode morphological operator.</span>
+ <span class="s0">*</span>
+ <span class="s0">* </span><span class="s4">@example</span>
+ <span class="s0">* const output = await sharp(input)</span>
+ <span class="s0">*   .erode()</span>
+ <span class="s0">*   .toBuffer();</span>
+ <span class="s0">*</span>
+ <span class="s0">* </span><span class="s4">@param </span><span class="s0">{Number} [width=1] erosion width in pixels.</span>
+ <span class="s0">* </span><span class="s4">@returns </span><span class="s0">{Sharp}</span>
+ <span class="s0">* </span><span class="s4">@throws </span><span class="s0">{Error} Invalid parameters</span>
+ <span class="s0">*/</span>
+<span class="s3">function </span><span class="s1">erode (width) {</span>
+  <span class="s3">if </span><span class="s1">(!is.defined(width)) {</span>
+    <span class="s3">this</span><span class="s1">.options.erodeWidth = </span><span class="s5">1</span><span class="s1">;</span>
+  <span class="s1">} </span><span class="s3">else if </span><span class="s1">(is.integer(width) &amp;&amp; width &gt; </span><span class="s5">0</span><span class="s1">) {</span>
+    <span class="s3">this</span><span class="s1">.options.erodeWidth = width;</span>
+  <span class="s1">} </span><span class="s3">else </span><span class="s1">{</span>
+    <span class="s3">throw </span><span class="s1">is.invalidParameterError(</span><span class="s2">'erode'</span><span class="s1">, </span><span class="s2">'positive integer'</span><span class="s1">, erode);</span>
+  <span class="s1">}</span>
+  <span class="s3">return this</span><span class="s1">;</span>
+<span class="s1">}</span>
+
+<span class="s0">/**</span>
+ <span class="s0">* Merge alpha transparency channel, if any, with a background, then remove the alpha channel.</span>
+ <span class="s0">*</span>
+ <span class="s0">* See also {</span><span class="s4">@link </span><span class="s0">/api-channel#removealpha|removeAlpha}.</span>
+ <span class="s0">*</span>
+ <span class="s0">* </span><span class="s4">@example</span>
+ <span class="s0">* await sharp(rgbaInput)</span>
+ <span class="s0">*   .flatten({ background: '#F0A703' })</span>
+ <span class="s0">*   .toBuffer();</span>
+ <span class="s0">*</span>
+ <span class="s0">* </span><span class="s4">@param </span><span class="s0">{Object} [options]</span>
+ <span class="s0">* </span><span class="s4">@param </span><span class="s0">{string|Object} [options.background={r: 0, g: 0, b: 0}] - background colour, parsed by the [color](https://www.npmjs.org/package/color) module, defaults to black.</span>
+ <span class="s0">* </span><span class="s4">@returns </span><span class="s0">{Sharp}</span>
+ <span class="s0">*/</span>
+<span class="s3">function </span><span class="s1">flatten (options) {</span>
+  <span class="s3">this</span><span class="s1">.options.flatten = is.bool(options) ? options : </span><span class="s3">true</span><span class="s1">;</span>
+  <span class="s3">if </span><span class="s1">(is.object(options)) {</span>
+    <span class="s3">this</span><span class="s1">._setBackgroundColourOption(</span><span class="s2">'flattenBackground'</span><span class="s1">, options.background);</span>
+  <span class="s1">}</span>
+  <span class="s3">return this</span><span class="s1">;</span>
+<span class="s1">}</span>
+
+<span class="s0">/**</span>
+ <span class="s0">* Ensure the image has an alpha channel</span>
+ <span class="s0">* with all white pixel values made fully transparent.</span>
+ <span class="s0">*</span>
+ <span class="s0">* Existing alpha channel values for non-white pixels remain unchanged.</span>
+ <span class="s0">*</span>
+ <span class="s0">* This feature is experimental and the API may change.</span>
+ <span class="s0">*</span>
+ <span class="s0">* </span><span class="s4">@since </span><span class="s0">0.32.1</span>
+ <span class="s0">*</span>
+ <span class="s0">* </span><span class="s4">@example</span>
+ <span class="s0">* await sharp(rgbInput)</span>
+ <span class="s0">*   .unflatten()</span>
+ <span class="s0">*   .toBuffer();</span>
+ <span class="s0">*</span>
+ <span class="s0">* </span><span class="s4">@example</span>
+ <span class="s0">* await sharp(rgbInput)</span>
+ <span class="s0">*   .threshold(128, { grayscale: false }) // converter bright pixels to white</span>
+ <span class="s0">*   .unflatten()</span>
+ <span class="s0">*   .toBuffer();</span>
+ <span class="s0">*/</span>
+<span class="s3">function </span><span class="s1">unflatten () {</span>
+  <span class="s3">this</span><span class="s1">.options.unflatten = </span><span class="s3">true</span><span class="s1">;</span>
+  <span class="s3">return this</span><span class="s1">;</span>
+<span class="s1">}</span>
+
+<span class="s0">/**</span>
+ <span class="s0">* Apply a gamma correction by reducing the encoding (darken) pre-resize at a factor of `1/gamma`</span>
+ <span class="s0">* then increasing the encoding (brighten) post-resize at a factor of `gamma`.</span>
+ <span class="s0">* This can improve the perceived brightness of a resized image in non-linear colour spaces.</span>
+ <span class="s0">* JPEG and WebP input images will not take advantage of the shrink-on-load performance optimisation</span>
+ <span class="s0">* when applying a gamma correction.</span>
+ <span class="s0">*</span>
+ <span class="s0">* Supply a second argument to use a different output gamma value, otherwise the first value is used in both cases.</span>
+ <span class="s0">*</span>
+ <span class="s0">* </span><span class="s4">@param </span><span class="s0">{number} [gamma=2.2] value between 1.0 and 3.0.</span>
+ <span class="s0">* </span><span class="s4">@param </span><span class="s0">{number} [gammaOut] value between 1.0 and 3.0. (optional, defaults to same as `gamma`)</span>
+ <span class="s0">* </span><span class="s4">@returns </span><span class="s0">{Sharp}</span>
+ <span class="s0">* </span><span class="s4">@throws </span><span class="s0">{Error} Invalid parameters</span>
+ <span class="s0">*/</span>
+<span class="s3">function </span><span class="s1">gamma (gamma, gammaOut) {</span>
+  <span class="s3">if </span><span class="s1">(!is.defined(gamma)) {</span>
+    <span class="s0">// Default gamma correction of 2.2 (sRGB)</span>
+    <span class="s3">this</span><span class="s1">.options.gamma = </span><span class="s5">2.2</span><span class="s1">;</span>
+  <span class="s1">} </span><span class="s3">else if </span><span class="s1">(is.number(gamma) &amp;&amp; is.inRange(gamma, </span><span class="s5">1</span><span class="s1">, </span><span class="s5">3</span><span class="s1">)) {</span>
+    <span class="s3">this</span><span class="s1">.options.gamma = gamma;</span>
+  <span class="s1">} </span><span class="s3">else </span><span class="s1">{</span>
+    <span class="s3">throw </span><span class="s1">is.invalidParameterError(</span><span class="s2">'gamma'</span><span class="s1">, </span><span class="s2">'number between 1.0 and 3.0'</span><span class="s1">, gamma);</span>
+  <span class="s1">}</span>
+  <span class="s3">if </span><span class="s1">(!is.defined(gammaOut)) {</span>
+    <span class="s0">// Default gamma correction for output is same as input</span>
+    <span class="s3">this</span><span class="s1">.options.gammaOut = </span><span class="s3">this</span><span class="s1">.options.gamma;</span>
+  <span class="s1">} </span><span class="s3">else if </span><span class="s1">(is.number(gammaOut) &amp;&amp; is.inRange(gammaOut, </span><span class="s5">1</span><span class="s1">, </span><span class="s5">3</span><span class="s1">)) {</span>
+    <span class="s3">this</span><span class="s1">.options.gammaOut = gammaOut;</span>
+  <span class="s1">} </span><span class="s3">else </span><span class="s1">{</span>
+    <span class="s3">throw </span><span class="s1">is.invalidParameterError(</span><span class="s2">'gammaOut'</span><span class="s1">, </span><span class="s2">'number between 1.0 and 3.0'</span><span class="s1">, gammaOut);</span>
+  <span class="s1">}</span>
+  <span class="s3">return this</span><span class="s1">;</span>
+<span class="s1">}</span>
+
+<span class="s0">/**</span>
+ <span class="s0">* Produce the &quot;negative&quot; of the image.</span>
+ <span class="s0">*</span>
+ <span class="s0">* </span><span class="s4">@example</span>
+ <span class="s0">* const output = await sharp(input)</span>
+ <span class="s0">*   .negate()</span>
+ <span class="s0">*   .toBuffer();</span>
+ <span class="s0">*</span>
+ <span class="s0">* </span><span class="s4">@example</span>
+ <span class="s0">* const output = await sharp(input)</span>
+ <span class="s0">*   .negate({ alpha: false })</span>
+ <span class="s0">*   .toBuffer();</span>
+ <span class="s0">*</span>
+ <span class="s0">* </span><span class="s4">@param </span><span class="s0">{Object} [options]</span>
+ <span class="s0">* </span><span class="s4">@param </span><span class="s0">{Boolean} [options.alpha=true] Whether or not to negate any alpha channel</span>
+ <span class="s0">* </span><span class="s4">@returns </span><span class="s0">{Sharp}</span>
+ <span class="s0">*/</span>
+<span class="s3">function </span><span class="s1">negate (options) {</span>
+  <span class="s3">this</span><span class="s1">.options.negate = is.bool(options) ? options : </span><span class="s3">true</span><span class="s1">;</span>
+  <span class="s3">if </span><span class="s1">(is.plainObject(options) &amp;&amp; </span><span class="s2">'alpha' </span><span class="s3">in </span><span class="s1">options) {</span>
+    <span class="s3">if </span><span class="s1">(!is.bool(options.alpha)) {</span>
+      <span class="s3">throw </span><span class="s1">is.invalidParameterError(</span><span class="s2">'alpha'</span><span class="s1">, </span><span class="s2">'should be boolean value'</span><span class="s1">, options.alpha);</span>
+    <span class="s1">} </span><span class="s3">else </span><span class="s1">{</span>
+      <span class="s3">this</span><span class="s1">.options.negateAlpha = options.alpha;</span>
+    <span class="s1">}</span>
+  <span class="s1">}</span>
+  <span class="s3">return this</span><span class="s1">;</span>
+<span class="s1">}</span>
+
+<span class="s0">/**</span>
+ <span class="s0">* Enhance output image contrast by stretching its luminance to cover a full dynamic range.</span>
+ <span class="s0">*</span>
+ <span class="s0">* Uses a histogram-based approach, taking a default range of 1% to 99% to reduce sensitivity to noise at the extremes.</span>
+ <span class="s0">*</span>
+ <span class="s0">* Luminance values below the `lower` percentile will be underexposed by clipping to zero.</span>
+ <span class="s0">* Luminance values above the `upper` percentile will be overexposed by clipping to the max pixel value.</span>
+ <span class="s0">*</span>
+ <span class="s0">* </span><span class="s4">@example</span>
+ <span class="s0">* const output = await sharp(input)</span>
+ <span class="s0">*   .normalise()</span>
+ <span class="s0">*   .toBuffer();</span>
+ <span class="s0">*</span>
+ <span class="s0">* </span><span class="s4">@example</span>
+ <span class="s0">* const output = await sharp(input)</span>
+ <span class="s0">*   .normalise({ lower: 0, upper: 100 })</span>
+ <span class="s0">*   .toBuffer();</span>
+ <span class="s0">*</span>
+ <span class="s0">* </span><span class="s4">@param </span><span class="s0">{Object} [options]</span>
+ <span class="s0">* </span><span class="s4">@param </span><span class="s0">{number} [options.lower=1] - Percentile below which luminance values will be underexposed.</span>
+ <span class="s0">* </span><span class="s4">@param </span><span class="s0">{number} [options.upper=99] - Percentile above which luminance values will be overexposed.</span>
+ <span class="s0">* </span><span class="s4">@returns </span><span class="s0">{Sharp}</span>
+ <span class="s0">*/</span>
+<span class="s3">function </span><span class="s1">normalise (options) {</span>
+  <span class="s3">if </span><span class="s1">(is.plainObject(options)) {</span>
+    <span class="s3">if </span><span class="s1">(is.defined(options.lower)) {</span>
+      <span class="s3">if </span><span class="s1">(is.number(options.lower) &amp;&amp; is.inRange(options.lower, </span><span class="s5">0</span><span class="s1">, </span><span class="s5">99</span><span class="s1">)) {</span>
+        <span class="s3">this</span><span class="s1">.options.normaliseLower = options.lower;</span>
+      <span class="s1">} </span><span class="s3">else </span><span class="s1">{</span>
+        <span class="s3">throw </span><span class="s1">is.invalidParameterError(</span><span class="s2">'lower'</span><span class="s1">, </span><span class="s2">'number between 0 and 99'</span><span class="s1">, options.lower);</span>
+      <span class="s1">}</span>
+    <span class="s1">}</span>
+    <span class="s3">if </span><span class="s1">(is.defined(options.upper)) {</span>
+      <span class="s3">if </span><span class="s1">(is.number(options.upper) &amp;&amp; is.inRange(options.upper, </span><span class="s5">1</span><span class="s1">, </span><span class="s5">100</span><span class="s1">)) {</span>
+        <span class="s3">this</span><span class="s1">.options.normaliseUpper = options.upper;</span>
+      <span class="s1">} </span><span class="s3">else </span><span class="s1">{</span>
+        <span class="s3">throw </span><span class="s1">is.invalidParameterError(</span><span class="s2">'upper'</span><span class="s1">, </span><span class="s2">'number between 1 and 100'</span><span class="s1">, options.upper);</span>
+      <span class="s1">}</span>
+    <span class="s1">}</span>
+  <span class="s1">}</span>
+  <span class="s3">if </span><span class="s1">(</span><span class="s3">this</span><span class="s1">.options.normaliseLower &gt;= </span><span class="s3">this</span><span class="s1">.options.normaliseUpper) {</span>
+    <span class="s3">throw </span><span class="s1">is.invalidParameterError(</span><span class="s2">'range'</span><span class="s1">, </span><span class="s2">'lower to be less than upper'</span><span class="s1">,</span>
+      <span class="s2">`</span><span class="s1">${</span><span class="s3">this</span><span class="s1">.options.normaliseLower} </span><span class="s2">&gt;= </span><span class="s1">${</span><span class="s3">this</span><span class="s1">.options.normaliseUpper}</span><span class="s2">`</span><span class="s1">);</span>
+  <span class="s1">}</span>
+  <span class="s3">this</span><span class="s1">.options.normalise = </span><span class="s3">true</span><span class="s1">;</span>
+  <span class="s3">return this</span><span class="s1">;</span>
+<span class="s1">}</span>
+
+<span class="s0">/**</span>
+ <span class="s0">* Alternative spelling of normalise.</span>
+ <span class="s0">*</span>
+ <span class="s0">* </span><span class="s4">@example</span>
+ <span class="s0">* const output = await sharp(input)</span>
+ <span class="s0">*   .normalize()</span>
+ <span class="s0">*   .toBuffer();</span>
+ <span class="s0">*</span>
+ <span class="s0">* </span><span class="s4">@param </span><span class="s0">{Object} [options]</span>
+ <span class="s0">* </span><span class="s4">@param </span><span class="s0">{number} [options.lower=1] - Percentile below which luminance values will be underexposed.</span>
+ <span class="s0">* </span><span class="s4">@param </span><span class="s0">{number} [options.upper=99] - Percentile above which luminance values will be overexposed.</span>
+ <span class="s0">* </span><span class="s4">@returns </span><span class="s0">{Sharp}</span>
+ <span class="s0">*/</span>
+<span class="s3">function </span><span class="s1">normalize (options) {</span>
+  <span class="s3">return this</span><span class="s1">.normalise(options);</span>
+<span class="s1">}</span>
+
+<span class="s0">/**</span>
+ <span class="s0">* Perform contrast limiting adaptive histogram equalization</span>
+ <span class="s0">* {</span><span class="s4">@link </span><span class="s0">https://en.wikipedia.org/wiki/Adaptive_histogram_equalization#Contrast_Limited_AHE|CLAHE}.</span>
+ <span class="s0">*</span>
+ <span class="s0">* This will, in general, enhance the clarity of the image by bringing out darker details.</span>
+ <span class="s0">*</span>
+ <span class="s0">* </span><span class="s4">@since </span><span class="s0">0.28.3</span>
+ <span class="s0">*</span>
+ <span class="s0">* </span><span class="s4">@example</span>
+ <span class="s0">* const output = await sharp(input)</span>
+ <span class="s0">*   .clahe({</span>
+ <span class="s0">*     width: 3,</span>
+ <span class="s0">*     height: 3,</span>
+ <span class="s0">*   })</span>
+ <span class="s0">*   .toBuffer();</span>
+ <span class="s0">*</span>
+ <span class="s0">* </span><span class="s4">@param </span><span class="s0">{Object} options</span>
+ <span class="s0">* </span><span class="s4">@param </span><span class="s0">{number} options.width - Integral width of the search window, in pixels.</span>
+ <span class="s0">* </span><span class="s4">@param </span><span class="s0">{number} options.height - Integral height of the search window, in pixels.</span>
+ <span class="s0">* </span><span class="s4">@param </span><span class="s0">{number} [options.maxSlope=3] - Integral level of brightening, between 0 and 100, where 0 disables contrast limiting.</span>
+ <span class="s0">* </span><span class="s4">@returns </span><span class="s0">{Sharp}</span>
+ <span class="s0">* </span><span class="s4">@throws </span><span class="s0">{Error} Invalid parameters</span>
+ <span class="s0">*/</span>
+<span class="s3">function </span><span class="s1">clahe (options) {</span>
+  <span class="s3">if </span><span class="s1">(is.plainObject(options)) {</span>
+    <span class="s3">if </span><span class="s1">(is.integer(options.width) &amp;&amp; options.width &gt; </span><span class="s5">0</span><span class="s1">) {</span>
+      <span class="s3">this</span><span class="s1">.options.claheWidth = options.width;</span>
+    <span class="s1">} </span><span class="s3">else </span><span class="s1">{</span>
+      <span class="s3">throw </span><span class="s1">is.invalidParameterError(</span><span class="s2">'width'</span><span class="s1">, </span><span class="s2">'integer greater than zero'</span><span class="s1">, options.width);</span>
+    <span class="s1">}</span>
+    <span class="s3">if </span><span class="s1">(is.integer(options.height) &amp;&amp; options.height &gt; </span><span class="s5">0</span><span class="s1">) {</span>
+      <span class="s3">this</span><span class="s1">.options.claheHeight = options.height;</span>
+    <span class="s1">} </span><span class="s3">else </span><span class="s1">{</span>
+      <span class="s3">throw </span><span class="s1">is.invalidParameterError(</span><span class="s2">'height'</span><span class="s1">, </span><span class="s2">'integer greater than zero'</span><span class="s1">, options.height);</span>
+    <span class="s1">}</span>
+    <span class="s3">if </span><span class="s1">(is.defined(options.maxSlope)) {</span>
+      <span class="s3">if </span><span class="s1">(is.integer(options.maxSlope) &amp;&amp; is.inRange(options.maxSlope, </span><span class="s5">0</span><span class="s1">, </span><span class="s5">100</span><span class="s1">)) {</span>
+        <span class="s3">this</span><span class="s1">.options.claheMaxSlope = options.maxSlope;</span>
+      <span class="s1">} </span><span class="s3">else </span><span class="s1">{</span>
+        <span class="s3">throw </span><span class="s1">is.invalidParameterError(</span><span class="s2">'maxSlope'</span><span class="s1">, </span><span class="s2">'integer between 0 and 100'</span><span class="s1">, options.maxSlope);</span>
+      <span class="s1">}</span>
+    <span class="s1">}</span>
+  <span class="s1">} </span><span class="s3">else </span><span class="s1">{</span>
+    <span class="s3">throw </span><span class="s1">is.invalidParameterError(</span><span class="s2">'options'</span><span class="s1">, </span><span class="s2">'plain object'</span><span class="s1">, options);</span>
+  <span class="s1">}</span>
+  <span class="s3">return this</span><span class="s1">;</span>
+<span class="s1">}</span>
+
+<span class="s0">/**</span>
+ <span class="s0">* Convolve the image with the specified kernel.</span>
+ <span class="s0">*</span>
+ <span class="s0">* </span><span class="s4">@example</span>
+ <span class="s0">* sharp(input)</span>
+ <span class="s0">*   .convolve({</span>
+ <span class="s0">*     width: 3,</span>
+ <span class="s0">*     height: 3,</span>
+ <span class="s0">*     kernel: [-1, 0, 1, -2, 0, 2, -1, 0, 1]</span>
+ <span class="s0">*   })</span>
+ <span class="s0">*   .raw()</span>
+ <span class="s0">*   .toBuffer(function(err, data, info) {</span>
+ <span class="s0">*     // data contains the raw pixel data representing the convolution</span>
+ <span class="s0">*     // of the input image with the horizontal Sobel operator</span>
+ <span class="s0">*   });</span>
+ <span class="s0">*</span>
+ <span class="s0">* </span><span class="s4">@param </span><span class="s0">{Object} kernel</span>
+ <span class="s0">* </span><span class="s4">@param </span><span class="s0">{number} kernel.width - width of the kernel in pixels.</span>
+ <span class="s0">* </span><span class="s4">@param </span><span class="s0">{number} kernel.height - height of the kernel in pixels.</span>
+ <span class="s0">* </span><span class="s4">@param </span><span class="s0">{Array&lt;number&gt;} kernel.kernel - Array of length `width*height` containing the kernel values.</span>
+ <span class="s0">* </span><span class="s4">@param </span><span class="s0">{number} [kernel.scale=sum] - the scale of the kernel in pixels.</span>
+ <span class="s0">* </span><span class="s4">@param </span><span class="s0">{number} [kernel.offset=0] - the offset of the kernel in pixels.</span>
+ <span class="s0">* </span><span class="s4">@returns </span><span class="s0">{Sharp}</span>
+ <span class="s0">* </span><span class="s4">@throws </span><span class="s0">{Error} Invalid parameters</span>
+ <span class="s0">*/</span>
+<span class="s3">function </span><span class="s1">convolve (kernel) {</span>
+  <span class="s3">if </span><span class="s1">(!is.object(kernel) || !Array.isArray(kernel.kernel) ||</span>
+      <span class="s1">!is.integer(kernel.width) || !is.integer(kernel.height) ||</span>
+      <span class="s1">!is.inRange(kernel.width, </span><span class="s5">3</span><span class="s1">, </span><span class="s5">1001</span><span class="s1">) || !is.inRange(kernel.height, </span><span class="s5">3</span><span class="s1">, </span><span class="s5">1001</span><span class="s1">) ||</span>
+      <span class="s1">kernel.height * kernel.width !== kernel.kernel.length</span>
+  <span class="s1">) {</span>
+    <span class="s0">// must pass in a kernel</span>
+    <span class="s3">throw new </span><span class="s1">Error(</span><span class="s2">'Invalid convolution kernel'</span><span class="s1">);</span>
+  <span class="s1">}</span>
+  <span class="s0">// Default scale is sum of kernel values</span>
+  <span class="s3">if </span><span class="s1">(!is.integer(kernel.scale)) {</span>
+    <span class="s1">kernel.scale = kernel.kernel.reduce(</span><span class="s3">function </span><span class="s1">(a, b) {</span>
+      <span class="s3">return </span><span class="s1">a + b;</span>
+    <span class="s1">}, </span><span class="s5">0</span><span class="s1">);</span>
+  <span class="s1">}</span>
+  <span class="s0">// Clip scale to a minimum value of 1</span>
+  <span class="s3">if </span><span class="s1">(kernel.scale &lt; </span><span class="s5">1</span><span class="s1">) {</span>
+    <span class="s1">kernel.scale = </span><span class="s5">1</span><span class="s1">;</span>
+  <span class="s1">}</span>
+  <span class="s3">if </span><span class="s1">(!is.integer(kernel.offset)) {</span>
+    <span class="s1">kernel.offset = </span><span class="s5">0</span><span class="s1">;</span>
+  <span class="s1">}</span>
+  <span class="s3">this</span><span class="s1">.options.convKernel = kernel;</span>
+  <span class="s3">return this</span><span class="s1">;</span>
+<span class="s1">}</span>
+
+<span class="s0">/**</span>
+ <span class="s0">* Any pixel value greater than or equal to the threshold value will be set to 255, otherwise it will be set to 0.</span>
+ <span class="s0">* </span><span class="s4">@param </span><span class="s0">{number} [threshold=128] - a value in the range 0-255 representing the level at which the threshold will be applied.</span>
+ <span class="s0">* </span><span class="s4">@param </span><span class="s0">{Object} [options]</span>
+ <span class="s0">* </span><span class="s4">@param </span><span class="s0">{Boolean} [options.greyscale=true] - convert to single channel greyscale.</span>
+ <span class="s0">* </span><span class="s4">@param </span><span class="s0">{Boolean} [options.grayscale=true] - alternative spelling for greyscale.</span>
+ <span class="s0">* </span><span class="s4">@returns </span><span class="s0">{Sharp}</span>
+ <span class="s0">* </span><span class="s4">@throws </span><span class="s0">{Error} Invalid parameters</span>
+ <span class="s0">*/</span>
+<span class="s3">function </span><span class="s1">threshold (threshold, options) {</span>
+  <span class="s3">if </span><span class="s1">(!is.defined(threshold)) {</span>
+    <span class="s3">this</span><span class="s1">.options.threshold = </span><span class="s5">128</span><span class="s1">;</span>
+  <span class="s1">} </span><span class="s3">else if </span><span class="s1">(is.bool(threshold)) {</span>
+    <span class="s3">this</span><span class="s1">.options.threshold = threshold ? </span><span class="s5">128 </span><span class="s1">: </span><span class="s5">0</span><span class="s1">;</span>
+  <span class="s1">} </span><span class="s3">else if </span><span class="s1">(is.integer(threshold) &amp;&amp; is.inRange(threshold, </span><span class="s5">0</span><span class="s1">, </span><span class="s5">255</span><span class="s1">)) {</span>
+    <span class="s3">this</span><span class="s1">.options.threshold = threshold;</span>
+  <span class="s1">} </span><span class="s3">else </span><span class="s1">{</span>
+    <span class="s3">throw </span><span class="s1">is.invalidParameterError(</span><span class="s2">'threshold'</span><span class="s1">, </span><span class="s2">'integer between 0 and 255'</span><span class="s1">, threshold);</span>
+  <span class="s1">}</span>
+  <span class="s3">if </span><span class="s1">(!is.object(options) || options.greyscale === </span><span class="s3">true </span><span class="s1">|| options.grayscale === </span><span class="s3">true</span><span class="s1">) {</span>
+    <span class="s3">this</span><span class="s1">.options.thresholdGrayscale = </span><span class="s3">true</span><span class="s1">;</span>
+  <span class="s1">} </span><span class="s3">else </span><span class="s1">{</span>
+    <span class="s3">this</span><span class="s1">.options.thresholdGrayscale = </span><span class="s3">false</span><span class="s1">;</span>
+  <span class="s1">}</span>
+  <span class="s3">return this</span><span class="s1">;</span>
+<span class="s1">}</span>
+
+<span class="s0">/**</span>
+ <span class="s0">* Perform a bitwise boolean operation with operand image.</span>
+ <span class="s0">*</span>
+ <span class="s0">* This operation creates an output image where each pixel is the result of</span>
+ <span class="s0">* the selected bitwise boolean `operation` between the corresponding pixels of the input images.</span>
+ <span class="s0">*</span>
+ <span class="s0">* </span><span class="s4">@param </span><span class="s0">{Buffer|string} operand - Buffer containing image data or string containing the path to an image file.</span>
+ <span class="s0">* </span><span class="s4">@param </span><span class="s0">{string} operator - one of `and`, `or` or `eor` to perform that bitwise operation, like the C logic operators `&amp;`, `|` and `^` respectively.</span>
+ <span class="s0">* </span><span class="s4">@param </span><span class="s0">{Object} [options]</span>
+ <span class="s0">* </span><span class="s4">@param </span><span class="s0">{Object} [options.raw] - describes operand when using raw pixel data.</span>
+ <span class="s0">* </span><span class="s4">@param </span><span class="s0">{number} [options.raw.width]</span>
+ <span class="s0">* </span><span class="s4">@param </span><span class="s0">{number} [options.raw.height]</span>
+ <span class="s0">* </span><span class="s4">@param </span><span class="s0">{number} [options.raw.channels]</span>
+ <span class="s0">* </span><span class="s4">@returns </span><span class="s0">{Sharp}</span>
+ <span class="s0">* </span><span class="s4">@throws </span><span class="s0">{Error} Invalid parameters</span>
+ <span class="s0">*/</span>
+<span class="s3">function </span><span class="s1">boolean (operand, operator, options) {</span>
+  <span class="s3">this</span><span class="s1">.options.boolean = </span><span class="s3">this</span><span class="s1">._createInputDescriptor(operand, options);</span>
+  <span class="s3">if </span><span class="s1">(is.string(operator) &amp;&amp; is.inArray(operator, [</span><span class="s2">'and'</span><span class="s1">, </span><span class="s2">'or'</span><span class="s1">, </span><span class="s2">'eor'</span><span class="s1">])) {</span>
+    <span class="s3">this</span><span class="s1">.options.booleanOp = operator;</span>
+  <span class="s1">} </span><span class="s3">else </span><span class="s1">{</span>
+    <span class="s3">throw </span><span class="s1">is.invalidParameterError(</span><span class="s2">'operator'</span><span class="s1">, </span><span class="s2">'one of: and, or, eor'</span><span class="s1">, operator);</span>
+  <span class="s1">}</span>
+  <span class="s3">return this</span><span class="s1">;</span>
+<span class="s1">}</span>
+
+<span class="s0">/**</span>
+ <span class="s0">* Apply the linear formula `a` * input + `b` to the image to adjust image levels.</span>
+ <span class="s0">*</span>
+ <span class="s0">* When a single number is provided, it will be used for all image channels.</span>
+ <span class="s0">* When an array of numbers is provided, the array length must match the number of channels.</span>
+ <span class="s0">*</span>
+ <span class="s0">* </span><span class="s4">@example</span>
+ <span class="s0">* await sharp(input)</span>
+ <span class="s0">*   .linear(0.5, 2)</span>
+ <span class="s0">*   .toBuffer();</span>
+ <span class="s0">*</span>
+ <span class="s0">* </span><span class="s4">@example</span>
+ <span class="s0">* await sharp(rgbInput)</span>
+ <span class="s0">*   .linear(</span>
+ <span class="s0">*     [0.25, 0.5, 0.75],</span>
+ <span class="s0">*     [150, 100, 50]</span>
+ <span class="s0">*   )</span>
+ <span class="s0">*   .toBuffer();</span>
+ <span class="s0">*</span>
+ <span class="s0">* </span><span class="s4">@param </span><span class="s0">{(number|number[])} [a=[]] multiplier</span>
+ <span class="s0">* </span><span class="s4">@param </span><span class="s0">{(number|number[])} [b=[]] offset</span>
+ <span class="s0">* </span><span class="s4">@returns </span><span class="s0">{Sharp}</span>
+ <span class="s0">* </span><span class="s4">@throws </span><span class="s0">{Error} Invalid parameters</span>
+ <span class="s0">*/</span>
+<span class="s3">function </span><span class="s1">linear (a, b) {</span>
+  <span class="s3">if </span><span class="s1">(!is.defined(a) &amp;&amp; is.number(b)) {</span>
+    <span class="s1">a = </span><span class="s5">1.0</span><span class="s1">;</span>
+  <span class="s1">} </span><span class="s3">else if </span><span class="s1">(is.number(a) &amp;&amp; !is.defined(b)) {</span>
+    <span class="s1">b = </span><span class="s5">0.0</span><span class="s1">;</span>
+  <span class="s1">}</span>
+  <span class="s3">if </span><span class="s1">(!is.defined(a)) {</span>
+    <span class="s3">this</span><span class="s1">.options.linearA = [];</span>
+  <span class="s1">} </span><span class="s3">else if </span><span class="s1">(is.number(a)) {</span>
+    <span class="s3">this</span><span class="s1">.options.linearA = [a];</span>
+  <span class="s1">} </span><span class="s3">else if </span><span class="s1">(Array.isArray(a) &amp;&amp; a.length &amp;&amp; a.every(is.number)) {</span>
+    <span class="s3">this</span><span class="s1">.options.linearA = a;</span>
+  <span class="s1">} </span><span class="s3">else </span><span class="s1">{</span>
+    <span class="s3">throw </span><span class="s1">is.invalidParameterError(</span><span class="s2">'a'</span><span class="s1">, </span><span class="s2">'number or array of numbers'</span><span class="s1">, a);</span>
+  <span class="s1">}</span>
+  <span class="s3">if </span><span class="s1">(!is.defined(b)) {</span>
+    <span class="s3">this</span><span class="s1">.options.linearB = [];</span>
+  <span class="s1">} </span><span class="s3">else if </span><span class="s1">(is.number(b)) {</span>
+    <span class="s3">this</span><span class="s1">.options.linearB = [b];</span>
+  <span class="s1">} </span><span class="s3">else if </span><span class="s1">(Array.isArray(b) &amp;&amp; b.length &amp;&amp; b.every(is.number)) {</span>
+    <span class="s3">this</span><span class="s1">.options.linearB = b;</span>
+  <span class="s1">} </span><span class="s3">else </span><span class="s1">{</span>
+    <span class="s3">throw </span><span class="s1">is.invalidParameterError(</span><span class="s2">'b'</span><span class="s1">, </span><span class="s2">'number or array of numbers'</span><span class="s1">, b);</span>
+  <span class="s1">}</span>
+  <span class="s3">if </span><span class="s1">(</span><span class="s3">this</span><span class="s1">.options.linearA.length !== </span><span class="s3">this</span><span class="s1">.options.linearB.length) {</span>
+    <span class="s3">throw new </span><span class="s1">Error(</span><span class="s2">'Expected a and b to be arrays of the same length'</span><span class="s1">);</span>
+  <span class="s1">}</span>
+  <span class="s3">return this</span><span class="s1">;</span>
+<span class="s1">}</span>
+
+<span class="s0">/**</span>
+ <span class="s0">* Recombine the image with the specified matrix.</span>
+ <span class="s0">*</span>
+ <span class="s0">* </span><span class="s4">@since </span><span class="s0">0.21.1</span>
+ <span class="s0">*</span>
+ <span class="s0">* </span><span class="s4">@example</span>
+ <span class="s0">* sharp(input)</span>
+ <span class="s0">*   .recomb([</span>
+ <span class="s0">*    [0.3588, 0.7044, 0.1368],</span>
+ <span class="s0">*    [0.2990, 0.5870, 0.1140],</span>
+ <span class="s0">*    [0.2392, 0.4696, 0.0912],</span>
+ <span class="s0">*   ])</span>
+ <span class="s0">*   .raw()</span>
+ <span class="s0">*   .toBuffer(function(err, data, info) {</span>
+ <span class="s0">*     // data contains the raw pixel data after applying the matrix</span>
+ <span class="s0">*     // With this example input, a sepia filter has been applied</span>
+ <span class="s0">*   });</span>
+ <span class="s0">*</span>
+ <span class="s0">* </span><span class="s4">@param </span><span class="s0">{Array&lt;Array&lt;number&gt;&gt;} inputMatrix - 3x3 or 4x4 Recombination matrix</span>
+ <span class="s0">* </span><span class="s4">@returns </span><span class="s0">{Sharp}</span>
+ <span class="s0">* </span><span class="s4">@throws </span><span class="s0">{Error} Invalid parameters</span>
+ <span class="s0">*/</span>
+<span class="s3">function </span><span class="s1">recomb (inputMatrix) {</span>
+  <span class="s3">if </span><span class="s1">(!Array.isArray(inputMatrix)) {</span>
+    <span class="s3">throw </span><span class="s1">is.invalidParameterError(</span><span class="s2">'inputMatrix'</span><span class="s1">, </span><span class="s2">'array'</span><span class="s1">, inputMatrix);</span>
+  <span class="s1">}</span>
+  <span class="s3">if </span><span class="s1">(inputMatrix.length !== </span><span class="s5">3 </span><span class="s1">&amp;&amp; inputMatrix.length !== </span><span class="s5">4</span><span class="s1">) {</span>
+    <span class="s3">throw </span><span class="s1">is.invalidParameterError(</span><span class="s2">'inputMatrix'</span><span class="s1">, </span><span class="s2">'3x3 or 4x4 array'</span><span class="s1">, inputMatrix.length);</span>
+  <span class="s1">}</span>
+  <span class="s3">const </span><span class="s1">recombMatrix = inputMatrix.flat().map(Number);</span>
+  <span class="s3">if </span><span class="s1">(recombMatrix.length !== </span><span class="s5">9 </span><span class="s1">&amp;&amp; recombMatrix.length !== </span><span class="s5">16</span><span class="s1">) {</span>
+    <span class="s3">throw </span><span class="s1">is.invalidParameterError(</span><span class="s2">'inputMatrix'</span><span class="s1">, </span><span class="s2">'cardinality of 9 or 16'</span><span class="s1">, recombMatrix.length);</span>
+  <span class="s1">}</span>
+  <span class="s3">this</span><span class="s1">.options.recombMatrix = recombMatrix;</span>
+  <span class="s3">return this</span><span class="s1">;</span>
+<span class="s1">}</span>
+
+<span class="s0">/**</span>
+ <span class="s0">* Transforms the image using brightness, saturation, hue rotation, and lightness.</span>
+ <span class="s0">* Brightness and lightness both operate on luminance, with the difference being that</span>
+ <span class="s0">* brightness is multiplicative whereas lightness is additive.</span>
+ <span class="s0">*</span>
+ <span class="s0">* </span><span class="s4">@since </span><span class="s0">0.22.1</span>
+ <span class="s0">*</span>
+ <span class="s0">* </span><span class="s4">@example</span>
+ <span class="s0">* // increase brightness by a factor of 2</span>
+ <span class="s0">* const output = await sharp(input)</span>
+ <span class="s0">*   .modulate({</span>
+ <span class="s0">*     brightness: 2</span>
+ <span class="s0">*   })</span>
+ <span class="s0">*   .toBuffer();</span>
+ <span class="s0">*</span>
+ <span class="s0">* </span><span class="s4">@example</span>
+ <span class="s0">* // hue-rotate by 180 degrees</span>
+ <span class="s0">* const output = await sharp(input)</span>
+ <span class="s0">*   .modulate({</span>
+ <span class="s0">*     hue: 180</span>
+ <span class="s0">*   })</span>
+ <span class="s0">*   .toBuffer();</span>
+ <span class="s0">*</span>
+ <span class="s0">* </span><span class="s4">@example</span>
+ <span class="s0">* // increase lightness by +50</span>
+ <span class="s0">* const output = await sharp(input)</span>
+ <span class="s0">*   .modulate({</span>
+ <span class="s0">*     lightness: 50</span>
+ <span class="s0">*   })</span>
+ <span class="s0">*   .toBuffer();</span>
+ <span class="s0">*</span>
+ <span class="s0">* </span><span class="s4">@example</span>
+ <span class="s0">* // decrease brightness and saturation while also hue-rotating by 90 degrees</span>
+ <span class="s0">* const output = await sharp(input)</span>
+ <span class="s0">*   .modulate({</span>
+ <span class="s0">*     brightness: 0.5,</span>
+ <span class="s0">*     saturation: 0.5,</span>
+ <span class="s0">*     hue: 90,</span>
+ <span class="s0">*   })</span>
+ <span class="s0">*   .toBuffer();</span>
+ <span class="s0">*</span>
+ <span class="s0">* </span><span class="s4">@param </span><span class="s0">{Object} [options]</span>
+ <span class="s0">* </span><span class="s4">@param </span><span class="s0">{number} [options.brightness] Brightness multiplier</span>
+ <span class="s0">* </span><span class="s4">@param </span><span class="s0">{number} [options.saturation] Saturation multiplier</span>
+ <span class="s0">* </span><span class="s4">@param </span><span class="s0">{number} [options.hue] Degrees for hue rotation</span>
+ <span class="s0">* </span><span class="s4">@param </span><span class="s0">{number} [options.lightness] Lightness addend</span>
+ <span class="s0">* </span><span class="s4">@returns </span><span class="s0">{Sharp}</span>
+ <span class="s0">*/</span>
+<span class="s3">function </span><span class="s1">modulate (options) {</span>
+  <span class="s3">if </span><span class="s1">(!is.plainObject(options)) {</span>
+    <span class="s3">throw </span><span class="s1">is.invalidParameterError(</span><span class="s2">'options'</span><span class="s1">, </span><span class="s2">'plain object'</span><span class="s1">, options);</span>
+  <span class="s1">}</span>
+  <span class="s3">if </span><span class="s1">(</span><span class="s2">'brightness' </span><span class="s3">in </span><span class="s1">options) {</span>
+    <span class="s3">if </span><span class="s1">(is.number(options.brightness) &amp;&amp; options.brightness &gt;= </span><span class="s5">0</span><span class="s1">) {</span>
+      <span class="s3">this</span><span class="s1">.options.brightness = options.brightness;</span>
+    <span class="s1">} </span><span class="s3">else </span><span class="s1">{</span>
+      <span class="s3">throw </span><span class="s1">is.invalidParameterError(</span><span class="s2">'brightness'</span><span class="s1">, </span><span class="s2">'number above zero'</span><span class="s1">, options.brightness);</span>
+    <span class="s1">}</span>
+  <span class="s1">}</span>
+  <span class="s3">if </span><span class="s1">(</span><span class="s2">'saturation' </span><span class="s3">in </span><span class="s1">options) {</span>
+    <span class="s3">if </span><span class="s1">(is.number(options.saturation) &amp;&amp; options.saturation &gt;= </span><span class="s5">0</span><span class="s1">) {</span>
+      <span class="s3">this</span><span class="s1">.options.saturation = options.saturation;</span>
+    <span class="s1">} </span><span class="s3">else </span><span class="s1">{</span>
+      <span class="s3">throw </span><span class="s1">is.invalidParameterError(</span><span class="s2">'saturation'</span><span class="s1">, </span><span class="s2">'number above zero'</span><span class="s1">, options.saturation);</span>
+    <span class="s1">}</span>
+  <span class="s1">}</span>
+  <span class="s3">if </span><span class="s1">(</span><span class="s2">'hue' </span><span class="s3">in </span><span class="s1">options) {</span>
+    <span class="s3">if </span><span class="s1">(is.integer(options.hue)) {</span>
+      <span class="s3">this</span><span class="s1">.options.hue = options.hue % </span><span class="s5">360</span><span class="s1">;</span>
+    <span class="s1">} </span><span class="s3">else </span><span class="s1">{</span>
+      <span class="s3">throw </span><span class="s1">is.invalidParameterError(</span><span class="s2">'hue'</span><span class="s1">, </span><span class="s2">'number'</span><span class="s1">, options.hue);</span>
+    <span class="s1">}</span>
+  <span class="s1">}</span>
+  <span class="s3">if </span><span class="s1">(</span><span class="s2">'lightness' </span><span class="s3">in </span><span class="s1">options) {</span>
+    <span class="s3">if </span><span class="s1">(is.number(options.lightness)) {</span>
+      <span class="s3">this</span><span class="s1">.options.lightness = options.lightness;</span>
+    <span class="s1">} </span><span class="s3">else </span><span class="s1">{</span>
+      <span class="s3">throw </span><span class="s1">is.invalidParameterError(</span><span class="s2">'lightness'</span><span class="s1">, </span><span class="s2">'number'</span><span class="s1">, options.lightness);</span>
+    <span class="s1">}</span>
+  <span class="s1">}</span>
+  <span class="s3">return this</span><span class="s1">;</span>
+<span class="s1">}</span>
+
+<span class="s0">/**</span>
+ <span class="s0">* Decorate the Sharp prototype with operation-related functions.</span>
+ <span class="s0">* </span><span class="s4">@module </span><span class="s0">Sharp</span>
+ <span class="s0">* </span><span class="s4">@private</span>
+ <span class="s0">*/</span>
+<span class="s1">module.exports = </span><span class="s3">function </span><span class="s1">(Sharp) {</span>
+  <span class="s1">Object.assign(Sharp.prototype, {</span>
+    <span class="s1">autoOrient,</span>
+    <span class="s1">rotate,</span>
+    <span class="s1">flip,</span>
+    <span class="s1">flop,</span>
+    <span class="s1">affine,</span>
+    <span class="s1">sharpen,</span>
+    <span class="s1">erode,</span>
+    <span class="s1">dilate,</span>
+    <span class="s1">median,</span>
+    <span class="s1">blur,</span>
+    <span class="s1">flatten,</span>
+    <span class="s1">unflatten,</span>
+    <span class="s1">gamma,</span>
+    <span class="s1">negate,</span>
+    <span class="s1">normalise,</span>
+    <span class="s1">normalize,</span>
+    <span class="s1">clahe,</span>
+    <span class="s1">convolve,</span>
+    <span class="s1">threshold,</span>
+    <span class="s1">boolean,</span>
+    <span class="s1">linear,</span>
+    <span class="s1">recomb,</span>
+    <span class="s1">modulate</span>
+  <span class="s1">});</span>
+<span class="s1">};</span>
+</pre>
+</body>
+</html>

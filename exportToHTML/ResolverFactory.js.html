@@ -1,0 +1,754 @@
+<html>
+<head>
+<title>ResolverFactory.js</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #8c8c8c; font-style: italic;}
+.s1 { color: #080808;}
+.s2 { color: #067d17;}
+.s3 { color: #0033b3;}
+.s4 { color: #8c8c8c; font-style: italic;}
+.s5 { color: #264eff;}
+.s6 { color: #1750eb;}
+</style>
+</head>
+<body bgcolor="#ffffff">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#c0c0c0" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+ResolverFactory.js</font>
+</center></td></tr></table>
+<pre><span class="s0">/* 
+    MIT License http://www.opensource.org/licenses/mit-license.php 
+    Author Tobias Koppers @sokra 
+*/</span>
+
+<span class="s2">&quot;use strict&quot;</span><span class="s1">;</span>
+
+<span class="s0">// eslint-disable-next-line n/prefer-global/process</span>
+<span class="s3">const </span><span class="s1">{ versions } = require(</span><span class="s2">&quot;process&quot;</span><span class="s1">);</span>
+
+<span class="s3">const </span><span class="s1">AliasFieldPlugin = require(</span><span class="s2">&quot;./AliasFieldPlugin&quot;</span><span class="s1">);</span>
+<span class="s3">const </span><span class="s1">AliasPlugin = require(</span><span class="s2">&quot;./AliasPlugin&quot;</span><span class="s1">);</span>
+<span class="s3">const </span><span class="s1">AppendPlugin = require(</span><span class="s2">&quot;./AppendPlugin&quot;</span><span class="s1">);</span>
+<span class="s3">const </span><span class="s1">ConditionalPlugin = require(</span><span class="s2">&quot;./ConditionalPlugin&quot;</span><span class="s1">);</span>
+<span class="s3">const </span><span class="s1">DescriptionFilePlugin = require(</span><span class="s2">&quot;./DescriptionFilePlugin&quot;</span><span class="s1">);</span>
+<span class="s3">const </span><span class="s1">DirectoryExistsPlugin = require(</span><span class="s2">&quot;./DirectoryExistsPlugin&quot;</span><span class="s1">);</span>
+<span class="s3">const </span><span class="s1">ExportsFieldPlugin = require(</span><span class="s2">&quot;./ExportsFieldPlugin&quot;</span><span class="s1">);</span>
+<span class="s3">const </span><span class="s1">ExtensionAliasPlugin = require(</span><span class="s2">&quot;./ExtensionAliasPlugin&quot;</span><span class="s1">);</span>
+<span class="s3">const </span><span class="s1">FileExistsPlugin = require(</span><span class="s2">&quot;./FileExistsPlugin&quot;</span><span class="s1">);</span>
+<span class="s3">const </span><span class="s1">ImportsFieldPlugin = require(</span><span class="s2">&quot;./ImportsFieldPlugin&quot;</span><span class="s1">);</span>
+<span class="s3">const </span><span class="s1">JoinRequestPartPlugin = require(</span><span class="s2">&quot;./JoinRequestPartPlugin&quot;</span><span class="s1">);</span>
+<span class="s3">const </span><span class="s1">JoinRequestPlugin = require(</span><span class="s2">&quot;./JoinRequestPlugin&quot;</span><span class="s1">);</span>
+<span class="s3">const </span><span class="s1">MainFieldPlugin = require(</span><span class="s2">&quot;./MainFieldPlugin&quot;</span><span class="s1">);</span>
+<span class="s3">const </span><span class="s1">ModulesInHierarchicalDirectoriesPlugin = require(</span><span class="s2">&quot;./ModulesInHierarchicalDirectoriesPlugin&quot;</span><span class="s1">);</span>
+<span class="s3">const </span><span class="s1">ModulesInRootPlugin = require(</span><span class="s2">&quot;./ModulesInRootPlugin&quot;</span><span class="s1">);</span>
+<span class="s3">const </span><span class="s1">NextPlugin = require(</span><span class="s2">&quot;./NextPlugin&quot;</span><span class="s1">);</span>
+<span class="s3">const </span><span class="s1">ParsePlugin = require(</span><span class="s2">&quot;./ParsePlugin&quot;</span><span class="s1">);</span>
+<span class="s3">const </span><span class="s1">PnpPlugin = require(</span><span class="s2">&quot;./PnpPlugin&quot;</span><span class="s1">);</span>
+<span class="s3">const </span><span class="s1">Resolver = require(</span><span class="s2">&quot;./Resolver&quot;</span><span class="s1">);</span>
+<span class="s3">const </span><span class="s1">RestrictionsPlugin = require(</span><span class="s2">&quot;./RestrictionsPlugin&quot;</span><span class="s1">);</span>
+<span class="s3">const </span><span class="s1">ResultPlugin = require(</span><span class="s2">&quot;./ResultPlugin&quot;</span><span class="s1">);</span>
+<span class="s3">const </span><span class="s1">RootsPlugin = require(</span><span class="s2">&quot;./RootsPlugin&quot;</span><span class="s1">);</span>
+<span class="s3">const </span><span class="s1">SelfReferencePlugin = require(</span><span class="s2">&quot;./SelfReferencePlugin&quot;</span><span class="s1">);</span>
+<span class="s3">const </span><span class="s1">SymlinkPlugin = require(</span><span class="s2">&quot;./SymlinkPlugin&quot;</span><span class="s1">);</span>
+<span class="s3">const </span><span class="s1">SyncAsyncFileSystemDecorator = require(</span><span class="s2">&quot;./SyncAsyncFileSystemDecorator&quot;</span><span class="s1">);</span>
+<span class="s3">const </span><span class="s1">TryNextPlugin = require(</span><span class="s2">&quot;./TryNextPlugin&quot;</span><span class="s1">);</span>
+<span class="s3">const </span><span class="s1">UnsafeCachePlugin = require(</span><span class="s2">&quot;./UnsafeCachePlugin&quot;</span><span class="s1">);</span>
+<span class="s3">const </span><span class="s1">UseFilePlugin = require(</span><span class="s2">&quot;./UseFilePlugin&quot;</span><span class="s1">);</span>
+<span class="s3">const </span><span class="s1">{ PathType, getType } = require(</span><span class="s2">&quot;./util/path&quot;</span><span class="s1">);</span>
+
+<span class="s0">/** </span><span class="s4">@typedef </span><span class="s0">{import(&quot;./AliasPlugin&quot;).AliasOption} AliasOptionEntry */</span>
+<span class="s0">/** </span><span class="s4">@typedef </span><span class="s0">{import(&quot;./ExtensionAliasPlugin&quot;).ExtensionAliasOption} ExtensionAliasOption */</span>
+<span class="s0">/** </span><span class="s4">@typedef </span><span class="s0">{import(&quot;./PnpPlugin&quot;).PnpApiImpl} PnpApi */</span>
+<span class="s0">/** </span><span class="s4">@typedef </span><span class="s0">{import(&quot;./Resolver&quot;).EnsuredHooks} EnsuredHooks */</span>
+<span class="s0">/** </span><span class="s4">@typedef </span><span class="s0">{import(&quot;./Resolver&quot;).FileSystem} FileSystem */</span>
+<span class="s0">/** </span><span class="s4">@typedef </span><span class="s0">{import(&quot;./Resolver&quot;).KnownHooks} KnownHooks */</span>
+<span class="s0">/** </span><span class="s4">@typedef </span><span class="s0">{import(&quot;./Resolver&quot;).ResolveRequest} ResolveRequest */</span>
+<span class="s0">/** </span><span class="s4">@typedef </span><span class="s0">{import(&quot;./Resolver&quot;).SyncFileSystem} SyncFileSystem */</span>
+<span class="s0">/** </span><span class="s4">@typedef </span><span class="s0">{import(&quot;./UnsafeCachePlugin&quot;).Cache} Cache */</span>
+
+<span class="s0">/** </span><span class="s4">@typedef </span><span class="s0">{string | string[] | false} AliasOptionNewRequest */</span>
+<span class="s0">/** </span><span class="s4">@typedef </span><span class="s0">{{ [k: string]: AliasOptionNewRequest }} AliasOptions */</span>
+<span class="s0">/** </span><span class="s4">@typedef </span><span class="s0">{{ [k: string]: string|string[] }} ExtensionAliasOptions */</span>
+<span class="s0">/** </span><span class="s4">@typedef </span><span class="s0">{false | 0 | &quot;&quot; | null | undefined} Falsy */</span>
+<span class="s0">/** </span><span class="s4">@typedef </span><span class="s0">{{apply: (resolver: Resolver) =&gt; void} | ((this: Resolver, resolver: Resolver) =&gt; void) | Falsy} Plugin */</span>
+
+<span class="s0">/**</span>
+ <span class="s0">* </span><span class="s4">@typedef </span><span class="s0">{object} UserResolveOptions</span>
+ <span class="s0">* </span><span class="s4">@property </span><span class="s0">{(AliasOptions | AliasOptionEntry[])=} alias A list of module alias configurations or an object which maps key to value</span>
+ <span class="s0">* </span><span class="s4">@property </span><span class="s0">{(AliasOptions | AliasOptionEntry[])=} fallback A list of module alias configurations or an object which maps key to value, applied only after modules option</span>
+ <span class="s0">* </span><span class="s4">@property </span><span class="s0">{ExtensionAliasOptions=} extensionAlias An object which maps extension to extension aliases</span>
+ <span class="s0">* </span><span class="s4">@property </span><span class="s0">{(string | string[])[]=} aliasFields A list of alias fields in description files</span>
+ <span class="s0">* </span><span class="s4">@property </span><span class="s0">{((predicate: ResolveRequest) =&gt; boolean)=} cachePredicate A function which decides whether a request should be cached or not. An object is passed with at least `path` and `request` properties.</span>
+ <span class="s0">* </span><span class="s4">@property </span><span class="s0">{boolean=} cacheWithContext Whether or not the unsafeCache should include request context as part of the cache key.</span>
+ <span class="s0">* </span><span class="s4">@property </span><span class="s0">{string[]=} descriptionFiles A list of description files to read from</span>
+ <span class="s0">* </span><span class="s4">@property </span><span class="s0">{string[]=} conditionNames A list of exports field condition names.</span>
+ <span class="s0">* </span><span class="s4">@property </span><span class="s0">{boolean=} enforceExtension Enforce that a extension from extensions must be used</span>
+ <span class="s0">* </span><span class="s4">@property </span><span class="s0">{(string | string[])[]=} exportsFields A list of exports fields in description files</span>
+ <span class="s0">* </span><span class="s4">@property </span><span class="s0">{(string | string[])[]=} importsFields A list of imports fields in description files</span>
+ <span class="s0">* </span><span class="s4">@property </span><span class="s0">{string[]=} extensions A list of extensions which should be tried for files</span>
+ <span class="s0">* </span><span class="s4">@property </span><span class="s0">{FileSystem} fileSystem The file system which should be used</span>
+ <span class="s0">* </span><span class="s4">@property </span><span class="s0">{(Cache | boolean)=} unsafeCache Use this cache object to unsafely cache the successful requests</span>
+ <span class="s0">* </span><span class="s4">@property </span><span class="s0">{boolean=} symlinks Resolve symlinks to their symlinked location</span>
+ <span class="s0">* </span><span class="s4">@property </span><span class="s0">{Resolver=} resolver A prepared Resolver to which the plugins are attached</span>
+ <span class="s0">* </span><span class="s4">@property </span><span class="s0">{string[] | string=} modules A list of directories to resolve modules from, can be absolute path or folder name</span>
+ <span class="s0">* </span><span class="s4">@property </span><span class="s0">{(string | string[] | {name: string | string[], forceRelative: boolean})[]=} mainFields A list of main fields in description files</span>
+ <span class="s0">* </span><span class="s4">@property </span><span class="s0">{string[]=} mainFiles A list of main files in directories</span>
+ <span class="s0">* </span><span class="s4">@property </span><span class="s0">{Plugin[]=} plugins A list of additional resolve plugins which should be applied</span>
+ <span class="s0">* </span><span class="s4">@property </span><span class="s0">{PnpApi | null=} pnpApi A PnP API that should be used - null is &quot;never&quot;, undefined is &quot;auto&quot;</span>
+ <span class="s0">* </span><span class="s4">@property </span><span class="s0">{string[]=} roots A list of root paths</span>
+ <span class="s0">* </span><span class="s4">@property </span><span class="s0">{boolean=} fullySpecified The request is already fully specified and no extensions or directories are resolved for it</span>
+ <span class="s0">* </span><span class="s4">@property </span><span class="s0">{boolean=} resolveToContext Resolve to a context instead of a file</span>
+ <span class="s0">* </span><span class="s4">@property </span><span class="s0">{(string|RegExp)[]=} restrictions A list of resolve restrictions</span>
+ <span class="s0">* </span><span class="s4">@property </span><span class="s0">{boolean=} useSyncFileSystemCalls Use only the sync constraints of the file system calls</span>
+ <span class="s0">* </span><span class="s4">@property </span><span class="s0">{boolean=} preferRelative Prefer to resolve module requests as relative requests before falling back to modules</span>
+ <span class="s0">* </span><span class="s4">@property </span><span class="s0">{boolean=} preferAbsolute Prefer to resolve server-relative urls as absolute paths before falling back to resolve in roots</span>
+ <span class="s0">*/</span>
+
+<span class="s0">/**</span>
+ <span class="s0">* </span><span class="s4">@typedef </span><span class="s0">{object} ResolveOptions</span>
+ <span class="s0">* </span><span class="s4">@property </span><span class="s0">{AliasOptionEntry[]} alias alias</span>
+ <span class="s0">* </span><span class="s4">@property </span><span class="s0">{AliasOptionEntry[]} fallback fallback</span>
+ <span class="s0">* </span><span class="s4">@property </span><span class="s0">{Set&lt;string | string[]&gt;} aliasFields alias fields</span>
+ <span class="s0">* </span><span class="s4">@property </span><span class="s0">{ExtensionAliasOption[]} extensionAlias extension alias</span>
+ <span class="s0">* </span><span class="s4">@property </span><span class="s0">{(predicate: ResolveRequest) =&gt; boolean} cachePredicate cache predicate</span>
+ <span class="s0">* </span><span class="s4">@property </span><span class="s0">{boolean} cacheWithContext cache with context</span>
+ <span class="s0">* </span><span class="s4">@property </span><span class="s0">{Set&lt;string&gt;} conditionNames A list of exports field condition names.</span>
+ <span class="s0">* </span><span class="s4">@property </span><span class="s0">{string[]} descriptionFiles description files</span>
+ <span class="s0">* </span><span class="s4">@property </span><span class="s0">{boolean} enforceExtension enforce extension</span>
+ <span class="s0">* </span><span class="s4">@property </span><span class="s0">{Set&lt;string | string[]&gt;} exportsFields exports fields</span>
+ <span class="s0">* </span><span class="s4">@property </span><span class="s0">{Set&lt;string | string[]&gt;} importsFields imports fields</span>
+ <span class="s0">* </span><span class="s4">@property </span><span class="s0">{Set&lt;string&gt;} extensions extensions</span>
+ <span class="s0">* </span><span class="s4">@property </span><span class="s0">{FileSystem} fileSystem fileSystem</span>
+ <span class="s0">* </span><span class="s4">@property </span><span class="s0">{Cache | false} unsafeCache unsafe cache</span>
+ <span class="s0">* </span><span class="s4">@property </span><span class="s0">{boolean} symlinks symlinks</span>
+ <span class="s0">* </span><span class="s4">@property </span><span class="s0">{Resolver=} resolver resolver</span>
+ <span class="s0">* </span><span class="s4">@property </span><span class="s0">{Array&lt;string | string[]&gt;} modules modules</span>
+ <span class="s0">* </span><span class="s4">@property </span><span class="s0">{{ name: string[], forceRelative: boolean }[]} mainFields main fields</span>
+ <span class="s0">* </span><span class="s4">@property </span><span class="s0">{Set&lt;string&gt;} mainFiles main files</span>
+ <span class="s0">* </span><span class="s4">@property </span><span class="s0">{Plugin[]} plugins plugins</span>
+ <span class="s0">* </span><span class="s4">@property </span><span class="s0">{PnpApi | null} pnpApi pnp API</span>
+ <span class="s0">* </span><span class="s4">@property </span><span class="s0">{Set&lt;string&gt;} roots roots</span>
+ <span class="s0">* </span><span class="s4">@property </span><span class="s0">{boolean} fullySpecified fully specified</span>
+ <span class="s0">* </span><span class="s4">@property </span><span class="s0">{boolean} resolveToContext resolve to context</span>
+ <span class="s0">* </span><span class="s4">@property </span><span class="s0">{Set&lt;string | RegExp&gt;} restrictions restrictions</span>
+ <span class="s0">* </span><span class="s4">@property </span><span class="s0">{boolean} preferRelative prefer relative</span>
+ <span class="s0">* </span><span class="s4">@property </span><span class="s0">{boolean} preferAbsolute prefer absolute</span>
+ <span class="s0">*/</span>
+
+<span class="s0">/**</span>
+ <span class="s0">* </span><span class="s4">@param </span><span class="s0">{PnpApi | null=} option option</span>
+ <span class="s0">* </span><span class="s4">@returns </span><span class="s0">{PnpApi | null} processed option</span>
+ <span class="s0">*/</span>
+<span class="s3">function </span><span class="s1">processPnpApiOption(option) {</span>
+	<span class="s3">if </span><span class="s1">(</span>
+		<span class="s1">option === undefined &amp;&amp;</span>
+		<span class="s0">/** </span><span class="s4">@type </span><span class="s0">{NodeJS.ProcessVersions &amp; {pnp: string}} */ </span><span class="s1">versions.pnp</span>
+	<span class="s1">) {</span>
+		<span class="s3">const </span><span class="s1">_findPnpApi =</span>
+			<span class="s0">/** </span><span class="s4">@type </span><span class="s0">{(issuer: string) =&gt; PnpApi | null}} */</span>
+			<span class="s1">(</span>
+				<span class="s0">// @ts-expect-error maybe nothing</span>
+				<span class="s1">require(</span><span class="s2">&quot;module&quot;</span><span class="s1">).findPnpApi</span>
+			<span class="s1">);</span>
+
+		<span class="s3">if </span><span class="s1">(_findPnpApi) {</span>
+			<span class="s3">return </span><span class="s1">{</span>
+				<span class="s1">resolveToUnqualified(request, issuer, opts) {</span>
+					<span class="s3">const </span><span class="s1">pnpapi = _findPnpApi(issuer);</span>
+
+					<span class="s3">if </span><span class="s1">(!pnpapi) {</span>
+						<span class="s0">// Issuer isn't managed by PnP</span>
+						<span class="s3">return null</span><span class="s1">;</span>
+					<span class="s1">}</span>
+
+					<span class="s3">return </span><span class="s1">pnpapi.resolveToUnqualified(request, issuer, opts);</span>
+				<span class="s1">},</span>
+			<span class="s1">};</span>
+		<span class="s1">}</span>
+	<span class="s1">}</span>
+
+	<span class="s3">return </span><span class="s1">option || </span><span class="s3">null</span><span class="s1">;</span>
+<span class="s1">}</span>
+
+<span class="s0">/**</span>
+ <span class="s0">* </span><span class="s4">@param </span><span class="s0">{AliasOptions | AliasOptionEntry[] | undefined} alias alias</span>
+ <span class="s0">* </span><span class="s4">@returns </span><span class="s0">{AliasOptionEntry[]} normalized aliases</span>
+ <span class="s0">*/</span>
+<span class="s3">function </span><span class="s1">normalizeAlias(alias) {</span>
+	<span class="s3">return typeof </span><span class="s1">alias === </span><span class="s2">&quot;object&quot; </span><span class="s1">&amp;&amp; !Array.isArray(alias) &amp;&amp; alias !== </span><span class="s3">null</span>
+		<span class="s1">? Object.keys(alias).map((key) =&gt; {</span>
+				<span class="s0">/** </span><span class="s4">@type </span><span class="s0">{AliasOptionEntry} */</span>
+				<span class="s3">const </span><span class="s1">obj = { name: key, onlyModule: </span><span class="s3">false</span><span class="s1">, alias: alias[key] };</span>
+
+				<span class="s3">if </span><span class="s1">(</span><span class="s5">/\$$/</span><span class="s1">.test(key)) {</span>
+					<span class="s1">obj.onlyModule = </span><span class="s3">true</span><span class="s1">;</span>
+					<span class="s1">obj.name = key.slice(</span><span class="s6">0</span><span class="s1">, -</span><span class="s6">1</span><span class="s1">);</span>
+				<span class="s1">}</span>
+
+				<span class="s3">return </span><span class="s1">obj;</span>
+			<span class="s1">})</span>
+		<span class="s1">: </span><span class="s0">/** </span><span class="s4">@type </span><span class="s0">{Array&lt;AliasOptionEntry&gt;} */ </span><span class="s1">(alias) || [];</span>
+<span class="s1">}</span>
+
+<span class="s0">/**</span>
+ <span class="s0">* Merging filtered elements</span>
+ <span class="s0">* </span><span class="s4">@param </span><span class="s0">{string[]} array source array</span>
+ <span class="s0">* </span><span class="s4">@param </span><span class="s0">{(item: string) =&gt; boolean} filter predicate</span>
+ <span class="s0">* </span><span class="s4">@returns </span><span class="s0">{Array&lt;string | string[]&gt;} merge result</span>
+ <span class="s0">*/</span>
+<span class="s3">function </span><span class="s1">mergeFilteredToArray(array, filter) {</span>
+	<span class="s0">/** </span><span class="s4">@type </span><span class="s0">{Array&lt;string | string[]&gt;} */</span>
+	<span class="s3">const </span><span class="s1">result = [];</span>
+	<span class="s3">const </span><span class="s1">set = </span><span class="s3">new </span><span class="s1">Set(array);</span>
+
+	<span class="s3">for </span><span class="s1">(</span><span class="s3">const </span><span class="s1">item of set) {</span>
+		<span class="s3">if </span><span class="s1">(filter(item)) {</span>
+			<span class="s3">const </span><span class="s1">lastElement =</span>
+				<span class="s1">result.length &gt; </span><span class="s6">0 </span><span class="s1">? result[result.length - </span><span class="s6">1</span><span class="s1">] : undefined;</span>
+			<span class="s3">if </span><span class="s1">(Array.isArray(lastElement)) {</span>
+				<span class="s1">lastElement.push(item);</span>
+			<span class="s1">} </span><span class="s3">else </span><span class="s1">{</span>
+				<span class="s1">result.push([item]);</span>
+			<span class="s1">}</span>
+		<span class="s1">} </span><span class="s3">else </span><span class="s1">{</span>
+			<span class="s1">result.push(item);</span>
+		<span class="s1">}</span>
+	<span class="s1">}</span>
+
+	<span class="s3">return </span><span class="s1">result;</span>
+<span class="s1">}</span>
+
+<span class="s0">/**</span>
+ <span class="s0">* </span><span class="s4">@param </span><span class="s0">{UserResolveOptions} options input options</span>
+ <span class="s0">* </span><span class="s4">@returns </span><span class="s0">{ResolveOptions} output options</span>
+ <span class="s0">*/</span>
+<span class="s3">function </span><span class="s1">createOptions(options) {</span>
+	<span class="s3">const </span><span class="s1">mainFieldsSet = </span><span class="s3">new </span><span class="s1">Set(options.mainFields || [</span><span class="s2">&quot;main&quot;</span><span class="s1">]);</span>
+	<span class="s0">/** </span><span class="s4">@type </span><span class="s0">{ResolveOptions[&quot;mainFields&quot;]} */</span>
+	<span class="s3">const </span><span class="s1">mainFields = [];</span>
+
+	<span class="s3">for </span><span class="s1">(</span><span class="s3">const </span><span class="s1">item of mainFieldsSet) {</span>
+		<span class="s3">if </span><span class="s1">(</span><span class="s3">typeof </span><span class="s1">item === </span><span class="s2">&quot;string&quot;</span><span class="s1">) {</span>
+			<span class="s1">mainFields.push({</span>
+				<span class="s1">name: [item],</span>
+				<span class="s1">forceRelative: </span><span class="s3">true</span><span class="s1">,</span>
+			<span class="s1">});</span>
+		<span class="s1">} </span><span class="s3">else if </span><span class="s1">(Array.isArray(item)) {</span>
+			<span class="s1">mainFields.push({</span>
+				<span class="s1">name: item,</span>
+				<span class="s1">forceRelative: </span><span class="s3">true</span><span class="s1">,</span>
+			<span class="s1">});</span>
+		<span class="s1">} </span><span class="s3">else </span><span class="s1">{</span>
+			<span class="s1">mainFields.push({</span>
+				<span class="s1">name: Array.isArray(item.name) ? item.name : [item.name],</span>
+				<span class="s1">forceRelative: item.forceRelative,</span>
+			<span class="s1">});</span>
+		<span class="s1">}</span>
+	<span class="s1">}</span>
+
+	<span class="s3">return </span><span class="s1">{</span>
+		<span class="s1">alias: normalizeAlias(options.alias),</span>
+		<span class="s1">fallback: normalizeAlias(options.fallback),</span>
+		<span class="s1">aliasFields: </span><span class="s3">new </span><span class="s1">Set(options.aliasFields),</span>
+		<span class="s1">cachePredicate:</span>
+			<span class="s1">options.cachePredicate ||</span>
+			<span class="s3">function </span><span class="s1">trueFn() {</span>
+				<span class="s3">return true</span><span class="s1">;</span>
+			<span class="s1">},</span>
+		<span class="s1">cacheWithContext:</span>
+			<span class="s3">typeof </span><span class="s1">options.cacheWithContext !== </span><span class="s2">&quot;undefined&quot;</span>
+				<span class="s1">? options.cacheWithContext</span>
+				<span class="s1">: </span><span class="s3">true</span><span class="s1">,</span>
+		<span class="s1">exportsFields: </span><span class="s3">new </span><span class="s1">Set(options.exportsFields || [</span><span class="s2">&quot;exports&quot;</span><span class="s1">]),</span>
+		<span class="s1">importsFields: </span><span class="s3">new </span><span class="s1">Set(options.importsFields || [</span><span class="s2">&quot;imports&quot;</span><span class="s1">]),</span>
+		<span class="s1">conditionNames: </span><span class="s3">new </span><span class="s1">Set(options.conditionNames),</span>
+		<span class="s1">descriptionFiles: [</span>
+			<span class="s1">...</span><span class="s3">new </span><span class="s1">Set(options.descriptionFiles || [</span><span class="s2">&quot;package.json&quot;</span><span class="s1">]),</span>
+		<span class="s1">],</span>
+		<span class="s1">enforceExtension:</span>
+			<span class="s1">options.enforceExtension === undefined</span>
+				<span class="s1">? Boolean(options.extensions &amp;&amp; options.extensions.includes(</span><span class="s2">&quot;&quot;</span><span class="s1">))</span>
+				<span class="s1">: options.enforceExtension,</span>
+		<span class="s1">extensions: </span><span class="s3">new </span><span class="s1">Set(options.extensions || [</span><span class="s2">&quot;.js&quot;</span><span class="s1">, </span><span class="s2">&quot;.json&quot;</span><span class="s1">, </span><span class="s2">&quot;.node&quot;</span><span class="s1">]),</span>
+		<span class="s1">extensionAlias: options.extensionAlias</span>
+			<span class="s1">? Object.keys(options.extensionAlias).map((k) =&gt; ({</span>
+					<span class="s1">extension: k,</span>
+					<span class="s1">alias: </span><span class="s0">/** </span><span class="s4">@type </span><span class="s0">{ExtensionAliasOptions} */ </span><span class="s1">(options.extensionAlias)[</span>
+						<span class="s1">k</span>
+					<span class="s1">],</span>
+				<span class="s1">}))</span>
+			<span class="s1">: [],</span>
+		<span class="s1">fileSystem: options.useSyncFileSystemCalls</span>
+			<span class="s1">? </span><span class="s3">new </span><span class="s1">SyncAsyncFileSystemDecorator(</span>
+					<span class="s0">/** </span><span class="s4">@type </span><span class="s0">{SyncFileSystem} */ </span><span class="s1">(</span>
+						<span class="s0">/** </span><span class="s4">@type </span><span class="s0">{unknown} */ </span><span class="s1">(options.fileSystem)</span>
+					<span class="s1">),</span>
+				<span class="s1">)</span>
+			<span class="s1">: options.fileSystem,</span>
+		<span class="s1">unsafeCache:</span>
+			<span class="s1">options.unsafeCache &amp;&amp; </span><span class="s3">typeof </span><span class="s1">options.unsafeCache !== </span><span class="s2">&quot;object&quot;</span>
+				<span class="s1">? </span><span class="s0">/** </span><span class="s4">@type </span><span class="s0">{Cache} */ </span><span class="s1">({})</span>
+				<span class="s1">: options.unsafeCache || </span><span class="s3">false</span><span class="s1">,</span>
+		<span class="s1">symlinks: </span><span class="s3">typeof </span><span class="s1">options.symlinks !== </span><span class="s2">&quot;undefined&quot; </span><span class="s1">? options.symlinks : </span><span class="s3">true</span><span class="s1">,</span>
+		<span class="s1">resolver: options.resolver,</span>
+		<span class="s1">modules: mergeFilteredToArray(</span>
+			<span class="s1">Array.isArray(options.modules)</span>
+				<span class="s1">? options.modules</span>
+				<span class="s1">: options.modules</span>
+					<span class="s1">? [options.modules]</span>
+					<span class="s1">: [</span><span class="s2">&quot;node_modules&quot;</span><span class="s1">],</span>
+			<span class="s1">(item) =&gt; {</span>
+				<span class="s3">const </span><span class="s1">type = getType(item);</span>
+				<span class="s3">return </span><span class="s1">type === PathType.Normal || type === PathType.Relative;</span>
+			<span class="s1">},</span>
+		<span class="s1">),</span>
+		<span class="s1">mainFields,</span>
+		<span class="s1">mainFiles: </span><span class="s3">new </span><span class="s1">Set(options.mainFiles || [</span><span class="s2">&quot;index&quot;</span><span class="s1">]),</span>
+		<span class="s1">plugins: options.plugins || [],</span>
+		<span class="s1">pnpApi: processPnpApiOption(options.pnpApi),</span>
+		<span class="s1">roots: </span><span class="s3">new </span><span class="s1">Set(options.roots || undefined),</span>
+		<span class="s1">fullySpecified: options.fullySpecified || </span><span class="s3">false</span><span class="s1">,</span>
+		<span class="s1">resolveToContext: options.resolveToContext || </span><span class="s3">false</span><span class="s1">,</span>
+		<span class="s1">preferRelative: options.preferRelative || </span><span class="s3">false</span><span class="s1">,</span>
+		<span class="s1">preferAbsolute: options.preferAbsolute || </span><span class="s3">false</span><span class="s1">,</span>
+		<span class="s1">restrictions: </span><span class="s3">new </span><span class="s1">Set(options.restrictions),</span>
+	<span class="s1">};</span>
+<span class="s1">}</span>
+
+<span class="s0">/**</span>
+ <span class="s0">* </span><span class="s4">@param </span><span class="s0">{UserResolveOptions} options resolve options</span>
+ <span class="s0">* </span><span class="s4">@returns </span><span class="s0">{Resolver} created resolver</span>
+ <span class="s0">*/</span>
+<span class="s1">module.exports.createResolver = </span><span class="s3">function </span><span class="s1">createResolver(options) {</span>
+	<span class="s3">const </span><span class="s1">normalizedOptions = createOptions(options);</span>
+
+	<span class="s3">const </span><span class="s1">{</span>
+		<span class="s1">alias,</span>
+		<span class="s1">fallback,</span>
+		<span class="s1">aliasFields,</span>
+		<span class="s1">cachePredicate,</span>
+		<span class="s1">cacheWithContext,</span>
+		<span class="s1">conditionNames,</span>
+		<span class="s1">descriptionFiles,</span>
+		<span class="s1">enforceExtension,</span>
+		<span class="s1">exportsFields,</span>
+		<span class="s1">extensionAlias,</span>
+		<span class="s1">importsFields,</span>
+		<span class="s1">extensions,</span>
+		<span class="s1">fileSystem,</span>
+		<span class="s1">fullySpecified,</span>
+		<span class="s1">mainFields,</span>
+		<span class="s1">mainFiles,</span>
+		<span class="s1">modules,</span>
+		<span class="s1">plugins: userPlugins,</span>
+		<span class="s1">pnpApi,</span>
+		<span class="s1">resolveToContext,</span>
+		<span class="s1">preferRelative,</span>
+		<span class="s1">preferAbsolute,</span>
+		<span class="s1">symlinks,</span>
+		<span class="s1">unsafeCache,</span>
+		<span class="s1">resolver: customResolver,</span>
+		<span class="s1">restrictions,</span>
+		<span class="s1">roots,</span>
+	<span class="s1">} = normalizedOptions;</span>
+
+	<span class="s3">const </span><span class="s1">plugins = [...userPlugins];</span>
+
+	<span class="s3">const </span><span class="s1">resolver =</span>
+		<span class="s1">customResolver || </span><span class="s3">new </span><span class="s1">Resolver(fileSystem, normalizedOptions);</span>
+
+	<span class="s0">// // pipeline ////</span>
+
+	<span class="s1">resolver.ensureHook(</span><span class="s2">&quot;resolve&quot;</span><span class="s1">);</span>
+	<span class="s1">resolver.ensureHook(</span><span class="s2">&quot;internalResolve&quot;</span><span class="s1">);</span>
+	<span class="s1">resolver.ensureHook(</span><span class="s2">&quot;newInternalResolve&quot;</span><span class="s1">);</span>
+	<span class="s1">resolver.ensureHook(</span><span class="s2">&quot;parsedResolve&quot;</span><span class="s1">);</span>
+	<span class="s1">resolver.ensureHook(</span><span class="s2">&quot;describedResolve&quot;</span><span class="s1">);</span>
+	<span class="s1">resolver.ensureHook(</span><span class="s2">&quot;rawResolve&quot;</span><span class="s1">);</span>
+	<span class="s1">resolver.ensureHook(</span><span class="s2">&quot;normalResolve&quot;</span><span class="s1">);</span>
+	<span class="s1">resolver.ensureHook(</span><span class="s2">&quot;internal&quot;</span><span class="s1">);</span>
+	<span class="s1">resolver.ensureHook(</span><span class="s2">&quot;rawModule&quot;</span><span class="s1">);</span>
+	<span class="s1">resolver.ensureHook(</span><span class="s2">&quot;alternateRawModule&quot;</span><span class="s1">);</span>
+	<span class="s1">resolver.ensureHook(</span><span class="s2">&quot;module&quot;</span><span class="s1">);</span>
+	<span class="s1">resolver.ensureHook(</span><span class="s2">&quot;resolveAsModule&quot;</span><span class="s1">);</span>
+	<span class="s1">resolver.ensureHook(</span><span class="s2">&quot;undescribedResolveInPackage&quot;</span><span class="s1">);</span>
+	<span class="s1">resolver.ensureHook(</span><span class="s2">&quot;resolveInPackage&quot;</span><span class="s1">);</span>
+	<span class="s1">resolver.ensureHook(</span><span class="s2">&quot;resolveInExistingDirectory&quot;</span><span class="s1">);</span>
+	<span class="s1">resolver.ensureHook(</span><span class="s2">&quot;relative&quot;</span><span class="s1">);</span>
+	<span class="s1">resolver.ensureHook(</span><span class="s2">&quot;describedRelative&quot;</span><span class="s1">);</span>
+	<span class="s1">resolver.ensureHook(</span><span class="s2">&quot;directory&quot;</span><span class="s1">);</span>
+	<span class="s1">resolver.ensureHook(</span><span class="s2">&quot;undescribedExistingDirectory&quot;</span><span class="s1">);</span>
+	<span class="s1">resolver.ensureHook(</span><span class="s2">&quot;existingDirectory&quot;</span><span class="s1">);</span>
+	<span class="s1">resolver.ensureHook(</span><span class="s2">&quot;undescribedRawFile&quot;</span><span class="s1">);</span>
+	<span class="s1">resolver.ensureHook(</span><span class="s2">&quot;rawFile&quot;</span><span class="s1">);</span>
+	<span class="s1">resolver.ensureHook(</span><span class="s2">&quot;file&quot;</span><span class="s1">);</span>
+	<span class="s1">resolver.ensureHook(</span><span class="s2">&quot;finalFile&quot;</span><span class="s1">);</span>
+	<span class="s1">resolver.ensureHook(</span><span class="s2">&quot;existingFile&quot;</span><span class="s1">);</span>
+	<span class="s1">resolver.ensureHook(</span><span class="s2">&quot;resolved&quot;</span><span class="s1">);</span>
+
+	<span class="s0">// TODO remove in next major</span>
+	<span class="s0">// cspell:word Interal</span>
+	<span class="s0">// Backward-compat</span>
+	<span class="s0">// @ts-expect-error</span>
+	<span class="s1">resolver.hooks.newInteralResolve = resolver.hooks.newInternalResolve;</span>
+
+	<span class="s0">// resolve</span>
+	<span class="s3">for </span><span class="s1">(</span><span class="s3">const </span><span class="s1">{ source, resolveOptions } of [</span>
+		<span class="s1">{ source: </span><span class="s2">&quot;resolve&quot;</span><span class="s1">, resolveOptions: { fullySpecified } },</span>
+		<span class="s1">{ source: </span><span class="s2">&quot;internal-resolve&quot;</span><span class="s1">, resolveOptions: { fullySpecified: </span><span class="s3">false </span><span class="s1">} },</span>
+	<span class="s1">]) {</span>
+		<span class="s3">if </span><span class="s1">(unsafeCache) {</span>
+			<span class="s1">plugins.push(</span>
+				<span class="s3">new </span><span class="s1">UnsafeCachePlugin(</span>
+					<span class="s1">source,</span>
+					<span class="s1">cachePredicate,</span>
+					<span class="s0">/** </span><span class="s4">@type </span><span class="s0">{import(&quot;./UnsafeCachePlugin&quot;).Cache} */ </span><span class="s1">(unsafeCache),</span>
+					<span class="s1">cacheWithContext,</span>
+					<span class="s2">`new-</span><span class="s1">${source}</span><span class="s2">`</span><span class="s1">,</span>
+				<span class="s1">),</span>
+			<span class="s1">);</span>
+			<span class="s1">plugins.push(</span>
+				<span class="s3">new </span><span class="s1">ParsePlugin(</span><span class="s2">`new-</span><span class="s1">${source}</span><span class="s2">`</span><span class="s1">, resolveOptions, </span><span class="s2">&quot;parsed-resolve&quot;</span><span class="s1">),</span>
+			<span class="s1">);</span>
+		<span class="s1">} </span><span class="s3">else </span><span class="s1">{</span>
+			<span class="s1">plugins.push(</span><span class="s3">new </span><span class="s1">ParsePlugin(source, resolveOptions, </span><span class="s2">&quot;parsed-resolve&quot;</span><span class="s1">));</span>
+		<span class="s1">}</span>
+	<span class="s1">}</span>
+
+	<span class="s0">// parsed-resolve</span>
+	<span class="s1">plugins.push(</span>
+		<span class="s3">new </span><span class="s1">DescriptionFilePlugin(</span>
+			<span class="s2">&quot;parsed-resolve&quot;</span><span class="s1">,</span>
+			<span class="s1">descriptionFiles,</span>
+			<span class="s3">false</span><span class="s1">,</span>
+			<span class="s2">&quot;described-resolve&quot;</span><span class="s1">,</span>
+		<span class="s1">),</span>
+	<span class="s1">);</span>
+	<span class="s1">plugins.push(</span><span class="s3">new </span><span class="s1">NextPlugin(</span><span class="s2">&quot;after-parsed-resolve&quot;</span><span class="s1">, </span><span class="s2">&quot;described-resolve&quot;</span><span class="s1">));</span>
+
+	<span class="s0">// described-resolve</span>
+	<span class="s1">plugins.push(</span><span class="s3">new </span><span class="s1">NextPlugin(</span><span class="s2">&quot;described-resolve&quot;</span><span class="s1">, </span><span class="s2">&quot;raw-resolve&quot;</span><span class="s1">));</span>
+	<span class="s3">if </span><span class="s1">(fallback.length &gt; </span><span class="s6">0</span><span class="s1">) {</span>
+		<span class="s1">plugins.push(</span>
+			<span class="s3">new </span><span class="s1">AliasPlugin(</span><span class="s2">&quot;described-resolve&quot;</span><span class="s1">, fallback, </span><span class="s2">&quot;internal-resolve&quot;</span><span class="s1">),</span>
+		<span class="s1">);</span>
+	<span class="s1">}</span>
+
+	<span class="s0">// raw-resolve</span>
+	<span class="s3">if </span><span class="s1">(alias.length &gt; </span><span class="s6">0</span><span class="s1">) {</span>
+		<span class="s1">plugins.push(</span><span class="s3">new </span><span class="s1">AliasPlugin(</span><span class="s2">&quot;raw-resolve&quot;</span><span class="s1">, alias, </span><span class="s2">&quot;internal-resolve&quot;</span><span class="s1">));</span>
+	<span class="s1">}</span>
+	<span class="s3">for </span><span class="s1">(</span><span class="s3">const </span><span class="s1">item of aliasFields) {</span>
+		<span class="s1">plugins.push(</span><span class="s3">new </span><span class="s1">AliasFieldPlugin(</span><span class="s2">&quot;raw-resolve&quot;</span><span class="s1">, item, </span><span class="s2">&quot;internal-resolve&quot;</span><span class="s1">));</span>
+	<span class="s1">}</span>
+	<span class="s3">for </span><span class="s1">(</span><span class="s3">const </span><span class="s1">item of extensionAlias) {</span>
+		<span class="s1">plugins.push(</span>
+			<span class="s3">new </span><span class="s1">ExtensionAliasPlugin(</span><span class="s2">&quot;raw-resolve&quot;</span><span class="s1">, item, </span><span class="s2">&quot;normal-resolve&quot;</span><span class="s1">),</span>
+		<span class="s1">);</span>
+	<span class="s1">}</span>
+	<span class="s1">plugins.push(</span><span class="s3">new </span><span class="s1">NextPlugin(</span><span class="s2">&quot;raw-resolve&quot;</span><span class="s1">, </span><span class="s2">&quot;normal-resolve&quot;</span><span class="s1">));</span>
+
+	<span class="s0">// normal-resolve</span>
+	<span class="s3">if </span><span class="s1">(preferRelative) {</span>
+		<span class="s1">plugins.push(</span><span class="s3">new </span><span class="s1">JoinRequestPlugin(</span><span class="s2">&quot;after-normal-resolve&quot;</span><span class="s1">, </span><span class="s2">&quot;relative&quot;</span><span class="s1">));</span>
+	<span class="s1">}</span>
+	<span class="s1">plugins.push(</span>
+		<span class="s3">new </span><span class="s1">ConditionalPlugin(</span>
+			<span class="s2">&quot;after-normal-resolve&quot;</span><span class="s1">,</span>
+			<span class="s1">{ module: </span><span class="s3">true </span><span class="s1">},</span>
+			<span class="s2">&quot;resolve as module&quot;</span><span class="s1">,</span>
+			<span class="s3">false</span><span class="s1">,</span>
+			<span class="s2">&quot;raw-module&quot;</span><span class="s1">,</span>
+		<span class="s1">),</span>
+	<span class="s1">);</span>
+	<span class="s1">plugins.push(</span>
+		<span class="s3">new </span><span class="s1">ConditionalPlugin(</span>
+			<span class="s2">&quot;after-normal-resolve&quot;</span><span class="s1">,</span>
+			<span class="s1">{ internal: </span><span class="s3">true </span><span class="s1">},</span>
+			<span class="s2">&quot;resolve as internal import&quot;</span><span class="s1">,</span>
+			<span class="s3">false</span><span class="s1">,</span>
+			<span class="s2">&quot;internal&quot;</span><span class="s1">,</span>
+		<span class="s1">),</span>
+	<span class="s1">);</span>
+	<span class="s3">if </span><span class="s1">(preferAbsolute) {</span>
+		<span class="s1">plugins.push(</span><span class="s3">new </span><span class="s1">JoinRequestPlugin(</span><span class="s2">&quot;after-normal-resolve&quot;</span><span class="s1">, </span><span class="s2">&quot;relative&quot;</span><span class="s1">));</span>
+	<span class="s1">}</span>
+	<span class="s3">if </span><span class="s1">(roots.size &gt; </span><span class="s6">0</span><span class="s1">) {</span>
+		<span class="s1">plugins.push(</span><span class="s3">new </span><span class="s1">RootsPlugin(</span><span class="s2">&quot;after-normal-resolve&quot;</span><span class="s1">, roots, </span><span class="s2">&quot;relative&quot;</span><span class="s1">));</span>
+	<span class="s1">}</span>
+	<span class="s3">if </span><span class="s1">(!preferRelative &amp;&amp; !preferAbsolute) {</span>
+		<span class="s1">plugins.push(</span><span class="s3">new </span><span class="s1">JoinRequestPlugin(</span><span class="s2">&quot;after-normal-resolve&quot;</span><span class="s1">, </span><span class="s2">&quot;relative&quot;</span><span class="s1">));</span>
+	<span class="s1">}</span>
+
+	<span class="s0">// internal</span>
+	<span class="s3">for </span><span class="s1">(</span><span class="s3">const </span><span class="s1">importsField of importsFields) {</span>
+		<span class="s1">plugins.push(</span>
+			<span class="s3">new </span><span class="s1">ImportsFieldPlugin(</span>
+				<span class="s2">&quot;internal&quot;</span><span class="s1">,</span>
+				<span class="s1">conditionNames,</span>
+				<span class="s1">importsField,</span>
+				<span class="s2">&quot;relative&quot;</span><span class="s1">,</span>
+				<span class="s2">&quot;internal-resolve&quot;</span><span class="s1">,</span>
+			<span class="s1">),</span>
+		<span class="s1">);</span>
+	<span class="s1">}</span>
+
+	<span class="s0">// raw-module</span>
+	<span class="s3">for </span><span class="s1">(</span><span class="s3">const </span><span class="s1">exportsField of exportsFields) {</span>
+		<span class="s1">plugins.push(</span>
+			<span class="s3">new </span><span class="s1">SelfReferencePlugin(</span><span class="s2">&quot;raw-module&quot;</span><span class="s1">, exportsField, </span><span class="s2">&quot;resolve-as-module&quot;</span><span class="s1">),</span>
+		<span class="s1">);</span>
+	<span class="s1">}</span>
+	<span class="s3">for </span><span class="s1">(</span><span class="s3">const </span><span class="s1">item of modules) {</span>
+		<span class="s3">if </span><span class="s1">(Array.isArray(item)) {</span>
+			<span class="s3">if </span><span class="s1">(item.includes(</span><span class="s2">&quot;node_modules&quot;</span><span class="s1">) &amp;&amp; pnpApi) {</span>
+				<span class="s1">plugins.push(</span>
+					<span class="s3">new </span><span class="s1">ModulesInHierarchicalDirectoriesPlugin(</span>
+						<span class="s2">&quot;raw-module&quot;</span><span class="s1">,</span>
+						<span class="s1">item.filter((i) =&gt; i !== </span><span class="s2">&quot;node_modules&quot;</span><span class="s1">),</span>
+						<span class="s2">&quot;module&quot;</span><span class="s1">,</span>
+					<span class="s1">),</span>
+				<span class="s1">);</span>
+				<span class="s1">plugins.push(</span>
+					<span class="s3">new </span><span class="s1">PnpPlugin(</span>
+						<span class="s2">&quot;raw-module&quot;</span><span class="s1">,</span>
+						<span class="s1">pnpApi,</span>
+						<span class="s2">&quot;undescribed-resolve-in-package&quot;</span><span class="s1">,</span>
+						<span class="s2">&quot;alternate-raw-module&quot;</span><span class="s1">,</span>
+					<span class="s1">),</span>
+				<span class="s1">);</span>
+
+				<span class="s1">plugins.push(</span>
+					<span class="s3">new </span><span class="s1">ModulesInHierarchicalDirectoriesPlugin(</span>
+						<span class="s2">&quot;alternate-raw-module&quot;</span><span class="s1">,</span>
+						<span class="s1">[</span><span class="s2">&quot;node_modules&quot;</span><span class="s1">],</span>
+						<span class="s2">&quot;module&quot;</span><span class="s1">,</span>
+					<span class="s1">),</span>
+				<span class="s1">);</span>
+			<span class="s1">} </span><span class="s3">else </span><span class="s1">{</span>
+				<span class="s1">plugins.push(</span>
+					<span class="s3">new </span><span class="s1">ModulesInHierarchicalDirectoriesPlugin(</span>
+						<span class="s2">&quot;raw-module&quot;</span><span class="s1">,</span>
+						<span class="s1">item,</span>
+						<span class="s2">&quot;module&quot;</span><span class="s1">,</span>
+					<span class="s1">),</span>
+				<span class="s1">);</span>
+			<span class="s1">}</span>
+		<span class="s1">} </span><span class="s3">else </span><span class="s1">{</span>
+			<span class="s1">plugins.push(</span><span class="s3">new </span><span class="s1">ModulesInRootPlugin(</span><span class="s2">&quot;raw-module&quot;</span><span class="s1">, item, </span><span class="s2">&quot;module&quot;</span><span class="s1">));</span>
+		<span class="s1">}</span>
+	<span class="s1">}</span>
+
+	<span class="s0">// module</span>
+	<span class="s1">plugins.push(</span><span class="s3">new </span><span class="s1">JoinRequestPartPlugin(</span><span class="s2">&quot;module&quot;</span><span class="s1">, </span><span class="s2">&quot;resolve-as-module&quot;</span><span class="s1">));</span>
+
+	<span class="s0">// resolve-as-module</span>
+	<span class="s3">if </span><span class="s1">(!resolveToContext) {</span>
+		<span class="s1">plugins.push(</span>
+			<span class="s3">new </span><span class="s1">ConditionalPlugin(</span>
+				<span class="s2">&quot;resolve-as-module&quot;</span><span class="s1">,</span>
+				<span class="s1">{ directory: </span><span class="s3">false</span><span class="s1">, request: </span><span class="s2">&quot;.&quot; </span><span class="s1">},</span>
+				<span class="s2">&quot;single file module&quot;</span><span class="s1">,</span>
+				<span class="s3">true</span><span class="s1">,</span>
+				<span class="s2">&quot;undescribed-raw-file&quot;</span><span class="s1">,</span>
+			<span class="s1">),</span>
+		<span class="s1">);</span>
+	<span class="s1">}</span>
+	<span class="s1">plugins.push(</span>
+		<span class="s3">new </span><span class="s1">DirectoryExistsPlugin(</span>
+			<span class="s2">&quot;resolve-as-module&quot;</span><span class="s1">,</span>
+			<span class="s2">&quot;undescribed-resolve-in-package&quot;</span><span class="s1">,</span>
+		<span class="s1">),</span>
+	<span class="s1">);</span>
+
+	<span class="s0">// undescribed-resolve-in-package</span>
+	<span class="s1">plugins.push(</span>
+		<span class="s3">new </span><span class="s1">DescriptionFilePlugin(</span>
+			<span class="s2">&quot;undescribed-resolve-in-package&quot;</span><span class="s1">,</span>
+			<span class="s1">descriptionFiles,</span>
+			<span class="s3">false</span><span class="s1">,</span>
+			<span class="s2">&quot;resolve-in-package&quot;</span><span class="s1">,</span>
+		<span class="s1">),</span>
+	<span class="s1">);</span>
+	<span class="s1">plugins.push(</span>
+		<span class="s3">new </span><span class="s1">NextPlugin(</span>
+			<span class="s2">&quot;after-undescribed-resolve-in-package&quot;</span><span class="s1">,</span>
+			<span class="s2">&quot;resolve-in-package&quot;</span><span class="s1">,</span>
+		<span class="s1">),</span>
+	<span class="s1">);</span>
+
+	<span class="s0">// resolve-in-package</span>
+	<span class="s3">for </span><span class="s1">(</span><span class="s3">const </span><span class="s1">exportsField of exportsFields) {</span>
+		<span class="s1">plugins.push(</span>
+			<span class="s3">new </span><span class="s1">ExportsFieldPlugin(</span>
+				<span class="s2">&quot;resolve-in-package&quot;</span><span class="s1">,</span>
+				<span class="s1">conditionNames,</span>
+				<span class="s1">exportsField,</span>
+				<span class="s2">&quot;relative&quot;</span><span class="s1">,</span>
+			<span class="s1">),</span>
+		<span class="s1">);</span>
+	<span class="s1">}</span>
+	<span class="s1">plugins.push(</span>
+		<span class="s3">new </span><span class="s1">NextPlugin(</span><span class="s2">&quot;resolve-in-package&quot;</span><span class="s1">, </span><span class="s2">&quot;resolve-in-existing-directory&quot;</span><span class="s1">),</span>
+	<span class="s1">);</span>
+
+	<span class="s0">// resolve-in-existing-directory</span>
+	<span class="s1">plugins.push(</span>
+		<span class="s3">new </span><span class="s1">JoinRequestPlugin(</span><span class="s2">&quot;resolve-in-existing-directory&quot;</span><span class="s1">, </span><span class="s2">&quot;relative&quot;</span><span class="s1">),</span>
+	<span class="s1">);</span>
+
+	<span class="s0">// relative</span>
+	<span class="s1">plugins.push(</span>
+		<span class="s3">new </span><span class="s1">DescriptionFilePlugin(</span>
+			<span class="s2">&quot;relative&quot;</span><span class="s1">,</span>
+			<span class="s1">descriptionFiles,</span>
+			<span class="s3">true</span><span class="s1">,</span>
+			<span class="s2">&quot;described-relative&quot;</span><span class="s1">,</span>
+		<span class="s1">),</span>
+	<span class="s1">);</span>
+	<span class="s1">plugins.push(</span><span class="s3">new </span><span class="s1">NextPlugin(</span><span class="s2">&quot;after-relative&quot;</span><span class="s1">, </span><span class="s2">&quot;described-relative&quot;</span><span class="s1">));</span>
+
+	<span class="s0">// described-relative</span>
+	<span class="s3">if </span><span class="s1">(resolveToContext) {</span>
+		<span class="s1">plugins.push(</span><span class="s3">new </span><span class="s1">NextPlugin(</span><span class="s2">&quot;described-relative&quot;</span><span class="s1">, </span><span class="s2">&quot;directory&quot;</span><span class="s1">));</span>
+	<span class="s1">} </span><span class="s3">else </span><span class="s1">{</span>
+		<span class="s1">plugins.push(</span>
+			<span class="s3">new </span><span class="s1">ConditionalPlugin(</span>
+				<span class="s2">&quot;described-relative&quot;</span><span class="s1">,</span>
+				<span class="s1">{ directory: </span><span class="s3">false </span><span class="s1">},</span>
+				<span class="s3">null</span><span class="s1">,</span>
+				<span class="s3">true</span><span class="s1">,</span>
+				<span class="s2">&quot;raw-file&quot;</span><span class="s1">,</span>
+			<span class="s1">),</span>
+		<span class="s1">);</span>
+		<span class="s1">plugins.push(</span>
+			<span class="s3">new </span><span class="s1">ConditionalPlugin(</span>
+				<span class="s2">&quot;described-relative&quot;</span><span class="s1">,</span>
+				<span class="s1">{ fullySpecified: </span><span class="s3">false </span><span class="s1">},</span>
+				<span class="s2">&quot;as directory&quot;</span><span class="s1">,</span>
+				<span class="s3">true</span><span class="s1">,</span>
+				<span class="s2">&quot;directory&quot;</span><span class="s1">,</span>
+			<span class="s1">),</span>
+		<span class="s1">);</span>
+	<span class="s1">}</span>
+
+	<span class="s0">// directory</span>
+	<span class="s1">plugins.push(</span>
+		<span class="s3">new </span><span class="s1">DirectoryExistsPlugin(</span><span class="s2">&quot;directory&quot;</span><span class="s1">, </span><span class="s2">&quot;undescribed-existing-directory&quot;</span><span class="s1">),</span>
+	<span class="s1">);</span>
+
+	<span class="s3">if </span><span class="s1">(resolveToContext) {</span>
+		<span class="s0">// undescribed-existing-directory</span>
+		<span class="s1">plugins.push(</span><span class="s3">new </span><span class="s1">NextPlugin(</span><span class="s2">&quot;undescribed-existing-directory&quot;</span><span class="s1">, </span><span class="s2">&quot;resolved&quot;</span><span class="s1">));</span>
+	<span class="s1">} </span><span class="s3">else </span><span class="s1">{</span>
+		<span class="s0">// undescribed-existing-directory</span>
+		<span class="s1">plugins.push(</span>
+			<span class="s3">new </span><span class="s1">DescriptionFilePlugin(</span>
+				<span class="s2">&quot;undescribed-existing-directory&quot;</span><span class="s1">,</span>
+				<span class="s1">descriptionFiles,</span>
+				<span class="s3">false</span><span class="s1">,</span>
+				<span class="s2">&quot;existing-directory&quot;</span><span class="s1">,</span>
+			<span class="s1">),</span>
+		<span class="s1">);</span>
+		<span class="s3">for </span><span class="s1">(</span><span class="s3">const </span><span class="s1">item of mainFiles) {</span>
+			<span class="s1">plugins.push(</span>
+				<span class="s3">new </span><span class="s1">UseFilePlugin(</span>
+					<span class="s2">&quot;undescribed-existing-directory&quot;</span><span class="s1">,</span>
+					<span class="s1">item,</span>
+					<span class="s2">&quot;undescribed-raw-file&quot;</span><span class="s1">,</span>
+				<span class="s1">),</span>
+			<span class="s1">);</span>
+		<span class="s1">}</span>
+
+		<span class="s0">// described-existing-directory</span>
+		<span class="s3">for </span><span class="s1">(</span><span class="s3">const </span><span class="s1">item of mainFields) {</span>
+			<span class="s1">plugins.push(</span>
+				<span class="s3">new </span><span class="s1">MainFieldPlugin(</span>
+					<span class="s2">&quot;existing-directory&quot;</span><span class="s1">,</span>
+					<span class="s1">item,</span>
+					<span class="s2">&quot;resolve-in-existing-directory&quot;</span><span class="s1">,</span>
+				<span class="s1">),</span>
+			<span class="s1">);</span>
+		<span class="s1">}</span>
+		<span class="s3">for </span><span class="s1">(</span><span class="s3">const </span><span class="s1">item of mainFiles) {</span>
+			<span class="s1">plugins.push(</span>
+				<span class="s3">new </span><span class="s1">UseFilePlugin(</span><span class="s2">&quot;existing-directory&quot;</span><span class="s1">, item, </span><span class="s2">&quot;undescribed-raw-file&quot;</span><span class="s1">),</span>
+			<span class="s1">);</span>
+		<span class="s1">}</span>
+
+		<span class="s0">// undescribed-raw-file</span>
+		<span class="s1">plugins.push(</span>
+			<span class="s3">new </span><span class="s1">DescriptionFilePlugin(</span>
+				<span class="s2">&quot;undescribed-raw-file&quot;</span><span class="s1">,</span>
+				<span class="s1">descriptionFiles,</span>
+				<span class="s3">true</span><span class="s1">,</span>
+				<span class="s2">&quot;raw-file&quot;</span><span class="s1">,</span>
+			<span class="s1">),</span>
+		<span class="s1">);</span>
+		<span class="s1">plugins.push(</span><span class="s3">new </span><span class="s1">NextPlugin(</span><span class="s2">&quot;after-undescribed-raw-file&quot;</span><span class="s1">, </span><span class="s2">&quot;raw-file&quot;</span><span class="s1">));</span>
+
+		<span class="s0">// raw-file</span>
+		<span class="s1">plugins.push(</span>
+			<span class="s3">new </span><span class="s1">ConditionalPlugin(</span>
+				<span class="s2">&quot;raw-file&quot;</span><span class="s1">,</span>
+				<span class="s1">{ fullySpecified: </span><span class="s3">true </span><span class="s1">},</span>
+				<span class="s3">null</span><span class="s1">,</span>
+				<span class="s3">false</span><span class="s1">,</span>
+				<span class="s2">&quot;file&quot;</span><span class="s1">,</span>
+			<span class="s1">),</span>
+		<span class="s1">);</span>
+		<span class="s3">if </span><span class="s1">(!enforceExtension) {</span>
+			<span class="s1">plugins.push(</span><span class="s3">new </span><span class="s1">TryNextPlugin(</span><span class="s2">&quot;raw-file&quot;</span><span class="s1">, </span><span class="s2">&quot;no extension&quot;</span><span class="s1">, </span><span class="s2">&quot;file&quot;</span><span class="s1">));</span>
+		<span class="s1">}</span>
+		<span class="s3">for </span><span class="s1">(</span><span class="s3">const </span><span class="s1">item of extensions) {</span>
+			<span class="s1">plugins.push(</span><span class="s3">new </span><span class="s1">AppendPlugin(</span><span class="s2">&quot;raw-file&quot;</span><span class="s1">, item, </span><span class="s2">&quot;file&quot;</span><span class="s1">));</span>
+		<span class="s1">}</span>
+
+		<span class="s0">// file</span>
+		<span class="s3">if </span><span class="s1">(alias.length &gt; </span><span class="s6">0</span><span class="s1">) {</span>
+			<span class="s1">plugins.push(</span><span class="s3">new </span><span class="s1">AliasPlugin(</span><span class="s2">&quot;file&quot;</span><span class="s1">, alias, </span><span class="s2">&quot;internal-resolve&quot;</span><span class="s1">));</span>
+		<span class="s1">}</span>
+		<span class="s3">for </span><span class="s1">(</span><span class="s3">const </span><span class="s1">item of aliasFields) {</span>
+			<span class="s1">plugins.push(</span><span class="s3">new </span><span class="s1">AliasFieldPlugin(</span><span class="s2">&quot;file&quot;</span><span class="s1">, item, </span><span class="s2">&quot;internal-resolve&quot;</span><span class="s1">));</span>
+		<span class="s1">}</span>
+		<span class="s1">plugins.push(</span><span class="s3">new </span><span class="s1">NextPlugin(</span><span class="s2">&quot;file&quot;</span><span class="s1">, </span><span class="s2">&quot;final-file&quot;</span><span class="s1">));</span>
+
+		<span class="s0">// final-file</span>
+		<span class="s1">plugins.push(</span><span class="s3">new </span><span class="s1">FileExistsPlugin(</span><span class="s2">&quot;final-file&quot;</span><span class="s1">, </span><span class="s2">&quot;existing-file&quot;</span><span class="s1">));</span>
+
+		<span class="s0">// existing-file</span>
+		<span class="s3">if </span><span class="s1">(symlinks) {</span>
+			<span class="s1">plugins.push(</span><span class="s3">new </span><span class="s1">SymlinkPlugin(</span><span class="s2">&quot;existing-file&quot;</span><span class="s1">, </span><span class="s2">&quot;existing-file&quot;</span><span class="s1">));</span>
+		<span class="s1">}</span>
+		<span class="s1">plugins.push(</span><span class="s3">new </span><span class="s1">NextPlugin(</span><span class="s2">&quot;existing-file&quot;</span><span class="s1">, </span><span class="s2">&quot;resolved&quot;</span><span class="s1">));</span>
+	<span class="s1">}</span>
+
+	<span class="s3">const </span><span class="s1">{ resolved } =</span>
+		<span class="s0">/** </span><span class="s4">@type </span><span class="s0">{KnownHooks &amp; EnsuredHooks} */</span>
+		<span class="s1">(resolver.hooks);</span>
+
+	<span class="s0">// resolved</span>
+	<span class="s3">if </span><span class="s1">(restrictions.size &gt; </span><span class="s6">0</span><span class="s1">) {</span>
+		<span class="s1">plugins.push(</span><span class="s3">new </span><span class="s1">RestrictionsPlugin(resolved, restrictions));</span>
+	<span class="s1">}</span>
+
+	<span class="s1">plugins.push(</span><span class="s3">new </span><span class="s1">ResultPlugin(resolved));</span>
+
+	<span class="s0">// // RESOLVER ////</span>
+
+	<span class="s3">for </span><span class="s1">(</span><span class="s3">const </span><span class="s1">plugin of plugins) {</span>
+		<span class="s3">if </span><span class="s1">(</span><span class="s3">typeof </span><span class="s1">plugin === </span><span class="s2">&quot;function&quot;</span><span class="s1">) {</span>
+			<span class="s0">/** </span><span class="s4">@type </span><span class="s0">{(this: Resolver, resolver: Resolver) =&gt; void} */</span>
+			<span class="s1">(plugin).call(resolver, resolver);</span>
+		<span class="s1">} </span><span class="s3">else if </span><span class="s1">(plugin) {</span>
+			<span class="s1">plugin.apply(resolver);</span>
+		<span class="s1">}</span>
+	<span class="s1">}</span>
+
+	<span class="s3">return </span><span class="s1">resolver;</span>
+<span class="s1">};</span>
+</pre>
+</body>
+</html>

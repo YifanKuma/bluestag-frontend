@@ -1,0 +1,429 @@
+<html>
+<head>
+<title>HotModuleReplacement.runtime.js</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #8c8c8c; font-style: italic;}
+.s1 { color: #080808;}
+.s2 { color: #067d17;}
+.s3 { color: #0033b3;}
+.s4 { color: #8c8c8c; font-style: italic;}
+.s5 { color: #1750eb;}
+</style>
+</head>
+<body bgcolor="#ffffff">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#c0c0c0" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+HotModuleReplacement.runtime.js</font>
+</center></td></tr></table>
+<pre><span class="s0">// @ts-nocheck</span>
+<span class="s0">/* 
+    MIT License http://www.opensource.org/licenses/mit-license.php 
+    Author Tobias Koppers @sokra 
+*/</span>
+
+<span class="s2">&quot;use strict&quot;</span><span class="s1">;</span>
+
+<span class="s3">var </span><span class="s1">$interceptModuleExecution$ = undefined;</span>
+<span class="s3">var </span><span class="s1">$moduleCache$ = undefined;</span>
+<span class="s0">// eslint-disable-next-line no-unused-vars</span>
+<span class="s3">var </span><span class="s1">$hmrModuleData$ = undefined;</span>
+<span class="s0">/** </span><span class="s4">@type </span><span class="s0">{() =&gt; Promise}  */</span>
+<span class="s3">var </span><span class="s1">$hmrDownloadManifest$ = undefined;</span>
+<span class="s3">var </span><span class="s1">$hmrDownloadUpdateHandlers$ = undefined;</span>
+<span class="s3">var </span><span class="s1">$hmrInvalidateModuleHandlers$ = undefined;</span>
+<span class="s3">var </span><span class="s1">__webpack_require__ = undefined;</span>
+
+<span class="s1">module.exports = </span><span class="s3">function </span><span class="s1">() {</span>
+	<span class="s3">var </span><span class="s1">currentModuleData = {};</span>
+	<span class="s3">var </span><span class="s1">installedModules = $moduleCache$;</span>
+
+	<span class="s0">// module and require creation</span>
+	<span class="s3">var </span><span class="s1">currentChildModule;</span>
+	<span class="s3">var </span><span class="s1">currentParents = [];</span>
+
+	<span class="s0">// status</span>
+	<span class="s3">var </span><span class="s1">registeredStatusHandlers = [];</span>
+	<span class="s3">var </span><span class="s1">currentStatus = </span><span class="s2">&quot;idle&quot;</span><span class="s1">;</span>
+
+	<span class="s0">// while downloading</span>
+	<span class="s3">var </span><span class="s1">blockingPromises = </span><span class="s5">0</span><span class="s1">;</span>
+	<span class="s3">var </span><span class="s1">blockingPromisesWaiting = [];</span>
+
+	<span class="s0">// The update info</span>
+	<span class="s3">var </span><span class="s1">currentUpdateApplyHandlers;</span>
+	<span class="s3">var </span><span class="s1">queuedInvalidatedModules;</span>
+
+	<span class="s1">$hmrModuleData$ = currentModuleData;</span>
+
+	<span class="s1">$interceptModuleExecution$.push(</span><span class="s3">function </span><span class="s1">(options) {</span>
+		<span class="s3">var </span><span class="s1">module = options.module;</span>
+		<span class="s3">var </span><span class="s1">require = createRequire(options.require, options.id);</span>
+		<span class="s1">module.hot = createModuleHotObject(options.id, module);</span>
+		<span class="s1">module.parents = currentParents;</span>
+		<span class="s1">module.children = [];</span>
+		<span class="s1">currentParents = [];</span>
+		<span class="s1">options.require = require;</span>
+	<span class="s1">});</span>
+
+	<span class="s1">$hmrDownloadUpdateHandlers$ = {};</span>
+	<span class="s1">$hmrInvalidateModuleHandlers$ = {};</span>
+
+	<span class="s3">function </span><span class="s1">createRequire(require, moduleId) {</span>
+		<span class="s3">var </span><span class="s1">me = installedModules[moduleId];</span>
+		<span class="s3">if </span><span class="s1">(!me) </span><span class="s3">return </span><span class="s1">require;</span>
+		<span class="s3">var </span><span class="s1">fn = </span><span class="s3">function </span><span class="s1">(request) {</span>
+			<span class="s3">if </span><span class="s1">(me.hot.active) {</span>
+				<span class="s3">if </span><span class="s1">(installedModules[request]) {</span>
+					<span class="s3">var </span><span class="s1">parents = installedModules[request].parents;</span>
+					<span class="s3">if </span><span class="s1">(parents.indexOf(moduleId) === -</span><span class="s5">1</span><span class="s1">) {</span>
+						<span class="s1">parents.push(moduleId);</span>
+					<span class="s1">}</span>
+				<span class="s1">} </span><span class="s3">else </span><span class="s1">{</span>
+					<span class="s1">currentParents = [moduleId];</span>
+					<span class="s1">currentChildModule = request;</span>
+				<span class="s1">}</span>
+				<span class="s3">if </span><span class="s1">(me.children.indexOf(request) === -</span><span class="s5">1</span><span class="s1">) {</span>
+					<span class="s1">me.children.push(request);</span>
+				<span class="s1">}</span>
+			<span class="s1">} </span><span class="s3">else </span><span class="s1">{</span>
+				<span class="s1">console.warn(</span>
+					<span class="s2">&quot;[HMR] unexpected require(&quot; </span><span class="s1">+</span>
+						<span class="s1">request +</span>
+						<span class="s2">&quot;) from disposed module &quot; </span><span class="s1">+</span>
+						<span class="s1">moduleId</span>
+				<span class="s1">);</span>
+				<span class="s1">currentParents = [];</span>
+			<span class="s1">}</span>
+			<span class="s3">return </span><span class="s1">require(request);</span>
+		<span class="s1">};</span>
+		<span class="s3">var </span><span class="s1">createPropertyDescriptor = </span><span class="s3">function </span><span class="s1">(name) {</span>
+			<span class="s3">return </span><span class="s1">{</span>
+				<span class="s1">configurable: </span><span class="s3">true</span><span class="s1">,</span>
+				<span class="s1">enumerable: </span><span class="s3">true</span><span class="s1">,</span>
+				<span class="s1">get: </span><span class="s3">function </span><span class="s1">() {</span>
+					<span class="s3">return </span><span class="s1">require[name];</span>
+				<span class="s1">},</span>
+				<span class="s1">set: </span><span class="s3">function </span><span class="s1">(value) {</span>
+					<span class="s1">require[name] = value;</span>
+				<span class="s1">}</span>
+			<span class="s1">};</span>
+		<span class="s1">};</span>
+		<span class="s3">for </span><span class="s1">(</span><span class="s3">var </span><span class="s1">name </span><span class="s3">in </span><span class="s1">require) {</span>
+			<span class="s3">if </span><span class="s1">(Object.prototype.hasOwnProperty.call(require, name) &amp;&amp; name !== </span><span class="s2">&quot;e&quot;</span><span class="s1">) {</span>
+				<span class="s1">Object.defineProperty(fn, name, createPropertyDescriptor(name));</span>
+			<span class="s1">}</span>
+		<span class="s1">}</span>
+		<span class="s1">fn.e = </span><span class="s3">function </span><span class="s1">(chunkId, fetchPriority) {</span>
+			<span class="s3">return </span><span class="s1">trackBlockingPromise(require.e(chunkId, fetchPriority));</span>
+		<span class="s1">};</span>
+		<span class="s3">return </span><span class="s1">fn;</span>
+	<span class="s1">}</span>
+
+	<span class="s3">function </span><span class="s1">createModuleHotObject(moduleId, me) {</span>
+		<span class="s3">var </span><span class="s1">_main = currentChildModule !== moduleId;</span>
+		<span class="s3">var </span><span class="s1">hot = {</span>
+			<span class="s0">// private stuff</span>
+			<span class="s1">_acceptedDependencies: {},</span>
+			<span class="s1">_acceptedErrorHandlers: {},</span>
+			<span class="s1">_declinedDependencies: {},</span>
+			<span class="s1">_selfAccepted: </span><span class="s3">false</span><span class="s1">,</span>
+			<span class="s1">_selfDeclined: </span><span class="s3">false</span><span class="s1">,</span>
+			<span class="s1">_selfInvalidated: </span><span class="s3">false</span><span class="s1">,</span>
+			<span class="s1">_disposeHandlers: [],</span>
+			<span class="s1">_main: _main,</span>
+			<span class="s1">_requireSelf: </span><span class="s3">function </span><span class="s1">() {</span>
+				<span class="s1">currentParents = me.parents.slice();</span>
+				<span class="s1">currentChildModule = _main ? undefined : moduleId;</span>
+				<span class="s1">__webpack_require__(moduleId);</span>
+			<span class="s1">},</span>
+
+			<span class="s0">// Module API</span>
+			<span class="s1">active: </span><span class="s3">true</span><span class="s1">,</span>
+			<span class="s1">accept: </span><span class="s3">function </span><span class="s1">(dep, callback, errorHandler) {</span>
+				<span class="s3">if </span><span class="s1">(dep === undefined) hot._selfAccepted = </span><span class="s3">true</span><span class="s1">;</span>
+				<span class="s3">else if </span><span class="s1">(</span><span class="s3">typeof </span><span class="s1">dep === </span><span class="s2">&quot;function&quot;</span><span class="s1">) hot._selfAccepted = dep;</span>
+				<span class="s3">else if </span><span class="s1">(</span><span class="s3">typeof </span><span class="s1">dep === </span><span class="s2">&quot;object&quot; </span><span class="s1">&amp;&amp; dep !== </span><span class="s3">null</span><span class="s1">) {</span>
+					<span class="s3">for </span><span class="s1">(</span><span class="s3">var </span><span class="s1">i = </span><span class="s5">0</span><span class="s1">; i &lt; dep.length; i++) {</span>
+						<span class="s1">hot._acceptedDependencies[dep[i]] = callback || </span><span class="s3">function </span><span class="s1">() {};</span>
+						<span class="s1">hot._acceptedErrorHandlers[dep[i]] = errorHandler;</span>
+					<span class="s1">}</span>
+				<span class="s1">} </span><span class="s3">else </span><span class="s1">{</span>
+					<span class="s1">hot._acceptedDependencies[dep] = callback || </span><span class="s3">function </span><span class="s1">() {};</span>
+					<span class="s1">hot._acceptedErrorHandlers[dep] = errorHandler;</span>
+				<span class="s1">}</span>
+			<span class="s1">},</span>
+			<span class="s1">decline: </span><span class="s3">function </span><span class="s1">(dep) {</span>
+				<span class="s3">if </span><span class="s1">(dep === undefined) hot._selfDeclined = </span><span class="s3">true</span><span class="s1">;</span>
+				<span class="s3">else if </span><span class="s1">(</span><span class="s3">typeof </span><span class="s1">dep === </span><span class="s2">&quot;object&quot; </span><span class="s1">&amp;&amp; dep !== </span><span class="s3">null</span><span class="s1">)</span>
+					<span class="s3">for </span><span class="s1">(</span><span class="s3">var </span><span class="s1">i = </span><span class="s5">0</span><span class="s1">; i &lt; dep.length; i++)</span>
+						<span class="s1">hot._declinedDependencies[dep[i]] = </span><span class="s3">true</span><span class="s1">;</span>
+				<span class="s3">else </span><span class="s1">hot._declinedDependencies[dep] = </span><span class="s3">true</span><span class="s1">;</span>
+			<span class="s1">},</span>
+			<span class="s1">dispose: </span><span class="s3">function </span><span class="s1">(callback) {</span>
+				<span class="s1">hot._disposeHandlers.push(callback);</span>
+			<span class="s1">},</span>
+			<span class="s1">addDisposeHandler: </span><span class="s3">function </span><span class="s1">(callback) {</span>
+				<span class="s1">hot._disposeHandlers.push(callback);</span>
+			<span class="s1">},</span>
+			<span class="s1">removeDisposeHandler: </span><span class="s3">function </span><span class="s1">(callback) {</span>
+				<span class="s3">var </span><span class="s1">idx = hot._disposeHandlers.indexOf(callback);</span>
+				<span class="s3">if </span><span class="s1">(idx &gt;= </span><span class="s5">0</span><span class="s1">) hot._disposeHandlers.splice(idx, </span><span class="s5">1</span><span class="s1">);</span>
+			<span class="s1">},</span>
+			<span class="s1">invalidate: </span><span class="s3">function </span><span class="s1">() {</span>
+				<span class="s3">this</span><span class="s1">._selfInvalidated = </span><span class="s3">true</span><span class="s1">;</span>
+				<span class="s3">switch </span><span class="s1">(currentStatus) {</span>
+					<span class="s3">case </span><span class="s2">&quot;idle&quot;</span><span class="s1">:</span>
+						<span class="s1">currentUpdateApplyHandlers = [];</span>
+						<span class="s1">Object.keys($hmrInvalidateModuleHandlers$).forEach(</span><span class="s3">function </span><span class="s1">(key) {</span>
+							<span class="s1">$hmrInvalidateModuleHandlers$[key](</span>
+								<span class="s1">moduleId,</span>
+								<span class="s1">currentUpdateApplyHandlers</span>
+							<span class="s1">);</span>
+						<span class="s1">});</span>
+						<span class="s1">setStatus(</span><span class="s2">&quot;ready&quot;</span><span class="s1">);</span>
+						<span class="s3">break</span><span class="s1">;</span>
+					<span class="s3">case </span><span class="s2">&quot;ready&quot;</span><span class="s1">:</span>
+						<span class="s1">Object.keys($hmrInvalidateModuleHandlers$).forEach(</span><span class="s3">function </span><span class="s1">(key) {</span>
+							<span class="s1">$hmrInvalidateModuleHandlers$[key](</span>
+								<span class="s1">moduleId,</span>
+								<span class="s1">currentUpdateApplyHandlers</span>
+							<span class="s1">);</span>
+						<span class="s1">});</span>
+						<span class="s3">break</span><span class="s1">;</span>
+					<span class="s3">case </span><span class="s2">&quot;prepare&quot;</span><span class="s1">:</span>
+					<span class="s3">case </span><span class="s2">&quot;check&quot;</span><span class="s1">:</span>
+					<span class="s3">case </span><span class="s2">&quot;dispose&quot;</span><span class="s1">:</span>
+					<span class="s3">case </span><span class="s2">&quot;apply&quot;</span><span class="s1">:</span>
+						<span class="s1">(queuedInvalidatedModules = queuedInvalidatedModules || []).push(</span>
+							<span class="s1">moduleId</span>
+						<span class="s1">);</span>
+						<span class="s3">break</span><span class="s1">;</span>
+					<span class="s3">default</span><span class="s1">:</span>
+						<span class="s0">// ignore requests in error states</span>
+						<span class="s3">break</span><span class="s1">;</span>
+				<span class="s1">}</span>
+			<span class="s1">},</span>
+
+			<span class="s0">// Management API</span>
+			<span class="s1">check: hotCheck,</span>
+			<span class="s1">apply: hotApply,</span>
+			<span class="s1">status: </span><span class="s3">function </span><span class="s1">(l) {</span>
+				<span class="s3">if </span><span class="s1">(!l) </span><span class="s3">return </span><span class="s1">currentStatus;</span>
+				<span class="s1">registeredStatusHandlers.push(l);</span>
+			<span class="s1">},</span>
+			<span class="s1">addStatusHandler: </span><span class="s3">function </span><span class="s1">(l) {</span>
+				<span class="s1">registeredStatusHandlers.push(l);</span>
+			<span class="s1">},</span>
+			<span class="s1">removeStatusHandler: </span><span class="s3">function </span><span class="s1">(l) {</span>
+				<span class="s3">var </span><span class="s1">idx = registeredStatusHandlers.indexOf(l);</span>
+				<span class="s3">if </span><span class="s1">(idx &gt;= </span><span class="s5">0</span><span class="s1">) registeredStatusHandlers.splice(idx, </span><span class="s5">1</span><span class="s1">);</span>
+			<span class="s1">},</span>
+
+			<span class="s0">// inherit from previous dispose call</span>
+			<span class="s1">data: currentModuleData[moduleId]</span>
+		<span class="s1">};</span>
+		<span class="s1">currentChildModule = undefined;</span>
+		<span class="s3">return </span><span class="s1">hot;</span>
+	<span class="s1">}</span>
+
+	<span class="s3">function </span><span class="s1">setStatus(newStatus) {</span>
+		<span class="s1">currentStatus = newStatus;</span>
+		<span class="s3">var </span><span class="s1">results = [];</span>
+
+		<span class="s3">for </span><span class="s1">(</span><span class="s3">var </span><span class="s1">i = </span><span class="s5">0</span><span class="s1">; i &lt; registeredStatusHandlers.length; i++)</span>
+			<span class="s1">results[i] = registeredStatusHandlers[i].call(</span><span class="s3">null</span><span class="s1">, newStatus);</span>
+
+		<span class="s3">return </span><span class="s1">Promise.all(results).then(</span><span class="s3">function </span><span class="s1">() {});</span>
+	<span class="s1">}</span>
+
+	<span class="s3">function </span><span class="s1">unblock() {</span>
+		<span class="s3">if </span><span class="s1">(--blockingPromises === </span><span class="s5">0</span><span class="s1">) {</span>
+			<span class="s1">setStatus(</span><span class="s2">&quot;ready&quot;</span><span class="s1">).then(</span><span class="s3">function </span><span class="s1">() {</span>
+				<span class="s3">if </span><span class="s1">(blockingPromises === </span><span class="s5">0</span><span class="s1">) {</span>
+					<span class="s3">var </span><span class="s1">list = blockingPromisesWaiting;</span>
+					<span class="s1">blockingPromisesWaiting = [];</span>
+					<span class="s3">for </span><span class="s1">(</span><span class="s3">var </span><span class="s1">i = </span><span class="s5">0</span><span class="s1">; i &lt; list.length; i++) {</span>
+						<span class="s1">list[i]();</span>
+					<span class="s1">}</span>
+				<span class="s1">}</span>
+			<span class="s1">});</span>
+		<span class="s1">}</span>
+	<span class="s1">}</span>
+
+	<span class="s3">function </span><span class="s1">trackBlockingPromise(promise) {</span>
+		<span class="s3">switch </span><span class="s1">(currentStatus) {</span>
+			<span class="s3">case </span><span class="s2">&quot;ready&quot;</span><span class="s1">:</span>
+				<span class="s1">setStatus(</span><span class="s2">&quot;prepare&quot;</span><span class="s1">);</span>
+			<span class="s0">/* fallthrough */</span>
+			<span class="s3">case </span><span class="s2">&quot;prepare&quot;</span><span class="s1">:</span>
+				<span class="s1">blockingPromises++;</span>
+				<span class="s1">promise.then(unblock, unblock);</span>
+				<span class="s3">return </span><span class="s1">promise;</span>
+			<span class="s3">default</span><span class="s1">:</span>
+				<span class="s3">return </span><span class="s1">promise;</span>
+		<span class="s1">}</span>
+	<span class="s1">}</span>
+
+	<span class="s3">function </span><span class="s1">waitForBlockingPromises(fn) {</span>
+		<span class="s3">if </span><span class="s1">(blockingPromises === </span><span class="s5">0</span><span class="s1">) </span><span class="s3">return </span><span class="s1">fn();</span>
+		<span class="s3">return new </span><span class="s1">Promise(</span><span class="s3">function </span><span class="s1">(resolve) {</span>
+			<span class="s1">blockingPromisesWaiting.push(</span><span class="s3">function </span><span class="s1">() {</span>
+				<span class="s1">resolve(fn());</span>
+			<span class="s1">});</span>
+		<span class="s1">});</span>
+	<span class="s1">}</span>
+
+	<span class="s3">function </span><span class="s1">hotCheck(applyOnUpdate) {</span>
+		<span class="s3">if </span><span class="s1">(currentStatus !== </span><span class="s2">&quot;idle&quot;</span><span class="s1">) {</span>
+			<span class="s3">throw new </span><span class="s1">Error(</span><span class="s2">&quot;check() is only allowed in idle status&quot;</span><span class="s1">);</span>
+		<span class="s1">}</span>
+		<span class="s3">return </span><span class="s1">setStatus(</span><span class="s2">&quot;check&quot;</span><span class="s1">)</span>
+			<span class="s1">.then($hmrDownloadManifest$)</span>
+			<span class="s1">.then(</span><span class="s3">function </span><span class="s1">(update) {</span>
+				<span class="s3">if </span><span class="s1">(!update) {</span>
+					<span class="s3">return </span><span class="s1">setStatus(applyInvalidatedModules() ? </span><span class="s2">&quot;ready&quot; </span><span class="s1">: </span><span class="s2">&quot;idle&quot;</span><span class="s1">).then(</span>
+						<span class="s3">function </span><span class="s1">() {</span>
+							<span class="s3">return null</span><span class="s1">;</span>
+						<span class="s1">}</span>
+					<span class="s1">);</span>
+				<span class="s1">}</span>
+
+				<span class="s3">return </span><span class="s1">setStatus(</span><span class="s2">&quot;prepare&quot;</span><span class="s1">).then(</span><span class="s3">function </span><span class="s1">() {</span>
+					<span class="s3">var </span><span class="s1">updatedModules = [];</span>
+					<span class="s1">currentUpdateApplyHandlers = [];</span>
+
+					<span class="s3">return </span><span class="s1">Promise.all(</span>
+						<span class="s1">Object.keys($hmrDownloadUpdateHandlers$).reduce(</span><span class="s3">function </span><span class="s1">(</span>
+							<span class="s1">promises,</span>
+							<span class="s1">key</span>
+						<span class="s1">) {</span>
+							<span class="s1">$hmrDownloadUpdateHandlers$[key](</span>
+								<span class="s1">update.c,</span>
+								<span class="s1">update.r,</span>
+								<span class="s1">update.m,</span>
+								<span class="s1">promises,</span>
+								<span class="s1">currentUpdateApplyHandlers,</span>
+								<span class="s1">updatedModules</span>
+							<span class="s1">);</span>
+							<span class="s3">return </span><span class="s1">promises;</span>
+						<span class="s1">}, [])</span>
+					<span class="s1">).then(</span><span class="s3">function </span><span class="s1">() {</span>
+						<span class="s3">return </span><span class="s1">waitForBlockingPromises(</span><span class="s3">function </span><span class="s1">() {</span>
+							<span class="s3">if </span><span class="s1">(applyOnUpdate) {</span>
+								<span class="s3">return </span><span class="s1">internalApply(applyOnUpdate);</span>
+							<span class="s1">}</span>
+							<span class="s3">return </span><span class="s1">setStatus(</span><span class="s2">&quot;ready&quot;</span><span class="s1">).then(</span><span class="s3">function </span><span class="s1">() {</span>
+								<span class="s3">return </span><span class="s1">updatedModules;</span>
+							<span class="s1">});</span>
+						<span class="s1">});</span>
+					<span class="s1">});</span>
+				<span class="s1">});</span>
+			<span class="s1">});</span>
+	<span class="s1">}</span>
+
+	<span class="s3">function </span><span class="s1">hotApply(options) {</span>
+		<span class="s3">if </span><span class="s1">(currentStatus !== </span><span class="s2">&quot;ready&quot;</span><span class="s1">) {</span>
+			<span class="s3">return </span><span class="s1">Promise.resolve().then(</span><span class="s3">function </span><span class="s1">() {</span>
+				<span class="s3">throw new </span><span class="s1">Error(</span>
+					<span class="s2">&quot;apply() is only allowed in ready status (state: &quot; </span><span class="s1">+</span>
+						<span class="s1">currentStatus +</span>
+						<span class="s2">&quot;)&quot;</span>
+				<span class="s1">);</span>
+			<span class="s1">});</span>
+		<span class="s1">}</span>
+		<span class="s3">return </span><span class="s1">internalApply(options);</span>
+	<span class="s1">}</span>
+
+	<span class="s3">function </span><span class="s1">internalApply(options) {</span>
+		<span class="s1">options = options || {};</span>
+
+		<span class="s1">applyInvalidatedModules();</span>
+
+		<span class="s3">var </span><span class="s1">results = currentUpdateApplyHandlers.map(</span><span class="s3">function </span><span class="s1">(handler) {</span>
+			<span class="s3">return </span><span class="s1">handler(options);</span>
+		<span class="s1">});</span>
+		<span class="s1">currentUpdateApplyHandlers = undefined;</span>
+
+		<span class="s3">var </span><span class="s1">errors = results</span>
+			<span class="s1">.map(</span><span class="s3">function </span><span class="s1">(r) {</span>
+				<span class="s3">return </span><span class="s1">r.error;</span>
+			<span class="s1">})</span>
+			<span class="s1">.filter(Boolean);</span>
+
+		<span class="s3">if </span><span class="s1">(errors.length &gt; </span><span class="s5">0</span><span class="s1">) {</span>
+			<span class="s3">return </span><span class="s1">setStatus(</span><span class="s2">&quot;abort&quot;</span><span class="s1">).then(</span><span class="s3">function </span><span class="s1">() {</span>
+				<span class="s3">throw </span><span class="s1">errors[</span><span class="s5">0</span><span class="s1">];</span>
+			<span class="s1">});</span>
+		<span class="s1">}</span>
+
+		<span class="s0">// Now in &quot;dispose&quot; phase</span>
+		<span class="s3">var </span><span class="s1">disposePromise = setStatus(</span><span class="s2">&quot;dispose&quot;</span><span class="s1">);</span>
+
+		<span class="s1">results.forEach(</span><span class="s3">function </span><span class="s1">(result) {</span>
+			<span class="s3">if </span><span class="s1">(result.dispose) result.dispose();</span>
+		<span class="s1">});</span>
+
+		<span class="s0">// Now in &quot;apply&quot; phase</span>
+		<span class="s3">var </span><span class="s1">applyPromise = setStatus(</span><span class="s2">&quot;apply&quot;</span><span class="s1">);</span>
+
+		<span class="s3">var </span><span class="s1">error;</span>
+		<span class="s3">var </span><span class="s1">reportError = </span><span class="s3">function </span><span class="s1">(err) {</span>
+			<span class="s3">if </span><span class="s1">(!error) error = err;</span>
+		<span class="s1">};</span>
+
+		<span class="s3">var </span><span class="s1">outdatedModules = [];</span>
+		<span class="s1">results.forEach(</span><span class="s3">function </span><span class="s1">(result) {</span>
+			<span class="s3">if </span><span class="s1">(result.apply) {</span>
+				<span class="s3">var </span><span class="s1">modules = result.apply(reportError);</span>
+				<span class="s3">if </span><span class="s1">(modules) {</span>
+					<span class="s3">for </span><span class="s1">(</span><span class="s3">var </span><span class="s1">i = </span><span class="s5">0</span><span class="s1">; i &lt; modules.length; i++) {</span>
+						<span class="s1">outdatedModules.push(modules[i]);</span>
+					<span class="s1">}</span>
+				<span class="s1">}</span>
+			<span class="s1">}</span>
+		<span class="s1">});</span>
+
+		<span class="s3">return </span><span class="s1">Promise.all([disposePromise, applyPromise]).then(</span><span class="s3">function </span><span class="s1">() {</span>
+			<span class="s0">// handle errors in accept handlers and self accepted module load</span>
+			<span class="s3">if </span><span class="s1">(error) {</span>
+				<span class="s3">return </span><span class="s1">setStatus(</span><span class="s2">&quot;fail&quot;</span><span class="s1">).then(</span><span class="s3">function </span><span class="s1">() {</span>
+					<span class="s3">throw </span><span class="s1">error;</span>
+				<span class="s1">});</span>
+			<span class="s1">}</span>
+
+			<span class="s3">if </span><span class="s1">(queuedInvalidatedModules) {</span>
+				<span class="s3">return </span><span class="s1">internalApply(options).then(</span><span class="s3">function </span><span class="s1">(list) {</span>
+					<span class="s1">outdatedModules.forEach(</span><span class="s3">function </span><span class="s1">(moduleId) {</span>
+						<span class="s3">if </span><span class="s1">(list.indexOf(moduleId) &lt; </span><span class="s5">0</span><span class="s1">) list.push(moduleId);</span>
+					<span class="s1">});</span>
+					<span class="s3">return </span><span class="s1">list;</span>
+				<span class="s1">});</span>
+			<span class="s1">}</span>
+
+			<span class="s3">return </span><span class="s1">setStatus(</span><span class="s2">&quot;idle&quot;</span><span class="s1">).then(</span><span class="s3">function </span><span class="s1">() {</span>
+				<span class="s3">return </span><span class="s1">outdatedModules;</span>
+			<span class="s1">});</span>
+		<span class="s1">});</span>
+	<span class="s1">}</span>
+
+	<span class="s3">function </span><span class="s1">applyInvalidatedModules() {</span>
+		<span class="s3">if </span><span class="s1">(queuedInvalidatedModules) {</span>
+			<span class="s3">if </span><span class="s1">(!currentUpdateApplyHandlers) currentUpdateApplyHandlers = [];</span>
+			<span class="s1">Object.keys($hmrInvalidateModuleHandlers$).forEach(</span><span class="s3">function </span><span class="s1">(key) {</span>
+				<span class="s1">queuedInvalidatedModules.forEach(</span><span class="s3">function </span><span class="s1">(moduleId) {</span>
+					<span class="s1">$hmrInvalidateModuleHandlers$[key](</span>
+						<span class="s1">moduleId,</span>
+						<span class="s1">currentUpdateApplyHandlers</span>
+					<span class="s1">);</span>
+				<span class="s1">});</span>
+			<span class="s1">});</span>
+			<span class="s1">queuedInvalidatedModules = undefined;</span>
+			<span class="s3">return true</span><span class="s1">;</span>
+		<span class="s1">}</span>
+	<span class="s1">}</span>
+<span class="s1">};</span>
+</pre>
+</body>
+</html>

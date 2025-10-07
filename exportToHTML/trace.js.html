@@ -1,0 +1,217 @@
+<html>
+<head>
+<title>trace.js</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #067d17;}
+.s1 { color: #080808;}
+.s2 { color: #0033b3;}
+.s3 { color: #1750eb;}
+.s4 { color: #8c8c8c; font-style: italic;}
+</style>
+</head>
+<body bgcolor="#ffffff">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#c0c0c0" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+trace.js</font>
+</center></td></tr></table>
+<pre><span class="s0">&quot;use strict&quot;</span><span class="s1">;</span>
+<span class="s1">Object.defineProperty(exports, </span><span class="s0">&quot;__esModule&quot;</span><span class="s1">, {</span>
+    <span class="s1">value: </span><span class="s2">true</span>
+<span class="s1">});</span>
+<span class="s3">0 </span><span class="s1">&amp;&amp; (module.exports = {</span>
+    <span class="s1">Span: </span><span class="s2">null</span><span class="s1">,</span>
+    <span class="s1">SpanStatus: </span><span class="s2">null</span><span class="s1">,</span>
+    <span class="s1">clearTraceEvents: </span><span class="s2">null</span><span class="s1">,</span>
+    <span class="s1">exportTraceState: </span><span class="s2">null</span><span class="s1">,</span>
+    <span class="s1">flushAllTraces: </span><span class="s2">null</span><span class="s1">,</span>
+    <span class="s1">getTraceEvents: </span><span class="s2">null</span><span class="s1">,</span>
+    <span class="s1">initializeTraceState: </span><span class="s2">null</span><span class="s1">,</span>
+    <span class="s1">recordTraceEvents: </span><span class="s2">null</span><span class="s1">,</span>
+    <span class="s1">trace: </span><span class="s2">null</span>
+<span class="s1">});</span>
+<span class="s2">function </span><span class="s1">_export(target, all) {</span>
+    <span class="s2">for</span><span class="s1">(</span><span class="s2">var </span><span class="s1">name </span><span class="s2">in </span><span class="s1">all)Object.defineProperty(target, name, {</span>
+        <span class="s1">enumerable: </span><span class="s2">true</span><span class="s1">,</span>
+        <span class="s1">get: all[name]</span>
+    <span class="s1">});</span>
+<span class="s1">}</span>
+<span class="s1">_export(exports, {</span>
+    <span class="s1">Span: </span><span class="s2">function</span><span class="s1">() {</span>
+        <span class="s2">return </span><span class="s1">Span;</span>
+    <span class="s1">},</span>
+    <span class="s1">SpanStatus: </span><span class="s2">function</span><span class="s1">() {</span>
+        <span class="s2">return </span><span class="s1">SpanStatus;</span>
+    <span class="s1">},</span>
+    <span class="s1">clearTraceEvents: </span><span class="s2">function</span><span class="s1">() {</span>
+        <span class="s2">return </span><span class="s1">clearTraceEvents;</span>
+    <span class="s1">},</span>
+    <span class="s1">exportTraceState: </span><span class="s2">function</span><span class="s1">() {</span>
+        <span class="s2">return </span><span class="s1">exportTraceState;</span>
+    <span class="s1">},</span>
+    <span class="s1">flushAllTraces: </span><span class="s2">function</span><span class="s1">() {</span>
+        <span class="s2">return </span><span class="s1">flushAllTraces;</span>
+    <span class="s1">},</span>
+    <span class="s1">getTraceEvents: </span><span class="s2">function</span><span class="s1">() {</span>
+        <span class="s2">return </span><span class="s1">getTraceEvents;</span>
+    <span class="s1">},</span>
+    <span class="s1">initializeTraceState: </span><span class="s2">function</span><span class="s1">() {</span>
+        <span class="s2">return </span><span class="s1">initializeTraceState;</span>
+    <span class="s1">},</span>
+    <span class="s1">recordTraceEvents: </span><span class="s2">function</span><span class="s1">() {</span>
+        <span class="s2">return </span><span class="s1">recordTraceEvents;</span>
+    <span class="s1">},</span>
+    <span class="s1">trace: </span><span class="s2">function</span><span class="s1">() {</span>
+        <span class="s2">return </span><span class="s1">trace;</span>
+    <span class="s1">}</span>
+<span class="s1">});</span>
+<span class="s2">const </span><span class="s1">_report = require(</span><span class="s0">&quot;./report&quot;</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">NUM_OF_MICROSEC_IN_NANOSEC = BigInt(</span><span class="s0">'1000'</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">NUM_OF_MILLISEC_IN_NANOSEC = BigInt(</span><span class="s0">'1000000'</span><span class="s1">);</span>
+<span class="s2">let </span><span class="s1">count = </span><span class="s3">0</span><span class="s1">;</span>
+<span class="s2">const </span><span class="s1">getId = ()=&gt;{</span>
+    <span class="s1">count++;</span>
+    <span class="s2">return </span><span class="s1">count;</span>
+<span class="s1">};</span>
+<span class="s2">let </span><span class="s1">defaultParentSpanId;</span>
+<span class="s2">let </span><span class="s1">shouldSaveTraceEvents;</span>
+<span class="s2">let </span><span class="s1">savedTraceEvents = [];</span>
+<span class="s2">const </span><span class="s1">RECORD_SPAN_THRESHOLD_MS = parseInt(process.env.NEXT_TRACE_SPAN_THRESHOLD_MS ?? </span><span class="s0">'-1'</span><span class="s1">);</span>
+<span class="s2">var </span><span class="s1">SpanStatus = </span><span class="s4">/*#__PURE__*/ </span><span class="s2">function</span><span class="s1">(SpanStatus) {</span>
+    <span class="s1">SpanStatus[</span><span class="s0">&quot;Started&quot;</span><span class="s1">] = </span><span class="s0">&quot;started&quot;</span><span class="s1">;</span>
+    <span class="s1">SpanStatus[</span><span class="s0">&quot;Stopped&quot;</span><span class="s1">] = </span><span class="s0">&quot;stopped&quot;</span><span class="s1">;</span>
+    <span class="s2">return </span><span class="s1">SpanStatus;</span>
+<span class="s1">}({});</span>
+<span class="s2">class </span><span class="s1">Span {</span>
+    <span class="s1">constructor({ name, parentId, attrs, startTime }){</span>
+        <span class="s2">this</span><span class="s1">.name = name;</span>
+        <span class="s2">this</span><span class="s1">.parentId = parentId ?? defaultParentSpanId;</span>
+        <span class="s2">this</span><span class="s1">.attrs = attrs ? {</span>
+            <span class="s1">...attrs</span>
+        <span class="s1">} : {};</span>
+        <span class="s2">this</span><span class="s1">.status = </span><span class="s0">&quot;started&quot;</span><span class="s1">;</span>
+        <span class="s2">this</span><span class="s1">.id = getId();</span>
+        <span class="s2">this</span><span class="s1">._start = startTime || process.hrtime.bigint();</span>
+        <span class="s4">// hrtime cannot be used to reconstruct tracing span's actual start time</span>
+        <span class="s4">// since it does not have relation to clock time:</span>
+        <span class="s4">// `These times are relative to an arbitrary time in the past, and not related to the time of day and therefore not subject to clock drift`</span>
+        <span class="s4">// https://nodejs.org/api/process.html#processhrtimetime</span>
+        <span class="s4">// Capturing current datetime as additional metadata for external reconstruction.</span>
+        <span class="s2">this</span><span class="s1">.now = Date.now();</span>
+    <span class="s1">}</span>
+    <span class="s4">// Durations are reported as microseconds. This gives 1000x the precision</span>
+    <span class="s4">// of something like Date.now(), which reports in milliseconds.</span>
+    <span class="s4">// Additionally, ~285 years can be safely represented as microseconds as</span>
+    <span class="s4">// a float64 in both JSON and JavaScript.</span>
+    <span class="s1">stop(stopTime) {</span>
+        <span class="s2">if </span><span class="s1">(</span><span class="s2">this</span><span class="s1">.status === </span><span class="s0">&quot;stopped&quot;</span><span class="s1">) {</span>
+            <span class="s4">// Don't report the same span twice.</span>
+            <span class="s4">// TODO: In the future this should throw as `.stop()` shouldn't be called multiple times.</span>
+            <span class="s2">return</span><span class="s1">;</span>
+        <span class="s1">}</span>
+        <span class="s2">const </span><span class="s1">end = stopTime || process.hrtime.bigint();</span>
+        <span class="s2">const </span><span class="s1">duration = (end - </span><span class="s2">this</span><span class="s1">._start) / NUM_OF_MICROSEC_IN_NANOSEC;</span>
+        <span class="s2">this</span><span class="s1">.status = </span><span class="s0">&quot;stopped&quot;</span><span class="s1">;</span>
+        <span class="s2">if </span><span class="s1">(duration &gt; Number.MAX_SAFE_INTEGER) {</span>
+            <span class="s2">throw </span><span class="s1">Object.defineProperty(</span><span class="s2">new </span><span class="s1">Error(</span><span class="s0">`Duration is too long to express as float64: </span><span class="s1">${duration}</span><span class="s0">`</span><span class="s1">), </span><span class="s0">&quot;__NEXT_ERROR_CODE&quot;</span><span class="s1">, {</span>
+                <span class="s1">value: </span><span class="s0">&quot;E513&quot;</span><span class="s1">,</span>
+                <span class="s1">enumerable: </span><span class="s2">false</span><span class="s1">,</span>
+                <span class="s1">configurable: </span><span class="s2">true</span>
+            <span class="s1">});</span>
+        <span class="s1">}</span>
+        <span class="s2">const </span><span class="s1">timestamp = </span><span class="s2">this</span><span class="s1">._start / NUM_OF_MICROSEC_IN_NANOSEC;</span>
+        <span class="s2">const </span><span class="s1">traceEvent = {</span>
+            <span class="s1">name: </span><span class="s2">this</span><span class="s1">.name,</span>
+            <span class="s1">duration: Number(duration),</span>
+            <span class="s1">timestamp: Number(timestamp),</span>
+            <span class="s1">id: </span><span class="s2">this</span><span class="s1">.id,</span>
+            <span class="s1">parentId: </span><span class="s2">this</span><span class="s1">.parentId,</span>
+            <span class="s1">tags: </span><span class="s2">this</span><span class="s1">.attrs,</span>
+            <span class="s1">startTime: </span><span class="s2">this</span><span class="s1">.now</span>
+        <span class="s1">};</span>
+        <span class="s2">if </span><span class="s1">(duration &gt; RECORD_SPAN_THRESHOLD_MS * </span><span class="s3">1000</span><span class="s1">) {</span>
+            <span class="s1">_report.reporter.report(traceEvent);</span>
+            <span class="s2">if </span><span class="s1">(shouldSaveTraceEvents) {</span>
+                <span class="s1">savedTraceEvents.push(traceEvent);</span>
+            <span class="s1">}</span>
+        <span class="s1">}</span>
+    <span class="s1">}</span>
+    <span class="s1">traceChild(name, attrs) {</span>
+        <span class="s2">return new </span><span class="s1">Span({</span>
+            <span class="s1">name,</span>
+            <span class="s1">parentId: </span><span class="s2">this</span><span class="s1">.id,</span>
+            <span class="s1">attrs</span>
+        <span class="s1">});</span>
+    <span class="s1">}</span>
+    <span class="s1">manualTraceChild(name, </span><span class="s4">// Start time in nanoseconds since epoch.</span>
+    <span class="s1">startTime, </span><span class="s4">// Stop time in nanoseconds since epoch.</span>
+    <span class="s1">stopTime, attrs) {</span>
+        <span class="s4">// We need to convert the time info to the same base as hrtime since that is used usually.</span>
+        <span class="s2">const </span><span class="s1">correction = process.hrtime.bigint() - BigInt(Date.now()) * NUM_OF_MILLISEC_IN_NANOSEC;</span>
+        <span class="s2">const </span><span class="s1">span = </span><span class="s2">new </span><span class="s1">Span({</span>
+            <span class="s1">name,</span>
+            <span class="s1">parentId: </span><span class="s2">this</span><span class="s1">.id,</span>
+            <span class="s1">attrs,</span>
+            <span class="s1">startTime: startTime ? startTime + correction : process.hrtime.bigint()</span>
+        <span class="s1">});</span>
+        <span class="s1">span.stop(stopTime ? stopTime + correction : process.hrtime.bigint());</span>
+    <span class="s1">}</span>
+    <span class="s1">getId() {</span>
+        <span class="s2">return this</span><span class="s1">.id;</span>
+    <span class="s1">}</span>
+    <span class="s1">setAttribute(key, value) {</span>
+        <span class="s2">this</span><span class="s1">.attrs[key] = value;</span>
+    <span class="s1">}</span>
+    <span class="s1">traceFn(fn) {</span>
+        <span class="s2">try </span><span class="s1">{</span>
+            <span class="s2">return </span><span class="s1">fn(</span><span class="s2">this</span><span class="s1">);</span>
+        <span class="s1">} </span><span class="s2">finally</span><span class="s1">{</span>
+            <span class="s2">this</span><span class="s1">.stop();</span>
+        <span class="s1">}</span>
+    <span class="s1">}</span>
+    <span class="s1">async traceAsyncFn(fn) {</span>
+        <span class="s2">try </span><span class="s1">{</span>
+            <span class="s2">return await </span><span class="s1">fn(</span><span class="s2">this</span><span class="s1">);</span>
+        <span class="s1">} </span><span class="s2">finally</span><span class="s1">{</span>
+            <span class="s2">this</span><span class="s1">.stop();</span>
+        <span class="s1">}</span>
+    <span class="s1">}</span>
+<span class="s1">}</span>
+<span class="s2">const </span><span class="s1">trace = (name, parentId, attrs)=&gt;{</span>
+    <span class="s2">return new </span><span class="s1">Span({</span>
+        <span class="s1">name,</span>
+        <span class="s1">parentId,</span>
+        <span class="s1">attrs</span>
+    <span class="s1">});</span>
+<span class="s1">};</span>
+<span class="s2">const </span><span class="s1">flushAllTraces = (opts)=&gt;_report.reporter.flushAll(opts);</span>
+<span class="s2">const </span><span class="s1">exportTraceState = ()=&gt;({</span>
+        <span class="s1">defaultParentSpanId,</span>
+        <span class="s1">lastId: count,</span>
+        <span class="s1">shouldSaveTraceEvents</span>
+    <span class="s1">});</span>
+<span class="s2">const </span><span class="s1">initializeTraceState = (state)=&gt;{</span>
+    <span class="s1">count = state.lastId;</span>
+    <span class="s1">defaultParentSpanId = state.defaultParentSpanId;</span>
+    <span class="s1">shouldSaveTraceEvents = state.shouldSaveTraceEvents;</span>
+<span class="s1">};</span>
+<span class="s2">function </span><span class="s1">getTraceEvents() {</span>
+    <span class="s2">return </span><span class="s1">savedTraceEvents;</span>
+<span class="s1">}</span>
+<span class="s2">function </span><span class="s1">recordTraceEvents(events) {</span>
+    <span class="s2">for </span><span class="s1">(</span><span class="s2">const </span><span class="s1">traceEvent of events){</span>
+        <span class="s1">_report.reporter.report(traceEvent);</span>
+        <span class="s2">if </span><span class="s1">(traceEvent.id &gt; count) {</span>
+            <span class="s1">count = traceEvent.id + </span><span class="s3">1</span><span class="s1">;</span>
+        <span class="s1">}</span>
+    <span class="s1">}</span>
+    <span class="s2">if </span><span class="s1">(shouldSaveTraceEvents) {</span>
+        <span class="s1">savedTraceEvents.push(...events);</span>
+    <span class="s1">}</span>
+<span class="s1">}</span>
+<span class="s2">const </span><span class="s1">clearTraceEvents = ()=&gt;savedTraceEvents = [];</span>
+
+<span class="s4">//# sourceMappingURL=trace.js.map</span></pre>
+</body>
+</html>

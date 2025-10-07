@@ -1,0 +1,429 @@
+<html>
+<head>
+<title>Leniency.js</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #0033b3;}
+.s1 { color: #080808;}
+.s2 { color: #067d17;}
+.s3 { color: #8c8c8c; font-style: italic;}
+.s4 { color: #1750eb;}
+.s5 { color: #0037a6;}
+</style>
+</head>
+<body bgcolor="#ffffff">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#c0c0c0" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+Leniency.js</font>
+</center></td></tr></table>
+<pre><span class="s0">import </span><span class="s1">parseDigits from </span><span class="s2">'../helpers/parseDigits.js'</span>
+<span class="s0">import </span><span class="s1">matchPhoneNumberStringAgainstPhoneNumber from </span><span class="s2">'./matchPhoneNumberStringAgainstPhoneNumber.js'</span>
+<span class="s0">import </span><span class="s1">Metadata from </span><span class="s2">'../metadata.js'</span>
+<span class="s0">import </span><span class="s1">getCountryByCallingCode from </span><span class="s2">'../helpers/getCountryByCallingCode.js'</span>
+<span class="s0">import </span><span class="s1">{ chooseFormatForNumber } from </span><span class="s2">'../format.js'</span>
+
+<span class="s0">import </span><span class="s1">{</span>
+	<span class="s1">startsWith,</span>
+	<span class="s1">endsWith</span>
+<span class="s1">} from </span><span class="s2">'./util.js'</span>
+
+<span class="s3">/**</span>
+ <span class="s3">* Leniency when finding potential phone numbers in text segments</span>
+ <span class="s3">* The levels here are ordered in increasing strictness.</span>
+ <span class="s3">*/</span>
+<span class="s0">export default</span>
+<span class="s1">{</span>
+	<span class="s3">/**</span>
+	 <span class="s3">* Phone numbers accepted are &quot;possible&quot;, but not necessarily &quot;valid&quot;.</span>
+	 <span class="s3">*/</span>
+	<span class="s1">POSSIBLE(phoneNumber, { candidate, metadata })</span>
+	<span class="s1">{</span>
+		<span class="s0">return true</span>
+	<span class="s1">},</span>
+
+	<span class="s3">/**</span>
+	 <span class="s3">* Phone numbers accepted are &quot;possible&quot; and &quot;valid&quot;.</span>
+	 <span class="s3">* Numbers written in national format must have their national-prefix</span>
+	 <span class="s3">* present if it is usually written for a number of this type.</span>
+	 <span class="s3">*/</span>
+	<span class="s1">VALID(phoneNumber, { candidate, defaultCountry, metadata })</span>
+	<span class="s1">{</span>
+		<span class="s0">if </span><span class="s1">(</span>
+			<span class="s1">!phoneNumber.isValid() ||</span>
+			<span class="s1">!containsOnlyValidXChars(phoneNumber, candidate, metadata)</span>
+		<span class="s1">)</span>
+		<span class="s1">{</span>
+			<span class="s0">return false</span>
+		<span class="s1">}</span>
+
+		<span class="s3">// Skipped for simplicity.</span>
+		<span class="s3">// return isNationalPrefixPresentIfRequired(phoneNumber, { defaultCountry, metadata })</span>
+		<span class="s0">return true</span>
+	<span class="s1">},</span>
+
+	<span class="s3">/**</span>
+	 <span class="s3">* Phone numbers accepted are &quot;valid&quot; and</span>
+	 <span class="s3">* are grouped in a possible way for this locale. For example, a US number written as</span>
+	 <span class="s3">* &quot;65 02 53 00 00&quot; and &quot;650253 0000&quot; are not accepted at this leniency level, whereas</span>
+	 <span class="s3">* &quot;650 253 0000&quot;, &quot;650 2530000&quot; or &quot;6502530000&quot; are.</span>
+	 <span class="s3">* Numbers with more than one '/' symbol in the national significant number</span>
+	 <span class="s3">* are also dropped at this level.</span>
+	 <span class="s3">*</span>
+	 <span class="s3">* Warning: This level might result in lower coverage especially for regions outside of</span>
+	 <span class="s3">* country code &quot;+1&quot;. If you are not sure about which level to use,</span>
+	 <span class="s3">* email the discussion group libphonenumber-discuss@googlegroups.com.</span>
+	 <span class="s3">*/</span>
+	<span class="s1">STRICT_GROUPING(phoneNumber, { candidate, defaultCountry, metadata, regExpCache })</span>
+	<span class="s1">{</span>
+		<span class="s0">if </span><span class="s1">(</span>
+			<span class="s1">!phoneNumber.isValid() ||</span>
+			<span class="s1">!containsOnlyValidXChars(phoneNumber, candidate, metadata) ||</span>
+			<span class="s1">containsMoreThanOneSlashInNationalNumber(phoneNumber, candidate) ||</span>
+			<span class="s1">!isNationalPrefixPresentIfRequired(phoneNumber, { defaultCountry, metadata })</span>
+		<span class="s1">)</span>
+		<span class="s1">{</span>
+			<span class="s0">return false</span>
+		<span class="s1">}</span>
+
+		<span class="s0">return </span><span class="s1">checkNumberGroupingIsValid</span>
+		<span class="s1">(</span>
+			<span class="s1">phoneNumber,</span>
+			<span class="s1">candidate,</span>
+			<span class="s1">metadata,</span>
+			<span class="s1">allNumberGroupsRemainGrouped,</span>
+			<span class="s1">regExpCache</span>
+		<span class="s1">)</span>
+	<span class="s1">},</span>
+
+	<span class="s3">/**</span>
+	 <span class="s3">* Phone numbers accepted are &quot;valid&quot; and are grouped in the same way</span>
+	 <span class="s3">* that we would have formatted it, or as a single block.</span>
+	 <span class="s3">* For example, a US number written as &quot;650 2530000&quot; is not accepted</span>
+	 <span class="s3">* at this leniency level, whereas &quot;650 253 0000&quot; or &quot;6502530000&quot; are.</span>
+	 <span class="s3">* Numbers with more than one '/' symbol are also dropped at this level.</span>
+	 <span class="s3">*</span>
+	 <span class="s3">* Warning: This level might result in lower coverage especially for regions outside of</span>
+	 <span class="s3">* country code &quot;+1&quot;. If you are not sure about which level to use, email the discussion group</span>
+	 <span class="s3">* libphonenumber-discuss@googlegroups.com.</span>
+	 <span class="s3">*/</span>
+	<span class="s1">EXACT_GROUPING(phoneNumber, { candidate, defaultCountry, metadata, regExpCache })</span>
+	<span class="s1">{</span>
+		<span class="s0">if </span><span class="s1">(</span>
+			<span class="s1">!phoneNumber.isValid() ||</span>
+			<span class="s1">!containsOnlyValidXChars(phoneNumber, candidate, metadata) ||</span>
+			<span class="s1">containsMoreThanOneSlashInNationalNumber(phoneNumber, candidate) ||</span>
+			<span class="s1">!isNationalPrefixPresentIfRequired(phoneNumber, { defaultCountry, metadata })</span>
+		<span class="s1">)</span>
+		<span class="s1">{</span>
+			<span class="s0">return false</span>
+		<span class="s1">}</span>
+
+		<span class="s0">return </span><span class="s1">checkNumberGroupingIsValid</span>
+		<span class="s1">(</span>
+			<span class="s1">phoneNumber,</span>
+			<span class="s1">candidate,</span>
+			<span class="s1">metadata,</span>
+			<span class="s1">allNumberGroupsAreExactlyPresent,</span>
+			<span class="s1">regExpCache</span>
+		<span class="s1">)</span>
+	<span class="s1">}</span>
+<span class="s1">}</span>
+
+<span class="s0">function </span><span class="s1">containsOnlyValidXChars(phoneNumber, candidate, metadata)</span>
+<span class="s1">{</span>
+	<span class="s3">// The characters 'x' and 'X' can be (1) a carrier code, in which case they always precede the</span>
+	<span class="s3">// national significant number or (2) an extension sign, in which case they always precede the</span>
+	<span class="s3">// extension number. We assume a carrier code is more than 1 digit, so the first case has to</span>
+	<span class="s3">// have more than 1 consecutive 'x' or 'X', whereas the second case can only have exactly 1 'x'</span>
+	<span class="s3">// or 'X'. We ignore the character if it appears as the last character of the string.</span>
+	<span class="s0">for </span><span class="s1">(</span><span class="s0">let </span><span class="s1">index = </span><span class="s4">0</span><span class="s1">; index &lt; candidate.length - </span><span class="s4">1</span><span class="s1">; index++)</span>
+	<span class="s1">{</span>
+		<span class="s0">const </span><span class="s1">charAtIndex = candidate.charAt(index)</span>
+
+		<span class="s0">if </span><span class="s1">(charAtIndex === </span><span class="s2">'x' </span><span class="s1">|| charAtIndex === </span><span class="s2">'X'</span><span class="s1">)</span>
+		<span class="s1">{</span>
+			<span class="s0">const </span><span class="s1">charAtNextIndex = candidate.charAt(index + </span><span class="s4">1</span><span class="s1">)</span>
+
+			<span class="s0">if </span><span class="s1">(charAtNextIndex === </span><span class="s2">'x' </span><span class="s1">|| charAtNextIndex === </span><span class="s2">'X'</span><span class="s1">)</span>
+			<span class="s1">{</span>
+				<span class="s3">// This is the carrier code case, in which the 'X's always precede the national</span>
+				<span class="s3">// significant number.</span>
+				<span class="s1">index++</span>
+				<span class="s0">if </span><span class="s1">(matchPhoneNumberStringAgainstPhoneNumber(candidate.substring(index), phoneNumber, metadata) !== </span><span class="s2">'NSN_MATCH'</span><span class="s1">)</span>
+				<span class="s1">{</span>
+					<span class="s0">return false</span>
+				<span class="s1">}</span>
+				<span class="s3">// This is the extension sign case, in which the 'x' or 'X' should always precede the</span>
+				<span class="s3">// extension number.</span>
+			<span class="s1">}</span>
+			<span class="s0">else </span><span class="s1">{</span>
+				<span class="s0">const </span><span class="s1">ext = parseDigits(candidate.substring(index))</span>
+				<span class="s0">if </span><span class="s1">(ext) {</span>
+					<span class="s0">if </span><span class="s1">(phoneNumber.ext !== ext)  {</span>
+						<span class="s0">return false</span>
+					<span class="s1">}</span>
+				<span class="s1">} </span><span class="s0">else </span><span class="s1">{</span>
+					<span class="s0">if </span><span class="s1">(phoneNumber.ext) {</span>
+						<span class="s0">return false</span>
+					<span class="s1">}</span>
+				<span class="s1">}</span>
+			<span class="s1">}</span>
+		<span class="s1">}</span>
+	<span class="s1">}</span>
+
+	<span class="s0">return true</span>
+<span class="s1">}</span>
+
+<span class="s0">function </span><span class="s1">isNationalPrefixPresentIfRequired(phoneNumber, { defaultCountry, metadata: _metadata })</span>
+<span class="s1">{</span>
+	<span class="s3">// First, check how we deduced the country code. If it was written in international format, then</span>
+	<span class="s3">// the national prefix is not required.</span>
+	<span class="s0">if </span><span class="s1">(phoneNumber.__countryCallingCodeSource !== </span><span class="s2">'FROM_DEFAULT_COUNTRY'</span><span class="s1">)</span>
+	<span class="s1">{</span>
+		<span class="s0">return true</span>
+	<span class="s1">}</span>
+
+	<span class="s0">const </span><span class="s1">metadata = </span><span class="s0">new </span><span class="s1">Metadata(_metadata)</span>
+	<span class="s1">metadata.selectNumberingPlan(phoneNumber.countryCallingCode)</span>
+
+	<span class="s0">const </span><span class="s1">phoneNumberRegion = phoneNumber.country || getCountryByCallingCode(phoneNumber.countryCallingCode, {</span>
+		<span class="s1">nationalNumber: phoneNumber.nationalNumber,</span>
+		<span class="s1">metadata</span>
+	<span class="s1">})</span>
+
+	<span class="s3">// Check if a national prefix should be present when formatting this number.</span>
+	<span class="s0">const </span><span class="s1">nationalNumber = phoneNumber.nationalNumber</span>
+	<span class="s0">const </span><span class="s1">format = chooseFormatForNumber(metadata.numberingPlan.formats(), nationalNumber)</span>
+
+	<span class="s3">// To do this, we check that a national prefix formatting rule was present</span>
+	<span class="s3">// and that it wasn't just the first-group symbol ($1) with punctuation.</span>
+	<span class="s0">if </span><span class="s1">(format.nationalPrefixFormattingRule())</span>
+	<span class="s1">{</span>
+		<span class="s0">if </span><span class="s1">(metadata.numberingPlan.nationalPrefixIsOptionalWhenFormattingInNationalFormat())</span>
+		<span class="s1">{</span>
+			<span class="s3">// The national-prefix is optional in these cases, so we don't need to check if it was present.</span>
+			<span class="s0">return true</span>
+		<span class="s1">}</span>
+
+		<span class="s0">if </span><span class="s1">(!format.usesNationalPrefix())</span>
+		<span class="s1">{</span>
+			<span class="s3">// National Prefix not needed for this number.</span>
+			<span class="s0">return true</span>
+		<span class="s1">}</span>
+
+		<span class="s0">return </span><span class="s1">Boolean(phoneNumber.nationalPrefix)</span>
+	<span class="s1">}</span>
+
+	<span class="s0">return true</span>
+<span class="s1">}</span>
+
+<span class="s0">export function </span><span class="s1">containsMoreThanOneSlashInNationalNumber(phoneNumber, candidate)</span>
+<span class="s1">{</span>
+	<span class="s0">const </span><span class="s1">firstSlashInBodyIndex = candidate.indexOf(</span><span class="s2">'/'</span><span class="s1">)</span>
+	<span class="s0">if </span><span class="s1">(firstSlashInBodyIndex &lt; </span><span class="s4">0</span><span class="s1">)</span>
+	<span class="s1">{</span>
+		<span class="s3">// No slashes, this is okay.</span>
+		<span class="s0">return false</span>
+	<span class="s1">}</span>
+
+	<span class="s3">// Now look for a second one.</span>
+	<span class="s0">const </span><span class="s1">secondSlashInBodyIndex = candidate.indexOf(</span><span class="s2">'/'</span><span class="s1">, firstSlashInBodyIndex + </span><span class="s4">1</span><span class="s1">)</span>
+	<span class="s0">if </span><span class="s1">(secondSlashInBodyIndex &lt; </span><span class="s4">0</span><span class="s1">)</span>
+	<span class="s1">{</span>
+		<span class="s3">// Only one slash, this is okay.</span>
+		<span class="s0">return false</span>
+	<span class="s1">}</span>
+
+	<span class="s3">// If the first slash is after the country calling code, this is permitted.</span>
+	<span class="s0">const </span><span class="s1">candidateHasCountryCode =</span>
+			<span class="s1">phoneNumber.__countryCallingCodeSource === </span><span class="s2">'FROM_NUMBER_WITH_PLUS_SIGN' </span><span class="s1">||</span>
+			<span class="s1">phoneNumber.__countryCallingCodeSource === </span><span class="s2">'FROM_NUMBER_WITHOUT_PLUS_SIGN'</span>
+
+	<span class="s0">if </span><span class="s1">(candidateHasCountryCode &amp;&amp; parseDigits(candidate.substring(</span><span class="s4">0</span><span class="s1">, firstSlashInBodyIndex)) === phoneNumber.countryCallingCode)</span>
+	<span class="s1">{</span>
+		<span class="s3">// Any more slashes and this is illegal.</span>
+		<span class="s0">return </span><span class="s1">candidate.slice(secondSlashInBodyIndex + </span><span class="s4">1</span><span class="s1">).indexOf(</span><span class="s2">'/'</span><span class="s1">) &gt;= </span><span class="s4">0</span>
+	<span class="s1">}</span>
+
+	<span class="s0">return true</span>
+<span class="s1">}</span>
+
+<span class="s0">function </span><span class="s1">checkNumberGroupingIsValid(</span>
+	<span class="s1">number,</span>
+	<span class="s1">candidate,</span>
+	<span class="s1">metadata,</span>
+	<span class="s1">checkGroups,</span>
+	<span class="s1">regExpCache</span>
+<span class="s1">) {</span>
+	<span class="s0">throw new </span><span class="s1">Error(</span><span class="s2">'This part of code hasn</span><span class="s5">\'</span><span class="s2">t been ported'</span><span class="s1">)</span>
+
+	<span class="s0">const </span><span class="s1">normalizedCandidate = normalizeDigits(candidate, </span><span class="s0">true </span><span class="s3">/* keep non-digits */</span><span class="s1">)</span>
+	<span class="s0">let </span><span class="s1">formattedNumberGroups = getNationalNumberGroups(metadata, number, </span><span class="s0">null</span><span class="s1">)</span>
+	<span class="s0">if </span><span class="s1">(checkGroups(metadata, number, normalizedCandidate, formattedNumberGroups)) {</span>
+		<span class="s0">return true</span>
+	<span class="s1">}</span>
+
+	<span class="s3">// If this didn't pass, see if there are any alternate formats that match, and try them instead.</span>
+	<span class="s0">const </span><span class="s1">alternateFormats = MetadataManager.getAlternateFormatsForCountry(number.getCountryCode())</span>
+	<span class="s0">const </span><span class="s1">nationalSignificantNumber = util.getNationalSignificantNumber(number)</span>
+
+	<span class="s0">if </span><span class="s1">(alternateFormats) {</span>
+		<span class="s0">for </span><span class="s1">(</span><span class="s0">const </span><span class="s1">alternateFormat of alternateFormats.numberFormats()) {</span>
+			<span class="s0">if </span><span class="s1">(alternateFormat.leadingDigitsPatterns().length &gt; </span><span class="s4">0</span><span class="s1">) {</span>
+				<span class="s3">// There is only one leading digits pattern for alternate formats.</span>
+				<span class="s0">const </span><span class="s1">leadingDigitsRegExp = regExpCache.getPatternForRegExp(</span><span class="s2">'^' </span><span class="s1">+ alternateFormat.leadingDigitsPatterns()[</span><span class="s4">0</span><span class="s1">])</span>
+				<span class="s0">if </span><span class="s1">(!leadingDigitsRegExp.test(nationalSignificantNumber)) {</span>
+					<span class="s3">// Leading digits don't match; try another one.</span>
+					<span class="s0">continue</span>
+				<span class="s1">}</span>
+			<span class="s1">}</span>
+			<span class="s1">formattedNumberGroups = getNationalNumberGroups(metadata, number, alternateFormat)</span>
+			<span class="s0">if </span><span class="s1">(checkGroups(metadata, number, normalizedCandidate, formattedNumberGroups)) {</span>
+				<span class="s0">return true</span>
+			<span class="s1">}</span>
+		<span class="s1">}</span>
+	<span class="s1">}</span>
+
+	<span class="s0">return false</span>
+<span class="s1">}</span>
+
+<span class="s3">/**</span>
+ <span class="s3">* Helper method to get the national-number part of a number, formatted without any national</span>
+ <span class="s3">* prefix, and return it as a set of digit blocks that would be formatted together following</span>
+ <span class="s3">* standard formatting rules.</span>
+ <span class="s3">*/</span>
+<span class="s0">function </span><span class="s1">getNationalNumberGroups(</span>
+	<span class="s1">metadata,</span>
+	<span class="s1">number,</span>
+	<span class="s1">formattingPattern</span>
+<span class="s1">) {</span>
+	<span class="s0">throw new </span><span class="s1">Error(</span><span class="s2">'This part of code hasn</span><span class="s5">\'</span><span class="s2">t been ported'</span><span class="s1">)</span>
+
+	<span class="s0">if </span><span class="s1">(formattingPattern) {</span>
+		<span class="s3">// We format the NSN only, and split that according to the separator.</span>
+		<span class="s0">const </span><span class="s1">nationalSignificantNumber = util.getNationalSignificantNumber(number)</span>
+		<span class="s0">return </span><span class="s1">util.formatNsnUsingPattern(nationalSignificantNumber,</span>
+																			<span class="s1">formattingPattern, </span><span class="s2">'RFC3966'</span><span class="s1">, metadata).split(</span><span class="s2">'-'</span><span class="s1">)</span>
+	<span class="s1">}</span>
+
+	<span class="s3">// This will be in the format +CC-DG1-DG2-DGX;ext=EXT where DG1..DGX represents groups of digits.</span>
+	<span class="s0">const </span><span class="s1">rfc3966Format = formatNumber(number, </span><span class="s2">'RFC3966'</span><span class="s1">, metadata)</span>
+
+	<span class="s3">// We remove the extension part from the formatted string before splitting it into different</span>
+	<span class="s3">// groups.</span>
+	<span class="s0">let </span><span class="s1">endIndex = rfc3966Format.indexOf(</span><span class="s2">';'</span><span class="s1">)</span>
+	<span class="s0">if </span><span class="s1">(endIndex &lt; </span><span class="s4">0</span><span class="s1">) {</span>
+		<span class="s1">endIndex = rfc3966Format.length</span>
+	<span class="s1">}</span>
+
+	<span class="s3">// The country-code will have a '-' following it.</span>
+	<span class="s0">const </span><span class="s1">startIndex = rfc3966Format.indexOf(</span><span class="s2">'-'</span><span class="s1">) + </span><span class="s4">1</span>
+	<span class="s0">return </span><span class="s1">rfc3966Format.slice(startIndex, endIndex).split(</span><span class="s2">'-'</span><span class="s1">)</span>
+<span class="s1">}</span>
+
+<span class="s0">function </span><span class="s1">allNumberGroupsAreExactlyPresent</span>
+<span class="s1">(</span>
+	<span class="s1">metadata,</span>
+	<span class="s1">number,</span>
+	<span class="s1">normalizedCandidate,</span>
+	<span class="s1">formattedNumberGroups</span>
+<span class="s1">)</span>
+<span class="s1">{</span>
+	<span class="s0">throw new </span><span class="s1">Error(</span><span class="s2">'This part of code hasn</span><span class="s5">\'</span><span class="s2">t been ported'</span><span class="s1">)</span>
+
+	<span class="s0">const </span><span class="s1">candidateGroups = normalizedCandidate.split(NON_DIGITS_PATTERN)</span>
+
+	<span class="s3">// Set this to the last group, skipping it if the number has an extension.</span>
+	<span class="s0">let </span><span class="s1">candidateNumberGroupIndex =</span>
+			<span class="s1">number.hasExtension() ? candidateGroups.length - </span><span class="s4">2 </span><span class="s1">: candidateGroups.length - </span><span class="s4">1</span>
+
+	<span class="s3">// First we check if the national significant number is formatted as a block.</span>
+	<span class="s3">// We use contains and not equals, since the national significant number may be present with</span>
+	<span class="s3">// a prefix such as a national number prefix, or the country code itself.</span>
+	<span class="s0">if </span><span class="s1">(candidateGroups.length == </span><span class="s4">1</span>
+			<span class="s1">|| candidateGroups[candidateNumberGroupIndex].contains(</span>
+					<span class="s1">util.getNationalSignificantNumber(number)))</span>
+	<span class="s1">{</span>
+		<span class="s0">return true</span>
+	<span class="s1">}</span>
+
+	<span class="s3">// Starting from the end, go through in reverse, excluding the first group, and check the</span>
+	<span class="s3">// candidate and number groups are the same.</span>
+	<span class="s0">let </span><span class="s1">formattedNumberGroupIndex = (formattedNumberGroups.length - </span><span class="s4">1</span><span class="s1">)</span>
+	<span class="s0">while </span><span class="s1">(formattedNumberGroupIndex &gt; </span><span class="s4">0 </span><span class="s1">&amp;&amp; candidateNumberGroupIndex &gt;= </span><span class="s4">0</span><span class="s1">)</span>
+	<span class="s1">{</span>
+		<span class="s0">if </span><span class="s1">(candidateGroups[candidateNumberGroupIndex] !== formattedNumberGroups[formattedNumberGroupIndex])</span>
+		<span class="s1">{</span>
+			<span class="s0">return false</span>
+		<span class="s1">}</span>
+		<span class="s1">formattedNumberGroupIndex--</span>
+		<span class="s1">candidateNumberGroupIndex--</span>
+	<span class="s1">}</span>
+
+	<span class="s3">// Now check the first group. There may be a national prefix at the start, so we only check</span>
+	<span class="s3">// that the candidate group ends with the formatted number group.</span>
+	<span class="s0">return </span><span class="s1">(candidateNumberGroupIndex &gt;= </span><span class="s4">0</span>
+			<span class="s1">&amp;&amp; endsWith(candidateGroups[candidateNumberGroupIndex], formattedNumberGroups[</span><span class="s4">0</span><span class="s1">]))</span>
+<span class="s1">}</span>
+
+
+<span class="s0">function </span><span class="s1">allNumberGroupsRemainGrouped</span>
+<span class="s1">(</span>
+	<span class="s1">metadata,</span>
+	<span class="s1">number,</span>
+	<span class="s1">normalizedCandidate,</span>
+	<span class="s1">formattedNumberGroups</span>
+<span class="s1">)</span>
+<span class="s1">{</span>
+	<span class="s0">throw new </span><span class="s1">Error(</span><span class="s2">'This part of code hasn</span><span class="s5">\'</span><span class="s2">t been ported'</span><span class="s1">)</span>
+
+	<span class="s0">let </span><span class="s1">fromIndex = </span><span class="s4">0</span>
+	<span class="s0">if </span><span class="s1">(number.getCountryCodeSource() !== CountryCodeSource.FROM_DEFAULT_COUNTRY)</span>
+	<span class="s1">{</span>
+		<span class="s3">// First skip the country code if the normalized candidate contained it.</span>
+		<span class="s0">const </span><span class="s1">countryCode = String(number.getCountryCode())</span>
+		<span class="s1">fromIndex = normalizedCandidate.indexOf(countryCode) + countryCode.length()</span>
+	<span class="s1">}</span>
+
+	<span class="s3">// Check each group of consecutive digits are not broken into separate groupings in the</span>
+	<span class="s3">// {@code normalizedCandidate} string.</span>
+	<span class="s0">for </span><span class="s1">(</span><span class="s0">let </span><span class="s1">i = </span><span class="s4">0</span><span class="s1">; i &lt; formattedNumberGroups.length; i++)</span>
+	<span class="s1">{</span>
+		<span class="s3">// Fails if the substring of {@code normalizedCandidate} starting from {@code fromIndex}</span>
+		<span class="s3">// doesn't contain the consecutive digits in formattedNumberGroups[i].</span>
+		<span class="s1">fromIndex = normalizedCandidate.indexOf(formattedNumberGroups[i], fromIndex)</span>
+		<span class="s0">if </span><span class="s1">(fromIndex &lt; </span><span class="s4">0</span><span class="s1">) {</span>
+			<span class="s0">return false</span>
+		<span class="s1">}</span>
+		<span class="s3">// Moves {@code fromIndex} forward.</span>
+		<span class="s1">fromIndex += formattedNumberGroups[i].length()</span>
+		<span class="s0">if </span><span class="s1">(i == </span><span class="s4">0 </span><span class="s1">&amp;&amp; fromIndex &lt; normalizedCandidate.length())</span>
+		<span class="s1">{</span>
+			<span class="s3">// We are at the position right after the NDC. We get the region used for formatting</span>
+			<span class="s3">// information based on the country code in the phone number, rather than the number itself,</span>
+			<span class="s3">// as we do not need to distinguish between different countries with the same country</span>
+			<span class="s3">// calling code and this is faster.</span>
+			<span class="s0">const </span><span class="s1">region = util.getRegionCodeForCountryCode(number.getCountryCode())</span>
+			<span class="s0">if </span><span class="s1">(util.getNddPrefixForRegion(region, </span><span class="s0">true</span><span class="s1">) != </span><span class="s0">null</span>
+					<span class="s1">&amp;&amp; Character.isDigit(normalizedCandidate.charAt(fromIndex))) {</span>
+				<span class="s3">// This means there is no formatting symbol after the NDC. In this case, we only</span>
+				<span class="s3">// accept the number if there is no formatting symbol at all in the number, except</span>
+				<span class="s3">// for extensions. This is only important for countries with national prefixes.</span>
+				<span class="s0">const </span><span class="s1">nationalSignificantNumber = util.getNationalSignificantNumber(number)</span>
+				<span class="s0">return </span><span class="s1">startsWith</span>
+				<span class="s1">(</span>
+					<span class="s1">normalizedCandidate.slice(fromIndex - formattedNumberGroups[i].length),</span>
+					 <span class="s1">nationalSignificantNumber</span>
+				<span class="s1">)</span>
+			<span class="s1">}</span>
+		<span class="s1">}</span>
+	<span class="s1">}</span>
+
+	<span class="s3">// The check here makes sure that we haven't mistakenly already used the extension to</span>
+	<span class="s3">// match the last group of the subscriber number. Note the extension cannot have</span>
+	<span class="s3">// formatting in-between digits.</span>
+	<span class="s0">return </span><span class="s1">normalizedCandidate.slice(fromIndex).contains(number.getExtension())</span>
+<span class="s1">}</span></pre>
+</body>
+</html>

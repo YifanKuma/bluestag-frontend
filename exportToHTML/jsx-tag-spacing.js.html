@@ -1,0 +1,351 @@
+<html>
+<head>
+<title>jsx-tag-spacing.js</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #8c8c8c; font-style: italic;}
+.s1 { color: #8c8c8c; font-style: italic;}
+.s2 { color: #080808;}
+.s3 { color: #067d17;}
+.s4 { color: #0033b3;}
+.s5 { color: #1750eb;}
+.s6 { color: #0037a6;}
+</style>
+</head>
+<body bgcolor="#ffffff">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#c0c0c0" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+jsx-tag-spacing.js</font>
+</center></td></tr></table>
+<pre><span class="s0">/**</span>
+ <span class="s0">* </span><span class="s1">@fileoverview </span><span class="s0">Validates whitespace in and around the JSX opening and closing brackets</span>
+ <span class="s0">* </span><span class="s1">@author </span><span class="s0">Diogo Franco (Kovensky)</span>
+ <span class="s0">*/</span>
+
+<span class="s3">'use strict'</span><span class="s2">;</span>
+
+<span class="s4">const </span><span class="s2">getTokenBeforeClosingBracket = require(</span><span class="s3">'../util/getTokenBeforeClosingBracket'</span><span class="s2">);</span>
+<span class="s4">const </span><span class="s2">docsUrl = require(</span><span class="s3">'../util/docsUrl'</span><span class="s2">);</span>
+<span class="s4">const </span><span class="s2">report = require(</span><span class="s3">'../util/report'</span><span class="s2">);</span>
+<span class="s4">const </span><span class="s2">eslintUtil = require(</span><span class="s3">'../util/eslint'</span><span class="s2">);</span>
+
+<span class="s4">const </span><span class="s2">getFirstTokens = eslintUtil.getFirstTokens;</span>
+<span class="s4">const </span><span class="s2">getSourceCode = eslintUtil.getSourceCode;</span>
+
+<span class="s4">const </span><span class="s2">messages = {</span>
+  <span class="s2">selfCloseSlashNoSpace: </span><span class="s3">'Whitespace is forbidden between `/` and `&gt;`; write `/&gt;`'</span><span class="s2">,</span>
+  <span class="s2">selfCloseSlashNeedSpace: </span><span class="s3">'Whitespace is required between `/` and `&gt;`; write `/ &gt;`'</span><span class="s2">,</span>
+  <span class="s2">closeSlashNoSpace: </span><span class="s3">'Whitespace is forbidden between `&lt;` and `/`; write `&lt;/`'</span><span class="s2">,</span>
+  <span class="s2">closeSlashNeedSpace: </span><span class="s3">'Whitespace is required between `&lt;` and `/`; write `&lt; /`'</span><span class="s2">,</span>
+  <span class="s2">beforeSelfCloseNoSpace: </span><span class="s3">'A space is forbidden before closing bracket'</span><span class="s2">,</span>
+  <span class="s2">beforeSelfCloseNeedSpace: </span><span class="s3">'A space is required before closing bracket'</span><span class="s2">,</span>
+  <span class="s2">beforeSelfCloseNeedNewline: </span><span class="s3">'A newline is required before closing bracket'</span><span class="s2">,</span>
+  <span class="s2">afterOpenNoSpace: </span><span class="s3">'A space is forbidden after opening bracket'</span><span class="s2">,</span>
+  <span class="s2">afterOpenNeedSpace: </span><span class="s3">'A space is required after opening bracket'</span><span class="s2">,</span>
+  <span class="s2">beforeCloseNoSpace: </span><span class="s3">'A space is forbidden before closing bracket'</span><span class="s2">,</span>
+  <span class="s2">beforeCloseNeedSpace: </span><span class="s3">'Whitespace is required before closing bracket'</span><span class="s2">,</span>
+  <span class="s2">beforeCloseNeedNewline: </span><span class="s3">'A newline is required before closing bracket'</span><span class="s2">,</span>
+<span class="s2">};</span>
+
+<span class="s0">// ------------------------------------------------------------------------------</span>
+<span class="s0">// Validators</span>
+<span class="s0">// ------------------------------------------------------------------------------</span>
+
+<span class="s4">function </span><span class="s2">validateClosingSlash(context, node, option) {</span>
+  <span class="s4">const </span><span class="s2">sourceCode = getSourceCode(context);</span>
+
+  <span class="s4">let </span><span class="s2">adjacent;</span>
+
+  <span class="s4">if </span><span class="s2">(node.selfClosing) {</span>
+    <span class="s4">const </span><span class="s2">lastTokens = sourceCode.getLastTokens(node, </span><span class="s5">2</span><span class="s2">);</span>
+
+    <span class="s2">adjacent = !sourceCode.isSpaceBetweenTokens(lastTokens[</span><span class="s5">0</span><span class="s2">], lastTokens[</span><span class="s5">1</span><span class="s2">]);</span>
+
+    <span class="s4">if </span><span class="s2">(option === </span><span class="s3">'never'</span><span class="s2">) {</span>
+      <span class="s4">if </span><span class="s2">(!adjacent) {</span>
+        <span class="s2">report(context, messages.selfCloseSlashNoSpace, </span><span class="s3">'selfCloseSlashNoSpace'</span><span class="s2">, {</span>
+          <span class="s2">node,</span>
+          <span class="s2">loc: {</span>
+            <span class="s2">start: lastTokens[</span><span class="s5">0</span><span class="s2">].loc.start,</span>
+            <span class="s2">end: lastTokens[</span><span class="s5">1</span><span class="s2">].loc.end,</span>
+          <span class="s2">},</span>
+          <span class="s2">fix(fixer) {</span>
+            <span class="s4">return </span><span class="s2">fixer.removeRange([lastTokens[</span><span class="s5">0</span><span class="s2">].range[</span><span class="s5">1</span><span class="s2">], lastTokens[</span><span class="s5">1</span><span class="s2">].range[</span><span class="s5">0</span><span class="s2">]]);</span>
+          <span class="s2">},</span>
+        <span class="s2">});</span>
+      <span class="s2">}</span>
+    <span class="s2">} </span><span class="s4">else if </span><span class="s2">(option === </span><span class="s3">'always' </span><span class="s2">&amp;&amp; adjacent) {</span>
+      <span class="s2">report(context, messages.selfCloseSlashNeedSpace, </span><span class="s3">'selfCloseSlashNeedSpace'</span><span class="s2">, {</span>
+        <span class="s2">node,</span>
+        <span class="s2">loc: {</span>
+          <span class="s2">start: lastTokens[</span><span class="s5">0</span><span class="s2">].loc.start,</span>
+          <span class="s2">end: lastTokens[</span><span class="s5">1</span><span class="s2">].loc.end,</span>
+        <span class="s2">},</span>
+        <span class="s2">fix(fixer) {</span>
+          <span class="s4">return </span><span class="s2">fixer.insertTextBefore(lastTokens[</span><span class="s5">1</span><span class="s2">], </span><span class="s3">' '</span><span class="s2">);</span>
+        <span class="s2">},</span>
+      <span class="s2">});</span>
+    <span class="s2">}</span>
+  <span class="s2">} </span><span class="s4">else </span><span class="s2">{</span>
+    <span class="s4">const </span><span class="s2">firstTokens = getFirstTokens(context, node, </span><span class="s5">2</span><span class="s2">);</span>
+
+    <span class="s2">adjacent = !sourceCode.isSpaceBetweenTokens(firstTokens[</span><span class="s5">0</span><span class="s2">], firstTokens[</span><span class="s5">1</span><span class="s2">]);</span>
+
+    <span class="s4">if </span><span class="s2">(option === </span><span class="s3">'never'</span><span class="s2">) {</span>
+      <span class="s4">if </span><span class="s2">(!adjacent) {</span>
+        <span class="s2">report(context, messages.closeSlashNoSpace, </span><span class="s3">'closeSlashNoSpace'</span><span class="s2">, {</span>
+          <span class="s2">node,</span>
+          <span class="s2">loc: {</span>
+            <span class="s2">start: firstTokens[</span><span class="s5">0</span><span class="s2">].loc.start,</span>
+            <span class="s2">end: firstTokens[</span><span class="s5">1</span><span class="s2">].loc.end,</span>
+          <span class="s2">},</span>
+          <span class="s2">fix(fixer) {</span>
+            <span class="s4">return </span><span class="s2">fixer.removeRange([firstTokens[</span><span class="s5">0</span><span class="s2">].range[</span><span class="s5">1</span><span class="s2">], firstTokens[</span><span class="s5">1</span><span class="s2">].range[</span><span class="s5">0</span><span class="s2">]]);</span>
+          <span class="s2">},</span>
+        <span class="s2">});</span>
+      <span class="s2">}</span>
+    <span class="s2">} </span><span class="s4">else if </span><span class="s2">(option === </span><span class="s3">'always' </span><span class="s2">&amp;&amp; adjacent) {</span>
+      <span class="s2">report(context, messages.closeSlashNeedSpace, </span><span class="s3">'closeSlashNeedSpace'</span><span class="s2">, {</span>
+        <span class="s2">node,</span>
+        <span class="s2">loc: {</span>
+          <span class="s2">start: firstTokens[</span><span class="s5">0</span><span class="s2">].loc.start,</span>
+          <span class="s2">end: firstTokens[</span><span class="s5">1</span><span class="s2">].loc.end,</span>
+        <span class="s2">},</span>
+        <span class="s2">fix(fixer) {</span>
+          <span class="s4">return </span><span class="s2">fixer.insertTextBefore(firstTokens[</span><span class="s5">1</span><span class="s2">], </span><span class="s3">' '</span><span class="s2">);</span>
+        <span class="s2">},</span>
+      <span class="s2">});</span>
+    <span class="s2">}</span>
+  <span class="s2">}</span>
+<span class="s2">}</span>
+
+<span class="s4">function </span><span class="s2">validateBeforeSelfClosing(context, node, option) {</span>
+  <span class="s4">const </span><span class="s2">sourceCode = getSourceCode(context);</span>
+  <span class="s4">const </span><span class="s2">leftToken = getTokenBeforeClosingBracket(node);</span>
+  <span class="s4">const </span><span class="s2">closingSlash = sourceCode.getTokenAfter(leftToken);</span>
+
+  <span class="s4">if </span><span class="s2">(node.loc.start.line !== node.loc.end.line &amp;&amp; option === </span><span class="s3">'proportional-always'</span><span class="s2">) {</span>
+    <span class="s4">if </span><span class="s2">(leftToken.loc.end.line === closingSlash.loc.start.line) {</span>
+      <span class="s2">report(context, messages.beforeSelfCloseNeedNewline, </span><span class="s3">'beforeSelfCloseNeedNewline'</span><span class="s2">, {</span>
+        <span class="s2">node,</span>
+        <span class="s2">loc: leftToken.loc.end,</span>
+        <span class="s2">fix(fixer) {</span>
+          <span class="s4">return </span><span class="s2">fixer.insertTextBefore(closingSlash, </span><span class="s3">'</span><span class="s6">\n</span><span class="s3">'</span><span class="s2">);</span>
+        <span class="s2">},</span>
+      <span class="s2">});</span>
+      <span class="s4">return</span><span class="s2">;</span>
+    <span class="s2">}</span>
+  <span class="s2">}</span>
+
+  <span class="s4">if </span><span class="s2">(leftToken.loc.end.line !== closingSlash.loc.start.line) {</span>
+    <span class="s4">return</span><span class="s2">;</span>
+  <span class="s2">}</span>
+
+  <span class="s4">const </span><span class="s2">adjacent = !sourceCode.isSpaceBetweenTokens(leftToken, closingSlash);</span>
+
+  <span class="s4">if </span><span class="s2">((option === </span><span class="s3">'always' </span><span class="s2">|| option === </span><span class="s3">'proportional-always'</span><span class="s2">) &amp;&amp; adjacent) {</span>
+    <span class="s2">report(context, messages.beforeSelfCloseNeedSpace, </span><span class="s3">'beforeSelfCloseNeedSpace'</span><span class="s2">, {</span>
+      <span class="s2">node,</span>
+      <span class="s2">loc: closingSlash.loc.start,</span>
+      <span class="s2">fix(fixer) {</span>
+        <span class="s4">return </span><span class="s2">fixer.insertTextBefore(closingSlash, </span><span class="s3">' '</span><span class="s2">);</span>
+      <span class="s2">},</span>
+    <span class="s2">});</span>
+  <span class="s2">} </span><span class="s4">else if </span><span class="s2">(option === </span><span class="s3">'never' </span><span class="s2">&amp;&amp; !adjacent) {</span>
+    <span class="s2">report(context, messages.beforeSelfCloseNoSpace, </span><span class="s3">'beforeSelfCloseNoSpace'</span><span class="s2">, {</span>
+      <span class="s2">node,</span>
+      <span class="s2">loc: closingSlash.loc.start,</span>
+      <span class="s2">fix(fixer) {</span>
+        <span class="s4">const </span><span class="s2">previousToken = sourceCode.getTokenBefore(closingSlash);</span>
+        <span class="s4">return </span><span class="s2">fixer.removeRange([previousToken.range[</span><span class="s5">1</span><span class="s2">], closingSlash.range[</span><span class="s5">0</span><span class="s2">]]);</span>
+      <span class="s2">},</span>
+    <span class="s2">});</span>
+  <span class="s2">}</span>
+<span class="s2">}</span>
+
+<span class="s4">function </span><span class="s2">validateAfterOpening(context, node, option) {</span>
+  <span class="s4">const </span><span class="s2">sourceCode = getSourceCode(context);</span>
+  <span class="s4">const </span><span class="s2">openingToken = sourceCode.getTokenBefore(node.name);</span>
+
+  <span class="s4">if </span><span class="s2">(option === </span><span class="s3">'allow-multiline'</span><span class="s2">) {</span>
+    <span class="s4">if </span><span class="s2">(openingToken.loc.start.line !== node.name.loc.start.line) {</span>
+      <span class="s4">return</span><span class="s2">;</span>
+    <span class="s2">}</span>
+  <span class="s2">}</span>
+
+  <span class="s4">const </span><span class="s2">adjacent = !sourceCode.isSpaceBetweenTokens(openingToken, node.name);</span>
+
+  <span class="s4">if </span><span class="s2">(option === </span><span class="s3">'never' </span><span class="s2">|| option === </span><span class="s3">'allow-multiline'</span><span class="s2">) {</span>
+    <span class="s4">if </span><span class="s2">(!adjacent) {</span>
+      <span class="s2">report(context, messages.afterOpenNoSpace, </span><span class="s3">'afterOpenNoSpace'</span><span class="s2">, {</span>
+        <span class="s2">node,</span>
+        <span class="s2">loc: {</span>
+          <span class="s2">start: openingToken.loc.start,</span>
+          <span class="s2">end: node.name.loc.start,</span>
+        <span class="s2">},</span>
+        <span class="s2">fix(fixer) {</span>
+          <span class="s4">return </span><span class="s2">fixer.removeRange([openingToken.range[</span><span class="s5">1</span><span class="s2">], node.name.range[</span><span class="s5">0</span><span class="s2">]]);</span>
+        <span class="s2">},</span>
+      <span class="s2">});</span>
+    <span class="s2">}</span>
+  <span class="s2">} </span><span class="s4">else if </span><span class="s2">(option === </span><span class="s3">'always' </span><span class="s2">&amp;&amp; adjacent) {</span>
+    <span class="s2">report(context, messages.afterOpenNeedSpace, </span><span class="s3">'afterOpenNeedSpace'</span><span class="s2">, {</span>
+      <span class="s2">node,</span>
+      <span class="s2">loc: {</span>
+        <span class="s2">start: openingToken.loc.start,</span>
+        <span class="s2">end: node.name.loc.start,</span>
+      <span class="s2">},</span>
+      <span class="s2">fix(fixer) {</span>
+        <span class="s4">return </span><span class="s2">fixer.insertTextBefore(node.name, </span><span class="s3">' '</span><span class="s2">);</span>
+      <span class="s2">},</span>
+    <span class="s2">});</span>
+  <span class="s2">}</span>
+<span class="s2">}</span>
+
+<span class="s4">function </span><span class="s2">validateBeforeClosing(context, node, option) {</span>
+  <span class="s0">// Don't enforce this rule for self closing tags</span>
+  <span class="s4">if </span><span class="s2">(!node.selfClosing) {</span>
+    <span class="s4">const </span><span class="s2">sourceCode = getSourceCode(context);</span>
+    <span class="s4">const </span><span class="s2">leftToken = option === </span><span class="s3">'proportional-always'</span>
+      <span class="s2">? getTokenBeforeClosingBracket(node)</span>
+      <span class="s2">: sourceCode.getLastTokens(node, </span><span class="s5">2</span><span class="s2">)[</span><span class="s5">0</span><span class="s2">];</span>
+    <span class="s4">const </span><span class="s2">closingToken = sourceCode.getTokenAfter(leftToken);</span>
+
+    <span class="s4">if </span><span class="s2">(node.loc.start.line !== node.loc.end.line &amp;&amp; option === </span><span class="s3">'proportional-always'</span><span class="s2">) {</span>
+      <span class="s4">if </span><span class="s2">(leftToken.loc.end.line === closingToken.loc.start.line) {</span>
+        <span class="s2">report(context, messages.beforeCloseNeedNewline, </span><span class="s3">'beforeCloseNeedNewline'</span><span class="s2">, {</span>
+          <span class="s2">node,</span>
+          <span class="s2">loc: leftToken.loc.end,</span>
+          <span class="s2">fix(fixer) {</span>
+            <span class="s4">return </span><span class="s2">fixer.insertTextBefore(closingToken, </span><span class="s3">'</span><span class="s6">\n</span><span class="s3">'</span><span class="s2">);</span>
+          <span class="s2">},</span>
+        <span class="s2">});</span>
+        <span class="s4">return</span><span class="s2">;</span>
+      <span class="s2">}</span>
+    <span class="s2">}</span>
+
+    <span class="s4">if </span><span class="s2">(leftToken.loc.start.line !== closingToken.loc.start.line) {</span>
+      <span class="s4">return</span><span class="s2">;</span>
+    <span class="s2">}</span>
+
+    <span class="s4">const </span><span class="s2">adjacent = !sourceCode.isSpaceBetweenTokens(leftToken, closingToken);</span>
+
+    <span class="s4">if </span><span class="s2">(option === </span><span class="s3">'never' </span><span class="s2">&amp;&amp; !adjacent) {</span>
+      <span class="s2">report(context, messages.beforeCloseNoSpace, </span><span class="s3">'beforeCloseNoSpace'</span><span class="s2">, {</span>
+        <span class="s2">node,</span>
+        <span class="s2">loc: {</span>
+          <span class="s2">start: leftToken.loc.end,</span>
+          <span class="s2">end: closingToken.loc.start,</span>
+        <span class="s2">},</span>
+        <span class="s2">fix(fixer) {</span>
+          <span class="s4">return </span><span class="s2">fixer.removeRange([leftToken.range[</span><span class="s5">1</span><span class="s2">], closingToken.range[</span><span class="s5">0</span><span class="s2">]]);</span>
+        <span class="s2">},</span>
+      <span class="s2">});</span>
+    <span class="s2">} </span><span class="s4">else if </span><span class="s2">(option === </span><span class="s3">'always' </span><span class="s2">&amp;&amp; adjacent) {</span>
+      <span class="s2">report(context, messages.beforeCloseNeedSpace, </span><span class="s3">'beforeCloseNeedSpace'</span><span class="s2">, {</span>
+        <span class="s2">node,</span>
+        <span class="s2">loc: {</span>
+          <span class="s2">start: leftToken.loc.end,</span>
+          <span class="s2">end: closingToken.loc.start,</span>
+        <span class="s2">},</span>
+        <span class="s2">fix(fixer) {</span>
+          <span class="s4">return </span><span class="s2">fixer.insertTextBefore(closingToken, </span><span class="s3">' '</span><span class="s2">);</span>
+        <span class="s2">},</span>
+      <span class="s2">});</span>
+    <span class="s2">} </span><span class="s4">else if </span><span class="s2">(option === </span><span class="s3">'proportional-always' </span><span class="s2">&amp;&amp; node.type === </span><span class="s3">'JSXOpeningElement' </span><span class="s2">&amp;&amp; adjacent !== (node.loc.start.line === node.loc.end.line)) {</span>
+      <span class="s2">report(context, messages.beforeCloseNeedSpace, </span><span class="s3">'beforeCloseNeedSpace'</span><span class="s2">, {</span>
+        <span class="s2">node,</span>
+        <span class="s2">loc: {</span>
+          <span class="s2">start: leftToken.loc.end,</span>
+          <span class="s2">end: closingToken.loc.start,</span>
+        <span class="s2">},</span>
+        <span class="s2">fix(fixer) {</span>
+          <span class="s4">return </span><span class="s2">fixer.insertTextBefore(closingToken, </span><span class="s3">' '</span><span class="s2">);</span>
+        <span class="s2">},</span>
+      <span class="s2">});</span>
+    <span class="s2">}</span>
+  <span class="s2">}</span>
+<span class="s2">}</span>
+
+<span class="s0">// ------------------------------------------------------------------------------</span>
+<span class="s0">// Rule Definition</span>
+<span class="s0">// ------------------------------------------------------------------------------</span>
+
+<span class="s4">const </span><span class="s2">optionDefaults = {</span>
+  <span class="s2">closingSlash: </span><span class="s3">'never'</span><span class="s2">,</span>
+  <span class="s2">beforeSelfClosing: </span><span class="s3">'always'</span><span class="s2">,</span>
+  <span class="s2">afterOpening: </span><span class="s3">'never'</span><span class="s2">,</span>
+  <span class="s2">beforeClosing: </span><span class="s3">'allow'</span><span class="s2">,</span>
+<span class="s2">};</span>
+
+<span class="s0">/** </span><span class="s1">@type </span><span class="s0">{import('eslint').Rule.RuleModule} */</span>
+<span class="s2">module.exports = {</span>
+  <span class="s2">meta: {</span>
+    <span class="s2">docs: {</span>
+      <span class="s2">description: </span><span class="s3">'Enforce whitespace in and around the JSX opening and closing brackets'</span><span class="s2">,</span>
+      <span class="s2">category: </span><span class="s3">'Stylistic Issues'</span><span class="s2">,</span>
+      <span class="s2">recommended: </span><span class="s4">false</span><span class="s2">,</span>
+      <span class="s2">url: docsUrl(</span><span class="s3">'jsx-tag-spacing'</span><span class="s2">),</span>
+    <span class="s2">},</span>
+    <span class="s2">fixable: </span><span class="s3">'whitespace'</span><span class="s2">,</span>
+
+    <span class="s2">messages,</span>
+
+    <span class="s2">schema: [</span>
+      <span class="s2">{</span>
+        <span class="s2">type: </span><span class="s3">'object'</span><span class="s2">,</span>
+        <span class="s2">properties: {</span>
+          <span class="s2">closingSlash: {</span>
+            <span class="s4">enum</span><span class="s2">: [</span><span class="s3">'always'</span><span class="s2">, </span><span class="s3">'never'</span><span class="s2">, </span><span class="s3">'allow'</span><span class="s2">],</span>
+          <span class="s2">},</span>
+          <span class="s2">beforeSelfClosing: {</span>
+            <span class="s4">enum</span><span class="s2">: [</span><span class="s3">'always'</span><span class="s2">, </span><span class="s3">'proportional-always'</span><span class="s2">, </span><span class="s3">'never'</span><span class="s2">, </span><span class="s3">'allow'</span><span class="s2">],</span>
+          <span class="s2">},</span>
+          <span class="s2">afterOpening: {</span>
+            <span class="s4">enum</span><span class="s2">: [</span><span class="s3">'always'</span><span class="s2">, </span><span class="s3">'allow-multiline'</span><span class="s2">, </span><span class="s3">'never'</span><span class="s2">, </span><span class="s3">'allow'</span><span class="s2">],</span>
+          <span class="s2">},</span>
+          <span class="s2">beforeClosing: {</span>
+            <span class="s4">enum</span><span class="s2">: [</span><span class="s3">'always'</span><span class="s2">, </span><span class="s3">'proportional-always'</span><span class="s2">, </span><span class="s3">'never'</span><span class="s2">, </span><span class="s3">'allow'</span><span class="s2">],</span>
+          <span class="s2">},</span>
+        <span class="s2">},</span>
+        <span class="s4">default</span><span class="s2">: optionDefaults,</span>
+        <span class="s2">additionalProperties: </span><span class="s4">false</span><span class="s2">,</span>
+      <span class="s2">},</span>
+    <span class="s2">],</span>
+  <span class="s2">},</span>
+  <span class="s2">create(context) {</span>
+    <span class="s4">const </span><span class="s2">options = Object.assign({}, optionDefaults, context.options[</span><span class="s5">0</span><span class="s2">]);</span>
+
+    <span class="s4">return </span><span class="s2">{</span>
+      <span class="s2">JSXOpeningElement(node) {</span>
+        <span class="s4">if </span><span class="s2">(options.closingSlash !== </span><span class="s3">'allow' </span><span class="s2">&amp;&amp; node.selfClosing) {</span>
+          <span class="s2">validateClosingSlash(context, node, options.closingSlash);</span>
+        <span class="s2">}</span>
+        <span class="s4">if </span><span class="s2">(options.afterOpening !== </span><span class="s3">'allow'</span><span class="s2">) {</span>
+          <span class="s2">validateAfterOpening(context, node, options.afterOpening);</span>
+        <span class="s2">}</span>
+        <span class="s4">if </span><span class="s2">(options.beforeSelfClosing !== </span><span class="s3">'allow' </span><span class="s2">&amp;&amp; node.selfClosing) {</span>
+          <span class="s2">validateBeforeSelfClosing(context, node, options.beforeSelfClosing);</span>
+        <span class="s2">}</span>
+        <span class="s4">if </span><span class="s2">(options.beforeClosing !== </span><span class="s3">'allow'</span><span class="s2">) {</span>
+          <span class="s2">validateBeforeClosing(context, node, options.beforeClosing);</span>
+        <span class="s2">}</span>
+      <span class="s2">},</span>
+      <span class="s2">JSXClosingElement(node) {</span>
+        <span class="s4">if </span><span class="s2">(options.afterOpening !== </span><span class="s3">'allow'</span><span class="s2">) {</span>
+          <span class="s2">validateAfterOpening(context, node, options.afterOpening);</span>
+        <span class="s2">}</span>
+        <span class="s4">if </span><span class="s2">(options.closingSlash !== </span><span class="s3">'allow'</span><span class="s2">) {</span>
+          <span class="s2">validateClosingSlash(context, node, options.closingSlash);</span>
+        <span class="s2">}</span>
+        <span class="s4">if </span><span class="s2">(options.beforeClosing !== </span><span class="s3">'allow'</span><span class="s2">) {</span>
+          <span class="s2">validateBeforeClosing(context, node, options.beforeClosing);</span>
+        <span class="s2">}</span>
+      <span class="s2">},</span>
+    <span class="s2">};</span>
+  <span class="s2">},</span>
+<span class="s2">};</span>
+</pre>
+</body>
+</html>

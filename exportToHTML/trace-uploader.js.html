@@ -1,0 +1,157 @@
+<html>
+<head>
+<title>trace-uploader.js</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #067d17;}
+.s1 { color: #080808;}
+.s2 { color: #0033b3;}
+.s3 { color: #8c8c8c; font-style: italic;}
+.s4 { color: #1750eb;}
+</style>
+</head>
+<body bgcolor="#ffffff">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#c0c0c0" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+trace-uploader.js</font>
+</center></td></tr></table>
+<pre><span class="s0">&quot;use strict&quot;</span><span class="s1">;</span>
+<span class="s1">Object.defineProperty(exports, </span><span class="s0">&quot;__esModule&quot;</span><span class="s1">, {</span>
+    <span class="s1">value: </span><span class="s2">true</span>
+<span class="s1">});</span>
+<span class="s2">const </span><span class="s1">_findup = </span><span class="s3">/*#__PURE__*/ </span><span class="s1">_interop_require_default(require(</span><span class="s0">&quot;next/dist/compiled/find-up&quot;</span><span class="s1">));</span>
+<span class="s2">const </span><span class="s1">_promises = </span><span class="s3">/*#__PURE__*/ </span><span class="s1">_interop_require_default(require(</span><span class="s0">&quot;fs/promises&quot;</span><span class="s1">));</span>
+<span class="s2">const </span><span class="s1">_child_process = </span><span class="s3">/*#__PURE__*/ </span><span class="s1">_interop_require_default(require(</span><span class="s0">&quot;child_process&quot;</span><span class="s1">));</span>
+<span class="s2">const </span><span class="s1">_assert = </span><span class="s3">/*#__PURE__*/ </span><span class="s1">_interop_require_default(require(</span><span class="s0">&quot;assert&quot;</span><span class="s1">));</span>
+<span class="s2">const </span><span class="s1">_os = </span><span class="s3">/*#__PURE__*/ </span><span class="s1">_interop_require_default(require(</span><span class="s0">&quot;os&quot;</span><span class="s1">));</span>
+<span class="s2">const </span><span class="s1">_readline = require(</span><span class="s0">&quot;readline&quot;</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">_fs = require(</span><span class="s0">&quot;fs&quot;</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">_path = </span><span class="s3">/*#__PURE__*/ </span><span class="s1">_interop_require_default(require(</span><span class="s0">&quot;path&quot;</span><span class="s1">));</span>
+<span class="s2">function </span><span class="s1">_interop_require_default(obj) {</span>
+    <span class="s2">return </span><span class="s1">obj &amp;&amp; obj.__esModule ? obj : {</span>
+        <span class="s2">default</span><span class="s1">: obj</span>
+    <span class="s1">};</span>
+<span class="s1">}</span>
+<span class="s2">const </span><span class="s1">COMMON_ALLOWED_EVENTS = [</span>
+    <span class="s0">'memory-usage'</span>
+<span class="s1">];</span>
+<span class="s3">// Predefined set of the event names to be included in the trace.</span>
+<span class="s3">// If the trace span's name matches to one of the event names in the set,</span>
+<span class="s3">// it'll up uploaded to the trace server.</span>
+<span class="s2">const </span><span class="s1">DEV_ALLOWED_EVENTS = </span><span class="s2">new </span><span class="s1">Set([</span>
+    <span class="s1">...COMMON_ALLOWED_EVENTS,</span>
+    <span class="s0">'client-hmr-latency'</span><span class="s1">,</span>
+    <span class="s0">'hot-reloader'</span><span class="s1">,</span>
+    <span class="s0">'webpack-invalid-client'</span><span class="s1">,</span>
+    <span class="s0">'webpack-invalidated-server'</span><span class="s1">,</span>
+    <span class="s0">'navigation-to-hydration'</span><span class="s1">,</span>
+    <span class="s0">'start-dev-server'</span><span class="s1">,</span>
+    <span class="s0">'compile-path'</span><span class="s1">,</span>
+    <span class="s0">'memory-usage'</span><span class="s1">,</span>
+    <span class="s0">'server-restart-close-to-memory-threshold'</span>
+<span class="s1">]);</span>
+<span class="s2">const </span><span class="s1">BUILD_ALLOWED_EVENTS = </span><span class="s2">new </span><span class="s1">Set([</span>
+    <span class="s1">...COMMON_ALLOWED_EVENTS,</span>
+    <span class="s0">'next-build'</span><span class="s1">,</span>
+    <span class="s0">'run-turbopack-compiler'</span><span class="s1">,</span>
+    <span class="s0">'webpack-compilation'</span><span class="s1">,</span>
+    <span class="s0">'run-webpack-compiler'</span><span class="s1">,</span>
+    <span class="s0">'create-entrypoints'</span><span class="s1">,</span>
+    <span class="s0">'worker-main-edge-server'</span><span class="s1">,</span>
+    <span class="s0">'worker-main-client'</span><span class="s1">,</span>
+    <span class="s0">'worker-main-server'</span><span class="s1">,</span>
+    <span class="s0">'server'</span><span class="s1">,</span>
+    <span class="s0">'make'</span><span class="s1">,</span>
+    <span class="s0">'seal'</span><span class="s1">,</span>
+    <span class="s0">'chunk-graph'</span><span class="s1">,</span>
+    <span class="s0">'optimize-modules'</span><span class="s1">,</span>
+    <span class="s0">'optimize-chunks'</span><span class="s1">,</span>
+    <span class="s0">'optimize'</span><span class="s1">,</span>
+    <span class="s0">'optimize-tree'</span><span class="s1">,</span>
+    <span class="s0">'optimize-chunk-modules'</span><span class="s1">,</span>
+    <span class="s0">'module-hash'</span><span class="s1">,</span>
+    <span class="s0">'client'</span><span class="s1">,</span>
+    <span class="s0">'static-check'</span><span class="s1">,</span>
+    <span class="s0">'node-file-trace-build'</span><span class="s1">,</span>
+    <span class="s0">'static-generation'</span><span class="s1">,</span>
+    <span class="s0">'next-export'</span><span class="s1">,</span>
+    <span class="s0">'verify-typescript-setup'</span><span class="s1">,</span>
+    <span class="s0">'verify-and-lint'</span>
+<span class="s1">]);</span>
+<span class="s2">const </span><span class="s1">{ NEXT_TRACE_UPLOAD_DEBUG, </span><span class="s3">// An external env to allow to upload full trace without picking up the relavant spans.</span>
+<span class="s3">// This is mainly for the debugging purpose, to allwo manual audit for full trace for the given build.</span>
+<span class="s3">// [NOTE] This may fail if build is large and generated trace is excessively large.</span>
+<span class="s1">NEXT_TRACE_UPLOAD_FULL } = process.env;</span>
+<span class="s2">const </span><span class="s1">isDebugEnabled = !!NEXT_TRACE_UPLOAD_DEBUG || !!NEXT_TRACE_UPLOAD_FULL;</span>
+<span class="s2">const </span><span class="s1">shouldUploadFullTrace = !!NEXT_TRACE_UPLOAD_FULL;</span>
+<span class="s2">const </span><span class="s1">[, , traceUploadUrl, mode, projectDir, distDir, _isTurboSession, traceId, anonymousId, sessionId] = process.argv;</span>
+<span class="s2">const </span><span class="s1">isTurboSession = _isTurboSession === </span><span class="s0">'true'</span><span class="s1">;</span>
+<span class="s1">(async </span><span class="s2">function </span><span class="s1">upload() {</span>
+    <span class="s2">const </span><span class="s1">nextVersion = JSON.parse(</span><span class="s2">await </span><span class="s1">_promises.default.readFile(_path.default.resolve(__dirname, </span><span class="s0">'../../package.json'</span><span class="s1">), </span><span class="s0">'utf8'</span><span class="s1">)).version;</span>
+    <span class="s2">const </span><span class="s1">projectPkgJsonPath = </span><span class="s2">await </span><span class="s1">(</span><span class="s4">0</span><span class="s1">, _findup.default)(</span><span class="s0">'package.json'</span><span class="s1">);</span>
+    <span class="s1">(</span><span class="s4">0</span><span class="s1">, _assert.default)(projectPkgJsonPath);</span>
+    <span class="s2">const </span><span class="s1">projectPkgJson = JSON.parse(</span><span class="s2">await </span><span class="s1">_promises.default.readFile(projectPkgJsonPath, </span><span class="s0">'utf-8'</span><span class="s1">));</span>
+    <span class="s2">const </span><span class="s1">pkgName = projectPkgJson.name;</span>
+    <span class="s2">const </span><span class="s1">commit = _child_process.default.spawnSync(_os.default.platform() === </span><span class="s0">'win32' </span><span class="s1">? </span><span class="s0">'git.exe' </span><span class="s1">: </span><span class="s0">'git'</span><span class="s1">, [</span>
+        <span class="s0">'rev-parse'</span><span class="s1">,</span>
+        <span class="s0">'HEAD'</span>
+    <span class="s1">], {</span>
+        <span class="s1">shell: </span><span class="s2">true</span>
+    <span class="s1">}).stdout.toString().trimEnd();</span>
+    <span class="s2">const </span><span class="s1">readLineInterface = (</span><span class="s4">0</span><span class="s1">, _readline.createInterface)({</span>
+        <span class="s1">input: (</span><span class="s4">0</span><span class="s1">, _fs.createReadStream)(_path.default.join(projectDir, distDir, </span><span class="s0">'trace'</span><span class="s1">)),</span>
+        <span class="s1">crlfDelay: Infinity</span>
+    <span class="s1">});</span>
+    <span class="s2">const </span><span class="s1">sessionTrace = [];</span>
+    <span class="s2">for await </span><span class="s1">(</span><span class="s2">const </span><span class="s1">line of readLineInterface){</span>
+        <span class="s2">const </span><span class="s1">lineEvents = JSON.parse(line);</span>
+        <span class="s2">for </span><span class="s1">(</span><span class="s2">const </span><span class="s1">event of lineEvents){</span>
+            <span class="s2">if </span><span class="s1">(event.traceId !== traceId) {</span>
+                <span class="s2">continue</span><span class="s1">;</span>
+            <span class="s1">}</span>
+            <span class="s2">if </span><span class="s1">(</span><span class="s3">// Always include root spans</span>
+            <span class="s1">event.parentId === undefined || shouldUploadFullTrace || (mode === </span><span class="s0">'dev' </span><span class="s1">? DEV_ALLOWED_EVENTS.has(event.name) : BUILD_ALLOWED_EVENTS.has(event.name))) {</span>
+                <span class="s1">sessionTrace.push(event);</span>
+            <span class="s1">}</span>
+        <span class="s1">}</span>
+    <span class="s1">}</span>
+    <span class="s2">const </span><span class="s1">body = {</span>
+        <span class="s1">metadata: {</span>
+            <span class="s1">anonymousId,</span>
+            <span class="s1">arch: _os.default.arch(),</span>
+            <span class="s1">commit,</span>
+            <span class="s1">cpus: _os.default.cpus().length,</span>
+            <span class="s1">isTurboSession,</span>
+            <span class="s1">mode,</span>
+            <span class="s1">nextVersion,</span>
+            <span class="s1">pkgName,</span>
+            <span class="s1">platform: _os.default.platform(),</span>
+            <span class="s1">sessionId</span>
+        <span class="s1">},</span>
+        <span class="s3">// The trace file can contain events spanning multiple sessions.</span>
+        <span class="s3">// Only submit traces for the current session, as the metadata we send is</span>
+        <span class="s3">// intended for this session only.</span>
+        <span class="s1">traces: [</span>
+            <span class="s1">sessionTrace</span>
+        <span class="s1">]</span>
+    <span class="s1">};</span>
+    <span class="s2">if </span><span class="s1">(isDebugEnabled) {</span>
+        <span class="s1">console.log(</span><span class="s0">'Sending request with body'</span><span class="s1">, JSON.stringify(body, </span><span class="s2">null</span><span class="s1">, </span><span class="s4">2</span><span class="s1">));</span>
+    <span class="s1">}</span>
+    <span class="s2">let </span><span class="s1">res = </span><span class="s2">await </span><span class="s1">fetch(traceUploadUrl, {</span>
+        <span class="s1">method: </span><span class="s0">'POST'</span><span class="s1">,</span>
+        <span class="s1">headers: {</span>
+            <span class="s0">'Content-Type'</span><span class="s1">: </span><span class="s0">'application/json'</span><span class="s1">,</span>
+            <span class="s0">'x-trace-transfer-mode'</span><span class="s1">: shouldUploadFullTrace ? </span><span class="s0">'full' </span><span class="s1">: </span><span class="s0">'default'</span>
+        <span class="s1">},</span>
+        <span class="s1">body: JSON.stringify(body)</span>
+    <span class="s1">});</span>
+    <span class="s2">if </span><span class="s1">(isDebugEnabled) {</span>
+        <span class="s1">console.log(</span><span class="s0">'Received response'</span><span class="s1">, res.status, </span><span class="s2">await </span><span class="s1">res.json());</span>
+    <span class="s1">}</span>
+<span class="s1">})();</span>
+
+<span class="s3">//# sourceMappingURL=trace-uploader.js.map</span></pre>
+</body>
+</html>

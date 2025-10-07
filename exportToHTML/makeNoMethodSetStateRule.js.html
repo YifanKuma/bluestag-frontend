@@ -1,0 +1,153 @@
+<html>
+<head>
+<title>makeNoMethodSetStateRule.js</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #8c8c8c; font-style: italic;}
+.s1 { color: #8c8c8c; font-style: italic;}
+.s2 { color: #080808;}
+.s3 { color: #067d17;}
+.s4 { color: #0033b3;}
+.s5 { color: #1750eb;}
+.s6 { color: #264eff;}
+</style>
+</head>
+<body bgcolor="#ffffff">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#c0c0c0" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+makeNoMethodSetStateRule.js</font>
+</center></td></tr></table>
+<pre><span class="s0">/**</span>
+ <span class="s0">* </span><span class="s1">@fileoverview </span><span class="s0">Prevent usage of setState in lifecycle methods</span>
+ <span class="s0">* </span><span class="s1">@author </span><span class="s0">Yannick Croissant</span>
+ <span class="s0">*/</span>
+
+<span class="s3">'use strict'</span><span class="s2">;</span>
+
+<span class="s4">const </span><span class="s2">findLast = require(</span><span class="s3">'array.prototype.findlast'</span><span class="s2">);</span>
+
+<span class="s4">const </span><span class="s2">docsUrl = require(</span><span class="s3">'./docsUrl'</span><span class="s2">);</span>
+<span class="s4">const </span><span class="s2">report = require(</span><span class="s3">'./report'</span><span class="s2">);</span>
+<span class="s4">const </span><span class="s2">getAncestors = require(</span><span class="s3">'./eslint'</span><span class="s2">).getAncestors;</span>
+<span class="s4">const </span><span class="s2">testReactVersion = require(</span><span class="s3">'./version'</span><span class="s2">).testReactVersion;</span>
+
+<span class="s0">// ------------------------------------------------------------------------------</span>
+<span class="s0">// Rule Definition</span>
+<span class="s0">// ------------------------------------------------------------------------------</span>
+
+<span class="s4">function </span><span class="s2">mapTitle(methodName) {</span>
+  <span class="s4">const </span><span class="s2">map = {</span>
+    <span class="s2">componentDidMount: </span><span class="s3">'did-mount'</span><span class="s2">,</span>
+    <span class="s2">componentDidUpdate: </span><span class="s3">'did-update'</span><span class="s2">,</span>
+    <span class="s2">componentWillUpdate: </span><span class="s3">'will-update'</span><span class="s2">,</span>
+  <span class="s2">};</span>
+  <span class="s4">const </span><span class="s2">title = map[methodName];</span>
+  <span class="s4">if </span><span class="s2">(!title) {</span>
+    <span class="s4">throw </span><span class="s2">Error(</span><span class="s3">`No docsUrl for '</span><span class="s2">${methodName}</span><span class="s3">'`</span><span class="s2">);</span>
+  <span class="s2">}</span>
+  <span class="s4">return </span><span class="s3">`no-</span><span class="s2">${title}</span><span class="s3">-set-state`</span><span class="s2">;</span>
+<span class="s2">}</span>
+
+<span class="s4">const </span><span class="s2">messages = {</span>
+  <span class="s2">noSetState: </span><span class="s3">'Do not use setState in {{name}}'</span><span class="s2">,</span>
+<span class="s2">};</span>
+
+<span class="s4">const </span><span class="s2">methodNoopsAsOf = {</span>
+  <span class="s2">componentDidMount: </span><span class="s3">'&gt;= 16.3.0'</span><span class="s2">,</span>
+  <span class="s2">componentDidUpdate: </span><span class="s3">'&gt;= 16.3.0'</span><span class="s2">,</span>
+<span class="s2">};</span>
+
+<span class="s4">function </span><span class="s2">shouldBeNoop(context, methodName) {</span>
+  <span class="s4">return </span><span class="s2">methodName </span><span class="s4">in </span><span class="s2">methodNoopsAsOf</span>
+    <span class="s2">&amp;&amp; testReactVersion(context, methodNoopsAsOf[methodName])</span>
+    <span class="s2">&amp;&amp; !testReactVersion(context, </span><span class="s3">'999.999.999'</span><span class="s2">); </span><span class="s0">// for when the version is not specified</span>
+<span class="s2">}</span>
+
+<span class="s0">// eslint-disable-next-line valid-jsdoc</span>
+<span class="s0">/**</span>
+ <span class="s0">* </span><span class="s1">@param </span><span class="s0">{string} methodName</span>
+ <span class="s0">* </span><span class="s1">@param </span><span class="s0">{(context: import('eslint').Rule.RuleContext) =&gt; boolean} [shouldCheckUnsafeCb]</span>
+ <span class="s0">* </span><span class="s1">@returns </span><span class="s0">{import('eslint').Rule.RuleModule}</span>
+ <span class="s0">*/</span>
+<span class="s2">module.exports = </span><span class="s4">function </span><span class="s2">makeNoMethodSetStateRule(methodName, shouldCheckUnsafeCb) {</span>
+  <span class="s4">return </span><span class="s2">{</span>
+    <span class="s2">meta: {</span>
+      <span class="s2">docs: {</span>
+        <span class="s2">description: </span><span class="s3">`Disallow usage of setState in </span><span class="s2">${methodName}</span><span class="s3">`</span><span class="s2">,</span>
+        <span class="s2">category: </span><span class="s3">'Best Practices'</span><span class="s2">,</span>
+        <span class="s2">recommended: </span><span class="s4">false</span><span class="s2">,</span>
+        <span class="s2">url: docsUrl(mapTitle(methodName)),</span>
+      <span class="s2">},</span>
+
+      <span class="s2">messages,</span>
+
+      <span class="s2">schema: [{</span>
+        <span class="s4">enum</span><span class="s2">: [</span><span class="s3">'disallow-in-func'</span><span class="s2">],</span>
+      <span class="s2">}],</span>
+    <span class="s2">},</span>
+
+    <span class="s2">create(context) {</span>
+      <span class="s4">const </span><span class="s2">mode = context.options[</span><span class="s5">0</span><span class="s2">] || </span><span class="s3">'allow-in-func'</span><span class="s2">;</span>
+
+      <span class="s4">function </span><span class="s2">nameMatches(name) {</span>
+        <span class="s4">if </span><span class="s2">(name === methodName) {</span>
+          <span class="s4">return true</span><span class="s2">;</span>
+        <span class="s2">}</span>
+
+        <span class="s4">if </span><span class="s2">(</span><span class="s4">typeof </span><span class="s2">shouldCheckUnsafeCb === </span><span class="s3">'function' </span><span class="s2">&amp;&amp; shouldCheckUnsafeCb(context)) {</span>
+          <span class="s4">return </span><span class="s2">name === </span><span class="s3">`UNSAFE_</span><span class="s2">${methodName}</span><span class="s3">`</span><span class="s2">;</span>
+        <span class="s2">}</span>
+
+        <span class="s4">return false</span><span class="s2">;</span>
+      <span class="s2">}</span>
+
+      <span class="s4">if </span><span class="s2">(shouldBeNoop(context, methodName)) {</span>
+        <span class="s4">return </span><span class="s2">{};</span>
+      <span class="s2">}</span>
+
+      <span class="s0">// --------------------------------------------------------------------------</span>
+      <span class="s0">// Public</span>
+      <span class="s0">// --------------------------------------------------------------------------</span>
+
+      <span class="s4">return </span><span class="s2">{</span>
+        <span class="s2">CallExpression(node) {</span>
+          <span class="s4">const </span><span class="s2">callee = node.callee;</span>
+          <span class="s4">if </span><span class="s2">(</span>
+            <span class="s2">callee.type !== </span><span class="s3">'MemberExpression'</span>
+            <span class="s2">|| callee.object.type !== </span><span class="s3">'ThisExpression'</span>
+            <span class="s2">|| !(</span><span class="s3">'name' </span><span class="s4">in </span><span class="s2">callee.property)</span>
+            <span class="s2">|| callee.property.name !== </span><span class="s3">'setState'</span>
+          <span class="s2">) {</span>
+            <span class="s4">return</span><span class="s2">;</span>
+          <span class="s2">}</span>
+          <span class="s4">const </span><span class="s2">ancestors = getAncestors(context, node);</span>
+          <span class="s4">let </span><span class="s2">depth = </span><span class="s5">0</span><span class="s2">;</span>
+          <span class="s2">findLast(ancestors, (ancestor) =&gt; {</span>
+          <span class="s0">// ancestors.some((ancestor) =&gt; {</span>
+            <span class="s4">if </span><span class="s2">(</span><span class="s6">/Function(Expression|Declaration)$/</span><span class="s2">.test(ancestor.type)) {</span>
+              <span class="s2">depth += </span><span class="s5">1</span><span class="s2">;</span>
+            <span class="s2">}</span>
+            <span class="s4">if </span><span class="s2">(</span>
+              <span class="s2">(ancestor.type !== </span><span class="s3">'Property' </span><span class="s2">&amp;&amp; ancestor.type !== </span><span class="s3">'MethodDefinition' </span><span class="s2">&amp;&amp; ancestor.type !== </span><span class="s3">'ClassProperty' </span><span class="s2">&amp;&amp; ancestor.type !== </span><span class="s3">'PropertyDefinition'</span><span class="s2">)</span>
+              <span class="s2">|| !nameMatches(ancestor.key.name)</span>
+              <span class="s2">|| (mode !== </span><span class="s3">'disallow-in-func' </span><span class="s2">&amp;&amp; depth &gt; </span><span class="s5">1</span><span class="s2">)</span>
+            <span class="s2">) {</span>
+              <span class="s4">return false</span><span class="s2">;</span>
+            <span class="s2">}</span>
+            <span class="s2">report(context, messages.noSetState, </span><span class="s3">'noSetState'</span><span class="s2">, {</span>
+              <span class="s2">node: callee,</span>
+              <span class="s2">data: {</span>
+                <span class="s2">name: ancestor.key.name,</span>
+              <span class="s2">},</span>
+            <span class="s2">});</span>
+            <span class="s4">return true</span><span class="s2">;</span>
+          <span class="s2">});</span>
+        <span class="s2">},</span>
+      <span class="s2">};</span>
+    <span class="s2">},</span>
+  <span class="s2">};</span>
+<span class="s2">};</span>
+</pre>
+</body>
+</html>

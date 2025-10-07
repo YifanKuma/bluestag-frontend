@@ -1,0 +1,94 @@
+<html>
+<head>
+<title>valueToFloat16Bytes.js</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #067d17;}
+.s1 { color: #080808;}
+.s2 { color: #0033b3;}
+.s3 { color: #1750eb;}
+.s4 { color: #8c8c8c; font-style: italic;}
+</style>
+</head>
+<body bgcolor="#ffffff">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#c0c0c0" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+valueToFloat16Bytes.js</font>
+</center></td></tr></table>
+<pre><span class="s0">'use strict'</span><span class="s1">;</span>
+
+<span class="s2">var </span><span class="s1">$abs = require(</span><span class="s0">'math-intrinsics/abs'</span><span class="s1">);</span>
+<span class="s2">var </span><span class="s1">$floor = require(</span><span class="s0">'math-intrinsics/floor'</span><span class="s1">);</span>
+<span class="s2">var </span><span class="s1">$pow = require(</span><span class="s0">'math-intrinsics/pow'</span><span class="s1">);</span>
+
+<span class="s2">var </span><span class="s1">isFinite = require(</span><span class="s0">'math-intrinsics/isFinite'</span><span class="s1">);</span>
+<span class="s2">var </span><span class="s1">isNaN = require(</span><span class="s0">'math-intrinsics/isNaN'</span><span class="s1">);</span>
+<span class="s2">var </span><span class="s1">isNegativeZero = require(</span><span class="s0">'math-intrinsics/isNegativeZero'</span><span class="s1">);</span>
+
+<span class="s2">var </span><span class="s1">maxFiniteFloat16 = </span><span class="s3">65504</span><span class="s1">; </span><span class="s4">// 2**16 - 2**5</span>
+
+<span class="s1">module.exports = </span><span class="s2">function </span><span class="s1">valueToFloat16Bytes(value, isLittleEndian) {</span>
+	<span class="s4">// NaN → exponent=all-ones, mantissa MSB=1 → 0x7e00</span>
+	<span class="s2">if </span><span class="s1">(isNaN(value)) {</span>
+		<span class="s2">return </span><span class="s1">isLittleEndian</span>
+			<span class="s1">? [</span><span class="s3">0x00</span><span class="s1">, </span><span class="s3">0x7e</span><span class="s1">]</span>
+			<span class="s1">: [</span><span class="s3">0x7e</span><span class="s1">, </span><span class="s3">0x00</span><span class="s1">];</span>
+	<span class="s1">}</span>
+
+	<span class="s2">var </span><span class="s1">leastSig;</span>
+
+	<span class="s4">// ±0 → just the sign bit</span>
+	<span class="s2">if </span><span class="s1">(value === </span><span class="s3">0</span><span class="s1">) {</span>
+		<span class="s1">leastSig = isNegativeZero(value) ? </span><span class="s3">0x80 </span><span class="s1">: </span><span class="s3">0x00</span><span class="s1">;</span>
+		<span class="s2">return </span><span class="s1">isLittleEndian</span>
+			<span class="s1">? [</span><span class="s3">0x00</span><span class="s1">, leastSig]</span>
+			<span class="s1">: [leastSig, </span><span class="s3">0x00</span><span class="s1">];</span>
+	<span class="s1">}</span>
+
+	<span class="s4">// ±∞ → exponent=all-ones, mantissa=0 → 0x7c00 or 0xfc00</span>
+	<span class="s2">if </span><span class="s1">($abs(value) &gt; maxFiniteFloat16 || !isFinite(value)) {</span>
+		<span class="s1">leastSig = value &lt; </span><span class="s3">0 </span><span class="s1">? </span><span class="s3">0xfc </span><span class="s1">: </span><span class="s3">0x7c</span><span class="s1">;</span>
+		<span class="s2">return </span><span class="s1">isLittleEndian</span>
+			<span class="s1">? [</span><span class="s3">0x00</span><span class="s1">, leastSig]</span>
+			<span class="s1">: [leastSig, </span><span class="s3">0x00</span><span class="s1">];</span>
+	<span class="s1">}</span>
+
+	<span class="s2">var </span><span class="s1">sign = value &lt; </span><span class="s3">0 </span><span class="s1">? </span><span class="s3">1 </span><span class="s1">: </span><span class="s3">0</span><span class="s1">;</span>
+	<span class="s1">value = $abs(value); </span><span class="s4">// eslint-disable-line no-param-reassign</span>
+
+	<span class="s4">// normalize to [1,2)</span>
+	<span class="s2">var </span><span class="s1">exponent = </span><span class="s3">0</span><span class="s1">;</span>
+	<span class="s2">while </span><span class="s1">(value &gt;= </span><span class="s3">2</span><span class="s1">) {</span>
+		<span class="s1">exponent += </span><span class="s3">1</span><span class="s1">;</span>
+		<span class="s1">value /= </span><span class="s3">2</span><span class="s1">; </span><span class="s4">// eslint-disable-line no-param-reassign</span>
+	<span class="s1">}</span>
+	<span class="s2">while </span><span class="s1">(value &lt; </span><span class="s3">1</span><span class="s1">) {</span>
+		<span class="s1">exponent -= </span><span class="s3">1</span><span class="s1">;</span>
+		<span class="s1">value *= </span><span class="s3">2</span><span class="s1">; </span><span class="s4">// eslint-disable-line no-param-reassign</span>
+	<span class="s1">}</span>
+
+	<span class="s4">// build mantissa (10 bits)</span>
+	<span class="s2">var </span><span class="s1">mantissa = value - </span><span class="s3">1</span><span class="s1">;</span>
+	<span class="s1">mantissa *= $pow(</span><span class="s3">2</span><span class="s1">, </span><span class="s3">10</span><span class="s1">) + </span><span class="s3">0.5</span><span class="s1">;</span>
+	<span class="s1">mantissa = $floor(mantissa);</span>
+
+	<span class="s4">// apply bias (15) and shift into place</span>
+	<span class="s1">exponent += </span><span class="s3">15</span><span class="s1">;</span>
+	<span class="s1">exponent &lt;&lt;= </span><span class="s3">10</span><span class="s1">;</span>
+
+	<span class="s4">// pack sign, exponent, mantissa</span>
+	<span class="s2">var </span><span class="s1">result = (sign &lt;&lt; </span><span class="s3">15</span><span class="s1">) | exponent | mantissa;</span>
+
+	<span class="s4">// split into two bytes</span>
+	<span class="s2">var </span><span class="s1">byte0 = result &amp; </span><span class="s3">0xFF</span><span class="s1">;</span>
+	<span class="s1">result &gt;&gt;= </span><span class="s3">8</span><span class="s1">;</span>
+	<span class="s2">var </span><span class="s1">byte1 = result &amp; </span><span class="s3">0xFF</span><span class="s1">;</span>
+
+	<span class="s2">return </span><span class="s1">isLittleEndian</span>
+		<span class="s1">? [byte0, byte1]</span>
+		<span class="s1">: [byte1, byte0];</span>
+<span class="s1">};</span>
+</pre>
+</body>
+</html>

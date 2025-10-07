@@ -1,0 +1,90 @@
+<html>
+<head>
+<title>CopyDataProperties.js</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #067d17;}
+.s1 { color: #080808;}
+.s2 { color: #0033b3;}
+.s3 { color: #8c8c8c; font-style: italic;}
+.s4 { color: #1750eb;}
+</style>
+</head>
+<body bgcolor="#ffffff">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#c0c0c0" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+CopyDataProperties.js</font>
+</center></td></tr></table>
+<pre><span class="s0">'use strict'</span><span class="s1">;</span>
+
+<span class="s2">var </span><span class="s1">$TypeError = require(</span><span class="s0">'es-errors/type'</span><span class="s1">);</span>
+<span class="s2">var </span><span class="s1">isObject = require(</span><span class="s0">'es-object-atoms/isObject'</span><span class="s1">);</span>
+<span class="s2">var </span><span class="s1">callBound = require(</span><span class="s0">'call-bound'</span><span class="s1">);</span>
+<span class="s2">var </span><span class="s1">OwnPropertyKeys = require(</span><span class="s0">'own-keys'</span><span class="s1">);</span>
+
+<span class="s2">var </span><span class="s1">forEach = require(</span><span class="s0">'../helpers/forEach'</span><span class="s1">);</span>
+<span class="s2">var </span><span class="s1">every = require(</span><span class="s0">'../helpers/every'</span><span class="s1">);</span>
+<span class="s2">var </span><span class="s1">some = require(</span><span class="s0">'../helpers/some'</span><span class="s1">);</span>
+
+<span class="s2">var </span><span class="s1">$isEnumerable = callBound(</span><span class="s0">'Object.prototype.propertyIsEnumerable'</span><span class="s1">);</span>
+
+<span class="s2">var </span><span class="s1">CreateDataPropertyOrThrow = require(</span><span class="s0">'./CreateDataPropertyOrThrow'</span><span class="s1">);</span>
+<span class="s2">var </span><span class="s1">Get = require(</span><span class="s0">'./Get'</span><span class="s1">);</span>
+<span class="s2">var </span><span class="s1">IsArray = require(</span><span class="s0">'./IsArray'</span><span class="s1">);</span>
+<span class="s2">var </span><span class="s1">isPropertyKey = require(</span><span class="s0">'../helpers/isPropertyKey'</span><span class="s1">);</span>
+<span class="s2">var </span><span class="s1">SameValue = require(</span><span class="s0">'./SameValue'</span><span class="s1">);</span>
+<span class="s2">var </span><span class="s1">ToNumber = require(</span><span class="s0">'./ToNumber'</span><span class="s1">);</span>
+<span class="s2">var </span><span class="s1">ToObject = require(</span><span class="s0">'./ToObject'</span><span class="s1">);</span>
+
+<span class="s2">var </span><span class="s1">isInteger = require(</span><span class="s0">'math-intrinsics/isInteger'</span><span class="s1">);</span>
+
+<span class="s3">// https://262.ecma-international.org/12.0/#sec-copydataproperties</span>
+
+<span class="s1">module.exports = </span><span class="s2">function </span><span class="s1">CopyDataProperties(target, source, excludedItems) {</span>
+	<span class="s2">if </span><span class="s1">(!isObject(target)) {</span>
+		<span class="s2">throw new </span><span class="s1">$TypeError(</span><span class="s0">'Assertion failed: &quot;target&quot; must be an Object'</span><span class="s1">);</span>
+	<span class="s1">}</span>
+
+	<span class="s2">if </span><span class="s1">(!IsArray(excludedItems) || !every(excludedItems, isPropertyKey)) {</span>
+		<span class="s2">throw new </span><span class="s1">$TypeError(</span><span class="s0">'Assertion failed: &quot;excludedItems&quot; must be a List of Property Keys'</span><span class="s1">);</span>
+	<span class="s1">}</span>
+
+	<span class="s2">if </span><span class="s1">(</span><span class="s2">typeof </span><span class="s1">source === </span><span class="s0">'undefined' </span><span class="s1">|| source === </span><span class="s2">null</span><span class="s1">) {</span>
+		<span class="s2">return </span><span class="s1">target;</span>
+	<span class="s1">}</span>
+
+	<span class="s2">var </span><span class="s1">from = ToObject(source);</span>
+
+	<span class="s2">var </span><span class="s1">keys = OwnPropertyKeys(from);</span>
+	<span class="s1">forEach(keys, </span><span class="s2">function </span><span class="s1">(nextKey) {</span>
+		<span class="s2">var </span><span class="s1">excluded = some(excludedItems, </span><span class="s2">function </span><span class="s1">(e) {</span>
+			<span class="s2">return </span><span class="s1">SameValue(e, nextKey) === </span><span class="s2">true</span><span class="s1">;</span>
+		<span class="s1">});</span>
+		<span class="s3">/* 
+        var excluded = false; 
+ 
+        forEach(excludedItems, function (e) { 
+            if (SameValue(e, nextKey) === true) { 
+                excluded = true; 
+            } 
+        }); 
+        */</span>
+
+		<span class="s2">var </span><span class="s1">enumerable = $isEnumerable(from, nextKey) || (</span>
+		<span class="s3">// this is to handle string keys being non-enumerable in older engines</span>
+			<span class="s2">typeof </span><span class="s1">source === </span><span class="s0">'string'</span>
+			<span class="s1">&amp;&amp; nextKey &gt;= </span><span class="s4">0</span>
+			<span class="s1">&amp;&amp; isInteger(ToNumber(nextKey))</span>
+		<span class="s1">);</span>
+		<span class="s2">if </span><span class="s1">(excluded === </span><span class="s2">false </span><span class="s1">&amp;&amp; enumerable) {</span>
+			<span class="s2">var </span><span class="s1">propValue = Get(from, nextKey);</span>
+			<span class="s1">CreateDataPropertyOrThrow(target, nextKey, propValue);</span>
+		<span class="s1">}</span>
+	<span class="s1">});</span>
+
+	<span class="s2">return </span><span class="s1">target;</span>
+<span class="s1">};</span>
+</pre>
+</body>
+</html>

@@ -1,0 +1,308 @@
+<html>
+<head>
+<title>jsx-no-target-blank.js</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #8c8c8c; font-style: italic;}
+.s1 { color: #8c8c8c; font-style: italic;}
+.s2 { color: #080808;}
+.s3 { color: #067d17;}
+.s4 { color: #0033b3;}
+.s5 { color: #1750eb;}
+.s6 { color: #264eff;}
+</style>
+</head>
+<body bgcolor="#ffffff">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#c0c0c0" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+jsx-no-target-blank.js</font>
+</center></td></tr></table>
+<pre><span class="s0">/**</span>
+ <span class="s0">* </span><span class="s1">@fileoverview </span><span class="s0">Forbid target='_blank' attribute</span>
+ <span class="s0">* </span><span class="s1">@author </span><span class="s0">Kevin Miller</span>
+ <span class="s0">*/</span>
+
+<span class="s3">'use strict'</span><span class="s2">;</span>
+
+<span class="s4">const </span><span class="s2">includes = require(</span><span class="s3">'array-includes'</span><span class="s2">);</span>
+<span class="s4">const </span><span class="s2">docsUrl = require(</span><span class="s3">'../util/docsUrl'</span><span class="s2">);</span>
+<span class="s4">const </span><span class="s2">linkComponentsUtil = require(</span><span class="s3">'../util/linkComponents'</span><span class="s2">);</span>
+<span class="s4">const </span><span class="s2">report = require(</span><span class="s3">'../util/report'</span><span class="s2">);</span>
+
+<span class="s0">// ------------------------------------------------------------------------------</span>
+<span class="s0">// Rule Definition</span>
+<span class="s0">// ------------------------------------------------------------------------------</span>
+
+<span class="s4">function </span><span class="s2">findLastIndex(arr, condition) {</span>
+  <span class="s4">for </span><span class="s2">(</span><span class="s4">let </span><span class="s2">i = arr.length - </span><span class="s5">1</span><span class="s2">; i &gt;= </span><span class="s5">0</span><span class="s2">; i -= </span><span class="s5">1</span><span class="s2">) {</span>
+    <span class="s4">if </span><span class="s2">(condition(arr[i])) {</span>
+      <span class="s4">return </span><span class="s2">i;</span>
+    <span class="s2">}</span>
+  <span class="s2">}</span>
+
+  <span class="s4">return </span><span class="s2">-</span><span class="s5">1</span><span class="s2">;</span>
+<span class="s2">}</span>
+
+<span class="s4">function </span><span class="s2">attributeValuePossiblyBlank(attribute) {</span>
+  <span class="s4">if </span><span class="s2">(!attribute || !attribute.value) {</span>
+    <span class="s4">return false</span><span class="s2">;</span>
+  <span class="s2">}</span>
+  <span class="s4">const </span><span class="s2">value = attribute.value;</span>
+  <span class="s4">if </span><span class="s2">(value.type === </span><span class="s3">'Literal'</span><span class="s2">) {</span>
+    <span class="s4">return typeof </span><span class="s2">value.value === </span><span class="s3">'string' </span><span class="s2">&amp;&amp; value.value.toLowerCase() === </span><span class="s3">'_blank'</span><span class="s2">;</span>
+  <span class="s2">}</span>
+  <span class="s4">if </span><span class="s2">(value.type === </span><span class="s3">'JSXExpressionContainer'</span><span class="s2">) {</span>
+    <span class="s4">const </span><span class="s2">expr = value.expression;</span>
+    <span class="s4">if </span><span class="s2">(expr.type === </span><span class="s3">'Literal'</span><span class="s2">) {</span>
+      <span class="s4">return typeof </span><span class="s2">expr.value === </span><span class="s3">'string' </span><span class="s2">&amp;&amp; expr.value.toLowerCase() === </span><span class="s3">'_blank'</span><span class="s2">;</span>
+    <span class="s2">}</span>
+    <span class="s4">if </span><span class="s2">(expr.type === </span><span class="s3">'ConditionalExpression'</span><span class="s2">) {</span>
+      <span class="s4">if </span><span class="s2">(expr.alternate.type === </span><span class="s3">'Literal' </span><span class="s2">&amp;&amp; expr.alternate.value &amp;&amp; expr.alternate.value.toLowerCase() === </span><span class="s3">'_blank'</span><span class="s2">) {</span>
+        <span class="s4">return true</span><span class="s2">;</span>
+      <span class="s2">}</span>
+      <span class="s4">if </span><span class="s2">(expr.consequent.type === </span><span class="s3">'Literal' </span><span class="s2">&amp;&amp; expr.consequent.value &amp;&amp; expr.consequent.value.toLowerCase() === </span><span class="s3">'_blank'</span><span class="s2">) {</span>
+        <span class="s4">return true</span><span class="s2">;</span>
+      <span class="s2">}</span>
+    <span class="s2">}</span>
+  <span class="s2">}</span>
+  <span class="s4">return false</span><span class="s2">;</span>
+<span class="s2">}</span>
+
+<span class="s4">function </span><span class="s2">hasExternalLink(node, linkAttributes, warnOnSpreadAttributes, spreadAttributeIndex) {</span>
+  <span class="s4">const </span><span class="s2">linkIndex = findLastIndex(node.attributes, (attr) =&gt; attr.name &amp;&amp; includes(linkAttributes, attr.name.name));</span>
+  <span class="s4">const </span><span class="s2">foundExternalLink = linkIndex !== -</span><span class="s5">1 </span><span class="s2">&amp;&amp; ((attr) =&gt; attr.value &amp;&amp; attr.value.type === </span><span class="s3">'Literal' </span><span class="s2">&amp;&amp; </span><span class="s6">/^(?:\w+:|\/\/)/</span><span class="s2">.test(attr.value.value))(</span>
+    <span class="s2">node.attributes[linkIndex]);</span>
+  <span class="s4">return </span><span class="s2">foundExternalLink || (warnOnSpreadAttributes &amp;&amp; linkIndex &lt; spreadAttributeIndex);</span>
+<span class="s2">}</span>
+
+<span class="s4">function </span><span class="s2">hasDynamicLink(node, linkAttributes) {</span>
+  <span class="s4">const </span><span class="s2">dynamicLinkIndex = findLastIndex(node.attributes, (attr) =&gt; attr.name</span>
+    <span class="s2">&amp;&amp; includes(linkAttributes, attr.name.name)</span>
+    <span class="s2">&amp;&amp; attr.value</span>
+    <span class="s2">&amp;&amp; attr.value.type === </span><span class="s3">'JSXExpressionContainer'</span><span class="s2">);</span>
+  <span class="s4">if </span><span class="s2">(dynamicLinkIndex !== -</span><span class="s5">1</span><span class="s2">) {</span>
+    <span class="s4">return true</span><span class="s2">;</span>
+  <span class="s2">}</span>
+<span class="s2">}</span>
+
+<span class="s0">/**</span>
+ <span class="s0">* Get the string(s) from a value</span>
+ <span class="s0">* </span><span class="s1">@param </span><span class="s0">{ASTNode} value The AST node being checked.</span>
+ <span class="s0">* </span><span class="s1">@param </span><span class="s0">{ASTNode} targetValue The AST node being checked.</span>
+ <span class="s0">* </span><span class="s1">@returns </span><span class="s0">{string | string[] | null} The string value, or null if not a string.</span>
+ <span class="s0">*/</span>
+<span class="s4">function </span><span class="s2">getStringFromValue(value, targetValue) {</span>
+  <span class="s4">if </span><span class="s2">(value) {</span>
+    <span class="s4">if </span><span class="s2">(value.type === </span><span class="s3">'Literal'</span><span class="s2">) {</span>
+      <span class="s4">return </span><span class="s2">value.value;</span>
+    <span class="s2">}</span>
+    <span class="s4">if </span><span class="s2">(value.type === </span><span class="s3">'JSXExpressionContainer'</span><span class="s2">) {</span>
+      <span class="s4">if </span><span class="s2">(value.expression.type === </span><span class="s3">'TemplateLiteral'</span><span class="s2">) {</span>
+        <span class="s4">return </span><span class="s2">value.expression.quasis[</span><span class="s5">0</span><span class="s2">].value.cooked;</span>
+      <span class="s2">}</span>
+      <span class="s4">const </span><span class="s2">expr = value.expression;</span>
+      <span class="s4">if </span><span class="s2">(expr &amp;&amp; expr.type === </span><span class="s3">'ConditionalExpression'</span><span class="s2">) {</span>
+        <span class="s4">const </span><span class="s2">relValues = [expr.consequent.value, expr.alternate.value];</span>
+        <span class="s4">if </span><span class="s2">(targetValue.type === </span><span class="s3">'JSXExpressionContainer' </span><span class="s2">&amp;&amp; targetValue.expression &amp;&amp; targetValue.expression.type === </span><span class="s3">'ConditionalExpression'</span><span class="s2">) {</span>
+          <span class="s4">const </span><span class="s2">targetTestCond = targetValue.expression.test.name;</span>
+          <span class="s4">const </span><span class="s2">relTestCond = value.expression.test.name;</span>
+          <span class="s4">if </span><span class="s2">(targetTestCond === relTestCond) {</span>
+            <span class="s4">const </span><span class="s2">targetBlankIndex = [targetValue.expression.consequent.value, targetValue.expression.alternate.value].indexOf(</span><span class="s3">'_blank'</span><span class="s2">);</span>
+            <span class="s4">return </span><span class="s2">relValues[targetBlankIndex];</span>
+          <span class="s2">}</span>
+        <span class="s2">}</span>
+        <span class="s4">return </span><span class="s2">relValues;</span>
+      <span class="s2">}</span>
+      <span class="s4">return </span><span class="s2">expr.value;</span>
+    <span class="s2">}</span>
+  <span class="s2">}</span>
+  <span class="s4">return null</span><span class="s2">;</span>
+<span class="s2">}</span>
+
+<span class="s4">function </span><span class="s2">hasSecureRel(node, allowReferrer, warnOnSpreadAttributes, spreadAttributeIndex) {</span>
+  <span class="s4">const </span><span class="s2">relIndex = findLastIndex(node.attributes, (attr) =&gt; (attr.type === </span><span class="s3">'JSXAttribute' </span><span class="s2">&amp;&amp; attr.name.name === </span><span class="s3">'rel'</span><span class="s2">));</span>
+  <span class="s4">const </span><span class="s2">targetIndex = findLastIndex(node.attributes, (attr) =&gt; (attr.type === </span><span class="s3">'JSXAttribute' </span><span class="s2">&amp;&amp; attr.name.name === </span><span class="s3">'target'</span><span class="s2">));</span>
+  <span class="s4">if </span><span class="s2">(relIndex === -</span><span class="s5">1 </span><span class="s2">|| (warnOnSpreadAttributes &amp;&amp; relIndex &lt; spreadAttributeIndex)) {</span>
+    <span class="s4">return false</span><span class="s2">;</span>
+  <span class="s2">}</span>
+
+  <span class="s4">const </span><span class="s2">relAttribute = node.attributes[relIndex];</span>
+  <span class="s4">const </span><span class="s2">targetAttributeValue = node.attributes[targetIndex] &amp;&amp; node.attributes[targetIndex].value;</span>
+  <span class="s4">const </span><span class="s2">value = getStringFromValue(relAttribute.value, targetAttributeValue);</span>
+  <span class="s4">return </span><span class="s2">[].concat(value).every((item) =&gt; {</span>
+    <span class="s4">const </span><span class="s2">tags = </span><span class="s4">typeof </span><span class="s2">item === </span><span class="s3">'string' </span><span class="s2">? item.toLowerCase().split(</span><span class="s3">' '</span><span class="s2">) : </span><span class="s4">false</span><span class="s2">;</span>
+    <span class="s4">const </span><span class="s2">noreferrer = tags &amp;&amp; tags.indexOf(</span><span class="s3">'noreferrer'</span><span class="s2">) &gt;= </span><span class="s5">0</span><span class="s2">;</span>
+    <span class="s4">if </span><span class="s2">(noreferrer) {</span>
+      <span class="s4">return true</span><span class="s2">;</span>
+    <span class="s2">}</span>
+    <span class="s4">const </span><span class="s2">noopener = tags &amp;&amp; tags.indexOf(</span><span class="s3">'noopener'</span><span class="s2">) &gt;= </span><span class="s5">0</span><span class="s2">;</span>
+    <span class="s4">return </span><span class="s2">allowReferrer &amp;&amp; noopener;</span>
+  <span class="s2">});</span>
+<span class="s2">}</span>
+
+<span class="s4">const </span><span class="s2">messages = {</span>
+  <span class="s2">noTargetBlankWithoutNoreferrer: </span><span class="s3">'Using target=&quot;_blank&quot; without rel=&quot;noreferrer&quot; (which implies rel=&quot;noopener&quot;) is a security risk in older browsers: see https://mathiasbynens.github.io/rel-noopener/#recommendations'</span><span class="s2">,</span>
+  <span class="s2">noTargetBlankWithoutNoopener: </span><span class="s3">'Using target=&quot;_blank&quot; without rel=&quot;noreferrer&quot; or rel=&quot;noopener&quot; (the former implies the latter and is preferred due to wider support) is a security risk: see https://mathiasbynens.github.io/rel-noopener/#recommendations'</span><span class="s2">,</span>
+<span class="s2">};</span>
+
+<span class="s0">/** </span><span class="s1">@type </span><span class="s0">{import('eslint').Rule.RuleModule} */</span>
+<span class="s2">module.exports = {</span>
+  <span class="s2">meta: {</span>
+    <span class="s2">fixable: </span><span class="s3">'code'</span><span class="s2">,</span>
+    <span class="s2">docs: {</span>
+      <span class="s2">description: </span><span class="s3">'Disallow `target=&quot;_blank&quot;` attribute without `rel=&quot;noreferrer&quot;`'</span><span class="s2">,</span>
+      <span class="s2">category: </span><span class="s3">'Best Practices'</span><span class="s2">,</span>
+      <span class="s2">recommended: </span><span class="s4">true</span><span class="s2">,</span>
+      <span class="s2">url: docsUrl(</span><span class="s3">'jsx-no-target-blank'</span><span class="s2">),</span>
+    <span class="s2">},</span>
+
+    <span class="s2">messages,</span>
+
+    <span class="s2">schema: [{</span>
+      <span class="s2">type: </span><span class="s3">'object'</span><span class="s2">,</span>
+      <span class="s2">properties: {</span>
+        <span class="s2">allowReferrer: {</span>
+          <span class="s2">type: </span><span class="s3">'boolean'</span><span class="s2">,</span>
+        <span class="s2">},</span>
+        <span class="s2">enforceDynamicLinks: {</span>
+          <span class="s4">enum</span><span class="s2">: [</span><span class="s3">'always'</span><span class="s2">, </span><span class="s3">'never'</span><span class="s2">],</span>
+        <span class="s2">},</span>
+        <span class="s2">warnOnSpreadAttributes: {</span>
+          <span class="s2">type: </span><span class="s3">'boolean'</span><span class="s2">,</span>
+        <span class="s2">},</span>
+        <span class="s2">links: {</span>
+          <span class="s2">type: </span><span class="s3">'boolean'</span><span class="s2">,</span>
+          <span class="s4">default</span><span class="s2">: </span><span class="s4">true</span><span class="s2">,</span>
+        <span class="s2">},</span>
+        <span class="s2">forms: {</span>
+          <span class="s2">type: </span><span class="s3">'boolean'</span><span class="s2">,</span>
+          <span class="s4">default</span><span class="s2">: </span><span class="s4">false</span><span class="s2">,</span>
+        <span class="s2">},</span>
+      <span class="s2">},</span>
+      <span class="s2">additionalProperties: </span><span class="s4">false</span><span class="s2">,</span>
+    <span class="s2">}],</span>
+  <span class="s2">},</span>
+
+  <span class="s2">create(context) {</span>
+    <span class="s4">const </span><span class="s2">configuration = Object.assign(</span>
+      <span class="s2">{</span>
+        <span class="s2">allowReferrer: </span><span class="s4">false</span><span class="s2">,</span>
+        <span class="s2">warnOnSpreadAttributes: </span><span class="s4">false</span><span class="s2">,</span>
+        <span class="s2">links: </span><span class="s4">true</span><span class="s2">,</span>
+        <span class="s2">forms: </span><span class="s4">false</span><span class="s2">,</span>
+      <span class="s2">},</span>
+      <span class="s2">context.options[</span><span class="s5">0</span><span class="s2">]</span>
+    <span class="s2">);</span>
+    <span class="s4">const </span><span class="s2">allowReferrer = configuration.allowReferrer;</span>
+    <span class="s4">const </span><span class="s2">warnOnSpreadAttributes = configuration.warnOnSpreadAttributes;</span>
+    <span class="s4">const </span><span class="s2">enforceDynamicLinks = configuration.enforceDynamicLinks || </span><span class="s3">'always'</span><span class="s2">;</span>
+    <span class="s4">const </span><span class="s2">linkComponents = linkComponentsUtil.getLinkComponents(context);</span>
+    <span class="s4">const </span><span class="s2">formComponents = linkComponentsUtil.getFormComponents(context);</span>
+
+    <span class="s4">return </span><span class="s2">{</span>
+      <span class="s2">JSXOpeningElement(node) {</span>
+        <span class="s4">const </span><span class="s2">targetIndex = findLastIndex(node.attributes, (attr) =&gt; attr.name &amp;&amp; attr.name.name === </span><span class="s3">'target'</span><span class="s2">);</span>
+        <span class="s4">const </span><span class="s2">spreadAttributeIndex = findLastIndex(node.attributes, (attr) =&gt; (attr.type === </span><span class="s3">'JSXSpreadAttribute'</span><span class="s2">));</span>
+
+        <span class="s4">if </span><span class="s2">(linkComponents.has(node.name.name)) {</span>
+          <span class="s4">if </span><span class="s2">(!attributeValuePossiblyBlank(node.attributes[targetIndex])) {</span>
+            <span class="s4">const </span><span class="s2">hasSpread = spreadAttributeIndex &gt;= </span><span class="s5">0</span><span class="s2">;</span>
+
+            <span class="s4">if </span><span class="s2">(warnOnSpreadAttributes &amp;&amp; hasSpread) {</span>
+              <span class="s0">// continue to check below</span>
+            <span class="s2">} </span><span class="s4">else if </span><span class="s2">((hasSpread &amp;&amp; targetIndex &lt; spreadAttributeIndex) || !hasSpread || !warnOnSpreadAttributes) {</span>
+              <span class="s4">return</span><span class="s2">;</span>
+            <span class="s2">}</span>
+          <span class="s2">}</span>
+
+          <span class="s4">const </span><span class="s2">linkAttributes = linkComponents.get(node.name.name);</span>
+          <span class="s4">const </span><span class="s2">hasDangerousLink = hasExternalLink(node, linkAttributes, warnOnSpreadAttributes, spreadAttributeIndex)</span>
+            <span class="s2">|| (enforceDynamicLinks === </span><span class="s3">'always' </span><span class="s2">&amp;&amp; hasDynamicLink(node, linkAttributes));</span>
+          <span class="s4">if </span><span class="s2">(hasDangerousLink &amp;&amp; !hasSecureRel(node, allowReferrer, warnOnSpreadAttributes, spreadAttributeIndex)) {</span>
+            <span class="s4">const </span><span class="s2">messageId = allowReferrer ? </span><span class="s3">'noTargetBlankWithoutNoopener' </span><span class="s2">: </span><span class="s3">'noTargetBlankWithoutNoreferrer'</span><span class="s2">;</span>
+            <span class="s4">const </span><span class="s2">relValue = allowReferrer ? </span><span class="s3">'noopener' </span><span class="s2">: </span><span class="s3">'noreferrer'</span><span class="s2">;</span>
+            <span class="s2">report(context, messages[messageId], messageId, {</span>
+              <span class="s2">node,</span>
+              <span class="s2">fix(fixer) {</span>
+                <span class="s0">// eslint 5 uses `node.attributes`; eslint 6+ uses `node.parent.attributes`</span>
+                <span class="s4">const </span><span class="s2">nodeWithAttrs = node.parent.attributes ? node.parent : node;</span>
+                <span class="s0">// eslint 5 does not provide a `name` property on JSXSpreadElements</span>
+                <span class="s4">const </span><span class="s2">relAttribute = nodeWithAttrs.attributes.find((attr) =&gt; attr.name &amp;&amp; attr.name.name === </span><span class="s3">'rel'</span><span class="s2">);</span>
+
+                <span class="s4">if </span><span class="s2">(targetIndex &lt; spreadAttributeIndex || (spreadAttributeIndex &gt;= </span><span class="s5">0 </span><span class="s2">&amp;&amp; !relAttribute)) {</span>
+                  <span class="s4">return null</span><span class="s2">;</span>
+                <span class="s2">}</span>
+
+                <span class="s4">if </span><span class="s2">(!relAttribute) {</span>
+                  <span class="s4">return </span><span class="s2">fixer.insertTextAfter(nodeWithAttrs.attributes.slice(-</span><span class="s5">1</span><span class="s2">)[</span><span class="s5">0</span><span class="s2">], </span><span class="s3">` rel=&quot;</span><span class="s2">${relValue}</span><span class="s3">&quot;`</span><span class="s2">);</span>
+                <span class="s2">}</span>
+
+                <span class="s4">if </span><span class="s2">(!relAttribute.value) {</span>
+                  <span class="s4">return </span><span class="s2">fixer.insertTextAfter(relAttribute, </span><span class="s3">`=&quot;</span><span class="s2">${relValue}</span><span class="s3">&quot;`</span><span class="s2">);</span>
+                <span class="s2">}</span>
+
+                <span class="s4">if </span><span class="s2">(relAttribute.value.type === </span><span class="s3">'Literal'</span><span class="s2">) {</span>
+                  <span class="s4">const </span><span class="s2">parts = relAttribute.value.value</span>
+                    <span class="s2">.split(</span><span class="s3">'noreferrer'</span><span class="s2">)</span>
+                    <span class="s2">.filter(Boolean);</span>
+                  <span class="s4">return </span><span class="s2">fixer.replaceText(relAttribute.value, </span><span class="s3">`&quot;</span><span class="s2">${parts.concat(</span><span class="s3">'noreferrer'</span><span class="s2">).join(</span><span class="s3">' '</span><span class="s2">)}</span><span class="s3">&quot;`</span><span class="s2">);</span>
+                <span class="s2">}</span>
+
+                <span class="s4">if </span><span class="s2">(relAttribute.value.type === </span><span class="s3">'JSXExpressionContainer'</span><span class="s2">) {</span>
+                  <span class="s4">if </span><span class="s2">(relAttribute.value.expression.type === </span><span class="s3">'Literal'</span><span class="s2">) {</span>
+                    <span class="s4">if </span><span class="s2">(</span><span class="s4">typeof </span><span class="s2">relAttribute.value.expression.value === </span><span class="s3">'string'</span><span class="s2">) {</span>
+                      <span class="s4">const </span><span class="s2">parts = relAttribute.value.expression.value</span>
+                        <span class="s2">.split(</span><span class="s3">'noreferrer'</span><span class="s2">)</span>
+                        <span class="s2">.filter(Boolean);</span>
+                      <span class="s4">return </span><span class="s2">fixer.replaceText(relAttribute.value.expression, </span><span class="s3">`&quot;</span><span class="s2">${parts.concat(</span><span class="s3">'noreferrer'</span><span class="s2">).join(</span><span class="s3">' '</span><span class="s2">)}</span><span class="s3">&quot;`</span><span class="s2">);</span>
+                    <span class="s2">}</span>
+
+                    <span class="s0">// for undefined, boolean, number, symbol, bigint, and null</span>
+                    <span class="s4">return </span><span class="s2">fixer.replaceText(relAttribute.value, </span><span class="s3">'&quot;noreferrer&quot;'</span><span class="s2">);</span>
+                  <span class="s2">}</span>
+                <span class="s2">}</span>
+
+                <span class="s4">return null</span><span class="s2">;</span>
+              <span class="s2">},</span>
+            <span class="s2">});</span>
+          <span class="s2">}</span>
+        <span class="s2">}</span>
+        <span class="s4">if </span><span class="s2">(formComponents.has(node.name.name)) {</span>
+          <span class="s4">if </span><span class="s2">(!attributeValuePossiblyBlank(node.attributes[targetIndex])) {</span>
+            <span class="s4">const </span><span class="s2">hasSpread = spreadAttributeIndex &gt;= </span><span class="s5">0</span><span class="s2">;</span>
+
+            <span class="s4">if </span><span class="s2">(warnOnSpreadAttributes &amp;&amp; hasSpread) {</span>
+              <span class="s0">// continue to check below</span>
+            <span class="s2">} </span><span class="s4">else if </span><span class="s2">(</span>
+              <span class="s2">(hasSpread &amp;&amp; targetIndex &lt; spreadAttributeIndex)</span>
+              <span class="s2">|| !hasSpread</span>
+              <span class="s2">|| !warnOnSpreadAttributes</span>
+            <span class="s2">) {</span>
+              <span class="s4">return</span><span class="s2">;</span>
+            <span class="s2">}</span>
+          <span class="s2">}</span>
+
+          <span class="s4">if </span><span class="s2">(!configuration.forms || hasSecureRel(node)) {</span>
+            <span class="s4">return</span><span class="s2">;</span>
+          <span class="s2">}</span>
+
+          <span class="s4">const </span><span class="s2">formAttributes = formComponents.get(node.name.name);</span>
+
+          <span class="s4">if </span><span class="s2">(</span>
+            <span class="s2">hasExternalLink(node, formAttributes)</span>
+            <span class="s2">|| (enforceDynamicLinks === </span><span class="s3">'always' </span><span class="s2">&amp;&amp; hasDynamicLink(node, formAttributes))</span>
+          <span class="s2">) {</span>
+            <span class="s4">const </span><span class="s2">messageId = allowReferrer ? </span><span class="s3">'noTargetBlankWithoutNoopener' </span><span class="s2">: </span><span class="s3">'noTargetBlankWithoutNoreferrer'</span><span class="s2">;</span>
+            <span class="s2">report(context, messages[messageId], messageId, {</span>
+              <span class="s2">node,</span>
+            <span class="s2">});</span>
+          <span class="s2">}</span>
+        <span class="s2">}</span>
+      <span class="s2">},</span>
+    <span class="s2">};</span>
+  <span class="s2">},</span>
+<span class="s2">};</span>
+</pre>
+</body>
+</html>

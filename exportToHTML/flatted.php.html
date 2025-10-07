@@ -1,0 +1,179 @@
+<html>
+<head>
+<title>flatted.php</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #080808;}
+.s1 { color: #8c8c8c; font-style: italic;}
+.s2 { color: #0033b3;}
+.s3 { color: #000000;}
+.s4 { color: #067d17;}
+.s5 { color: #00627a;}
+.s6 { color: #871094; font-style: italic;}
+.s7 { color: #1750eb; font-style: italic;}
+</style>
+</head>
+<body bgcolor="#ffffff">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#c0c0c0" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+flatted.php</font>
+</center></td></tr></table>
+<pre><span class="s0">&lt;?php</span>
+
+<span class="s1">/*! 
+ * ISC License 
+ *  
+ * Copyright (c) 2018-2021, Andrea Giammarchi, @WebReflection 
+ * 
+ * Permission to use, copy, modify, and/or distribute this software for any 
+ * purpose with or without fee is hereby granted, provided that the above 
+ * copyright notice and this permission notice appear in all copies. 
+ * 
+ * THE SOFTWARE IS PROVIDED &quot;AS IS&quot; AND THE AUTHOR DISCLAIMS ALL WARRANTIES WITH 
+ * REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF MERCHANTABILITY 
+ * AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY SPECIAL, DIRECT, 
+ * INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES WHATSOEVER RESULTING FROM 
+ * LOSS OF USE, DATA OR PROFITS, WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE 
+ * OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR 
+ * PERFORMANCE OF THIS SOFTWARE. 
+ */</span>
+
+<span class="s2">class </span>FlattedString <span class="s0">{</span>
+  <span class="s2">public </span>$value <span class="s2">= </span><span class="s4">''</span><span class="s0">;</span>
+  <span class="s2">public function </span><span class="s0">__construct(</span>$value<span class="s0">) {</span>
+    $this<span class="s2">-&gt;</span>value <span class="s2">= </span>$value<span class="s0">;</span>
+  <span class="s0">}</span>
+<span class="s0">}</span>
+
+<span class="s2">class </span>Flatted <span class="s0">{</span>
+
+  <span class="s1">// public utilities 
+  </span><span class="s2">public static function </span><span class="s5">parse</span><span class="s0">(</span>$json<span class="s0">, </span>$assoc <span class="s2">= </span><span class="s6">false</span><span class="s0">, </span>$depth <span class="s2">= </span><span class="s7">512</span><span class="s0">, </span>$options <span class="s2">= </span><span class="s7">0</span><span class="s0">) {</span>
+    $input <span class="s2">= </span><span class="s0">array_map(</span>
+      <span class="s4">'Flatted::asString'</span><span class="s0">,</span>
+      <span class="s0">array_map(</span>
+        <span class="s4">'Flatted::wrap'</span><span class="s0">,</span>
+        <span class="s0">json_decode(</span>$json<span class="s0">, </span>$assoc<span class="s0">, </span>$depth<span class="s0">, </span>$options<span class="s0">)</span>
+      <span class="s0">)</span>
+    <span class="s0">);</span>
+    $value <span class="s2">= &amp;</span>$input<span class="s0">[</span><span class="s7">0</span><span class="s0">];</span>
+    $set <span class="s2">= </span><span class="s0">array();</span>
+    $set<span class="s0">[] </span><span class="s2">= &amp;</span>$value<span class="s0">;</span>
+    <span class="s2">if </span><span class="s0">(is_array(</span>$value<span class="s0">))</span>
+      <span class="s2">return </span><span class="s0">Flatted</span><span class="s2">::</span><span class="s5">loop</span><span class="s0">(</span><span class="s6">false</span><span class="s0">, array_keys(</span>$value<span class="s0">), </span>$input<span class="s0">, </span>$set<span class="s0">, </span>$value<span class="s0">);</span>
+    <span class="s2">if </span><span class="s0">(is_object(</span>$value<span class="s0">))</span>
+      <span class="s2">return </span><span class="s0">Flatted</span><span class="s2">::</span><span class="s5">loop</span><span class="s0">(</span><span class="s6">true</span><span class="s0">, Flatted</span><span class="s2">::</span><span class="s5">keys</span><span class="s0">(</span>$value<span class="s0">), </span>$input<span class="s0">, </span>$set<span class="s0">, </span>$value<span class="s0">);</span>
+    <span class="s2">return </span>$value<span class="s0">;</span>
+  <span class="s0">}</span>
+
+  <span class="s2">public static function </span><span class="s5">stringify</span><span class="s0">(</span>$value<span class="s0">, </span>$options <span class="s2">= </span><span class="s7">0</span><span class="s0">, </span>$depth <span class="s2">= </span><span class="s7">512</span><span class="s0">) {</span>
+    $known <span class="s2">= new </span><span class="s0">stdClass;</span>
+    $known<span class="s2">-&gt;</span>key <span class="s2">= </span><span class="s0">array();</span>
+    $known<span class="s2">-&gt;</span>value <span class="s2">= </span><span class="s0">array();</span>
+    $input <span class="s2">= </span><span class="s0">array();</span>
+    $output <span class="s2">= </span><span class="s0">array();</span>
+    $i <span class="s2">= </span><span class="s0">intval(Flatted</span><span class="s2">::</span><span class="s5">index</span><span class="s0">(</span>$known<span class="s0">, </span>$input<span class="s0">, </span>$value<span class="s0">));</span>
+    <span class="s2">while </span><span class="s0">(</span>$i <span class="s2">&lt; </span><span class="s0">count(</span>$input<span class="s0">)) {</span>
+      $output<span class="s0">[</span>$i<span class="s0">] </span><span class="s2">= </span><span class="s0">Flatted</span><span class="s2">::</span><span class="s5">transform</span><span class="s0">(</span>$known<span class="s0">, </span>$input<span class="s0">, </span>$input<span class="s0">[</span>$i<span class="s0">]);</span>
+      $i<span class="s2">++</span><span class="s0">;</span>
+    <span class="s0">}</span>
+    <span class="s2">return </span><span class="s0">json_encode(</span>$output<span class="s0">, </span>$options<span class="s0">, </span>$depth<span class="s0">);</span>
+  <span class="s0">}</span>
+
+  <span class="s1">// private helpers 
+  </span><span class="s2">private static function </span><span class="s5">asString</span><span class="s0">(</span>$value<span class="s0">) {</span>
+    <span class="s2">return </span>$value <span class="s2">instanceof </span><span class="s0">FlattedString </span><span class="s2">? </span>$value<span class="s2">-&gt;</span>value <span class="s2">: </span>$value<span class="s0">;</span>
+  <span class="s0">}</span>
+
+  <span class="s2">private static function </span><span class="s5">index</span><span class="s0">(</span><span class="s2">&amp;</span>$known<span class="s0">, </span><span class="s2">&amp;</span>$input<span class="s0">, </span><span class="s2">&amp;</span>$value<span class="s0">) {</span>
+    $input<span class="s0">[] </span><span class="s2">= &amp;</span>$value<span class="s0">;</span>
+    $index <span class="s2">= </span><span class="s0">strval(count(</span>$input<span class="s0">) </span><span class="s2">- </span><span class="s7">1</span><span class="s0">);</span>
+    $known<span class="s2">-&gt;</span>key<span class="s0">[] </span><span class="s2">= &amp;</span>$value<span class="s0">;</span>
+    $known<span class="s2">-&gt;</span>value<span class="s0">[] </span><span class="s2">= &amp;</span>$index<span class="s0">;</span>
+    <span class="s2">return </span>$index<span class="s0">;</span>
+  <span class="s0">}</span>
+
+  <span class="s2">private static function </span><span class="s5">keys</span><span class="s0">(</span><span class="s2">&amp;</span>$value<span class="s0">) {</span>
+    $obj <span class="s2">= new </span><span class="s0">ReflectionObject(</span>$value<span class="s0">);</span>
+    $props <span class="s2">= </span>$obj<span class="s2">-&gt;</span><span class="s5">getProperties</span><span class="s0">();</span>
+    $keys <span class="s2">= </span><span class="s0">array();</span>
+    <span class="s2">foreach </span><span class="s0">(</span>$props <span class="s2">as </span>$prop<span class="s0">)</span>
+      $keys<span class="s0">[] </span><span class="s2">= </span>$prop<span class="s2">-&gt;</span><span class="s5">getName</span><span class="s0">();</span>
+    <span class="s2">return </span>$keys<span class="s0">;</span>
+  <span class="s0">}</span>
+
+  <span class="s2">private static function </span><span class="s5">loop</span><span class="s0">(</span>$obj<span class="s0">, </span>$keys<span class="s0">, </span><span class="s2">&amp;</span>$input<span class="s0">, </span><span class="s2">&amp;</span>$set<span class="s0">, </span><span class="s2">&amp;</span>$output<span class="s0">) {</span>
+    <span class="s2">foreach </span><span class="s0">(</span>$keys <span class="s2">as </span>$key<span class="s0">) {</span>
+      $value <span class="s2">= </span>$obj <span class="s2">? </span>$output<span class="s2">-&gt;</span>$key <span class="s2">: </span>$output<span class="s0">[</span>$key<span class="s0">];</span>
+      <span class="s2">if </span><span class="s0">(</span>$value <span class="s2">instanceof </span><span class="s0">FlattedString)</span>
+        <span class="s0">Flatted</span><span class="s2">::</span><span class="s5">ref</span><span class="s0">(</span>$obj<span class="s0">, </span>$key<span class="s0">, </span>$input<span class="s0">[</span>$value<span class="s2">-&gt;</span>value<span class="s0">], </span>$input<span class="s0">, </span>$set<span class="s0">, </span>$output<span class="s0">);</span>
+    <span class="s0">}</span>
+    <span class="s2">return </span>$output<span class="s0">;</span>
+  <span class="s0">}</span>
+
+  <span class="s2">private static function </span><span class="s5">relate</span><span class="s0">(</span><span class="s2">&amp;</span>$known<span class="s0">, </span><span class="s2">&amp;</span>$input<span class="s0">, </span><span class="s2">&amp;</span>$value<span class="s0">) {</span>
+    <span class="s2">if </span><span class="s0">(is_string(</span>$value<span class="s0">) </span><span class="s2">|| </span><span class="s0">is_array(</span>$value<span class="s0">) </span><span class="s2">|| </span><span class="s0">is_object(</span>$value<span class="s0">)) {</span>
+      $key <span class="s2">= </span><span class="s0">array_search(</span>$value<span class="s0">, </span>$known<span class="s2">-&gt;</span>key<span class="s0">, </span><span class="s6">true</span><span class="s0">);</span>
+      <span class="s2">if </span><span class="s0">(</span>$key <span class="s2">!== </span><span class="s6">false</span><span class="s0">)</span>
+        <span class="s2">return </span>$known<span class="s2">-&gt;</span>value<span class="s0">[</span>$key<span class="s0">];</span>
+      <span class="s2">return </span><span class="s0">Flatted</span><span class="s2">::</span><span class="s5">index</span><span class="s0">(</span>$known<span class="s0">, </span>$input<span class="s0">, </span>$value<span class="s0">);</span>
+    <span class="s0">}</span>
+    <span class="s2">return </span>$value<span class="s0">;</span>
+  <span class="s0">}</span>
+
+  <span class="s2">private static function </span><span class="s5">ref</span><span class="s0">(</span>$obj<span class="s0">, </span><span class="s2">&amp;</span>$key<span class="s0">, </span><span class="s2">&amp;</span>$value<span class="s0">, </span><span class="s2">&amp;</span>$input<span class="s0">, </span><span class="s2">&amp;</span>$set<span class="s0">, </span><span class="s2">&amp;</span>$output<span class="s0">) {</span>
+    <span class="s2">if </span><span class="s0">(is_array(</span>$value<span class="s0">) </span><span class="s2">&amp;&amp; !</span><span class="s0">in_array(</span>$value<span class="s0">, </span>$set<span class="s0">, </span><span class="s6">true</span><span class="s0">)) {</span>
+      $set<span class="s0">[] </span><span class="s2">= </span>$value<span class="s0">;</span>
+      $value <span class="s2">= </span><span class="s0">Flatted</span><span class="s2">::</span><span class="s5">loop</span><span class="s0">(</span><span class="s6">false</span><span class="s0">, array_keys(</span>$value<span class="s0">), </span>$input<span class="s0">, </span>$set<span class="s0">, </span>$value<span class="s0">);</span>
+    <span class="s0">}</span>
+    <span class="s2">elseif </span><span class="s0">(is_object(</span>$value<span class="s0">) </span><span class="s2">&amp;&amp; !</span><span class="s0">in_array(</span>$value<span class="s0">, </span>$set<span class="s0">, </span><span class="s6">true</span><span class="s0">)) {</span>
+      $set<span class="s0">[] </span><span class="s2">= </span>$value<span class="s0">;</span>
+      $value <span class="s2">= </span><span class="s0">Flatted</span><span class="s2">::</span><span class="s5">loop</span><span class="s0">(</span><span class="s6">true</span><span class="s0">, Flatted</span><span class="s2">::</span><span class="s5">keys</span><span class="s0">(</span>$value<span class="s0">), </span>$input<span class="s0">, </span>$set<span class="s0">, </span>$value<span class="s0">);</span>
+    <span class="s0">}</span>
+    <span class="s2">if </span><span class="s0">(</span>$obj<span class="s0">) {</span>
+      $output<span class="s2">-&gt;</span>$key <span class="s2">= &amp;</span>$value<span class="s0">;</span>
+    <span class="s0">}</span>
+    <span class="s2">else </span><span class="s0">{</span>
+      $output<span class="s0">[</span>$key<span class="s0">] </span><span class="s2">= &amp;</span>$value<span class="s0">;</span>
+    <span class="s0">}</span>
+  <span class="s0">}</span>
+
+  <span class="s2">private static function </span><span class="s5">transform</span><span class="s0">(</span><span class="s2">&amp;</span>$known<span class="s0">, </span><span class="s2">&amp;</span>$input<span class="s0">, </span><span class="s2">&amp;</span>$value<span class="s0">) {</span>
+    <span class="s2">if </span><span class="s0">(is_array(</span>$value<span class="s0">)) {</span>
+      <span class="s2">return </span><span class="s0">array_map(</span>
+        <span class="s2">function </span><span class="s0">(</span>$value<span class="s0">) </span><span class="s2">use</span><span class="s0">(</span><span class="s2">&amp;</span>$known<span class="s0">, </span><span class="s2">&amp;</span>$input<span class="s0">) {</span>
+          <span class="s2">return </span><span class="s0">Flatted</span><span class="s2">::</span><span class="s5">relate</span><span class="s0">(</span>$known<span class="s0">, </span>$input<span class="s0">, </span>$value<span class="s0">);</span>
+        <span class="s0">},</span>
+        $value
+      <span class="s0">);</span>
+    <span class="s0">}</span>
+    <span class="s2">if </span><span class="s0">(is_object(</span>$value<span class="s0">)) {</span>
+      $object <span class="s2">= new </span><span class="s0">stdClass;</span>
+      $keys <span class="s2">= </span><span class="s0">Flatted</span><span class="s2">::</span><span class="s5">keys</span><span class="s0">(</span>$value<span class="s0">);</span>
+      <span class="s2">foreach </span><span class="s0">(</span>$keys <span class="s2">as </span>$key<span class="s0">)</span>
+        $object<span class="s2">-&gt;</span>$key <span class="s2">= </span><span class="s0">Flatted</span><span class="s2">::</span><span class="s5">relate</span><span class="s0">(</span>$known<span class="s0">, </span>$input<span class="s0">, </span>$value<span class="s2">-&gt;</span>$key<span class="s0">);</span>
+      <span class="s2">return </span>$object<span class="s0">;</span>
+    <span class="s0">}</span>
+    <span class="s2">return </span>$value<span class="s0">;</span>
+  <span class="s0">}</span>
+
+  <span class="s2">private static function </span><span class="s5">wrap</span><span class="s0">(</span>$value<span class="s0">) {</span>
+    <span class="s2">if </span><span class="s0">(is_string(</span>$value<span class="s0">)) {</span>
+      <span class="s2">return new </span><span class="s0">FlattedString(</span>$value<span class="s0">);</span>
+    <span class="s0">}</span>
+    <span class="s2">if </span><span class="s0">(is_array(</span>$value<span class="s0">)) {</span>
+      <span class="s2">return </span><span class="s0">array_map(</span><span class="s4">'Flatted::wrap'</span><span class="s0">, </span>$value<span class="s0">);</span>
+    <span class="s0">}</span>
+    <span class="s2">if </span><span class="s0">(is_object(</span>$value<span class="s0">)) {</span>
+      $keys <span class="s2">= </span><span class="s0">Flatted</span><span class="s2">::</span><span class="s5">keys</span><span class="s0">(</span>$value<span class="s0">);</span>
+      <span class="s2">foreach </span><span class="s0">(</span>$keys <span class="s2">as </span>$key<span class="s0">) {</span>
+        $value<span class="s2">-&gt;</span>$key <span class="s2">= self::</span><span class="s5">wrap</span><span class="s0">(</span>$value<span class="s2">-&gt;</span>$key<span class="s0">);</span>
+      <span class="s0">}</span>
+    <span class="s0">}</span>
+    <span class="s2">return </span>$value<span class="s0">;</span>
+  <span class="s0">}</span>
+<span class="s0">}</span>
+<span class="s0">?&gt;</span></pre>
+</body>
+</html>

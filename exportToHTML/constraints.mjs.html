@@ -1,0 +1,149 @@
+<html>
+<head>
+<title>constraints.mjs</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #0033b3;}
+.s1 { color: #080808;}
+.s2 { color: #067d17;}
+.s3 { color: #8c8c8c; font-style: italic;}
+.s4 { color: #1750eb;}
+</style>
+</head>
+<body bgcolor="#ffffff">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#c0c0c0" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+constraints.mjs</font>
+</center></td></tr></table>
+<pre><span class="s0">import </span><span class="s1">{ mixNumber } from </span><span class="s2">'motion-dom'</span><span class="s1">;</span>
+<span class="s0">import </span><span class="s1">{ progress, clamp } from </span><span class="s2">'motion-utils'</span><span class="s1">;</span>
+<span class="s0">import </span><span class="s1">{ calcLength } from </span><span class="s2">'../../../projection/geometry/delta-calc.mjs'</span><span class="s1">;</span>
+
+<span class="s3">/**</span>
+ <span class="s3">* Apply constraints to a point. These constraints are both physical along an</span>
+ <span class="s3">* axis, and an elastic factor that determines how much to constrain the point</span>
+ <span class="s3">* by if it does lie outside the defined parameters.</span>
+ <span class="s3">*/</span>
+<span class="s0">function </span><span class="s1">applyConstraints(point, { min, max }, elastic) {</span>
+    <span class="s0">if </span><span class="s1">(min !== undefined &amp;&amp; point &lt; min) {</span>
+        <span class="s3">// If we have a min point defined, and this is outside of that, constrain</span>
+        <span class="s1">point = elastic</span>
+            <span class="s1">? mixNumber(min, point, elastic.min)</span>
+            <span class="s1">: Math.max(point, min);</span>
+    <span class="s1">}</span>
+    <span class="s0">else if </span><span class="s1">(max !== undefined &amp;&amp; point &gt; max) {</span>
+        <span class="s3">// If we have a max point defined, and this is outside of that, constrain</span>
+        <span class="s1">point = elastic</span>
+            <span class="s1">? mixNumber(max, point, elastic.max)</span>
+            <span class="s1">: Math.min(point, max);</span>
+    <span class="s1">}</span>
+    <span class="s0">return </span><span class="s1">point;</span>
+<span class="s1">}</span>
+<span class="s3">/**</span>
+ <span class="s3">* Calculate constraints in terms of the viewport when defined relatively to the</span>
+ <span class="s3">* measured axis. This is measured from the nearest edge, so a max constraint of 200</span>
+ <span class="s3">* on an axis with a max value of 300 would return a constraint of 500 - axis length</span>
+ <span class="s3">*/</span>
+<span class="s0">function </span><span class="s1">calcRelativeAxisConstraints(axis, min, max) {</span>
+    <span class="s0">return </span><span class="s1">{</span>
+        <span class="s1">min: min !== undefined ? axis.min + min : undefined,</span>
+        <span class="s1">max: max !== undefined</span>
+            <span class="s1">? axis.max + max - (axis.max - axis.min)</span>
+            <span class="s1">: undefined,</span>
+    <span class="s1">};</span>
+<span class="s1">}</span>
+<span class="s3">/**</span>
+ <span class="s3">* Calculate constraints in terms of the viewport when</span>
+ <span class="s3">* defined relatively to the measured bounding box.</span>
+ <span class="s3">*/</span>
+<span class="s0">function </span><span class="s1">calcRelativeConstraints(layoutBox, { top, left, bottom, right }) {</span>
+    <span class="s0">return </span><span class="s1">{</span>
+        <span class="s1">x: calcRelativeAxisConstraints(layoutBox.x, left, right),</span>
+        <span class="s1">y: calcRelativeAxisConstraints(layoutBox.y, top, bottom),</span>
+    <span class="s1">};</span>
+<span class="s1">}</span>
+<span class="s3">/**</span>
+ <span class="s3">* Calculate viewport constraints when defined as another viewport-relative axis</span>
+ <span class="s3">*/</span>
+<span class="s0">function </span><span class="s1">calcViewportAxisConstraints(layoutAxis, constraintsAxis) {</span>
+    <span class="s0">let </span><span class="s1">min = constraintsAxis.min - layoutAxis.min;</span>
+    <span class="s0">let </span><span class="s1">max = constraintsAxis.max - layoutAxis.max;</span>
+    <span class="s3">// If the constraints axis is actually smaller than the layout axis then we can</span>
+    <span class="s3">// flip the constraints</span>
+    <span class="s0">if </span><span class="s1">(constraintsAxis.max - constraintsAxis.min &lt;</span>
+        <span class="s1">layoutAxis.max - layoutAxis.min) {</span>
+        <span class="s1">[min, max] = [max, min];</span>
+    <span class="s1">}</span>
+    <span class="s0">return </span><span class="s1">{ min, max };</span>
+<span class="s1">}</span>
+<span class="s3">/**</span>
+ <span class="s3">* Calculate viewport constraints when defined as another viewport-relative box</span>
+ <span class="s3">*/</span>
+<span class="s0">function </span><span class="s1">calcViewportConstraints(layoutBox, constraintsBox) {</span>
+    <span class="s0">return </span><span class="s1">{</span>
+        <span class="s1">x: calcViewportAxisConstraints(layoutBox.x, constraintsBox.x),</span>
+        <span class="s1">y: calcViewportAxisConstraints(layoutBox.y, constraintsBox.y),</span>
+    <span class="s1">};</span>
+<span class="s1">}</span>
+<span class="s3">/**</span>
+ <span class="s3">* Calculate a transform origin relative to the source axis, between 0-1, that results</span>
+ <span class="s3">* in an asthetically pleasing scale/transform needed to project from source to target.</span>
+ <span class="s3">*/</span>
+<span class="s0">function </span><span class="s1">calcOrigin(source, target) {</span>
+    <span class="s0">let </span><span class="s1">origin = </span><span class="s4">0.5</span><span class="s1">;</span>
+    <span class="s0">const </span><span class="s1">sourceLength = calcLength(source);</span>
+    <span class="s0">const </span><span class="s1">targetLength = calcLength(target);</span>
+    <span class="s0">if </span><span class="s1">(targetLength &gt; sourceLength) {</span>
+        <span class="s1">origin = progress(target.min, target.max - sourceLength, source.min);</span>
+    <span class="s1">}</span>
+    <span class="s0">else if </span><span class="s1">(sourceLength &gt; targetLength) {</span>
+        <span class="s1">origin = progress(source.min, source.max - targetLength, target.min);</span>
+    <span class="s1">}</span>
+    <span class="s0">return </span><span class="s1">clamp(</span><span class="s4">0</span><span class="s1">, </span><span class="s4">1</span><span class="s1">, origin);</span>
+<span class="s1">}</span>
+<span class="s3">/**</span>
+ <span class="s3">* Rebase the calculated viewport constraints relative to the layout.min point.</span>
+ <span class="s3">*/</span>
+<span class="s0">function </span><span class="s1">rebaseAxisConstraints(layout, constraints) {</span>
+    <span class="s0">const </span><span class="s1">relativeConstraints = {};</span>
+    <span class="s0">if </span><span class="s1">(constraints.min !== undefined) {</span>
+        <span class="s1">relativeConstraints.min = constraints.min - layout.min;</span>
+    <span class="s1">}</span>
+    <span class="s0">if </span><span class="s1">(constraints.max !== undefined) {</span>
+        <span class="s1">relativeConstraints.max = constraints.max - layout.min;</span>
+    <span class="s1">}</span>
+    <span class="s0">return </span><span class="s1">relativeConstraints;</span>
+<span class="s1">}</span>
+<span class="s0">const </span><span class="s1">defaultElastic = </span><span class="s4">0.35</span><span class="s1">;</span>
+<span class="s3">/**</span>
+ <span class="s3">* Accepts a dragElastic prop and returns resolved elastic values for each axis.</span>
+ <span class="s3">*/</span>
+<span class="s0">function </span><span class="s1">resolveDragElastic(dragElastic = defaultElastic) {</span>
+    <span class="s0">if </span><span class="s1">(dragElastic === </span><span class="s0">false</span><span class="s1">) {</span>
+        <span class="s1">dragElastic = </span><span class="s4">0</span><span class="s1">;</span>
+    <span class="s1">}</span>
+    <span class="s0">else if </span><span class="s1">(dragElastic === </span><span class="s0">true</span><span class="s1">) {</span>
+        <span class="s1">dragElastic = defaultElastic;</span>
+    <span class="s1">}</span>
+    <span class="s0">return </span><span class="s1">{</span>
+        <span class="s1">x: resolveAxisElastic(dragElastic, </span><span class="s2">&quot;left&quot;</span><span class="s1">, </span><span class="s2">&quot;right&quot;</span><span class="s1">),</span>
+        <span class="s1">y: resolveAxisElastic(dragElastic, </span><span class="s2">&quot;top&quot;</span><span class="s1">, </span><span class="s2">&quot;bottom&quot;</span><span class="s1">),</span>
+    <span class="s1">};</span>
+<span class="s1">}</span>
+<span class="s0">function </span><span class="s1">resolveAxisElastic(dragElastic, minLabel, maxLabel) {</span>
+    <span class="s0">return </span><span class="s1">{</span>
+        <span class="s1">min: resolvePointElastic(dragElastic, minLabel),</span>
+        <span class="s1">max: resolvePointElastic(dragElastic, maxLabel),</span>
+    <span class="s1">};</span>
+<span class="s1">}</span>
+<span class="s0">function </span><span class="s1">resolvePointElastic(dragElastic, label) {</span>
+    <span class="s0">return typeof </span><span class="s1">dragElastic === </span><span class="s2">&quot;number&quot;</span>
+        <span class="s1">? dragElastic</span>
+        <span class="s1">: dragElastic[label] || </span><span class="s4">0</span><span class="s1">;</span>
+<span class="s1">}</span>
+
+<span class="s0">export </span><span class="s1">{ applyConstraints, calcOrigin, calcRelativeAxisConstraints, calcRelativeConstraints, calcViewportAxisConstraints, calcViewportConstraints, defaultElastic, rebaseAxisConstraints, resolveAxisElastic, resolveDragElastic, resolvePointElastic };</span>
+</pre>
+</body>
+</html>

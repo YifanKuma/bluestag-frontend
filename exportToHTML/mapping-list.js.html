@@ -1,0 +1,101 @@
+<html>
+<head>
+<title>mapping-list.js</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #8c8c8c; font-style: italic;}
+.s1 { color: #080808;}
+.s2 { color: #0033b3;}
+.s3 { color: #067d17;}
+.s4 { color: #1750eb;}
+.s5 { color: #8c8c8c; font-style: italic;}
+</style>
+</head>
+<body bgcolor="#ffffff">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#c0c0c0" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+mapping-list.js</font>
+</center></td></tr></table>
+<pre><span class="s0">/* -*- Mode: js; js-indent-level: 2; -*- */</span>
+<span class="s0">/* 
+ * Copyright 2014 Mozilla Foundation and contributors 
+ * Licensed under the New BSD license. See LICENSE or: 
+ * http://opensource.org/licenses/BSD-3-Clause 
+ */</span>
+
+<span class="s2">var </span><span class="s1">util = require(</span><span class="s3">'./util'</span><span class="s1">);</span>
+
+<span class="s0">/**</span>
+ <span class="s0">* Determine whether mappingB is after mappingA with respect to generated</span>
+ <span class="s0">* position.</span>
+ <span class="s0">*/</span>
+<span class="s2">function </span><span class="s1">generatedPositionAfter(mappingA, mappingB) {</span>
+  <span class="s0">// Optimized for most common case</span>
+  <span class="s2">var </span><span class="s1">lineA = mappingA.generatedLine;</span>
+  <span class="s2">var </span><span class="s1">lineB = mappingB.generatedLine;</span>
+  <span class="s2">var </span><span class="s1">columnA = mappingA.generatedColumn;</span>
+  <span class="s2">var </span><span class="s1">columnB = mappingB.generatedColumn;</span>
+  <span class="s2">return </span><span class="s1">lineB &gt; lineA || lineB == lineA &amp;&amp; columnB &gt;= columnA ||</span>
+         <span class="s1">util.compareByGeneratedPositionsInflated(mappingA, mappingB) &lt;= </span><span class="s4">0</span><span class="s1">;</span>
+<span class="s1">}</span>
+
+<span class="s0">/**</span>
+ <span class="s0">* A data structure to provide a sorted view of accumulated mappings in a</span>
+ <span class="s0">* performance conscious manner. It trades a neglibable overhead in general</span>
+ <span class="s0">* case for a large speedup in case of mappings being added in order.</span>
+ <span class="s0">*/</span>
+<span class="s2">function </span><span class="s1">MappingList() {</span>
+  <span class="s2">this</span><span class="s1">._array = [];</span>
+  <span class="s2">this</span><span class="s1">._sorted = </span><span class="s2">true</span><span class="s1">;</span>
+  <span class="s0">// Serves as infimum</span>
+  <span class="s2">this</span><span class="s1">._last = {generatedLine: -</span><span class="s4">1</span><span class="s1">, generatedColumn: </span><span class="s4">0</span><span class="s1">};</span>
+<span class="s1">}</span>
+
+<span class="s0">/**</span>
+ <span class="s0">* Iterate through internal items. This method takes the same arguments that</span>
+ <span class="s0">* `Array.prototype.forEach` takes.</span>
+ <span class="s0">*</span>
+ <span class="s0">* NOTE: The order of the mappings is NOT guaranteed.</span>
+ <span class="s0">*/</span>
+<span class="s1">MappingList.prototype.unsortedForEach =</span>
+  <span class="s2">function </span><span class="s1">MappingList_forEach(aCallback, aThisArg) {</span>
+    <span class="s2">this</span><span class="s1">._array.forEach(aCallback, aThisArg);</span>
+  <span class="s1">};</span>
+
+<span class="s0">/**</span>
+ <span class="s0">* Add the given source mapping.</span>
+ <span class="s0">*</span>
+ <span class="s0">* </span><span class="s5">@param </span><span class="s0">Object aMapping</span>
+ <span class="s0">*/</span>
+<span class="s1">MappingList.prototype.add = </span><span class="s2">function </span><span class="s1">MappingList_add(aMapping) {</span>
+  <span class="s2">if </span><span class="s1">(generatedPositionAfter(</span><span class="s2">this</span><span class="s1">._last, aMapping)) {</span>
+    <span class="s2">this</span><span class="s1">._last = aMapping;</span>
+    <span class="s2">this</span><span class="s1">._array.push(aMapping);</span>
+  <span class="s1">} </span><span class="s2">else </span><span class="s1">{</span>
+    <span class="s2">this</span><span class="s1">._sorted = </span><span class="s2">false</span><span class="s1">;</span>
+    <span class="s2">this</span><span class="s1">._array.push(aMapping);</span>
+  <span class="s1">}</span>
+<span class="s1">};</span>
+
+<span class="s0">/**</span>
+ <span class="s0">* Returns the flat, sorted array of mappings. The mappings are sorted by</span>
+ <span class="s0">* generated position.</span>
+ <span class="s0">*</span>
+ <span class="s0">* WARNING: This method returns internal data without copying, for</span>
+ <span class="s0">* performance. The return value must NOT be mutated, and should be treated as</span>
+ <span class="s0">* an immutable borrow. If you want to take ownership, you must make your own</span>
+ <span class="s0">* copy.</span>
+ <span class="s0">*/</span>
+<span class="s1">MappingList.prototype.toArray = </span><span class="s2">function </span><span class="s1">MappingList_toArray() {</span>
+  <span class="s2">if </span><span class="s1">(!</span><span class="s2">this</span><span class="s1">._sorted) {</span>
+    <span class="s2">this</span><span class="s1">._array.sort(util.compareByGeneratedPositionsInflated);</span>
+    <span class="s2">this</span><span class="s1">._sorted = </span><span class="s2">true</span><span class="s1">;</span>
+  <span class="s1">}</span>
+  <span class="s2">return this</span><span class="s1">._array;</span>
+<span class="s1">};</span>
+
+<span class="s1">exports.MappingList = MappingList;</span>
+</pre>
+</body>
+</html>

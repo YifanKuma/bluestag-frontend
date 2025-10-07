@@ -1,0 +1,165 @@
+<html>
+<head>
+<title>remapping.mjs</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #8c8c8c; font-style: italic;}
+.s1 { color: #080808;}
+.s2 { color: #0033b3;}
+.s3 { color: #067d17;}
+.s4 { color: #1750eb;}
+</style>
+</head>
+<body bgcolor="#ffffff">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#c0c0c0" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+remapping.mjs</font>
+</center></td></tr></table>
+<pre><span class="s0">// src/build-source-map-tree.ts</span>
+<span class="s2">import </span><span class="s1">{ TraceMap } from </span><span class="s3">&quot;@jridgewell/trace-mapping&quot;</span><span class="s1">;</span>
+
+<span class="s0">// src/source-map-tree.ts</span>
+<span class="s2">import </span><span class="s1">{ GenMapping, maybeAddSegment, setIgnore, setSourceContent } from </span><span class="s3">&quot;@jridgewell/gen-mapping&quot;</span><span class="s1">;</span>
+<span class="s2">import </span><span class="s1">{ traceSegment, decodedMappings } from </span><span class="s3">&quot;@jridgewell/trace-mapping&quot;</span><span class="s1">;</span>
+<span class="s2">var </span><span class="s1">SOURCELESS_MAPPING = </span><span class="s0">/* @__PURE__ */ </span><span class="s1">SegmentObject(</span><span class="s3">&quot;&quot;</span><span class="s1">, -</span><span class="s4">1</span><span class="s1">, -</span><span class="s4">1</span><span class="s1">, </span><span class="s3">&quot;&quot;</span><span class="s1">, </span><span class="s2">null</span><span class="s1">, </span><span class="s2">false</span><span class="s1">);</span>
+<span class="s2">var </span><span class="s1">EMPTY_SOURCES = [];</span>
+<span class="s2">function </span><span class="s1">SegmentObject(source, line, column, name, content, ignore) {</span>
+  <span class="s2">return </span><span class="s1">{ source, line, column, name, content, ignore };</span>
+<span class="s1">}</span>
+<span class="s2">function </span><span class="s1">Source(map, sources, source, content, ignore) {</span>
+  <span class="s2">return </span><span class="s1">{</span>
+    <span class="s1">map,</span>
+    <span class="s1">sources,</span>
+    <span class="s1">source,</span>
+    <span class="s1">content,</span>
+    <span class="s1">ignore</span>
+  <span class="s1">};</span>
+<span class="s1">}</span>
+<span class="s2">function </span><span class="s1">MapSource(map, sources) {</span>
+  <span class="s2">return </span><span class="s1">Source(map, sources, </span><span class="s3">&quot;&quot;</span><span class="s1">, </span><span class="s2">null</span><span class="s1">, </span><span class="s2">false</span><span class="s1">);</span>
+<span class="s1">}</span>
+<span class="s2">function </span><span class="s1">OriginalSource(source, content, ignore) {</span>
+  <span class="s2">return </span><span class="s1">Source(</span><span class="s2">null</span><span class="s1">, EMPTY_SOURCES, source, content, ignore);</span>
+<span class="s1">}</span>
+<span class="s2">function </span><span class="s1">traceMappings(tree) {</span>
+  <span class="s2">const </span><span class="s1">gen = </span><span class="s2">new </span><span class="s1">GenMapping({ file: tree.map.file });</span>
+  <span class="s2">const </span><span class="s1">{ sources: rootSources, map } = tree;</span>
+  <span class="s2">const </span><span class="s1">rootNames = map.names;</span>
+  <span class="s2">const </span><span class="s1">rootMappings = decodedMappings(map);</span>
+  <span class="s2">for </span><span class="s1">(</span><span class="s2">let </span><span class="s1">i = </span><span class="s4">0</span><span class="s1">; i &lt; rootMappings.length; i++) {</span>
+    <span class="s2">const </span><span class="s1">segments = rootMappings[i];</span>
+    <span class="s2">for </span><span class="s1">(</span><span class="s2">let </span><span class="s1">j = </span><span class="s4">0</span><span class="s1">; j &lt; segments.length; j++) {</span>
+      <span class="s2">const </span><span class="s1">segment = segments[j];</span>
+      <span class="s2">const </span><span class="s1">genCol = segment[</span><span class="s4">0</span><span class="s1">];</span>
+      <span class="s2">let </span><span class="s1">traced = SOURCELESS_MAPPING;</span>
+      <span class="s2">if </span><span class="s1">(segment.length !== </span><span class="s4">1</span><span class="s1">) {</span>
+        <span class="s2">const </span><span class="s1">source2 = rootSources[segment[</span><span class="s4">1</span><span class="s1">]];</span>
+        <span class="s1">traced = originalPositionFor(</span>
+          <span class="s1">source2,</span>
+          <span class="s1">segment[</span><span class="s4">2</span><span class="s1">],</span>
+          <span class="s1">segment[</span><span class="s4">3</span><span class="s1">],</span>
+          <span class="s1">segment.length === </span><span class="s4">5 </span><span class="s1">? rootNames[segment[</span><span class="s4">4</span><span class="s1">]] : </span><span class="s3">&quot;&quot;</span>
+        <span class="s1">);</span>
+        <span class="s2">if </span><span class="s1">(traced == </span><span class="s2">null</span><span class="s1">) </span><span class="s2">continue</span><span class="s1">;</span>
+      <span class="s1">}</span>
+      <span class="s2">const </span><span class="s1">{ column, line, name, content, source, ignore } = traced;</span>
+      <span class="s1">maybeAddSegment(gen, i, genCol, source, line, column, name);</span>
+      <span class="s2">if </span><span class="s1">(source &amp;&amp; content != </span><span class="s2">null</span><span class="s1">) setSourceContent(gen, source, content);</span>
+      <span class="s2">if </span><span class="s1">(ignore) setIgnore(gen, source, </span><span class="s2">true</span><span class="s1">);</span>
+    <span class="s1">}</span>
+  <span class="s1">}</span>
+  <span class="s2">return </span><span class="s1">gen;</span>
+<span class="s1">}</span>
+<span class="s2">function </span><span class="s1">originalPositionFor(source, line, column, name) {</span>
+  <span class="s2">if </span><span class="s1">(!source.map) {</span>
+    <span class="s2">return </span><span class="s1">SegmentObject(source.source, line, column, name, source.content, source.ignore);</span>
+  <span class="s1">}</span>
+  <span class="s2">const </span><span class="s1">segment = traceSegment(source.map, line, column);</span>
+  <span class="s2">if </span><span class="s1">(segment == </span><span class="s2">null</span><span class="s1">) </span><span class="s2">return null</span><span class="s1">;</span>
+  <span class="s2">if </span><span class="s1">(segment.length === </span><span class="s4">1</span><span class="s1">) </span><span class="s2">return </span><span class="s1">SOURCELESS_MAPPING;</span>
+  <span class="s2">return </span><span class="s1">originalPositionFor(</span>
+    <span class="s1">source.sources[segment[</span><span class="s4">1</span><span class="s1">]],</span>
+    <span class="s1">segment[</span><span class="s4">2</span><span class="s1">],</span>
+    <span class="s1">segment[</span><span class="s4">3</span><span class="s1">],</span>
+    <span class="s1">segment.length === </span><span class="s4">5 </span><span class="s1">? source.map.names[segment[</span><span class="s4">4</span><span class="s1">]] : name</span>
+  <span class="s1">);</span>
+<span class="s1">}</span>
+
+<span class="s0">// src/build-source-map-tree.ts</span>
+<span class="s2">function </span><span class="s1">asArray(value) {</span>
+  <span class="s2">if </span><span class="s1">(Array.isArray(value)) </span><span class="s2">return </span><span class="s1">value;</span>
+  <span class="s2">return </span><span class="s1">[value];</span>
+<span class="s1">}</span>
+<span class="s2">function </span><span class="s1">buildSourceMapTree(input, loader) {</span>
+  <span class="s2">const </span><span class="s1">maps = asArray(input).map((m) =&gt; </span><span class="s2">new </span><span class="s1">TraceMap(m, </span><span class="s3">&quot;&quot;</span><span class="s1">));</span>
+  <span class="s2">const </span><span class="s1">map = maps.pop();</span>
+  <span class="s2">for </span><span class="s1">(</span><span class="s2">let </span><span class="s1">i = </span><span class="s4">0</span><span class="s1">; i &lt; maps.length; i++) {</span>
+    <span class="s2">if </span><span class="s1">(maps[i].sources.length &gt; </span><span class="s4">1</span><span class="s1">) {</span>
+      <span class="s2">throw new </span><span class="s1">Error(</span>
+        <span class="s3">`Transformation map </span><span class="s1">${i} </span><span class="s3">must have exactly one source file. 
+Did you specify these with the most recent transformation maps first?`</span>
+      <span class="s1">);</span>
+    <span class="s1">}</span>
+  <span class="s1">}</span>
+  <span class="s2">let </span><span class="s1">tree = build(map, loader, </span><span class="s3">&quot;&quot;</span><span class="s1">, </span><span class="s4">0</span><span class="s1">);</span>
+  <span class="s2">for </span><span class="s1">(</span><span class="s2">let </span><span class="s1">i = maps.length - </span><span class="s4">1</span><span class="s1">; i &gt;= </span><span class="s4">0</span><span class="s1">; i--) {</span>
+    <span class="s1">tree = MapSource(maps[i], [tree]);</span>
+  <span class="s1">}</span>
+  <span class="s2">return </span><span class="s1">tree;</span>
+<span class="s1">}</span>
+<span class="s2">function </span><span class="s1">build(map, loader, importer, importerDepth) {</span>
+  <span class="s2">const </span><span class="s1">{ resolvedSources, sourcesContent, ignoreList } = map;</span>
+  <span class="s2">const </span><span class="s1">depth = importerDepth + </span><span class="s4">1</span><span class="s1">;</span>
+  <span class="s2">const </span><span class="s1">children = resolvedSources.map((sourceFile, i) =&gt; {</span>
+    <span class="s2">const </span><span class="s1">ctx = {</span>
+      <span class="s1">importer,</span>
+      <span class="s1">depth,</span>
+      <span class="s1">source: sourceFile || </span><span class="s3">&quot;&quot;</span><span class="s1">,</span>
+      <span class="s1">content: </span><span class="s2">void </span><span class="s4">0</span><span class="s1">,</span>
+      <span class="s1">ignore: </span><span class="s2">void </span><span class="s4">0</span>
+    <span class="s1">};</span>
+    <span class="s2">const </span><span class="s1">sourceMap = loader(ctx.source, ctx);</span>
+    <span class="s2">const </span><span class="s1">{ source, content, ignore } = ctx;</span>
+    <span class="s2">if </span><span class="s1">(sourceMap) </span><span class="s2">return </span><span class="s1">build(</span><span class="s2">new </span><span class="s1">TraceMap(sourceMap, source), loader, source, depth);</span>
+    <span class="s2">const </span><span class="s1">sourceContent = content !== </span><span class="s2">void </span><span class="s4">0 </span><span class="s1">? content : sourcesContent ? sourcesContent[i] : </span><span class="s2">null</span><span class="s1">;</span>
+    <span class="s2">const </span><span class="s1">ignored = ignore !== </span><span class="s2">void </span><span class="s4">0 </span><span class="s1">? ignore : ignoreList ? ignoreList.includes(i) : </span><span class="s2">false</span><span class="s1">;</span>
+    <span class="s2">return </span><span class="s1">OriginalSource(source, sourceContent, ignored);</span>
+  <span class="s1">});</span>
+  <span class="s2">return </span><span class="s1">MapSource(map, children);</span>
+<span class="s1">}</span>
+
+<span class="s0">// src/source-map.ts</span>
+<span class="s2">import </span><span class="s1">{ toDecodedMap, toEncodedMap } from </span><span class="s3">&quot;@jridgewell/gen-mapping&quot;</span><span class="s1">;</span>
+<span class="s2">var </span><span class="s1">SourceMap = </span><span class="s2">class </span><span class="s1">{</span>
+  <span class="s1">constructor(map, options) {</span>
+    <span class="s2">const </span><span class="s1">out = options.decodedMappings ? toDecodedMap(map) : toEncodedMap(map);</span>
+    <span class="s2">this</span><span class="s1">.version = out.version;</span>
+    <span class="s2">this</span><span class="s1">.file = out.file;</span>
+    <span class="s2">this</span><span class="s1">.mappings = out.mappings;</span>
+    <span class="s2">this</span><span class="s1">.names = out.names;</span>
+    <span class="s2">this</span><span class="s1">.ignoreList = out.ignoreList;</span>
+    <span class="s2">this</span><span class="s1">.sourceRoot = out.sourceRoot;</span>
+    <span class="s2">this</span><span class="s1">.sources = out.sources;</span>
+    <span class="s2">if </span><span class="s1">(!options.excludeContent) {</span>
+      <span class="s2">this</span><span class="s1">.sourcesContent = out.sourcesContent;</span>
+    <span class="s1">}</span>
+  <span class="s1">}</span>
+  <span class="s1">toString() {</span>
+    <span class="s2">return </span><span class="s1">JSON.stringify(</span><span class="s2">this</span><span class="s1">);</span>
+  <span class="s1">}</span>
+<span class="s1">};</span>
+
+<span class="s0">// src/remapping.ts</span>
+<span class="s2">function </span><span class="s1">remapping(input, loader, options) {</span>
+  <span class="s2">const </span><span class="s1">opts = </span><span class="s2">typeof </span><span class="s1">options === </span><span class="s3">&quot;object&quot; </span><span class="s1">? options : { excludeContent: !!options, decodedMappings: </span><span class="s2">false </span><span class="s1">};</span>
+  <span class="s2">const </span><span class="s1">tree = buildSourceMapTree(input, loader);</span>
+  <span class="s2">return new </span><span class="s1">SourceMap(traceMappings(tree), opts);</span>
+<span class="s1">}</span>
+<span class="s2">export </span><span class="s1">{</span>
+  <span class="s1">remapping as </span><span class="s2">default</span>
+<span class="s1">};</span>
+<span class="s0">//# sourceMappingURL=remapping.mjs.map</span>
+</pre>
+</body>
+</html>

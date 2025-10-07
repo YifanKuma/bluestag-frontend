@@ -1,0 +1,370 @@
+<html>
+<head>
+<title>route-loader.js</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #067d17;}
+.s1 { color: #080808;}
+.s2 { color: #0033b3;}
+.s3 { color: #1750eb;}
+.s4 { color: #8c8c8c; font-style: italic;}
+.s5 { color: #0037a6;}
+.s6 { color: #264eff;}
+</style>
+</head>
+<body bgcolor="#ffffff">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#c0c0c0" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+route-loader.js</font>
+</center></td></tr></table>
+<pre><span class="s0">&quot;use strict&quot;</span><span class="s1">;</span>
+<span class="s1">Object.defineProperty(exports, </span><span class="s0">&quot;__esModule&quot;</span><span class="s1">, {</span>
+    <span class="s1">value: </span><span class="s2">true</span>
+<span class="s1">});</span>
+<span class="s3">0 </span><span class="s1">&amp;&amp; (module.exports = {</span>
+    <span class="s1">createRouteLoader: </span><span class="s2">null</span><span class="s1">,</span>
+    <span class="s1">getClientBuildManifest: </span><span class="s2">null</span><span class="s1">,</span>
+    <span class="s1">isAssetError: </span><span class="s2">null</span><span class="s1">,</span>
+    <span class="s1">markAssetError: </span><span class="s2">null</span>
+<span class="s1">});</span>
+<span class="s2">function </span><span class="s1">_export(target, all) {</span>
+    <span class="s2">for</span><span class="s1">(</span><span class="s2">var </span><span class="s1">name </span><span class="s2">in </span><span class="s1">all)Object.defineProperty(target, name, {</span>
+        <span class="s1">enumerable: </span><span class="s2">true</span><span class="s1">,</span>
+        <span class="s1">get: all[name]</span>
+    <span class="s1">});</span>
+<span class="s1">}</span>
+<span class="s1">_export(exports, {</span>
+    <span class="s1">createRouteLoader: </span><span class="s2">function</span><span class="s1">() {</span>
+        <span class="s2">return </span><span class="s1">createRouteLoader;</span>
+    <span class="s1">},</span>
+    <span class="s1">getClientBuildManifest: </span><span class="s2">function</span><span class="s1">() {</span>
+        <span class="s2">return </span><span class="s1">getClientBuildManifest;</span>
+    <span class="s1">},</span>
+    <span class="s1">isAssetError: </span><span class="s2">function</span><span class="s1">() {</span>
+        <span class="s2">return </span><span class="s1">isAssetError;</span>
+    <span class="s1">},</span>
+    <span class="s1">markAssetError: </span><span class="s2">function</span><span class="s1">() {</span>
+        <span class="s2">return </span><span class="s1">markAssetError;</span>
+    <span class="s1">}</span>
+<span class="s1">});</span>
+<span class="s2">const </span><span class="s1">_interop_require_default = require(</span><span class="s0">&quot;@swc/helpers/_/_interop_require_default&quot;</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">_getassetpathfromroute = </span><span class="s4">/*#__PURE__*/ </span><span class="s1">_interop_require_default._(require(</span><span class="s0">&quot;../shared/lib/router/utils/get-asset-path-from-route&quot;</span><span class="s1">));</span>
+<span class="s2">const </span><span class="s1">_trustedtypes = require(</span><span class="s0">&quot;./trusted-types&quot;</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">_requestidlecallback = require(</span><span class="s0">&quot;./request-idle-callback&quot;</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">_deploymentid = require(</span><span class="s0">&quot;../build/deployment-id&quot;</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">_encodeuripath = require(</span><span class="s0">&quot;../shared/lib/encode-uri-path&quot;</span><span class="s1">);</span>
+<span class="s4">// 3.8s was arbitrarily chosen as it's what https://web.dev/interactive</span>
+<span class="s4">// considers as &quot;Good&quot; time-to-interactive. We must assume something went</span>
+<span class="s4">// wrong beyond this point, and then fall-back to a full page transition to</span>
+<span class="s4">// show the user something of value.</span>
+<span class="s2">const </span><span class="s1">MS_MAX_IDLE_DELAY = </span><span class="s3">3800</span><span class="s1">;</span>
+<span class="s2">function </span><span class="s1">withFuture(key, map, generator) {</span>
+    <span class="s2">let </span><span class="s1">entry = map.get(key);</span>
+    <span class="s2">if </span><span class="s1">(entry) {</span>
+        <span class="s2">if </span><span class="s1">(</span><span class="s0">'future' </span><span class="s2">in </span><span class="s1">entry) {</span>
+            <span class="s2">return </span><span class="s1">entry.future;</span>
+        <span class="s1">}</span>
+        <span class="s2">return </span><span class="s1">Promise.resolve(entry);</span>
+    <span class="s1">}</span>
+    <span class="s2">let </span><span class="s1">resolver;</span>
+    <span class="s2">const </span><span class="s1">prom = </span><span class="s2">new </span><span class="s1">Promise((resolve)=&gt;{</span>
+        <span class="s1">resolver = resolve;</span>
+    <span class="s1">});</span>
+    <span class="s1">map.set(key, {</span>
+        <span class="s1">resolve: resolver,</span>
+        <span class="s1">future: prom</span>
+    <span class="s1">});</span>
+    <span class="s2">return </span><span class="s1">generator ? generator().then((value)=&gt;{</span>
+        <span class="s1">resolver(value);</span>
+        <span class="s2">return </span><span class="s1">value;</span>
+    <span class="s1">}).catch((err)=&gt;{</span>
+        <span class="s1">map.delete(key);</span>
+        <span class="s2">throw </span><span class="s1">err;</span>
+    <span class="s1">}) : prom;</span>
+<span class="s1">}</span>
+<span class="s2">const </span><span class="s1">ASSET_LOAD_ERROR = Symbol(</span><span class="s0">'ASSET_LOAD_ERROR'</span><span class="s1">);</span>
+<span class="s2">function </span><span class="s1">markAssetError(err) {</span>
+    <span class="s2">return </span><span class="s1">Object.defineProperty(err, ASSET_LOAD_ERROR, {});</span>
+<span class="s1">}</span>
+<span class="s2">function </span><span class="s1">isAssetError(err) {</span>
+    <span class="s2">return </span><span class="s1">err &amp;&amp; ASSET_LOAD_ERROR </span><span class="s2">in </span><span class="s1">err;</span>
+<span class="s1">}</span>
+<span class="s2">function </span><span class="s1">hasPrefetch(link) {</span>
+    <span class="s2">try </span><span class="s1">{</span>
+        <span class="s1">link = document.createElement(</span><span class="s0">'link'</span><span class="s1">);</span>
+        <span class="s2">return</span><span class="s1">(</span><span class="s4">// detect IE11 since it supports prefetch but isn't detected</span>
+        <span class="s4">// with relList.support</span>
+        <span class="s1">!!window.MSInputMethodContext &amp;&amp; !!document.documentMode || link.relList.supports(</span><span class="s0">'prefetch'</span><span class="s1">));</span>
+    <span class="s1">} </span><span class="s2">catch </span><span class="s1">(e) {</span>
+        <span class="s2">return false</span><span class="s1">;</span>
+    <span class="s1">}</span>
+<span class="s1">}</span>
+<span class="s2">const </span><span class="s1">canPrefetch = hasPrefetch();</span>
+<span class="s2">const </span><span class="s1">getAssetQueryString = ()=&gt;{</span>
+    <span class="s2">return </span><span class="s1">(</span><span class="s3">0</span><span class="s1">, _deploymentid.getDeploymentIdQueryOrEmptyString)();</span>
+<span class="s1">};</span>
+<span class="s2">function </span><span class="s1">prefetchViaDom(href, as, link) {</span>
+    <span class="s2">return new </span><span class="s1">Promise((resolve, reject)=&gt;{</span>
+        <span class="s2">const </span><span class="s1">selector = </span><span class="s0">'</span><span class="s5">\n      </span><span class="s0">link[rel=&quot;prefetch&quot;][href^=&quot;' </span><span class="s1">+ href + </span><span class="s0">'&quot;],</span><span class="s5">\n      </span><span class="s0">link[rel=&quot;preload&quot;][href^=&quot;' </span><span class="s1">+ href + </span><span class="s0">'&quot;],</span><span class="s5">\n      </span><span class="s0">script[src^=&quot;' </span><span class="s1">+ href + </span><span class="s0">'&quot;]'</span><span class="s1">;</span>
+        <span class="s2">if </span><span class="s1">(document.querySelector(selector)) {</span>
+            <span class="s2">return </span><span class="s1">resolve();</span>
+        <span class="s1">}</span>
+        <span class="s1">link = document.createElement(</span><span class="s0">'link'</span><span class="s1">);</span>
+        <span class="s4">// The order of property assignment here is intentional:</span>
+        <span class="s2">if </span><span class="s1">(as) link.as = as;</span>
+        <span class="s1">link.rel = </span><span class="s0">&quot;prefetch&quot;</span><span class="s1">;</span>
+        <span class="s1">link.crossOrigin = process.env.__NEXT_CROSS_ORIGIN;</span>
+        <span class="s1">link.onload = resolve;</span>
+        <span class="s1">link.onerror = ()=&gt;reject(markAssetError(Object.defineProperty(</span><span class="s2">new </span><span class="s1">Error(</span><span class="s0">&quot;Failed to prefetch: &quot; </span><span class="s1">+ href), </span><span class="s0">&quot;__NEXT_ERROR_CODE&quot;</span><span class="s1">, {</span>
+                <span class="s1">value: </span><span class="s0">&quot;E268&quot;</span><span class="s1">,</span>
+                <span class="s1">enumerable: </span><span class="s2">false</span><span class="s1">,</span>
+                <span class="s1">configurable: </span><span class="s2">true</span>
+            <span class="s1">})));</span>
+        <span class="s4">// `href` should always be last:</span>
+        <span class="s1">link.href = href;</span>
+        <span class="s1">document.head.appendChild(link);</span>
+    <span class="s1">});</span>
+<span class="s1">}</span>
+<span class="s2">function </span><span class="s1">appendScript(src, script) {</span>
+    <span class="s2">return new </span><span class="s1">Promise((resolve, reject)=&gt;{</span>
+        <span class="s1">script = document.createElement(</span><span class="s0">'script'</span><span class="s1">);</span>
+        <span class="s4">// The order of property assignment here is intentional.</span>
+        <span class="s4">// 1. Setup success/failure hooks in case the browser synchronously</span>
+        <span class="s4">//    executes when `src` is set.</span>
+        <span class="s1">script.onload = resolve;</span>
+        <span class="s1">script.onerror = ()=&gt;reject(markAssetError(Object.defineProperty(</span><span class="s2">new </span><span class="s1">Error(</span><span class="s0">&quot;Failed to load script: &quot; </span><span class="s1">+ src), </span><span class="s0">&quot;__NEXT_ERROR_CODE&quot;</span><span class="s1">, {</span>
+                <span class="s1">value: </span><span class="s0">&quot;E74&quot;</span><span class="s1">,</span>
+                <span class="s1">enumerable: </span><span class="s2">false</span><span class="s1">,</span>
+                <span class="s1">configurable: </span><span class="s2">true</span>
+            <span class="s1">})));</span>
+        <span class="s4">// 2. Configure the cross-origin attribute before setting `src` in case the</span>
+        <span class="s4">//    browser begins to fetch.</span>
+        <span class="s1">script.crossOrigin = process.env.__NEXT_CROSS_ORIGIN;</span>
+        <span class="s4">// 3. Finally, set the source and inject into the DOM in case the child</span>
+        <span class="s4">//    must be appended for fetching to start.</span>
+        <span class="s1">script.src = src;</span>
+        <span class="s1">document.body.appendChild(script);</span>
+    <span class="s1">});</span>
+<span class="s1">}</span>
+<span class="s4">// We wait for pages to be built in dev before we start the route transition</span>
+<span class="s4">// timeout to prevent an un-necessary hard navigation in development.</span>
+<span class="s2">let </span><span class="s1">devBuildPromise;</span>
+<span class="s4">// Resolve a promise that times out after given amount of milliseconds.</span>
+<span class="s2">function </span><span class="s1">resolvePromiseWithTimeout(p, ms, err) {</span>
+    <span class="s2">return new </span><span class="s1">Promise((resolve, reject)=&gt;{</span>
+        <span class="s2">let </span><span class="s1">cancelled = </span><span class="s2">false</span><span class="s1">;</span>
+        <span class="s1">p.then((r)=&gt;{</span>
+            <span class="s4">// Resolved, cancel the timeout</span>
+            <span class="s1">cancelled = </span><span class="s2">true</span><span class="s1">;</span>
+            <span class="s1">resolve(r);</span>
+        <span class="s1">}).catch(reject);</span>
+        <span class="s4">// We wrap these checks separately for better dead-code elimination in</span>
+        <span class="s4">// production bundles.</span>
+        <span class="s2">if </span><span class="s1">(process.env.NODE_ENV === </span><span class="s0">'development'</span><span class="s1">) {</span>
+            <span class="s1">;</span>
+            <span class="s1">(devBuildPromise || Promise.resolve()).then(()=&gt;{</span>
+                <span class="s1">(</span><span class="s3">0</span><span class="s1">, _requestidlecallback.requestIdleCallback)(()=&gt;setTimeout(()=&gt;{</span>
+                        <span class="s2">if </span><span class="s1">(!cancelled) {</span>
+                            <span class="s1">reject(err);</span>
+                        <span class="s1">}</span>
+                    <span class="s1">}, ms));</span>
+            <span class="s1">});</span>
+        <span class="s1">}</span>
+        <span class="s2">if </span><span class="s1">(process.env.NODE_ENV !== </span><span class="s0">'development'</span><span class="s1">) {</span>
+            <span class="s1">(</span><span class="s3">0</span><span class="s1">, _requestidlecallback.requestIdleCallback)(()=&gt;setTimeout(()=&gt;{</span>
+                    <span class="s2">if </span><span class="s1">(!cancelled) {</span>
+                        <span class="s1">reject(err);</span>
+                    <span class="s1">}</span>
+                <span class="s1">}, ms));</span>
+        <span class="s1">}</span>
+    <span class="s1">});</span>
+<span class="s1">}</span>
+<span class="s2">function </span><span class="s1">getClientBuildManifest() {</span>
+    <span class="s2">if </span><span class="s1">(self.__BUILD_MANIFEST) {</span>
+        <span class="s2">return </span><span class="s1">Promise.resolve(self.__BUILD_MANIFEST);</span>
+    <span class="s1">}</span>
+    <span class="s2">const </span><span class="s1">onBuildManifest = </span><span class="s2">new </span><span class="s1">Promise((resolve)=&gt;{</span>
+        <span class="s4">// Mandatory because this is not concurrent safe:</span>
+        <span class="s2">const </span><span class="s1">cb = self.__BUILD_MANIFEST_CB;</span>
+        <span class="s1">self.__BUILD_MANIFEST_CB = ()=&gt;{</span>
+            <span class="s1">resolve(self.__BUILD_MANIFEST);</span>
+            <span class="s1">cb &amp;&amp; cb();</span>
+        <span class="s1">};</span>
+    <span class="s1">});</span>
+    <span class="s2">return </span><span class="s1">resolvePromiseWithTimeout(onBuildManifest, MS_MAX_IDLE_DELAY, markAssetError(Object.defineProperty(</span><span class="s2">new </span><span class="s1">Error(</span><span class="s0">'Failed to load client build manifest'</span><span class="s1">), </span><span class="s0">&quot;__NEXT_ERROR_CODE&quot;</span><span class="s1">, {</span>
+        <span class="s1">value: </span><span class="s0">&quot;E273&quot;</span><span class="s1">,</span>
+        <span class="s1">enumerable: </span><span class="s2">false</span><span class="s1">,</span>
+        <span class="s1">configurable: </span><span class="s2">true</span>
+    <span class="s1">})));</span>
+<span class="s1">}</span>
+<span class="s2">function </span><span class="s1">getFilesForRoute(assetPrefix, route) {</span>
+    <span class="s2">if </span><span class="s1">(process.env.NODE_ENV === </span><span class="s0">'development'</span><span class="s1">) {</span>
+        <span class="s2">const </span><span class="s1">scriptUrl = assetPrefix + </span><span class="s0">'/_next/static/chunks/pages' </span><span class="s1">+ (</span><span class="s3">0</span><span class="s1">, _encodeuripath.encodeURIPath)((</span><span class="s3">0</span><span class="s1">, _getassetpathfromroute.default)(route, </span><span class="s0">'.js'</span><span class="s1">)) + getAssetQueryString();</span>
+        <span class="s2">return </span><span class="s1">Promise.resolve({</span>
+            <span class="s1">scripts: [</span>
+                <span class="s1">(</span><span class="s3">0</span><span class="s1">, _trustedtypes.__unsafeCreateTrustedScriptURL)(scriptUrl)</span>
+            <span class="s1">],</span>
+            <span class="s4">// Styles are handled by `style-loader` in development:</span>
+            <span class="s1">css: []</span>
+        <span class="s1">});</span>
+    <span class="s1">}</span>
+    <span class="s2">return </span><span class="s1">getClientBuildManifest().then((manifest)=&gt;{</span>
+        <span class="s2">if </span><span class="s1">(!(route </span><span class="s2">in </span><span class="s1">manifest)) {</span>
+            <span class="s2">throw </span><span class="s1">markAssetError(Object.defineProperty(</span><span class="s2">new </span><span class="s1">Error(</span><span class="s0">&quot;Failed to lookup route: &quot; </span><span class="s1">+ route), </span><span class="s0">&quot;__NEXT_ERROR_CODE&quot;</span><span class="s1">, {</span>
+                <span class="s1">value: </span><span class="s0">&quot;E446&quot;</span><span class="s1">,</span>
+                <span class="s1">enumerable: </span><span class="s2">false</span><span class="s1">,</span>
+                <span class="s1">configurable: </span><span class="s2">true</span>
+            <span class="s1">}));</span>
+        <span class="s1">}</span>
+        <span class="s2">const </span><span class="s1">allFiles = manifest[route].map((entry)=&gt;assetPrefix + </span><span class="s0">'/_next/' </span><span class="s1">+ (</span><span class="s3">0</span><span class="s1">, _encodeuripath.encodeURIPath)(entry));</span>
+        <span class="s2">return </span><span class="s1">{</span>
+            <span class="s1">scripts: allFiles.filter((v)=&gt;v.endsWith(</span><span class="s0">'.js'</span><span class="s1">)).map((v)=&gt;(</span><span class="s3">0</span><span class="s1">, _trustedtypes.__unsafeCreateTrustedScriptURL)(v) + getAssetQueryString()),</span>
+            <span class="s1">css: allFiles.filter((v)=&gt;v.endsWith(</span><span class="s0">'.css'</span><span class="s1">)).map((v)=&gt;v + getAssetQueryString())</span>
+        <span class="s1">};</span>
+    <span class="s1">});</span>
+<span class="s1">}</span>
+<span class="s2">function </span><span class="s1">createRouteLoader(assetPrefix) {</span>
+    <span class="s2">const </span><span class="s1">entrypoints = </span><span class="s2">new </span><span class="s1">Map();</span>
+    <span class="s2">const </span><span class="s1">loadedScripts = </span><span class="s2">new </span><span class="s1">Map();</span>
+    <span class="s2">const </span><span class="s1">styleSheets = </span><span class="s2">new </span><span class="s1">Map();</span>
+    <span class="s2">const </span><span class="s1">routes = </span><span class="s2">new </span><span class="s1">Map();</span>
+    <span class="s2">function </span><span class="s1">maybeExecuteScript(src) {</span>
+        <span class="s4">// With HMR we might need to &quot;reload&quot; scripts when they are</span>
+        <span class="s4">// disposed and readded. Executing scripts twice has no functional</span>
+        <span class="s4">// differences</span>
+        <span class="s2">if </span><span class="s1">(process.env.NODE_ENV !== </span><span class="s0">'development'</span><span class="s1">) {</span>
+            <span class="s2">let </span><span class="s1">prom = loadedScripts.get(src.toString());</span>
+            <span class="s2">if </span><span class="s1">(prom) {</span>
+                <span class="s2">return </span><span class="s1">prom;</span>
+            <span class="s1">}</span>
+            <span class="s4">// Skip executing script if it's already in the DOM:</span>
+            <span class="s2">if </span><span class="s1">(document.querySelector(</span><span class="s0">'script[src^=&quot;' </span><span class="s1">+ src + </span><span class="s0">'&quot;]'</span><span class="s1">)) {</span>
+                <span class="s2">return </span><span class="s1">Promise.resolve();</span>
+            <span class="s1">}</span>
+            <span class="s1">loadedScripts.set(src.toString(), prom = appendScript(src));</span>
+            <span class="s2">return </span><span class="s1">prom;</span>
+        <span class="s1">} </span><span class="s2">else </span><span class="s1">{</span>
+            <span class="s2">return </span><span class="s1">appendScript(src);</span>
+        <span class="s1">}</span>
+    <span class="s1">}</span>
+    <span class="s2">function </span><span class="s1">fetchStyleSheet(href) {</span>
+        <span class="s2">let </span><span class="s1">prom = styleSheets.get(href);</span>
+        <span class="s2">if </span><span class="s1">(prom) {</span>
+            <span class="s2">return </span><span class="s1">prom;</span>
+        <span class="s1">}</span>
+        <span class="s1">styleSheets.set(href, prom = fetch(href, {</span>
+            <span class="s1">credentials: </span><span class="s0">'same-origin'</span>
+        <span class="s1">}).then((res)=&gt;{</span>
+            <span class="s2">if </span><span class="s1">(!res.ok) {</span>
+                <span class="s2">throw </span><span class="s1">Object.defineProperty(</span><span class="s2">new </span><span class="s1">Error(</span><span class="s0">&quot;Failed to load stylesheet: &quot; </span><span class="s1">+ href), </span><span class="s0">&quot;__NEXT_ERROR_CODE&quot;</span><span class="s1">, {</span>
+                    <span class="s1">value: </span><span class="s0">&quot;E189&quot;</span><span class="s1">,</span>
+                    <span class="s1">enumerable: </span><span class="s2">false</span><span class="s1">,</span>
+                    <span class="s1">configurable: </span><span class="s2">true</span>
+                <span class="s1">});</span>
+            <span class="s1">}</span>
+            <span class="s2">return </span><span class="s1">res.text().then((text)=&gt;({</span>
+                    <span class="s1">href: href,</span>
+                    <span class="s1">content: text</span>
+                <span class="s1">}));</span>
+        <span class="s1">}).catch((err)=&gt;{</span>
+            <span class="s2">throw </span><span class="s1">markAssetError(err);</span>
+        <span class="s1">}));</span>
+        <span class="s2">return </span><span class="s1">prom;</span>
+    <span class="s1">}</span>
+    <span class="s2">return </span><span class="s1">{</span>
+        <span class="s1">whenEntrypoint (route) {</span>
+            <span class="s2">return </span><span class="s1">withFuture(route, entrypoints);</span>
+        <span class="s1">},</span>
+        <span class="s1">onEntrypoint (route, execute) {</span>
+            <span class="s1">;</span>
+            <span class="s1">(execute ? Promise.resolve().then(()=&gt;execute()).then((exports1)=&gt;({</span>
+                    <span class="s1">component: exports1 &amp;&amp; exports1.default || exports1,</span>
+                    <span class="s1">exports: exports1</span>
+                <span class="s1">}), (err)=&gt;({</span>
+                    <span class="s1">error: err</span>
+                <span class="s1">})) : Promise.resolve(undefined)).then((input)=&gt;{</span>
+                <span class="s2">const </span><span class="s1">old = entrypoints.get(route);</span>
+                <span class="s2">if </span><span class="s1">(old &amp;&amp; </span><span class="s0">'resolve' </span><span class="s2">in </span><span class="s1">old) {</span>
+                    <span class="s2">if </span><span class="s1">(input) {</span>
+                        <span class="s1">entrypoints.set(route, input);</span>
+                        <span class="s1">old.resolve(input);</span>
+                    <span class="s1">}</span>
+                <span class="s1">} </span><span class="s2">else </span><span class="s1">{</span>
+                    <span class="s2">if </span><span class="s1">(input) {</span>
+                        <span class="s1">entrypoints.set(route, input);</span>
+                    <span class="s1">} </span><span class="s2">else </span><span class="s1">{</span>
+                        <span class="s1">entrypoints.delete(route);</span>
+                    <span class="s1">}</span>
+                    <span class="s4">// when this entrypoint has been resolved before</span>
+                    <span class="s4">// the route is outdated and we want to invalidate</span>
+                    <span class="s4">// this cache entry</span>
+                    <span class="s1">routes.delete(route);</span>
+                <span class="s1">}</span>
+            <span class="s1">});</span>
+        <span class="s1">},</span>
+        <span class="s1">loadRoute (route, prefetch) {</span>
+            <span class="s2">return </span><span class="s1">withFuture(route, routes, ()=&gt;{</span>
+                <span class="s2">let </span><span class="s1">devBuildPromiseResolve;</span>
+                <span class="s2">if </span><span class="s1">(process.env.NODE_ENV === </span><span class="s0">'development'</span><span class="s1">) {</span>
+                    <span class="s1">devBuildPromise = </span><span class="s2">new </span><span class="s1">Promise((resolve)=&gt;{</span>
+                        <span class="s1">devBuildPromiseResolve = resolve;</span>
+                    <span class="s1">});</span>
+                <span class="s1">}</span>
+                <span class="s2">return </span><span class="s1">resolvePromiseWithTimeout(getFilesForRoute(assetPrefix, route).then((param)=&gt;{</span>
+                    <span class="s2">let </span><span class="s1">{ scripts, css } = param;</span>
+                    <span class="s2">return </span><span class="s1">Promise.all([</span>
+                        <span class="s1">entrypoints.has(route) ? [] : Promise.all(scripts.map(maybeExecuteScript)),</span>
+                        <span class="s1">Promise.all(css.map(fetchStyleSheet))</span>
+                    <span class="s1">]);</span>
+                <span class="s1">}).then((res)=&gt;{</span>
+                    <span class="s2">return this</span><span class="s1">.whenEntrypoint(route).then((entrypoint)=&gt;({</span>
+                            <span class="s1">entrypoint,</span>
+                            <span class="s1">styles: res[</span><span class="s3">1</span><span class="s1">]</span>
+                        <span class="s1">}));</span>
+                <span class="s1">}), MS_MAX_IDLE_DELAY, markAssetError(Object.defineProperty(</span><span class="s2">new </span><span class="s1">Error(</span><span class="s0">&quot;Route did not complete loading: &quot; </span><span class="s1">+ route), </span><span class="s0">&quot;__NEXT_ERROR_CODE&quot;</span><span class="s1">, {</span>
+                    <span class="s1">value: </span><span class="s0">&quot;E12&quot;</span><span class="s1">,</span>
+                    <span class="s1">enumerable: </span><span class="s2">false</span><span class="s1">,</span>
+                    <span class="s1">configurable: </span><span class="s2">true</span>
+                <span class="s1">}))).then((param)=&gt;{</span>
+                    <span class="s2">let </span><span class="s1">{ entrypoint, styles } = param;</span>
+                    <span class="s2">const </span><span class="s1">res = Object.assign({</span>
+                        <span class="s1">styles: styles</span>
+                    <span class="s1">}, entrypoint);</span>
+                    <span class="s2">return </span><span class="s0">'error' </span><span class="s2">in </span><span class="s1">entrypoint ? entrypoint : res;</span>
+                <span class="s1">}).catch((err)=&gt;{</span>
+                    <span class="s2">if </span><span class="s1">(prefetch) {</span>
+                        <span class="s4">// we don't want to cache errors during prefetch</span>
+                        <span class="s2">throw </span><span class="s1">err;</span>
+                    <span class="s1">}</span>
+                    <span class="s2">return </span><span class="s1">{</span>
+                        <span class="s1">error: err</span>
+                    <span class="s1">};</span>
+                <span class="s1">}).finally(()=&gt;devBuildPromiseResolve == </span><span class="s2">null </span><span class="s1">? </span><span class="s2">void </span><span class="s3">0 </span><span class="s1">: devBuildPromiseResolve());</span>
+            <span class="s1">});</span>
+        <span class="s1">},</span>
+        <span class="s1">prefetch (route) {</span>
+            <span class="s4">// https://github.com/GoogleChromeLabs/quicklink/blob/453a661fa1fa940e2d2e044452398e38c67a98fb/src/index.mjs#L115-L118</span>
+            <span class="s4">// License: Apache 2.0</span>
+            <span class="s2">let </span><span class="s1">cn;</span>
+            <span class="s2">if </span><span class="s1">(cn = navigator.connection) {</span>
+                <span class="s4">// Don't prefetch if using 2G or if Save-Data is enabled.</span>
+                <span class="s2">if </span><span class="s1">(cn.saveData || </span><span class="s6">/2g/</span><span class="s1">.test(cn.effectiveType)) </span><span class="s2">return </span><span class="s1">Promise.resolve();</span>
+            <span class="s1">}</span>
+            <span class="s2">return </span><span class="s1">getFilesForRoute(assetPrefix, route).then((output)=&gt;Promise.all(canPrefetch ? output.scripts.map((script)=&gt;prefetchViaDom(script.toString(), </span><span class="s0">'script'</span><span class="s1">)) : [])).then(()=&gt;{</span>
+                <span class="s1">(</span><span class="s3">0</span><span class="s1">, _requestidlecallback.requestIdleCallback)(()=&gt;</span><span class="s2">this</span><span class="s1">.loadRoute(route, </span><span class="s2">true</span><span class="s1">).catch(()=&gt;{}));</span>
+            <span class="s1">}).catch(</span><span class="s4">// swallow prefetch errors</span>
+            <span class="s1">()=&gt;{});</span>
+        <span class="s1">}</span>
+    <span class="s1">};</span>
+<span class="s1">}</span>
+
+<span class="s2">if </span><span class="s1">((</span><span class="s2">typeof </span><span class="s1">exports.default === </span><span class="s0">'function' </span><span class="s1">|| (</span><span class="s2">typeof </span><span class="s1">exports.default === </span><span class="s0">'object' </span><span class="s1">&amp;&amp; exports.default !== </span><span class="s2">null</span><span class="s1">)) &amp;&amp; </span><span class="s2">typeof </span><span class="s1">exports.default.__esModule === </span><span class="s0">'undefined'</span><span class="s1">) {</span>
+  <span class="s1">Object.defineProperty(exports.default, </span><span class="s0">'__esModule'</span><span class="s1">, { value: </span><span class="s2">true </span><span class="s1">});</span>
+  <span class="s1">Object.assign(exports.default, exports);</span>
+  <span class="s1">module.exports = exports.default;</span>
+<span class="s1">}</span>
+
+<span class="s4">//# sourceMappingURL=route-loader.js.map</span></pre>
+</body>
+</html>

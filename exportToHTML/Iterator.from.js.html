@@ -1,0 +1,190 @@
+<html>
+<head>
+<title>Iterator.from.js</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #067d17;}
+.s1 { color: #080808;}
+.s2 { color: #0033b3;}
+.s3 { color: #1750eb;}
+.s4 { color: #8c8c8c; font-style: italic;}
+</style>
+</head>
+<body bgcolor="#ffffff">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#c0c0c0" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+Iterator.from.js</font>
+</center></td></tr></table>
+<pre><span class="s0">'use strict'</span><span class="s1">;</span>
+
+<span class="s2">var </span><span class="s1">defineProperties = require(</span><span class="s0">'define-properties'</span><span class="s1">);</span>
+<span class="s2">var </span><span class="s1">test = require(</span><span class="s0">'tape'</span><span class="s1">);</span>
+<span class="s2">var </span><span class="s1">callBind = require(</span><span class="s0">'call-bind'</span><span class="s1">);</span>
+<span class="s2">var </span><span class="s1">functionsHaveNames = require(</span><span class="s0">'functions-have-names'</span><span class="s1">)();</span>
+<span class="s2">var </span><span class="s1">hasProto = require(</span><span class="s0">'has-proto'</span><span class="s1">)();</span>
+<span class="s2">var </span><span class="s1">forEach = require(</span><span class="s0">'for-each'</span><span class="s1">);</span>
+<span class="s2">var </span><span class="s1">debug = require(</span><span class="s0">'object-inspect'</span><span class="s1">);</span>
+<span class="s2">var </span><span class="s1">v = require(</span><span class="s0">'es-value-fixtures'</span><span class="s1">);</span>
+<span class="s2">var </span><span class="s1">hasSymbols = require(</span><span class="s0">'has-symbols/shams'</span><span class="s1">)();</span>
+<span class="s2">var </span><span class="s1">mockProperty = require(</span><span class="s0">'mock-property'</span><span class="s1">);</span>
+
+<span class="s2">var </span><span class="s1">index = require(</span><span class="s0">'../Iterator.from'</span><span class="s1">);</span>
+<span class="s2">var </span><span class="s1">impl = require(</span><span class="s0">'../Iterator.from/implementation'</span><span class="s1">);</span>
+
+<span class="s2">var </span><span class="s1">isEnumerable = Object.prototype.propertyIsEnumerable;</span>
+
+<span class="s2">var </span><span class="s1">testIterator = require(</span><span class="s0">'./helpers/testIterator'</span><span class="s1">);</span>
+
+<span class="s2">var </span><span class="s1">$Iterator = require(</span><span class="s0">'../Iterator/implementation'</span><span class="s1">);</span>
+<span class="s2">var </span><span class="s1">iterProto = require(</span><span class="s0">'iterator.prototype'</span><span class="s1">);</span>
+
+<span class="s2">var </span><span class="s1">getCodePoints = </span><span class="s2">function </span><span class="s1">getCodePoints(str) {</span>
+	<span class="s2">var </span><span class="s1">chars = [];</span>
+	<span class="s2">for </span><span class="s1">(</span><span class="s2">var </span><span class="s1">i = </span><span class="s3">0</span><span class="s1">; i &lt; str.length; i++) {</span>
+		<span class="s2">var </span><span class="s1">c1 = str.charCodeAt(i);</span>
+		<span class="s2">if </span><span class="s1">(c1 &gt;= </span><span class="s3">0xD800 </span><span class="s1">&amp;&amp; c1 &lt; </span><span class="s3">0xDC00 </span><span class="s1">&amp;&amp; i + </span><span class="s3">1 </span><span class="s1">&lt; str.length) {</span>
+			<span class="s2">var </span><span class="s1">c2 = str.charCodeAt(i + </span><span class="s3">1</span><span class="s1">);</span>
+			<span class="s2">if </span><span class="s1">(c2 &gt;= </span><span class="s3">0xDC00 </span><span class="s1">&amp;&amp; c2 &lt; </span><span class="s3">0xE000</span><span class="s1">) {</span>
+				<span class="s1">chars.push(str.charAt(i) + str.charAt(i + </span><span class="s3">1</span><span class="s1">));</span>
+				<span class="s1">i += </span><span class="s3">1</span><span class="s1">;</span>
+				<span class="s2">continue</span><span class="s1">; </span><span class="s4">// eslint-disable-line no-continue, no-restricted-syntax</span>
+			<span class="s1">}</span>
+		<span class="s1">}</span>
+		<span class="s1">chars.push(str.charAt(i));</span>
+	<span class="s1">}</span>
+	<span class="s2">return </span><span class="s1">chars;</span>
+<span class="s1">};</span>
+
+<span class="s1">module.exports = {</span>
+	<span class="s1">tests: </span><span class="s2">function </span><span class="s1">(from, name, t) {</span>
+		<span class="s1">t[</span><span class="s0">'throws'</span><span class="s1">](</span>
+			<span class="s2">function </span><span class="s1">() { </span><span class="s2">return new </span><span class="s1">from(); }, </span><span class="s4">// eslint-disable-line new-cap</span>
+			<span class="s1">TypeError,</span>
+			<span class="s0">'`' </span><span class="s1">+ name + </span><span class="s0">'` itself is not a constructor'</span>
+		<span class="s1">);</span>
+		<span class="s1">t[</span><span class="s0">'throws'</span><span class="s1">](</span>
+			<span class="s2">function </span><span class="s1">() { </span><span class="s2">return new </span><span class="s1">from({}); }, </span><span class="s4">// eslint-disable-line new-cap</span>
+			<span class="s1">TypeError,</span>
+			<span class="s0">'`' </span><span class="s1">+ name + </span><span class="s0">'` itself is not a constructor, with an argument'</span>
+		<span class="s1">);</span>
+
+		<span class="s1">forEach(v.primitives.concat(v.objects), </span><span class="s2">function </span><span class="s1">(nonIterator) {</span>
+			<span class="s2">if </span><span class="s1">(</span><span class="s2">typeof </span><span class="s1">nonIterator !== </span><span class="s0">'string'</span><span class="s1">) {</span>
+				<span class="s1">t[</span><span class="s0">'throws'</span><span class="s1">](</span>
+					<span class="s2">function </span><span class="s1">() { from(nonIterator).next(); },</span>
+					<span class="s1">TypeError,</span>
+					<span class="s1">debug(nonIterator) + </span><span class="s0">' is not an iterable Object'</span>
+				<span class="s1">);</span>
+			<span class="s1">}</span>
+		<span class="s1">});</span>
+
+		<span class="s1">t.test(</span><span class="s0">'actual iteration'</span><span class="s1">, { skip: !hasSymbols }, </span><span class="s2">function </span><span class="s1">(st) {</span>
+			<span class="s1">forEach(v.nonFunctions, </span><span class="s2">function </span><span class="s1">(nonFunction) {</span>
+				<span class="s2">var </span><span class="s1">badIterable = {};</span>
+				<span class="s1">badIterable[Symbol.iterator] = nonFunction;</span>
+				<span class="s1">st[</span><span class="s0">'throws'</span><span class="s1">](</span>
+					<span class="s2">function </span><span class="s1">() { from(badIterable).next(); },</span>
+					<span class="s1">TypeError,</span>
+					<span class="s1">debug(badIterable) + </span><span class="s0">' is not a function'</span>
+				<span class="s1">);</span>
+			<span class="s1">});</span>
+
+			<span class="s4">// st['throws'](</span>
+			<span class="s4">//  function () { return new from([]); }, // eslint-disable-line new-cap</span>
+			<span class="s4">//  RangeError,</span>
+			<span class="s4">//  '`' + name + '` iterator is not a constructor'</span>
+			<span class="s4">// );</span>
+
+			<span class="s1">forEach(v.strings, </span><span class="s2">function </span><span class="s1">(string) {</span>
+				<span class="s2">var </span><span class="s1">stringIt = from(string);</span>
+				<span class="s1">testIterator(stringIt, getCodePoints(string), st, </span><span class="s0">'string iterator: ' </span><span class="s1">+ debug(string));</span>
+			<span class="s1">});</span>
+
+			<span class="s2">var </span><span class="s1">arrayIt = from([</span><span class="s3">1</span><span class="s1">, </span><span class="s3">2</span><span class="s1">, </span><span class="s3">3</span><span class="s1">]);</span>
+			<span class="s1">st.equal(</span><span class="s2">typeof </span><span class="s1">arrayIt.next, </span><span class="s0">'function'</span><span class="s1">, </span><span class="s0">'has a `next` function'</span><span class="s1">);</span>
+
+			<span class="s1">st.test(</span><span class="s0">'__proto__ is Iterator.prototype'</span><span class="s1">, { skip: !hasProto }, </span><span class="s2">function </span><span class="s1">(s2t) {</span>
+				<span class="s2">var </span><span class="s1">fakeIterator = {</span>
+					<span class="s1">__proto__: iterProto,</span>
+					<span class="s1">next: </span><span class="s2">function </span><span class="s1">() {}</span>
+				<span class="s1">};</span>
+				<span class="s1">s2t.ok(fakeIterator </span><span class="s2">instanceof </span><span class="s1">$Iterator, </span><span class="s0">'is an instanceof Iterator'</span><span class="s1">);</span>
+				<span class="s1">s2t.equal(</span><span class="s2">typeof </span><span class="s1">fakeIterator.next, </span><span class="s0">'function'</span><span class="s1">, </span><span class="s0">'fake iterator `.next` is a function'</span><span class="s1">);</span>
+				<span class="s1">s2t.equal(from(fakeIterator), fakeIterator, </span><span class="s0">'returns input when it is an instanceof Iterator'</span><span class="s1">);</span>
+
+				<span class="s1">s2t.end();</span>
+			<span class="s1">});</span>
+
+			<span class="s1">st.test(</span><span class="s0">'real iterators'</span><span class="s1">, { skip: !hasSymbols }, </span><span class="s2">function </span><span class="s1">(s2t) {</span>
+				<span class="s2">var </span><span class="s1">iter = [][Symbol.iterator]();</span>
+				<span class="s4">// eslint-disable-next-line no-proto</span>
+				<span class="s2">var </span><span class="s1">arrayIterHasIterProto = hasProto &amp;&amp; iter.__proto__.__proto__ !== Object.prototype;</span>
+				<span class="s1">s2t.equal(</span>
+					<span class="s1">from(iter),</span>
+					<span class="s1">iter,</span>
+					<span class="s0">'array iterator becomes itself'</span><span class="s1">,</span>
+					<span class="s1">{ skip: !arrayIterHasIterProto &amp;&amp; </span><span class="s0">'node 0.12 - 3 do not have Iterator.prototype in the proto chains' </span><span class="s1">}</span>
+				<span class="s1">);</span>
+
+				<span class="s1">s2t.end();</span>
+			<span class="s1">});</span>
+
+			<span class="s1">st.test(</span><span class="s0">'observability in a replaced String iterator'</span><span class="s1">, </span><span class="s2">function </span><span class="s1">(s2t) {</span>
+				<span class="s2">var </span><span class="s1">originalStringIterator = String.prototype[Symbol.iterator];</span>
+				<span class="s2">var </span><span class="s1">observedType;</span>
+				<span class="s1">s2t.teardown(mockProperty(String.prototype, Symbol.iterator, {</span>
+					<span class="s1">get: </span><span class="s2">function </span><span class="s1">() {</span>
+						<span class="s0">'use strict'</span><span class="s1">; </span><span class="s4">// eslint-disable-line strict, lines-around-directive</span>
+
+						<span class="s1">observedType = </span><span class="s2">typeof this</span><span class="s1">;</span>
+						<span class="s2">return </span><span class="s1">originalStringIterator;</span>
+					<span class="s1">}</span>
+				<span class="s1">}));</span>
+
+				<span class="s1">from(</span><span class="s0">''</span><span class="s1">);</span>
+				<span class="s1">s2t.equal(observedType, </span><span class="s0">'string'</span><span class="s1">, </span><span class="s0">'string primitive -&gt; primitive receiver in Symbol.iterator getter'</span><span class="s1">);</span>
+				<span class="s1">from(Object(</span><span class="s0">''</span><span class="s1">));</span>
+				<span class="s1">s2t.equal(observedType, </span><span class="s0">'object'</span><span class="s1">, </span><span class="s0">'boxed string -&gt; boxed string in Symbol.iterator getter'</span><span class="s1">);</span>
+
+				<span class="s1">s2t.end();</span>
+			<span class="s1">});</span>
+
+			<span class="s1">st.end();</span>
+		<span class="s1">});</span>
+	<span class="s1">},</span>
+	<span class="s1">index: </span><span class="s2">function </span><span class="s1">() {</span>
+		<span class="s1">test(</span><span class="s0">'Iterator.from: index'</span><span class="s1">, </span><span class="s2">function </span><span class="s1">(t) {</span>
+			<span class="s1">module.exports.tests(index, </span><span class="s0">'Iterator.from'</span><span class="s1">, t);</span>
+
+			<span class="s1">t.end();</span>
+		<span class="s1">});</span>
+	<span class="s1">},</span>
+	<span class="s1">implementation: </span><span class="s2">function </span><span class="s1">() {</span>
+		<span class="s1">test(</span><span class="s0">'Iterator.from: implementation'</span><span class="s1">, </span><span class="s2">function </span><span class="s1">(t) {</span>
+			<span class="s1">module.exports.tests(impl, </span><span class="s0">'Iterator.from'</span><span class="s1">, t);</span>
+
+			<span class="s1">t.end();</span>
+		<span class="s1">});</span>
+	<span class="s1">},</span>
+	<span class="s1">shimmed: </span><span class="s2">function </span><span class="s1">() {</span>
+		<span class="s1">test(</span><span class="s0">'Iterator.from: shimmed'</span><span class="s1">, </span><span class="s2">function </span><span class="s1">(t) {</span>
+			<span class="s1">t.test(</span><span class="s0">'Function name'</span><span class="s1">, { skip: !functionsHaveNames }, </span><span class="s2">function </span><span class="s1">(st) {</span>
+				<span class="s1">st.equal(Iterator.from.name, </span><span class="s0">'from'</span><span class="s1">, </span><span class="s0">'Iterator.from has name &quot;from&quot;'</span><span class="s1">);</span>
+				<span class="s1">st.end();</span>
+			<span class="s1">});</span>
+
+			<span class="s1">t.test(</span><span class="s0">'enumerability'</span><span class="s1">, { skip: !defineProperties.supportsDescriptors }, </span><span class="s2">function </span><span class="s1">(et) {</span>
+				<span class="s1">et.equal(</span><span class="s2">false</span><span class="s1">, isEnumerable.call(Iterator, </span><span class="s0">'from'</span><span class="s1">), </span><span class="s0">'Iterator.from is not enumerable'</span><span class="s1">);</span>
+				<span class="s1">et.end();</span>
+			<span class="s1">});</span>
+
+			<span class="s1">module.exports.tests(callBind(Iterator.from, Iterator), </span><span class="s0">'Iterator.from'</span><span class="s1">, t);</span>
+
+			<span class="s1">t.end();</span>
+		<span class="s1">});</span>
+	<span class="s1">}</span>
+<span class="s1">};</span>
+</pre>
+</body>
+</html>

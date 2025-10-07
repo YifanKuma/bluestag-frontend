@@ -1,0 +1,148 @@
+<html>
+<head>
+<title>implicit-arrow-linebreak.js</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #8c8c8c; font-style: italic;}
+.s1 { color: #8c8c8c; font-style: italic;}
+.s2 { color: #080808;}
+.s3 { color: #067d17;}
+.s4 { color: #0033b3;}
+.s5 { color: #1750eb;}
+.s6 { color: #0037a6;}
+</style>
+</head>
+<body bgcolor="#ffffff">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#c0c0c0" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+implicit-arrow-linebreak.js</font>
+</center></td></tr></table>
+<pre><span class="s0">/**</span>
+ <span class="s0">* </span><span class="s1">@fileoverview </span><span class="s0">enforce the location of arrow function bodies</span>
+ <span class="s0">* </span><span class="s1">@author </span><span class="s0">Sharmila Jesupaul</span>
+ <span class="s0">* </span><span class="s1">@deprecated </span><span class="s0">in ESLint v8.53.0</span>
+ <span class="s0">*/</span>
+<span class="s3">&quot;use strict&quot;</span><span class="s2">;</span>
+
+<span class="s4">const </span><span class="s2">{ isCommentToken, isNotOpeningParenToken } = require(</span><span class="s3">&quot;./utils/ast-utils&quot;</span><span class="s2">);</span>
+
+<span class="s0">//------------------------------------------------------------------------------</span>
+<span class="s0">// Rule Definition</span>
+<span class="s0">//------------------------------------------------------------------------------</span>
+<span class="s0">/** </span><span class="s1">@type </span><span class="s0">{import('../types').Rule.RuleModule} */</span>
+<span class="s2">module.exports = {</span>
+	<span class="s2">meta: {</span>
+		<span class="s2">deprecated: {</span>
+			<span class="s2">message: </span><span class="s3">&quot;Formatting rules are being moved out of ESLint core.&quot;</span><span class="s2">,</span>
+			<span class="s2">url: </span><span class="s3">&quot;https://eslint.org/blog/2023/10/deprecating-formatting-rules/&quot;</span><span class="s2">,</span>
+			<span class="s2">deprecatedSince: </span><span class="s3">&quot;8.53.0&quot;</span><span class="s2">,</span>
+			<span class="s2">availableUntil: </span><span class="s3">&quot;10.0.0&quot;</span><span class="s2">,</span>
+			<span class="s2">replacedBy: [</span>
+				<span class="s2">{</span>
+					<span class="s2">message:</span>
+						<span class="s3">&quot;ESLint Stylistic now maintains deprecated stylistic core rules.&quot;</span><span class="s2">,</span>
+					<span class="s2">url: </span><span class="s3">&quot;https://eslint.style/guide/migration&quot;</span><span class="s2">,</span>
+					<span class="s2">plugin: {</span>
+						<span class="s2">name: </span><span class="s3">&quot;@stylistic/eslint-plugin&quot;</span><span class="s2">,</span>
+						<span class="s2">url: </span><span class="s3">&quot;https://eslint.style&quot;</span><span class="s2">,</span>
+					<span class="s2">},</span>
+					<span class="s2">rule: {</span>
+						<span class="s2">name: </span><span class="s3">&quot;implicit-arrow-linebreak&quot;</span><span class="s2">,</span>
+						<span class="s2">url: </span><span class="s3">&quot;https://eslint.style/rules/implicit-arrow-linebreak&quot;</span><span class="s2">,</span>
+					<span class="s2">},</span>
+				<span class="s2">},</span>
+			<span class="s2">],</span>
+		<span class="s2">},</span>
+		<span class="s2">type: </span><span class="s3">&quot;layout&quot;</span><span class="s2">,</span>
+
+		<span class="s2">docs: {</span>
+			<span class="s2">description: </span><span class="s3">&quot;Enforce the location of arrow function bodies&quot;</span><span class="s2">,</span>
+			<span class="s2">recommended: </span><span class="s4">false</span><span class="s2">,</span>
+			<span class="s2">url: </span><span class="s3">&quot;https://eslint.org/docs/latest/rules/implicit-arrow-linebreak&quot;</span><span class="s2">,</span>
+		<span class="s2">},</span>
+
+		<span class="s2">fixable: </span><span class="s3">&quot;whitespace&quot;</span><span class="s2">,</span>
+
+		<span class="s2">schema: [</span>
+			<span class="s2">{</span>
+				<span class="s4">enum</span><span class="s2">: [</span><span class="s3">&quot;beside&quot;</span><span class="s2">, </span><span class="s3">&quot;below&quot;</span><span class="s2">],</span>
+			<span class="s2">},</span>
+		<span class="s2">],</span>
+		<span class="s2">messages: {</span>
+			<span class="s2">expected: </span><span class="s3">&quot;Expected a linebreak before this expression.&quot;</span><span class="s2">,</span>
+			<span class="s2">unexpected: </span><span class="s3">&quot;Expected no linebreak before this expression.&quot;</span><span class="s2">,</span>
+		<span class="s2">},</span>
+	<span class="s2">},</span>
+
+	<span class="s2">create(context) {</span>
+		<span class="s4">const </span><span class="s2">sourceCode = context.sourceCode;</span>
+		<span class="s4">const </span><span class="s2">option = context.options[</span><span class="s5">0</span><span class="s2">] || </span><span class="s3">&quot;beside&quot;</span><span class="s2">;</span>
+
+		<span class="s0">/**</span>
+		 <span class="s0">* Validates the location of an arrow function body</span>
+		 <span class="s0">* </span><span class="s1">@param </span><span class="s0">{ASTNode} node The arrow function body</span>
+		 <span class="s0">* </span><span class="s1">@returns </span><span class="s0">{void}</span>
+		 <span class="s0">*/</span>
+		<span class="s4">function </span><span class="s2">validateExpression(node) {</span>
+			<span class="s4">if </span><span class="s2">(node.body.type === </span><span class="s3">&quot;BlockStatement&quot;</span><span class="s2">) {</span>
+				<span class="s4">return</span><span class="s2">;</span>
+			<span class="s2">}</span>
+
+			<span class="s4">const </span><span class="s2">arrowToken = sourceCode.getTokenBefore(</span>
+				<span class="s2">node.body,</span>
+				<span class="s2">isNotOpeningParenToken,</span>
+			<span class="s2">);</span>
+			<span class="s4">const </span><span class="s2">firstTokenOfBody = sourceCode.getTokenAfter(arrowToken);</span>
+
+			<span class="s4">if </span><span class="s2">(</span>
+				<span class="s2">arrowToken.loc.end.line === firstTokenOfBody.loc.start.line &amp;&amp;</span>
+				<span class="s2">option === </span><span class="s3">&quot;below&quot;</span>
+			<span class="s2">) {</span>
+				<span class="s2">context.report({</span>
+					<span class="s2">node: firstTokenOfBody,</span>
+					<span class="s2">messageId: </span><span class="s3">&quot;expected&quot;</span><span class="s2">,</span>
+					<span class="s2">fix: fixer =&gt;</span>
+						<span class="s2">fixer.insertTextBefore(firstTokenOfBody, </span><span class="s3">&quot;</span><span class="s6">\n</span><span class="s3">&quot;</span><span class="s2">),</span>
+				<span class="s2">});</span>
+			<span class="s2">} </span><span class="s4">else if </span><span class="s2">(</span>
+				<span class="s2">arrowToken.loc.end.line !== firstTokenOfBody.loc.start.line &amp;&amp;</span>
+				<span class="s2">option === </span><span class="s3">&quot;beside&quot;</span>
+			<span class="s2">) {</span>
+				<span class="s2">context.report({</span>
+					<span class="s2">node: firstTokenOfBody,</span>
+					<span class="s2">messageId: </span><span class="s3">&quot;unexpected&quot;</span><span class="s2">,</span>
+					<span class="s2">fix(fixer) {</span>
+						<span class="s4">if </span><span class="s2">(</span>
+							<span class="s2">sourceCode.getFirstTokenBetween(</span>
+								<span class="s2">arrowToken,</span>
+								<span class="s2">firstTokenOfBody,</span>
+								<span class="s2">{</span>
+									<span class="s2">includeComments: </span><span class="s4">true</span><span class="s2">,</span>
+									<span class="s2">filter: isCommentToken,</span>
+								<span class="s2">},</span>
+							<span class="s2">)</span>
+						<span class="s2">) {</span>
+							<span class="s4">return null</span><span class="s2">;</span>
+						<span class="s2">}</span>
+
+						<span class="s4">return </span><span class="s2">fixer.replaceTextRange(</span>
+							<span class="s2">[arrowToken.range[</span><span class="s5">1</span><span class="s2">], firstTokenOfBody.range[</span><span class="s5">0</span><span class="s2">]],</span>
+							<span class="s3">&quot; &quot;</span><span class="s2">,</span>
+						<span class="s2">);</span>
+					<span class="s2">},</span>
+				<span class="s2">});</span>
+			<span class="s2">}</span>
+		<span class="s2">}</span>
+
+		<span class="s0">//----------------------------------------------------------------------</span>
+		<span class="s0">// Public</span>
+		<span class="s0">//----------------------------------------------------------------------</span>
+		<span class="s4">return </span><span class="s2">{</span>
+			<span class="s2">ArrowFunctionExpression: node =&gt; validateExpression(node),</span>
+		<span class="s2">};</span>
+	<span class="s2">},</span>
+<span class="s2">};</span>
+</pre>
+</body>
+</html>

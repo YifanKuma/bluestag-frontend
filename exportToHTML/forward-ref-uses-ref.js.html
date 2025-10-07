@@ -1,0 +1,122 @@
+<html>
+<head>
+<title>forward-ref-uses-ref.js</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #8c8c8c; font-style: italic;}
+.s1 { color: #8c8c8c; font-style: italic;}
+.s2 { color: #080808;}
+.s3 { color: #067d17;}
+.s4 { color: #0033b3;}
+.s5 { color: #1750eb;}
+</style>
+</head>
+<body bgcolor="#ffffff">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#c0c0c0" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+forward-ref-uses-ref.js</font>
+</center></td></tr></table>
+<pre><span class="s0">/**</span>
+ <span class="s0">* </span><span class="s1">@fileoverview </span><span class="s0">Require all forwardRef components include a ref parameter</span>
+ <span class="s0">*/</span>
+
+<span class="s3">'use strict'</span><span class="s2">;</span>
+
+<span class="s4">const </span><span class="s2">isParenthesized = require(</span><span class="s3">'../util/ast'</span><span class="s2">).isParenthesized;</span>
+<span class="s4">const </span><span class="s2">docsUrl = require(</span><span class="s3">'../util/docsUrl'</span><span class="s2">);</span>
+<span class="s4">const </span><span class="s2">report = require(</span><span class="s3">'../util/report'</span><span class="s2">);</span>
+<span class="s4">const </span><span class="s2">getMessageData = require(</span><span class="s3">'../util/message'</span><span class="s2">);</span>
+
+<span class="s0">// ------------------------------------------------------------------------------</span>
+<span class="s0">// Rule Definition</span>
+<span class="s0">// ------------------------------------------------------------------------------</span>
+
+<span class="s0">/**</span>
+ <span class="s0">* </span><span class="s1">@param </span><span class="s0">{ASTNode} node</span>
+ <span class="s0">* </span><span class="s1">@returns </span><span class="s0">{boolean} If the node represents the identifier `forwardRef`.</span>
+ <span class="s0">*/</span>
+<span class="s4">function </span><span class="s2">isForwardRefIdentifier(node) {</span>
+  <span class="s4">return </span><span class="s2">node.type === </span><span class="s3">'Identifier' </span><span class="s2">&amp;&amp; node.name === </span><span class="s3">'forwardRef'</span><span class="s2">;</span>
+<span class="s2">}</span>
+
+<span class="s0">/**</span>
+ <span class="s0">* </span><span class="s1">@param </span><span class="s0">{ASTNode} node</span>
+ <span class="s0">* </span><span class="s1">@returns </span><span class="s0">{boolean} If the node represents a function call `forwardRef()` or `React.forwardRef()`.</span>
+ <span class="s0">*/</span>
+<span class="s4">function </span><span class="s2">isForwardRefCall(node) {</span>
+  <span class="s4">return </span><span class="s2">(</span>
+    <span class="s2">node.type === </span><span class="s3">'CallExpression'</span>
+    <span class="s2">&amp;&amp; (</span>
+      <span class="s2">isForwardRefIdentifier(node.callee)</span>
+      <span class="s2">|| (node.callee.type === </span><span class="s3">'MemberExpression' </span><span class="s2">&amp;&amp; isForwardRefIdentifier(node.callee.property))</span>
+    <span class="s2">)</span>
+  <span class="s2">);</span>
+<span class="s2">}</span>
+
+<span class="s4">const </span><span class="s2">messages = {</span>
+  <span class="s2">missingRefParameter: </span><span class="s3">'forwardRef is used with this component but no ref parameter is set'</span><span class="s2">,</span>
+  <span class="s2">addRefParameter: </span><span class="s3">'Add a ref parameter'</span><span class="s2">,</span>
+  <span class="s2">removeForwardRef: </span><span class="s3">'Remove forwardRef wrapper'</span><span class="s2">,</span>
+<span class="s2">};</span>
+
+<span class="s0">/** </span><span class="s1">@type </span><span class="s0">{import('eslint').Rule.RuleModule} */</span>
+<span class="s2">module.exports = {</span>
+  <span class="s2">meta: {</span>
+    <span class="s2">docs: {</span>
+      <span class="s2">description: </span><span class="s3">'Require all forwardRef components include a ref parameter'</span><span class="s2">,</span>
+      <span class="s2">category: </span><span class="s3">'Possible Errors'</span><span class="s2">,</span>
+      <span class="s2">recommended: </span><span class="s4">false</span><span class="s2">,</span>
+      <span class="s2">url: docsUrl(</span><span class="s3">'forward-ref-uses-ref'</span><span class="s2">),</span>
+    <span class="s2">},</span>
+    <span class="s2">messages,</span>
+    <span class="s2">schema: [],</span>
+    <span class="s2">type: </span><span class="s3">'suggestion'</span><span class="s2">,</span>
+    <span class="s2">hasSuggestions: </span><span class="s4">true</span><span class="s2">,</span>
+  <span class="s2">},</span>
+
+  <span class="s2">create(context) {</span>
+    <span class="s4">const </span><span class="s2">sourceCode = context.getSourceCode();</span>
+
+    <span class="s4">return </span><span class="s2">{</span>
+      <span class="s3">'FunctionExpression, ArrowFunctionExpression'</span><span class="s2">(node) {</span>
+        <span class="s4">if </span><span class="s2">(!isForwardRefCall(node.parent)) {</span>
+          <span class="s4">return</span><span class="s2">;</span>
+        <span class="s2">}</span>
+
+        <span class="s4">if </span><span class="s2">(node.params.length === </span><span class="s5">1</span><span class="s2">) {</span>
+          <span class="s2">report(context, messages.missingRefParameter, </span><span class="s3">'missingRefParameter'</span><span class="s2">, {</span>
+            <span class="s2">node,</span>
+            <span class="s2">suggest: [</span>
+              <span class="s2">Object.assign(</span>
+                <span class="s2">getMessageData(</span><span class="s3">'addRefParameter'</span><span class="s2">, messages.addRefParameter),</span>
+                <span class="s2">{</span>
+                  <span class="s2">fix(fixer) {</span>
+                    <span class="s4">const </span><span class="s2">param = node.params[</span><span class="s5">0</span><span class="s2">];</span>
+                    <span class="s0">// If using shorthand arrow function syntax, add parentheses around the new parameter pair</span>
+                    <span class="s4">const </span><span class="s2">shouldAddParentheses = node.type === </span><span class="s3">'ArrowFunctionExpression' </span><span class="s2">&amp;&amp; !isParenthesized(context, param);</span>
+                    <span class="s4">return </span><span class="s2">[].concat(</span>
+                      <span class="s2">shouldAddParentheses ? fixer.insertTextBefore(param, </span><span class="s3">'('</span><span class="s2">) : [],</span>
+                      <span class="s2">fixer.insertTextAfter(param, </span><span class="s3">`, ref</span><span class="s2">${shouldAddParentheses ? </span><span class="s3">')' </span><span class="s2">: </span><span class="s3">''</span><span class="s2">}</span><span class="s3">`</span><span class="s2">)</span>
+                    <span class="s2">);</span>
+                  <span class="s2">},</span>
+                <span class="s2">}</span>
+              <span class="s2">),</span>
+              <span class="s2">Object.assign(</span>
+                <span class="s2">getMessageData(</span><span class="s3">'removeForwardRef'</span><span class="s2">, messages.removeForwardRef),</span>
+                <span class="s2">{</span>
+                  <span class="s2">fix(fixer) {</span>
+                    <span class="s4">return </span><span class="s2">fixer.replaceText(node.parent, sourceCode.getText(node));</span>
+                  <span class="s2">},</span>
+                <span class="s2">}</span>
+              <span class="s2">),</span>
+            <span class="s2">],</span>
+          <span class="s2">});</span>
+        <span class="s2">}</span>
+      <span class="s2">},</span>
+    <span class="s2">};</span>
+  <span class="s2">},</span>
+<span class="s2">};</span>
+</pre>
+</body>
+</html>

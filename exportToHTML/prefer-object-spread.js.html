@@ -1,0 +1,342 @@
+<html>
+<head>
+<title>prefer-object-spread.js</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #8c8c8c; font-style: italic;}
+.s1 { color: #8c8c8c; font-style: italic;}
+.s2 { color: #080808;}
+.s3 { color: #067d17;}
+.s4 { color: #0033b3;}
+.s5 { color: #264eff;}
+.s6 { color: #1750eb;}
+</style>
+</head>
+<body bgcolor="#ffffff">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#c0c0c0" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+prefer-object-spread.js</font>
+</center></td></tr></table>
+<pre><span class="s0">/**</span>
+ <span class="s0">* </span><span class="s1">@fileoverview </span><span class="s0">Rule to disallow using `Object.assign` with an object literal as the first argument and prefer the use of object spread instead</span>
+ <span class="s0">* </span><span class="s1">@author </span><span class="s0">Sharmila Jesupaul</span>
+ <span class="s0">*/</span>
+
+<span class="s3">&quot;use strict&quot;</span><span class="s2">;</span>
+
+<span class="s4">const </span><span class="s2">{ CALL, ReferenceTracker } = require(</span><span class="s3">&quot;@eslint-community/eslint-utils&quot;</span><span class="s2">);</span>
+<span class="s4">const </span><span class="s2">{</span>
+	<span class="s2">isCommaToken,</span>
+	<span class="s2">isOpeningParenToken,</span>
+	<span class="s2">isClosingParenToken,</span>
+	<span class="s2">isParenthesised,</span>
+<span class="s2">} = require(</span><span class="s3">&quot;./utils/ast-utils&quot;</span><span class="s2">);</span>
+
+<span class="s4">const </span><span class="s2">ANY_SPACE = </span><span class="s5">/\s/u</span><span class="s2">;</span>
+
+<span class="s0">/**</span>
+ <span class="s0">* Helper that checks if the Object.assign call has array spread</span>
+ <span class="s0">* </span><span class="s1">@param </span><span class="s0">{ASTNode} node The node that the rule warns on</span>
+ <span class="s0">* </span><span class="s1">@returns </span><span class="s0">{boolean} - Returns true if the Object.assign call has array spread</span>
+ <span class="s0">*/</span>
+<span class="s4">function </span><span class="s2">hasArraySpread(node) {</span>
+	<span class="s4">return </span><span class="s2">node.arguments.some(arg =&gt; arg.type === </span><span class="s3">&quot;SpreadElement&quot;</span><span class="s2">);</span>
+<span class="s2">}</span>
+
+<span class="s0">/**</span>
+ <span class="s0">* Determines whether the given node is an accessor property (getter/setter).</span>
+ <span class="s0">* </span><span class="s1">@param </span><span class="s0">{ASTNode} node Node to check.</span>
+ <span class="s0">* </span><span class="s1">@returns </span><span class="s0">{boolean} `true` if the node is a getter or a setter.</span>
+ <span class="s0">*/</span>
+<span class="s4">function </span><span class="s2">isAccessorProperty(node) {</span>
+	<span class="s4">return </span><span class="s2">(</span>
+		<span class="s2">node.type === </span><span class="s3">&quot;Property&quot; </span><span class="s2">&amp;&amp; (node.kind === </span><span class="s3">&quot;get&quot; </span><span class="s2">|| node.kind === </span><span class="s3">&quot;set&quot;</span><span class="s2">)</span>
+	<span class="s2">);</span>
+<span class="s2">}</span>
+
+<span class="s0">/**</span>
+ <span class="s0">* Determines whether the given object expression node has accessor properties (getters/setters).</span>
+ <span class="s0">* </span><span class="s1">@param </span><span class="s0">{ASTNode} node `ObjectExpression` node to check.</span>
+ <span class="s0">* </span><span class="s1">@returns </span><span class="s0">{boolean} `true` if the node has at least one getter/setter.</span>
+ <span class="s0">*/</span>
+<span class="s4">function </span><span class="s2">hasAccessors(node) {</span>
+	<span class="s4">return </span><span class="s2">node.properties.some(isAccessorProperty);</span>
+<span class="s2">}</span>
+
+<span class="s0">/**</span>
+ <span class="s0">* Determines whether the given call expression node has object expression arguments with accessor properties (getters/setters).</span>
+ <span class="s0">* </span><span class="s1">@param </span><span class="s0">{ASTNode} node `CallExpression` node to check.</span>
+ <span class="s0">* </span><span class="s1">@returns </span><span class="s0">{boolean} `true` if the node has at least one argument that is an object expression with at least one getter/setter.</span>
+ <span class="s0">*/</span>
+<span class="s4">function </span><span class="s2">hasArgumentsWithAccessors(node) {</span>
+	<span class="s4">return </span><span class="s2">node.arguments</span>
+		<span class="s2">.filter(arg =&gt; arg.type === </span><span class="s3">&quot;ObjectExpression&quot;</span><span class="s2">)</span>
+		<span class="s2">.some(hasAccessors);</span>
+<span class="s2">}</span>
+
+<span class="s0">/**</span>
+ <span class="s0">* Helper that checks if the node needs parentheses to be valid JS.</span>
+ <span class="s0">* The default is to wrap the node in parentheses to avoid parsing errors.</span>
+ <span class="s0">* </span><span class="s1">@param </span><span class="s0">{ASTNode} node The node that the rule warns on</span>
+ <span class="s0">* </span><span class="s1">@param </span><span class="s0">{Object} sourceCode in context sourcecode object</span>
+ <span class="s0">* </span><span class="s1">@returns </span><span class="s0">{boolean} - Returns true if the node needs parentheses</span>
+ <span class="s0">*/</span>
+<span class="s4">function </span><span class="s2">needsParens(node, sourceCode) {</span>
+	<span class="s4">const </span><span class="s2">parent = node.parent;</span>
+
+	<span class="s4">switch </span><span class="s2">(parent.type) {</span>
+		<span class="s4">case </span><span class="s3">&quot;VariableDeclarator&quot;</span><span class="s2">:</span>
+		<span class="s4">case </span><span class="s3">&quot;ArrayExpression&quot;</span><span class="s2">:</span>
+		<span class="s4">case </span><span class="s3">&quot;ReturnStatement&quot;</span><span class="s2">:</span>
+		<span class="s4">case </span><span class="s3">&quot;CallExpression&quot;</span><span class="s2">:</span>
+		<span class="s4">case </span><span class="s3">&quot;Property&quot;</span><span class="s2">:</span>
+			<span class="s4">return false</span><span class="s2">;</span>
+		<span class="s4">case </span><span class="s3">&quot;AssignmentExpression&quot;</span><span class="s2">:</span>
+			<span class="s4">return </span><span class="s2">parent.left === node &amp;&amp; !isParenthesised(sourceCode, node);</span>
+		<span class="s4">default</span><span class="s2">:</span>
+			<span class="s4">return </span><span class="s2">!isParenthesised(sourceCode, node);</span>
+	<span class="s2">}</span>
+<span class="s2">}</span>
+
+<span class="s0">/**</span>
+ <span class="s0">* Determines if an argument needs parentheses. The default is to not add parens.</span>
+ <span class="s0">* </span><span class="s1">@param </span><span class="s0">{ASTNode} node The node to be checked.</span>
+ <span class="s0">* </span><span class="s1">@param </span><span class="s0">{Object} sourceCode in context sourcecode object</span>
+ <span class="s0">* </span><span class="s1">@returns </span><span class="s0">{boolean} True if the node needs parentheses</span>
+ <span class="s0">*/</span>
+<span class="s4">function </span><span class="s2">argNeedsParens(node, sourceCode) {</span>
+	<span class="s4">switch </span><span class="s2">(node.type) {</span>
+		<span class="s4">case </span><span class="s3">&quot;AssignmentExpression&quot;</span><span class="s2">:</span>
+		<span class="s4">case </span><span class="s3">&quot;ArrowFunctionExpression&quot;</span><span class="s2">:</span>
+		<span class="s4">case </span><span class="s3">&quot;ConditionalExpression&quot;</span><span class="s2">:</span>
+			<span class="s4">return </span><span class="s2">!isParenthesised(sourceCode, node);</span>
+		<span class="s4">default</span><span class="s2">:</span>
+			<span class="s4">return false</span><span class="s2">;</span>
+	<span class="s2">}</span>
+<span class="s2">}</span>
+
+<span class="s0">/**</span>
+ <span class="s0">* Get the parenthesis tokens of a given ObjectExpression node.</span>
+ <span class="s0">* This includes the braces of the object literal and enclosing parentheses.</span>
+ <span class="s0">* </span><span class="s1">@param </span><span class="s0">{ASTNode} node The node to get.</span>
+ <span class="s0">* </span><span class="s1">@param </span><span class="s0">{Token} leftArgumentListParen The opening paren token of the argument list.</span>
+ <span class="s0">* </span><span class="s1">@param </span><span class="s0">{SourceCode} sourceCode The source code object to get tokens.</span>
+ <span class="s0">* </span><span class="s1">@returns </span><span class="s0">{Token[]} The parenthesis tokens of the node. This is sorted by the location.</span>
+ <span class="s0">*/</span>
+<span class="s4">function </span><span class="s2">getParenTokens(node, leftArgumentListParen, sourceCode) {</span>
+	<span class="s4">const </span><span class="s2">parens = [</span>
+		<span class="s2">sourceCode.getFirstToken(node),</span>
+		<span class="s2">sourceCode.getLastToken(node),</span>
+	<span class="s2">];</span>
+	<span class="s4">let </span><span class="s2">leftNext = sourceCode.getTokenBefore(node);</span>
+	<span class="s4">let </span><span class="s2">rightNext = sourceCode.getTokenAfter(node);</span>
+
+	<span class="s0">// Note: don't include the parens of the argument list.</span>
+	<span class="s4">while </span><span class="s2">(</span>
+		<span class="s2">leftNext &amp;&amp;</span>
+		<span class="s2">rightNext &amp;&amp;</span>
+		<span class="s2">leftNext.range[</span><span class="s6">0</span><span class="s2">] &gt; leftArgumentListParen.range[</span><span class="s6">0</span><span class="s2">] &amp;&amp;</span>
+		<span class="s2">isOpeningParenToken(leftNext) &amp;&amp;</span>
+		<span class="s2">isClosingParenToken(rightNext)</span>
+	<span class="s2">) {</span>
+		<span class="s2">parens.push(leftNext, rightNext);</span>
+		<span class="s2">leftNext = sourceCode.getTokenBefore(leftNext);</span>
+		<span class="s2">rightNext = sourceCode.getTokenAfter(rightNext);</span>
+	<span class="s2">}</span>
+
+	<span class="s4">return </span><span class="s2">parens.sort((a, b) =&gt; a.range[</span><span class="s6">0</span><span class="s2">] - b.range[</span><span class="s6">0</span><span class="s2">]);</span>
+<span class="s2">}</span>
+
+<span class="s0">/**</span>
+ <span class="s0">* Get the range of a given token and around whitespaces.</span>
+ <span class="s0">* </span><span class="s1">@param </span><span class="s0">{Token} token The token to get range.</span>
+ <span class="s0">* </span><span class="s1">@param </span><span class="s0">{SourceCode} sourceCode The source code object to get tokens.</span>
+ <span class="s0">* </span><span class="s1">@returns </span><span class="s0">{number} The end of the range of the token and around whitespaces.</span>
+ <span class="s0">*/</span>
+<span class="s4">function </span><span class="s2">getStartWithSpaces(token, sourceCode) {</span>
+	<span class="s4">const </span><span class="s2">text = sourceCode.text;</span>
+	<span class="s4">let </span><span class="s2">start = token.range[</span><span class="s6">0</span><span class="s2">];</span>
+
+	<span class="s0">// If the previous token is a line comment then skip this step to avoid commenting this token out.</span>
+	<span class="s2">{</span>
+		<span class="s4">const </span><span class="s2">prevToken = sourceCode.getTokenBefore(token, {</span>
+			<span class="s2">includeComments: </span><span class="s4">true</span><span class="s2">,</span>
+		<span class="s2">});</span>
+
+		<span class="s4">if </span><span class="s2">(prevToken &amp;&amp; prevToken.type === </span><span class="s3">&quot;Line&quot;</span><span class="s2">) {</span>
+			<span class="s4">return </span><span class="s2">start;</span>
+		<span class="s2">}</span>
+	<span class="s2">}</span>
+
+	<span class="s0">// Detect spaces before the token.</span>
+	<span class="s4">while </span><span class="s2">(ANY_SPACE.test(text[start - </span><span class="s6">1</span><span class="s2">] || </span><span class="s3">&quot;&quot;</span><span class="s2">)) {</span>
+		<span class="s2">start -= </span><span class="s6">1</span><span class="s2">;</span>
+	<span class="s2">}</span>
+
+	<span class="s4">return </span><span class="s2">start;</span>
+<span class="s2">}</span>
+
+<span class="s0">/**</span>
+ <span class="s0">* Get the range of a given token and around whitespaces.</span>
+ <span class="s0">* </span><span class="s1">@param </span><span class="s0">{Token} token The token to get range.</span>
+ <span class="s0">* </span><span class="s1">@param </span><span class="s0">{SourceCode} sourceCode The source code object to get tokens.</span>
+ <span class="s0">* </span><span class="s1">@returns </span><span class="s0">{number} The start of the range of the token and around whitespaces.</span>
+ <span class="s0">*/</span>
+<span class="s4">function </span><span class="s2">getEndWithSpaces(token, sourceCode) {</span>
+	<span class="s4">const </span><span class="s2">text = sourceCode.text;</span>
+	<span class="s4">let </span><span class="s2">end = token.range[</span><span class="s6">1</span><span class="s2">];</span>
+
+	<span class="s0">// Detect spaces after the token.</span>
+	<span class="s4">while </span><span class="s2">(ANY_SPACE.test(text[end] || </span><span class="s3">&quot;&quot;</span><span class="s2">)) {</span>
+		<span class="s2">end += </span><span class="s6">1</span><span class="s2">;</span>
+	<span class="s2">}</span>
+
+	<span class="s4">return </span><span class="s2">end;</span>
+<span class="s2">}</span>
+
+<span class="s0">/**</span>
+ <span class="s0">* Autofixes the Object.assign call to use an object spread instead.</span>
+ <span class="s0">* </span><span class="s1">@param </span><span class="s0">{ASTNode|null} node The node that the rule warns on, i.e. the Object.assign call</span>
+ <span class="s0">* </span><span class="s1">@param </span><span class="s0">{string} sourceCode sourceCode of the Object.assign call</span>
+ <span class="s0">* </span><span class="s1">@returns </span><span class="s0">{Function} autofixer - replaces the Object.assign with a spread object.</span>
+ <span class="s0">*/</span>
+<span class="s4">function </span><span class="s2">defineFixer(node, sourceCode) {</span>
+	<span class="s4">return function</span><span class="s2">* (fixer) {</span>
+		<span class="s4">const </span><span class="s2">leftParen = sourceCode.getTokenAfter(</span>
+			<span class="s2">node.callee,</span>
+			<span class="s2">isOpeningParenToken,</span>
+		<span class="s2">);</span>
+		<span class="s4">const </span><span class="s2">rightParen = sourceCode.getLastToken(node);</span>
+
+		<span class="s0">// Remove everything before the opening paren: callee `Object.assign`, type arguments, and whitespace between the callee and the paren.</span>
+		<span class="s4">yield </span><span class="s2">fixer.removeRange([node.range[</span><span class="s6">0</span><span class="s2">], leftParen.range[</span><span class="s6">0</span><span class="s2">]]);</span>
+
+		<span class="s0">// Replace the parens of argument list to braces.</span>
+		<span class="s4">if </span><span class="s2">(needsParens(node, sourceCode)) {</span>
+			<span class="s4">yield </span><span class="s2">fixer.replaceText(leftParen, </span><span class="s3">&quot;({&quot;</span><span class="s2">);</span>
+			<span class="s4">yield </span><span class="s2">fixer.replaceText(rightParen, </span><span class="s3">&quot;})&quot;</span><span class="s2">);</span>
+		<span class="s2">} </span><span class="s4">else </span><span class="s2">{</span>
+			<span class="s4">yield </span><span class="s2">fixer.replaceText(leftParen, </span><span class="s3">&quot;{&quot;</span><span class="s2">);</span>
+			<span class="s4">yield </span><span class="s2">fixer.replaceText(rightParen, </span><span class="s3">&quot;}&quot;</span><span class="s2">);</span>
+		<span class="s2">}</span>
+
+		<span class="s0">// Process arguments.</span>
+		<span class="s4">for </span><span class="s2">(</span><span class="s4">const </span><span class="s2">argNode of node.arguments) {</span>
+			<span class="s4">const </span><span class="s2">innerParens = getParenTokens(argNode, leftParen, sourceCode);</span>
+			<span class="s4">const </span><span class="s2">left = innerParens.shift();</span>
+			<span class="s4">const </span><span class="s2">right = innerParens.pop();</span>
+
+			<span class="s4">if </span><span class="s2">(argNode.type === </span><span class="s3">&quot;ObjectExpression&quot;</span><span class="s2">) {</span>
+				<span class="s4">const </span><span class="s2">maybeTrailingComma = sourceCode.getLastToken(argNode, </span><span class="s6">1</span><span class="s2">);</span>
+				<span class="s4">const </span><span class="s2">maybeArgumentComma = sourceCode.getTokenAfter(right);</span>
+
+				<span class="s0">/* 
+                 * Make bare this object literal. 
+                 * And remove spaces inside of the braces for better formatting. 
+                 */</span>
+				<span class="s4">for </span><span class="s2">(</span><span class="s4">const </span><span class="s2">innerParen of innerParens) {</span>
+					<span class="s4">yield </span><span class="s2">fixer.remove(innerParen);</span>
+				<span class="s2">}</span>
+				<span class="s4">const </span><span class="s2">leftRange = [</span>
+					<span class="s2">left.range[</span><span class="s6">0</span><span class="s2">],</span>
+					<span class="s2">getEndWithSpaces(left, sourceCode),</span>
+				<span class="s2">];</span>
+				<span class="s4">const </span><span class="s2">rightRange = [</span>
+					<span class="s2">Math.max(</span>
+						<span class="s2">getStartWithSpaces(right, sourceCode),</span>
+						<span class="s2">leftRange[</span><span class="s6">1</span><span class="s2">],</span>
+					<span class="s2">), </span><span class="s0">// Ensure ranges don't overlap</span>
+					<span class="s2">right.range[</span><span class="s6">1</span><span class="s2">],</span>
+				<span class="s2">];</span>
+
+				<span class="s4">yield </span><span class="s2">fixer.removeRange(leftRange);</span>
+				<span class="s4">yield </span><span class="s2">fixer.removeRange(rightRange);</span>
+
+				<span class="s0">// Remove the comma of this argument if it's duplication.</span>
+				<span class="s4">if </span><span class="s2">(</span>
+					<span class="s2">(argNode.properties.length === </span><span class="s6">0 </span><span class="s2">||</span>
+						<span class="s2">isCommaToken(maybeTrailingComma)) &amp;&amp;</span>
+					<span class="s2">isCommaToken(maybeArgumentComma)</span>
+				<span class="s2">) {</span>
+					<span class="s4">yield </span><span class="s2">fixer.remove(maybeArgumentComma);</span>
+				<span class="s2">}</span>
+			<span class="s2">} </span><span class="s4">else </span><span class="s2">{</span>
+				<span class="s0">// Make spread.</span>
+				<span class="s4">if </span><span class="s2">(argNeedsParens(argNode, sourceCode)) {</span>
+					<span class="s4">yield </span><span class="s2">fixer.insertTextBefore(left, </span><span class="s3">&quot;...(&quot;</span><span class="s2">);</span>
+					<span class="s4">yield </span><span class="s2">fixer.insertTextAfter(right, </span><span class="s3">&quot;)&quot;</span><span class="s2">);</span>
+				<span class="s2">} </span><span class="s4">else </span><span class="s2">{</span>
+					<span class="s4">yield </span><span class="s2">fixer.insertTextBefore(left, </span><span class="s3">&quot;...&quot;</span><span class="s2">);</span>
+				<span class="s2">}</span>
+			<span class="s2">}</span>
+		<span class="s2">}</span>
+	<span class="s2">};</span>
+<span class="s2">}</span>
+
+<span class="s0">/** </span><span class="s1">@type </span><span class="s0">{import('../types').Rule.RuleModule} */</span>
+<span class="s2">module.exports = {</span>
+	<span class="s2">meta: {</span>
+		<span class="s2">type: </span><span class="s3">&quot;suggestion&quot;</span><span class="s2">,</span>
+
+		<span class="s2">docs: {</span>
+			<span class="s2">description:</span>
+				<span class="s3">&quot;Disallow using `Object.assign` with an object literal as the first argument and prefer the use of object spread instead&quot;</span><span class="s2">,</span>
+			<span class="s2">recommended: </span><span class="s4">false</span><span class="s2">,</span>
+			<span class="s2">frozen: </span><span class="s4">true</span><span class="s2">,</span>
+			<span class="s2">url: </span><span class="s3">&quot;https://eslint.org/docs/latest/rules/prefer-object-spread&quot;</span><span class="s2">,</span>
+		<span class="s2">},</span>
+
+		<span class="s2">schema: [],</span>
+		<span class="s2">fixable: </span><span class="s3">&quot;code&quot;</span><span class="s2">,</span>
+
+		<span class="s2">messages: {</span>
+			<span class="s2">useSpreadMessage:</span>
+				<span class="s3">&quot;Use an object spread instead of `Object.assign` eg: `{ ...foo }`.&quot;</span><span class="s2">,</span>
+			<span class="s2">useLiteralMessage:</span>
+				<span class="s3">&quot;Use an object literal instead of `Object.assign`. eg: `{ foo: bar }`.&quot;</span><span class="s2">,</span>
+		<span class="s2">},</span>
+	<span class="s2">},</span>
+
+	<span class="s2">create(context) {</span>
+		<span class="s4">const </span><span class="s2">sourceCode = context.sourceCode;</span>
+
+		<span class="s4">return </span><span class="s2">{</span>
+			<span class="s2">Program(node) {</span>
+				<span class="s4">const </span><span class="s2">scope = sourceCode.getScope(node);</span>
+				<span class="s4">const </span><span class="s2">tracker = </span><span class="s4">new </span><span class="s2">ReferenceTracker(scope);</span>
+				<span class="s4">const </span><span class="s2">trackMap = {</span>
+					<span class="s2">Object: {</span>
+						<span class="s2">assign: { [CALL]: </span><span class="s4">true </span><span class="s2">},</span>
+					<span class="s2">},</span>
+				<span class="s2">};</span>
+
+				<span class="s0">// Iterate all calls of `Object.assign` (only of the global variable `Object`).</span>
+				<span class="s4">for </span><span class="s2">(</span><span class="s4">const </span><span class="s2">{ node: refNode } of tracker.iterateGlobalReferences(</span>
+					<span class="s2">trackMap,</span>
+				<span class="s2">)) {</span>
+					<span class="s4">if </span><span class="s2">(</span>
+						<span class="s2">refNode.arguments.length &gt;= </span><span class="s6">1 </span><span class="s2">&amp;&amp;</span>
+						<span class="s2">refNode.arguments[</span><span class="s6">0</span><span class="s2">].type === </span><span class="s3">&quot;ObjectExpression&quot; </span><span class="s2">&amp;&amp;</span>
+						<span class="s2">!hasArraySpread(refNode) &amp;&amp;</span>
+						<span class="s2">!(</span>
+							<span class="s2">refNode.arguments.length &gt; </span><span class="s6">1 </span><span class="s2">&amp;&amp;</span>
+							<span class="s2">hasArgumentsWithAccessors(refNode)</span>
+						<span class="s2">)</span>
+					<span class="s2">) {</span>
+						<span class="s4">const </span><span class="s2">messageId =</span>
+							<span class="s2">refNode.arguments.length === </span><span class="s6">1</span>
+								<span class="s2">? </span><span class="s3">&quot;useLiteralMessage&quot;</span>
+								<span class="s2">: </span><span class="s3">&quot;useSpreadMessage&quot;</span><span class="s2">;</span>
+						<span class="s4">const </span><span class="s2">fix = defineFixer(refNode, sourceCode);</span>
+
+						<span class="s2">context.report({ node: refNode, messageId, fix });</span>
+					<span class="s2">}</span>
+				<span class="s2">}</span>
+			<span class="s2">},</span>
+		<span class="s2">};</span>
+	<span class="s2">},</span>
+<span class="s2">};</span>
+</pre>
+</body>
+</html>

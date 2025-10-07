@@ -1,0 +1,636 @@
+<html>
+<head>
+<title>padding-line-between-statements.js</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #8c8c8c; font-style: italic;}
+.s1 { color: #8c8c8c; font-style: italic;}
+.s2 { color: #080808;}
+.s3 { color: #067d17;}
+.s4 { color: #0033b3;}
+.s5 { color: #0037a6;}
+.s6 { color: #264eff;}
+.s7 { color: #1750eb;}
+</style>
+</head>
+<body bgcolor="#ffffff">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#c0c0c0" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+padding-line-between-statements.js</font>
+</center></td></tr></table>
+<pre><span class="s0">/**</span>
+ <span class="s0">* </span><span class="s1">@fileoverview </span><span class="s0">Rule to require or disallow newlines between statements</span>
+ <span class="s0">* </span><span class="s1">@author </span><span class="s0">Toru Nagashima</span>
+ <span class="s0">* </span><span class="s1">@deprecated </span><span class="s0">in ESLint v8.53.0</span>
+ <span class="s0">*/</span>
+
+<span class="s3">&quot;use strict&quot;</span><span class="s2">;</span>
+
+<span class="s0">//------------------------------------------------------------------------------</span>
+<span class="s0">// Requirements</span>
+<span class="s0">//------------------------------------------------------------------------------</span>
+
+<span class="s4">const </span><span class="s2">astUtils = require(</span><span class="s3">&quot;./utils/ast-utils&quot;</span><span class="s2">);</span>
+
+<span class="s0">//------------------------------------------------------------------------------</span>
+<span class="s0">// Helpers</span>
+<span class="s0">//------------------------------------------------------------------------------</span>
+
+<span class="s4">const </span><span class="s2">LT = </span><span class="s3">`[</span><span class="s2">${Array.from(astUtils.LINEBREAKS).join(</span><span class="s3">&quot;&quot;</span><span class="s2">)}</span><span class="s3">]`</span><span class="s2">;</span>
+<span class="s4">const </span><span class="s2">PADDING_LINE_SEQUENCE = </span><span class="s4">new </span><span class="s2">RegExp(</span>
+	<span class="s2">String.raw</span><span class="s3">`^(</span><span class="s5">\s</span><span class="s3">*?</span><span class="s2">${LT}</span><span class="s3">)</span><span class="s5">\s</span><span class="s3">*</span><span class="s2">${LT}</span><span class="s3">(</span><span class="s5">\s</span><span class="s3">*;?)$`</span><span class="s2">,</span>
+	<span class="s3">&quot;u&quot;</span><span class="s2">,</span>
+<span class="s2">);</span>
+<span class="s4">const </span><span class="s2">CJS_EXPORT = </span><span class="s6">/^(?:module\s*\.\s*)?exports(?:\s*\.|\s*\[|$)/u</span><span class="s2">;</span>
+<span class="s4">const </span><span class="s2">CJS_IMPORT = </span><span class="s6">/^require\(/u</span><span class="s2">;</span>
+
+<span class="s0">/**</span>
+ <span class="s0">* Creates tester which check if a node starts with specific keyword.</span>
+ <span class="s0">* </span><span class="s1">@param </span><span class="s0">{string} keyword The keyword to test.</span>
+ <span class="s0">* </span><span class="s1">@returns </span><span class="s0">{Object} the created tester.</span>
+ <span class="s0">* </span><span class="s1">@private</span>
+ <span class="s0">*/</span>
+<span class="s4">function </span><span class="s2">newKeywordTester(keyword) {</span>
+	<span class="s4">return </span><span class="s2">{</span>
+		<span class="s2">test: (node, sourceCode) =&gt;</span>
+			<span class="s2">sourceCode.getFirstToken(node).value === keyword,</span>
+	<span class="s2">};</span>
+<span class="s2">}</span>
+
+<span class="s0">/**</span>
+ <span class="s0">* Creates tester which check if a node starts with specific keyword and spans a single line.</span>
+ <span class="s0">* </span><span class="s1">@param </span><span class="s0">{string} keyword The keyword to test.</span>
+ <span class="s0">* </span><span class="s1">@returns </span><span class="s0">{Object} the created tester.</span>
+ <span class="s0">* </span><span class="s1">@private</span>
+ <span class="s0">*/</span>
+<span class="s4">function </span><span class="s2">newSinglelineKeywordTester(keyword) {</span>
+	<span class="s4">return </span><span class="s2">{</span>
+		<span class="s2">test: (node, sourceCode) =&gt;</span>
+			<span class="s2">node.loc.start.line === node.loc.end.line &amp;&amp;</span>
+			<span class="s2">sourceCode.getFirstToken(node).value === keyword,</span>
+	<span class="s2">};</span>
+<span class="s2">}</span>
+
+<span class="s0">/**</span>
+ <span class="s0">* Creates tester which check if a node starts with specific keyword and spans multiple lines.</span>
+ <span class="s0">* </span><span class="s1">@param </span><span class="s0">{string} keyword The keyword to test.</span>
+ <span class="s0">* </span><span class="s1">@returns </span><span class="s0">{Object} the created tester.</span>
+ <span class="s0">* </span><span class="s1">@private</span>
+ <span class="s0">*/</span>
+<span class="s4">function </span><span class="s2">newMultilineKeywordTester(keyword) {</span>
+	<span class="s4">return </span><span class="s2">{</span>
+		<span class="s2">test: (node, sourceCode) =&gt;</span>
+			<span class="s2">node.loc.start.line !== node.loc.end.line &amp;&amp;</span>
+			<span class="s2">sourceCode.getFirstToken(node).value === keyword,</span>
+	<span class="s2">};</span>
+<span class="s2">}</span>
+
+<span class="s0">/**</span>
+ <span class="s0">* Creates tester which check if a node is specific type.</span>
+ <span class="s0">* </span><span class="s1">@param </span><span class="s0">{string} type The node type to test.</span>
+ <span class="s0">* </span><span class="s1">@returns </span><span class="s0">{Object} the created tester.</span>
+ <span class="s0">* </span><span class="s1">@private</span>
+ <span class="s0">*/</span>
+<span class="s4">function </span><span class="s2">newNodeTypeTester(type) {</span>
+	<span class="s4">return </span><span class="s2">{</span>
+		<span class="s2">test: node =&gt; node.type === type,</span>
+	<span class="s2">};</span>
+<span class="s2">}</span>
+
+<span class="s0">/**</span>
+ <span class="s0">* Checks the given node is an expression statement of IIFE.</span>
+ <span class="s0">* </span><span class="s1">@param </span><span class="s0">{ASTNode} node The node to check.</span>
+ <span class="s0">* </span><span class="s1">@returns </span><span class="s0">{boolean} `true` if the node is an expression statement of IIFE.</span>
+ <span class="s0">* </span><span class="s1">@private</span>
+ <span class="s0">*/</span>
+<span class="s4">function </span><span class="s2">isIIFEStatement(node) {</span>
+	<span class="s4">if </span><span class="s2">(node.type === </span><span class="s3">&quot;ExpressionStatement&quot;</span><span class="s2">) {</span>
+		<span class="s4">let </span><span class="s2">call = astUtils.skipChainExpression(node.expression);</span>
+
+		<span class="s4">if </span><span class="s2">(call.type === </span><span class="s3">&quot;UnaryExpression&quot;</span><span class="s2">) {</span>
+			<span class="s2">call = astUtils.skipChainExpression(call.argument);</span>
+		<span class="s2">}</span>
+		<span class="s4">return </span><span class="s2">(</span>
+			<span class="s2">call.type === </span><span class="s3">&quot;CallExpression&quot; </span><span class="s2">&amp;&amp; astUtils.isFunction(call.callee)</span>
+		<span class="s2">);</span>
+	<span class="s2">}</span>
+	<span class="s4">return false</span><span class="s2">;</span>
+<span class="s2">}</span>
+
+<span class="s0">/**</span>
+ <span class="s0">* Checks whether the given node is a block-like statement.</span>
+ <span class="s0">* This checks the last token of the node is the closing brace of a block.</span>
+ <span class="s0">* </span><span class="s1">@param </span><span class="s0">{SourceCode} sourceCode The source code to get tokens.</span>
+ <span class="s0">* </span><span class="s1">@param </span><span class="s0">{ASTNode} node The node to check.</span>
+ <span class="s0">* </span><span class="s1">@returns </span><span class="s0">{boolean} `true` if the node is a block-like statement.</span>
+ <span class="s0">* </span><span class="s1">@private</span>
+ <span class="s0">*/</span>
+<span class="s4">function </span><span class="s2">isBlockLikeStatement(sourceCode, node) {</span>
+	<span class="s0">// do-while with a block is a block-like statement.</span>
+	<span class="s4">if </span><span class="s2">(</span>
+		<span class="s2">node.type === </span><span class="s3">&quot;DoWhileStatement&quot; </span><span class="s2">&amp;&amp;</span>
+		<span class="s2">node.body.type === </span><span class="s3">&quot;BlockStatement&quot;</span>
+	<span class="s2">) {</span>
+		<span class="s4">return true</span><span class="s2">;</span>
+	<span class="s2">}</span>
+
+	<span class="s0">/* 
+     * IIFE is a block-like statement specially from 
+     * JSCS#disallowPaddingNewLinesAfterBlocks. 
+     */</span>
+	<span class="s4">if </span><span class="s2">(isIIFEStatement(node)) {</span>
+		<span class="s4">return true</span><span class="s2">;</span>
+	<span class="s2">}</span>
+
+	<span class="s0">// Checks the last token is a closing brace of blocks.</span>
+	<span class="s4">const </span><span class="s2">lastToken = sourceCode.getLastToken(</span>
+		<span class="s2">node,</span>
+		<span class="s2">astUtils.isNotSemicolonToken,</span>
+	<span class="s2">);</span>
+	<span class="s4">const </span><span class="s2">belongingNode =</span>
+		<span class="s2">lastToken &amp;&amp; astUtils.isClosingBraceToken(lastToken)</span>
+			<span class="s2">? sourceCode.getNodeByRangeIndex(lastToken.range[</span><span class="s7">0</span><span class="s2">])</span>
+			<span class="s2">: </span><span class="s4">null</span><span class="s2">;</span>
+
+	<span class="s4">return </span><span class="s2">(</span>
+		<span class="s2">Boolean(belongingNode) &amp;&amp;</span>
+		<span class="s2">(belongingNode.type === </span><span class="s3">&quot;BlockStatement&quot; </span><span class="s2">||</span>
+			<span class="s2">belongingNode.type === </span><span class="s3">&quot;SwitchStatement&quot;</span><span class="s2">)</span>
+	<span class="s2">);</span>
+<span class="s2">}</span>
+
+<span class="s0">/**</span>
+ <span class="s0">* Gets the actual last token.</span>
+ <span class="s0">*</span>
+ <span class="s0">* If a semicolon is semicolon-less style's semicolon, this ignores it.</span>
+ <span class="s0">* For example:</span>
+ <span class="s0">*</span>
+ <span class="s0">*     foo()</span>
+ <span class="s0">*     ;[1, 2, 3].forEach(bar)</span>
+ <span class="s0">* </span><span class="s1">@param </span><span class="s0">{SourceCode} sourceCode The source code to get tokens.</span>
+ <span class="s0">* </span><span class="s1">@param </span><span class="s0">{ASTNode} node The node to get.</span>
+ <span class="s0">* </span><span class="s1">@returns </span><span class="s0">{Token} The actual last token.</span>
+ <span class="s0">* </span><span class="s1">@private</span>
+ <span class="s0">*/</span>
+<span class="s4">function </span><span class="s2">getActualLastToken(sourceCode, node) {</span>
+	<span class="s4">const </span><span class="s2">semiToken = sourceCode.getLastToken(node);</span>
+	<span class="s4">const </span><span class="s2">prevToken = sourceCode.getTokenBefore(semiToken);</span>
+	<span class="s4">const </span><span class="s2">nextToken = sourceCode.getTokenAfter(semiToken);</span>
+	<span class="s4">const </span><span class="s2">isSemicolonLessStyle = Boolean(</span>
+		<span class="s2">prevToken &amp;&amp;</span>
+			<span class="s2">nextToken &amp;&amp;</span>
+			<span class="s2">prevToken.range[</span><span class="s7">0</span><span class="s2">] &gt;= node.range[</span><span class="s7">0</span><span class="s2">] &amp;&amp;</span>
+			<span class="s2">astUtils.isSemicolonToken(semiToken) &amp;&amp;</span>
+			<span class="s2">semiToken.loc.start.line !== prevToken.loc.end.line &amp;&amp;</span>
+			<span class="s2">semiToken.loc.end.line === nextToken.loc.start.line,</span>
+	<span class="s2">);</span>
+
+	<span class="s4">return </span><span class="s2">isSemicolonLessStyle ? prevToken : semiToken;</span>
+<span class="s2">}</span>
+
+<span class="s0">/**</span>
+ <span class="s0">* This returns the concatenation of the first 2 captured strings.</span>
+ <span class="s0">* </span><span class="s1">@param </span><span class="s0">{string} _ Unused. Whole matched string.</span>
+ <span class="s0">* </span><span class="s1">@param </span><span class="s0">{string} trailingSpaces The trailing spaces of the first line.</span>
+ <span class="s0">* </span><span class="s1">@param </span><span class="s0">{string} indentSpaces The indentation spaces of the last line.</span>
+ <span class="s0">* </span><span class="s1">@returns </span><span class="s0">{string} The concatenation of trailingSpaces and indentSpaces.</span>
+ <span class="s0">* </span><span class="s1">@private</span>
+ <span class="s0">*/</span>
+<span class="s4">function </span><span class="s2">replacerToRemovePaddingLines(_, trailingSpaces, indentSpaces) {</span>
+	<span class="s4">return </span><span class="s2">trailingSpaces + indentSpaces;</span>
+<span class="s2">}</span>
+
+<span class="s0">/**</span>
+ <span class="s0">* Check and report statements for `any` configuration.</span>
+ <span class="s0">* It does nothing.</span>
+ <span class="s0">* </span><span class="s1">@returns </span><span class="s0">{void}</span>
+ <span class="s0">* </span><span class="s1">@private</span>
+ <span class="s0">*/</span>
+<span class="s4">function </span><span class="s2">verifyForAny() {}</span>
+
+<span class="s0">/**</span>
+ <span class="s0">* Check and report statements for `never` configuration.</span>
+ <span class="s0">* This autofix removes blank lines between the given 2 statements.</span>
+ <span class="s0">* However, if comments exist between 2 blank lines, it does not remove those</span>
+ <span class="s0">* blank lines automatically.</span>
+ <span class="s0">* </span><span class="s1">@param </span><span class="s0">{RuleContext} context The rule context to report.</span>
+ <span class="s0">* </span><span class="s1">@param </span><span class="s0">{ASTNode} _ Unused. The previous node to check.</span>
+ <span class="s0">* </span><span class="s1">@param </span><span class="s0">{ASTNode} nextNode The next node to check.</span>
+ <span class="s0">* </span><span class="s1">@param </span><span class="s0">{Array&lt;Token[]&gt;} paddingLines The array of token pairs that blank</span>
+ <span class="s0">* lines exist between the pair.</span>
+ <span class="s0">* </span><span class="s1">@returns </span><span class="s0">{void}</span>
+ <span class="s0">* </span><span class="s1">@private</span>
+ <span class="s0">*/</span>
+<span class="s4">function </span><span class="s2">verifyForNever(context, _, nextNode, paddingLines) {</span>
+	<span class="s4">if </span><span class="s2">(paddingLines.length === </span><span class="s7">0</span><span class="s2">) {</span>
+		<span class="s4">return</span><span class="s2">;</span>
+	<span class="s2">}</span>
+
+	<span class="s2">context.report({</span>
+		<span class="s2">node: nextNode,</span>
+		<span class="s2">messageId: </span><span class="s3">&quot;unexpectedBlankLine&quot;</span><span class="s2">,</span>
+		<span class="s2">fix(fixer) {</span>
+			<span class="s4">if </span><span class="s2">(paddingLines.length &gt;= </span><span class="s7">2</span><span class="s2">) {</span>
+				<span class="s4">return null</span><span class="s2">;</span>
+			<span class="s2">}</span>
+
+			<span class="s4">const </span><span class="s2">prevToken = paddingLines[</span><span class="s7">0</span><span class="s2">][</span><span class="s7">0</span><span class="s2">];</span>
+			<span class="s4">const </span><span class="s2">nextToken = paddingLines[</span><span class="s7">0</span><span class="s2">][</span><span class="s7">1</span><span class="s2">];</span>
+			<span class="s4">const </span><span class="s2">start = prevToken.range[</span><span class="s7">1</span><span class="s2">];</span>
+			<span class="s4">const </span><span class="s2">end = nextToken.range[</span><span class="s7">0</span><span class="s2">];</span>
+			<span class="s4">const </span><span class="s2">text = context.sourceCode.text</span>
+				<span class="s2">.slice(start, end)</span>
+				<span class="s2">.replace(PADDING_LINE_SEQUENCE, replacerToRemovePaddingLines);</span>
+
+			<span class="s4">return </span><span class="s2">fixer.replaceTextRange([start, end], text);</span>
+		<span class="s2">},</span>
+	<span class="s2">});</span>
+<span class="s2">}</span>
+
+<span class="s0">/**</span>
+ <span class="s0">* Check and report statements for `always` configuration.</span>
+ <span class="s0">* This autofix inserts a blank line between the given 2 statements.</span>
+ <span class="s0">* If the `prevNode` has trailing comments, it inserts a blank line after the</span>
+ <span class="s0">* trailing comments.</span>
+ <span class="s0">* </span><span class="s1">@param </span><span class="s0">{RuleContext} context The rule context to report.</span>
+ <span class="s0">* </span><span class="s1">@param </span><span class="s0">{ASTNode} prevNode The previous node to check.</span>
+ <span class="s0">* </span><span class="s1">@param </span><span class="s0">{ASTNode} nextNode The next node to check.</span>
+ <span class="s0">* </span><span class="s1">@param </span><span class="s0">{Array&lt;Token[]&gt;} paddingLines The array of token pairs that blank</span>
+ <span class="s0">* lines exist between the pair.</span>
+ <span class="s0">* </span><span class="s1">@returns </span><span class="s0">{void}</span>
+ <span class="s0">* </span><span class="s1">@private</span>
+ <span class="s0">*/</span>
+<span class="s4">function </span><span class="s2">verifyForAlways(context, prevNode, nextNode, paddingLines) {</span>
+	<span class="s4">if </span><span class="s2">(paddingLines.length &gt; </span><span class="s7">0</span><span class="s2">) {</span>
+		<span class="s4">return</span><span class="s2">;</span>
+	<span class="s2">}</span>
+
+	<span class="s2">context.report({</span>
+		<span class="s2">node: nextNode,</span>
+		<span class="s2">messageId: </span><span class="s3">&quot;expectedBlankLine&quot;</span><span class="s2">,</span>
+		<span class="s2">fix(fixer) {</span>
+			<span class="s4">const </span><span class="s2">sourceCode = context.sourceCode;</span>
+			<span class="s4">let </span><span class="s2">prevToken = getActualLastToken(sourceCode, prevNode);</span>
+			<span class="s4">const </span><span class="s2">nextToken =</span>
+				<span class="s2">sourceCode.getFirstTokenBetween(prevToken, nextNode, {</span>
+					<span class="s2">includeComments: </span><span class="s4">true</span><span class="s2">,</span>
+
+					<span class="s0">/**</span>
+					 <span class="s0">* Skip the trailing comments of the previous node.</span>
+					 <span class="s0">* This inserts a blank line after the last trailing comment.</span>
+					 <span class="s0">*</span>
+					 <span class="s0">* For example:</span>
+					 <span class="s0">*</span>
+					 <span class="s0">*     foo(); // trailing comment.</span>
+					 <span class="s0">*     // comment.</span>
+					 <span class="s0">*     bar();</span>
+					 <span class="s0">*</span>
+					 <span class="s0">* Get fixed to:</span>
+					 <span class="s0">*</span>
+					 <span class="s0">*     foo(); // trailing comment.</span>
+					 <span class="s0">*</span>
+					 <span class="s0">*     // comment.</span>
+					 <span class="s0">*     bar();</span>
+					 <span class="s0">* </span><span class="s1">@param </span><span class="s0">{Token} token The token to check.</span>
+					 <span class="s0">* </span><span class="s1">@returns </span><span class="s0">{boolean} `true` if the token is not a trailing comment.</span>
+					 <span class="s0">* </span><span class="s1">@private</span>
+					 <span class="s0">*/</span>
+					<span class="s2">filter(token) {</span>
+						<span class="s4">if </span><span class="s2">(astUtils.isTokenOnSameLine(prevToken, token)) {</span>
+							<span class="s2">prevToken = token;</span>
+							<span class="s4">return false</span><span class="s2">;</span>
+						<span class="s2">}</span>
+						<span class="s4">return true</span><span class="s2">;</span>
+					<span class="s2">},</span>
+				<span class="s2">}) || nextNode;</span>
+			<span class="s4">const </span><span class="s2">insertText = astUtils.isTokenOnSameLine(prevToken, nextToken)</span>
+				<span class="s2">? </span><span class="s3">&quot;</span><span class="s5">\n\n</span><span class="s3">&quot;</span>
+				<span class="s2">: </span><span class="s3">&quot;</span><span class="s5">\n</span><span class="s3">&quot;</span><span class="s2">;</span>
+
+			<span class="s4">return </span><span class="s2">fixer.insertTextAfter(prevToken, insertText);</span>
+		<span class="s2">},</span>
+	<span class="s2">});</span>
+<span class="s2">}</span>
+
+<span class="s0">/**</span>
+ <span class="s0">* Types of blank lines.</span>
+ <span class="s0">* `any`, `never`, and `always` are defined.</span>
+ <span class="s0">* Those have `verify` method to check and report statements.</span>
+ <span class="s0">* </span><span class="s1">@private</span>
+ <span class="s0">*/</span>
+<span class="s4">const </span><span class="s2">PaddingTypes = {</span>
+	<span class="s2">any: { verify: verifyForAny },</span>
+	<span class="s2">never: { verify: verifyForNever },</span>
+	<span class="s2">always: { verify: verifyForAlways },</span>
+<span class="s2">};</span>
+
+<span class="s0">/**</span>
+ <span class="s0">* Types of statements.</span>
+ <span class="s0">* Those have `test` method to check it matches to the given statement.</span>
+ <span class="s0">* </span><span class="s1">@private</span>
+ <span class="s0">*/</span>
+<span class="s4">const </span><span class="s2">StatementTypes = {</span>
+	<span class="s3">&quot;*&quot;</span><span class="s2">: { test: () =&gt; </span><span class="s4">true </span><span class="s2">},</span>
+	<span class="s3">&quot;block-like&quot;</span><span class="s2">: {</span>
+		<span class="s2">test: (node, sourceCode) =&gt; isBlockLikeStatement(sourceCode, node),</span>
+	<span class="s2">},</span>
+	<span class="s3">&quot;cjs-export&quot;</span><span class="s2">: {</span>
+		<span class="s2">test: (node, sourceCode) =&gt;</span>
+			<span class="s2">node.type === </span><span class="s3">&quot;ExpressionStatement&quot; </span><span class="s2">&amp;&amp;</span>
+			<span class="s2">node.expression.type === </span><span class="s3">&quot;AssignmentExpression&quot; </span><span class="s2">&amp;&amp;</span>
+			<span class="s2">CJS_EXPORT.test(sourceCode.getText(node.expression.left)),</span>
+	<span class="s2">},</span>
+	<span class="s3">&quot;cjs-import&quot;</span><span class="s2">: {</span>
+		<span class="s2">test: (node, sourceCode) =&gt;</span>
+			<span class="s2">node.type === </span><span class="s3">&quot;VariableDeclaration&quot; </span><span class="s2">&amp;&amp;</span>
+			<span class="s2">node.declarations.length &gt; </span><span class="s7">0 </span><span class="s2">&amp;&amp;</span>
+			<span class="s2">Boolean(node.declarations[</span><span class="s7">0</span><span class="s2">].init) &amp;&amp;</span>
+			<span class="s2">CJS_IMPORT.test(sourceCode.getText(node.declarations[</span><span class="s7">0</span><span class="s2">].init)),</span>
+	<span class="s2">},</span>
+	<span class="s2">directive: {</span>
+		<span class="s2">test: astUtils.isDirective,</span>
+	<span class="s2">},</span>
+	<span class="s2">expression: {</span>
+		<span class="s2">test: node =&gt;</span>
+			<span class="s2">node.type === </span><span class="s3">&quot;ExpressionStatement&quot; </span><span class="s2">&amp;&amp; !astUtils.isDirective(node),</span>
+	<span class="s2">},</span>
+	<span class="s2">iife: {</span>
+		<span class="s2">test: isIIFEStatement,</span>
+	<span class="s2">},</span>
+	<span class="s3">&quot;multiline-block-like&quot;</span><span class="s2">: {</span>
+		<span class="s2">test: (node, sourceCode) =&gt;</span>
+			<span class="s2">node.loc.start.line !== node.loc.end.line &amp;&amp;</span>
+			<span class="s2">isBlockLikeStatement(sourceCode, node),</span>
+	<span class="s2">},</span>
+	<span class="s3">&quot;multiline-expression&quot;</span><span class="s2">: {</span>
+		<span class="s2">test: node =&gt;</span>
+			<span class="s2">node.loc.start.line !== node.loc.end.line &amp;&amp;</span>
+			<span class="s2">node.type === </span><span class="s3">&quot;ExpressionStatement&quot; </span><span class="s2">&amp;&amp;</span>
+			<span class="s2">!astUtils.isDirective(node),</span>
+	<span class="s2">},</span>
+
+	<span class="s3">&quot;multiline-const&quot;</span><span class="s2">: newMultilineKeywordTester(</span><span class="s3">&quot;const&quot;</span><span class="s2">),</span>
+	<span class="s3">&quot;multiline-let&quot;</span><span class="s2">: newMultilineKeywordTester(</span><span class="s3">&quot;let&quot;</span><span class="s2">),</span>
+	<span class="s3">&quot;multiline-var&quot;</span><span class="s2">: newMultilineKeywordTester(</span><span class="s3">&quot;var&quot;</span><span class="s2">),</span>
+	<span class="s3">&quot;singleline-const&quot;</span><span class="s2">: newSinglelineKeywordTester(</span><span class="s3">&quot;const&quot;</span><span class="s2">),</span>
+	<span class="s3">&quot;singleline-let&quot;</span><span class="s2">: newSinglelineKeywordTester(</span><span class="s3">&quot;let&quot;</span><span class="s2">),</span>
+	<span class="s3">&quot;singleline-var&quot;</span><span class="s2">: newSinglelineKeywordTester(</span><span class="s3">&quot;var&quot;</span><span class="s2">),</span>
+
+	<span class="s2">block: newNodeTypeTester(</span><span class="s3">&quot;BlockStatement&quot;</span><span class="s2">),</span>
+	<span class="s2">empty: newNodeTypeTester(</span><span class="s3">&quot;EmptyStatement&quot;</span><span class="s2">),</span>
+	<span class="s4">function</span><span class="s2">: newNodeTypeTester(</span><span class="s3">&quot;FunctionDeclaration&quot;</span><span class="s2">),</span>
+
+	<span class="s4">break</span><span class="s2">: newKeywordTester(</span><span class="s3">&quot;break&quot;</span><span class="s2">),</span>
+	<span class="s4">case</span><span class="s2">: newKeywordTester(</span><span class="s3">&quot;case&quot;</span><span class="s2">),</span>
+	<span class="s4">class</span><span class="s2">: newKeywordTester(</span><span class="s3">&quot;class&quot;</span><span class="s2">),</span>
+	<span class="s4">const</span><span class="s2">: newKeywordTester(</span><span class="s3">&quot;const&quot;</span><span class="s2">),</span>
+	<span class="s4">continue</span><span class="s2">: newKeywordTester(</span><span class="s3">&quot;continue&quot;</span><span class="s2">),</span>
+	<span class="s4">debugger</span><span class="s2">: newKeywordTester(</span><span class="s3">&quot;debugger&quot;</span><span class="s2">),</span>
+	<span class="s4">default</span><span class="s2">: newKeywordTester(</span><span class="s3">&quot;default&quot;</span><span class="s2">),</span>
+	<span class="s4">do</span><span class="s2">: newKeywordTester(</span><span class="s3">&quot;do&quot;</span><span class="s2">),</span>
+	<span class="s4">export</span><span class="s2">: newKeywordTester(</span><span class="s3">&quot;export&quot;</span><span class="s2">),</span>
+	<span class="s4">for</span><span class="s2">: newKeywordTester(</span><span class="s3">&quot;for&quot;</span><span class="s2">),</span>
+	<span class="s4">if</span><span class="s2">: newKeywordTester(</span><span class="s3">&quot;if&quot;</span><span class="s2">),</span>
+	<span class="s4">import</span><span class="s2">: newKeywordTester(</span><span class="s3">&quot;import&quot;</span><span class="s2">),</span>
+	<span class="s4">let</span><span class="s2">: newKeywordTester(</span><span class="s3">&quot;let&quot;</span><span class="s2">),</span>
+	<span class="s4">return</span><span class="s2">: newKeywordTester(</span><span class="s3">&quot;return&quot;</span><span class="s2">),</span>
+	<span class="s4">switch</span><span class="s2">: newKeywordTester(</span><span class="s3">&quot;switch&quot;</span><span class="s2">),</span>
+	<span class="s4">throw</span><span class="s2">: newKeywordTester(</span><span class="s3">&quot;throw&quot;</span><span class="s2">),</span>
+	<span class="s4">try</span><span class="s2">: newKeywordTester(</span><span class="s3">&quot;try&quot;</span><span class="s2">),</span>
+	<span class="s4">var</span><span class="s2">: newKeywordTester(</span><span class="s3">&quot;var&quot;</span><span class="s2">),</span>
+	<span class="s4">while</span><span class="s2">: newKeywordTester(</span><span class="s3">&quot;while&quot;</span><span class="s2">),</span>
+	<span class="s4">with</span><span class="s2">: newKeywordTester(</span><span class="s3">&quot;with&quot;</span><span class="s2">),</span>
+<span class="s2">};</span>
+
+<span class="s0">//------------------------------------------------------------------------------</span>
+<span class="s0">// Rule Definition</span>
+<span class="s0">//------------------------------------------------------------------------------</span>
+
+<span class="s0">/** </span><span class="s1">@type </span><span class="s0">{import('../types').Rule.RuleModule} */</span>
+<span class="s2">module.exports = {</span>
+	<span class="s2">meta: {</span>
+		<span class="s2">deprecated: {</span>
+			<span class="s2">message: </span><span class="s3">&quot;Formatting rules are being moved out of ESLint core.&quot;</span><span class="s2">,</span>
+			<span class="s2">url: </span><span class="s3">&quot;https://eslint.org/blog/2023/10/deprecating-formatting-rules/&quot;</span><span class="s2">,</span>
+			<span class="s2">deprecatedSince: </span><span class="s3">&quot;8.53.0&quot;</span><span class="s2">,</span>
+			<span class="s2">availableUntil: </span><span class="s3">&quot;10.0.0&quot;</span><span class="s2">,</span>
+			<span class="s2">replacedBy: [</span>
+				<span class="s2">{</span>
+					<span class="s2">message:</span>
+						<span class="s3">&quot;ESLint Stylistic now maintains deprecated stylistic core rules.&quot;</span><span class="s2">,</span>
+					<span class="s2">url: </span><span class="s3">&quot;https://eslint.style/guide/migration&quot;</span><span class="s2">,</span>
+					<span class="s2">plugin: {</span>
+						<span class="s2">name: </span><span class="s3">&quot;@stylistic/eslint-plugin&quot;</span><span class="s2">,</span>
+						<span class="s2">url: </span><span class="s3">&quot;https://eslint.style&quot;</span><span class="s2">,</span>
+					<span class="s2">},</span>
+					<span class="s2">rule: {</span>
+						<span class="s2">name: </span><span class="s3">&quot;padding-line-between-statements&quot;</span><span class="s2">,</span>
+						<span class="s2">url: </span><span class="s3">&quot;https://eslint.style/rules/padding-line-between-statements&quot;</span><span class="s2">,</span>
+					<span class="s2">},</span>
+				<span class="s2">},</span>
+			<span class="s2">],</span>
+		<span class="s2">},</span>
+		<span class="s2">type: </span><span class="s3">&quot;layout&quot;</span><span class="s2">,</span>
+
+		<span class="s2">docs: {</span>
+			<span class="s2">description: </span><span class="s3">&quot;Require or disallow padding lines between statements&quot;</span><span class="s2">,</span>
+			<span class="s2">recommended: </span><span class="s4">false</span><span class="s2">,</span>
+			<span class="s2">url: </span><span class="s3">&quot;https://eslint.org/docs/latest/rules/padding-line-between-statements&quot;</span><span class="s2">,</span>
+		<span class="s2">},</span>
+
+		<span class="s2">fixable: </span><span class="s3">&quot;whitespace&quot;</span><span class="s2">,</span>
+
+		<span class="s2">schema: {</span>
+			<span class="s2">definitions: {</span>
+				<span class="s2">paddingType: {</span>
+					<span class="s4">enum</span><span class="s2">: Object.keys(PaddingTypes),</span>
+				<span class="s2">},</span>
+				<span class="s2">statementType: {</span>
+					<span class="s2">anyOf: [</span>
+						<span class="s2">{ </span><span class="s4">enum</span><span class="s2">: Object.keys(StatementTypes) },</span>
+						<span class="s2">{</span>
+							<span class="s2">type: </span><span class="s3">&quot;array&quot;</span><span class="s2">,</span>
+							<span class="s2">items: { </span><span class="s4">enum</span><span class="s2">: Object.keys(StatementTypes) },</span>
+							<span class="s2">minItems: </span><span class="s7">1</span><span class="s2">,</span>
+							<span class="s2">uniqueItems: </span><span class="s4">true</span><span class="s2">,</span>
+						<span class="s2">},</span>
+					<span class="s2">],</span>
+				<span class="s2">},</span>
+			<span class="s2">},</span>
+			<span class="s2">type: </span><span class="s3">&quot;array&quot;</span><span class="s2">,</span>
+			<span class="s2">items: {</span>
+				<span class="s2">type: </span><span class="s3">&quot;object&quot;</span><span class="s2">,</span>
+				<span class="s2">properties: {</span>
+					<span class="s2">blankLine: { $ref: </span><span class="s3">&quot;#/definitions/paddingType&quot; </span><span class="s2">},</span>
+					<span class="s2">prev: { $ref: </span><span class="s3">&quot;#/definitions/statementType&quot; </span><span class="s2">},</span>
+					<span class="s2">next: { $ref: </span><span class="s3">&quot;#/definitions/statementType&quot; </span><span class="s2">},</span>
+				<span class="s2">},</span>
+				<span class="s2">additionalProperties: </span><span class="s4">false</span><span class="s2">,</span>
+				<span class="s2">required: [</span><span class="s3">&quot;blankLine&quot;</span><span class="s2">, </span><span class="s3">&quot;prev&quot;</span><span class="s2">, </span><span class="s3">&quot;next&quot;</span><span class="s2">],</span>
+			<span class="s2">},</span>
+		<span class="s2">},</span>
+
+		<span class="s2">messages: {</span>
+			<span class="s2">unexpectedBlankLine: </span><span class="s3">&quot;Unexpected blank line before this statement.&quot;</span><span class="s2">,</span>
+			<span class="s2">expectedBlankLine: </span><span class="s3">&quot;Expected blank line before this statement.&quot;</span><span class="s2">,</span>
+		<span class="s2">},</span>
+	<span class="s2">},</span>
+
+	<span class="s2">create(context) {</span>
+		<span class="s4">const </span><span class="s2">sourceCode = context.sourceCode;</span>
+		<span class="s4">const </span><span class="s2">configureList = context.options || [];</span>
+		<span class="s4">let </span><span class="s2">scopeInfo = </span><span class="s4">null</span><span class="s2">;</span>
+
+		<span class="s0">/**</span>
+		 <span class="s0">* Processes to enter to new scope.</span>
+		 <span class="s0">* This manages the current previous statement.</span>
+		 <span class="s0">* </span><span class="s1">@returns </span><span class="s0">{void}</span>
+		 <span class="s0">* </span><span class="s1">@private</span>
+		 <span class="s0">*/</span>
+		<span class="s4">function </span><span class="s2">enterScope() {</span>
+			<span class="s2">scopeInfo = {</span>
+				<span class="s2">upper: scopeInfo,</span>
+				<span class="s2">prevNode: </span><span class="s4">null</span><span class="s2">,</span>
+			<span class="s2">};</span>
+		<span class="s2">}</span>
+
+		<span class="s0">/**</span>
+		 <span class="s0">* Processes to exit from the current scope.</span>
+		 <span class="s0">* </span><span class="s1">@returns </span><span class="s0">{void}</span>
+		 <span class="s0">* </span><span class="s1">@private</span>
+		 <span class="s0">*/</span>
+		<span class="s4">function </span><span class="s2">exitScope() {</span>
+			<span class="s2">scopeInfo = scopeInfo.upper;</span>
+		<span class="s2">}</span>
+
+		<span class="s0">/**</span>
+		 <span class="s0">* Checks whether the given node matches the given type.</span>
+		 <span class="s0">* </span><span class="s1">@param </span><span class="s0">{ASTNode} node The statement node to check.</span>
+		 <span class="s0">* </span><span class="s1">@param </span><span class="s0">{string|string[]} type The statement type to check.</span>
+		 <span class="s0">* </span><span class="s1">@returns </span><span class="s0">{boolean} `true` if the statement node matched the type.</span>
+		 <span class="s0">* </span><span class="s1">@private</span>
+		 <span class="s0">*/</span>
+		<span class="s4">function </span><span class="s2">match(node, type) {</span>
+			<span class="s4">let </span><span class="s2">innerStatementNode = node;</span>
+
+			<span class="s4">while </span><span class="s2">(innerStatementNode.type === </span><span class="s3">&quot;LabeledStatement&quot;</span><span class="s2">) {</span>
+				<span class="s2">innerStatementNode = innerStatementNode.body;</span>
+			<span class="s2">}</span>
+			<span class="s4">if </span><span class="s2">(Array.isArray(type)) {</span>
+				<span class="s4">return </span><span class="s2">type.some(match.bind(</span><span class="s4">null</span><span class="s2">, innerStatementNode));</span>
+			<span class="s2">}</span>
+			<span class="s4">return </span><span class="s2">StatementTypes[type].test(innerStatementNode, sourceCode);</span>
+		<span class="s2">}</span>
+
+		<span class="s0">/**</span>
+		 <span class="s0">* Finds the last matched configure from configureList.</span>
+		 <span class="s0">* </span><span class="s1">@param </span><span class="s0">{ASTNode} prevNode The previous statement to match.</span>
+		 <span class="s0">* </span><span class="s1">@param </span><span class="s0">{ASTNode} nextNode The current statement to match.</span>
+		 <span class="s0">* </span><span class="s1">@returns </span><span class="s0">{Object} The tester of the last matched configure.</span>
+		 <span class="s0">* </span><span class="s1">@private</span>
+		 <span class="s0">*/</span>
+		<span class="s4">function </span><span class="s2">getPaddingType(prevNode, nextNode) {</span>
+			<span class="s4">for </span><span class="s2">(</span><span class="s4">let </span><span class="s2">i = configureList.length - </span><span class="s7">1</span><span class="s2">; i &gt;= </span><span class="s7">0</span><span class="s2">; --i) {</span>
+				<span class="s4">const </span><span class="s2">configure = configureList[i];</span>
+				<span class="s4">const </span><span class="s2">matched =</span>
+					<span class="s2">match(prevNode, configure.prev) &amp;&amp;</span>
+					<span class="s2">match(nextNode, configure.next);</span>
+
+				<span class="s4">if </span><span class="s2">(matched) {</span>
+					<span class="s4">return </span><span class="s2">PaddingTypes[configure.blankLine];</span>
+				<span class="s2">}</span>
+			<span class="s2">}</span>
+			<span class="s4">return </span><span class="s2">PaddingTypes.any;</span>
+		<span class="s2">}</span>
+
+		<span class="s0">/**</span>
+		 <span class="s0">* Gets padding line sequences between the given 2 statements.</span>
+		 <span class="s0">* Comments are separators of the padding line sequences.</span>
+		 <span class="s0">* </span><span class="s1">@param </span><span class="s0">{ASTNode} prevNode The previous statement to count.</span>
+		 <span class="s0">* </span><span class="s1">@param </span><span class="s0">{ASTNode} nextNode The current statement to count.</span>
+		 <span class="s0">* </span><span class="s1">@returns </span><span class="s0">{Array&lt;Token[]&gt;} The array of token pairs.</span>
+		 <span class="s0">* </span><span class="s1">@private</span>
+		 <span class="s0">*/</span>
+		<span class="s4">function </span><span class="s2">getPaddingLineSequences(prevNode, nextNode) {</span>
+			<span class="s4">const </span><span class="s2">pairs = [];</span>
+			<span class="s4">let </span><span class="s2">prevToken = getActualLastToken(sourceCode, prevNode);</span>
+
+			<span class="s4">if </span><span class="s2">(nextNode.loc.start.line - prevToken.loc.end.line &gt;= </span><span class="s7">2</span><span class="s2">) {</span>
+				<span class="s4">do </span><span class="s2">{</span>
+					<span class="s4">const </span><span class="s2">token = sourceCode.getTokenAfter(prevToken, {</span>
+						<span class="s2">includeComments: </span><span class="s4">true</span><span class="s2">,</span>
+					<span class="s2">});</span>
+
+					<span class="s4">if </span><span class="s2">(token.loc.start.line - prevToken.loc.end.line &gt;= </span><span class="s7">2</span><span class="s2">) {</span>
+						<span class="s2">pairs.push([prevToken, token]);</span>
+					<span class="s2">}</span>
+					<span class="s2">prevToken = token;</span>
+				<span class="s2">} </span><span class="s4">while </span><span class="s2">(prevToken.range[</span><span class="s7">0</span><span class="s2">] &lt; nextNode.range[</span><span class="s7">0</span><span class="s2">]);</span>
+			<span class="s2">}</span>
+
+			<span class="s4">return </span><span class="s2">pairs;</span>
+		<span class="s2">}</span>
+
+		<span class="s0">/**</span>
+		 <span class="s0">* Verify padding lines between the given node and the previous node.</span>
+		 <span class="s0">* </span><span class="s1">@param </span><span class="s0">{ASTNode} node The node to verify.</span>
+		 <span class="s0">* </span><span class="s1">@returns </span><span class="s0">{void}</span>
+		 <span class="s0">* </span><span class="s1">@private</span>
+		 <span class="s0">*/</span>
+		<span class="s4">function </span><span class="s2">verify(node) {</span>
+			<span class="s4">const </span><span class="s2">parentType = node.parent.type;</span>
+			<span class="s4">const </span><span class="s2">validParent =</span>
+				<span class="s2">astUtils.STATEMENT_LIST_PARENTS.has(parentType) ||</span>
+				<span class="s2">parentType === </span><span class="s3">&quot;SwitchStatement&quot;</span><span class="s2">;</span>
+
+			<span class="s4">if </span><span class="s2">(!validParent) {</span>
+				<span class="s4">return</span><span class="s2">;</span>
+			<span class="s2">}</span>
+
+			<span class="s0">// Save this node as the current previous statement.</span>
+			<span class="s4">const </span><span class="s2">prevNode = scopeInfo.prevNode;</span>
+
+			<span class="s0">// Verify.</span>
+			<span class="s4">if </span><span class="s2">(prevNode) {</span>
+				<span class="s4">const </span><span class="s2">type = getPaddingType(prevNode, node);</span>
+				<span class="s4">const </span><span class="s2">paddingLines = getPaddingLineSequences(prevNode, node);</span>
+
+				<span class="s2">type.verify(context, prevNode, node, paddingLines);</span>
+			<span class="s2">}</span>
+
+			<span class="s2">scopeInfo.prevNode = node;</span>
+		<span class="s2">}</span>
+
+		<span class="s0">/**</span>
+		 <span class="s0">* Verify padding lines between the given node and the previous node.</span>
+		 <span class="s0">* Then process to enter to new scope.</span>
+		 <span class="s0">* </span><span class="s1">@param </span><span class="s0">{ASTNode} node The node to verify.</span>
+		 <span class="s0">* </span><span class="s1">@returns </span><span class="s0">{void}</span>
+		 <span class="s0">* </span><span class="s1">@private</span>
+		 <span class="s0">*/</span>
+		<span class="s4">function </span><span class="s2">verifyThenEnterScope(node) {</span>
+			<span class="s2">verify(node);</span>
+			<span class="s2">enterScope();</span>
+		<span class="s2">}</span>
+
+		<span class="s4">return </span><span class="s2">{</span>
+			<span class="s2">Program: enterScope,</span>
+			<span class="s2">BlockStatement: enterScope,</span>
+			<span class="s2">SwitchStatement: enterScope,</span>
+			<span class="s2">StaticBlock: enterScope,</span>
+			<span class="s3">&quot;Program:exit&quot;</span><span class="s2">: exitScope,</span>
+			<span class="s3">&quot;BlockStatement:exit&quot;</span><span class="s2">: exitScope,</span>
+			<span class="s3">&quot;SwitchStatement:exit&quot;</span><span class="s2">: exitScope,</span>
+			<span class="s3">&quot;StaticBlock:exit&quot;</span><span class="s2">: exitScope,</span>
+
+			<span class="s3">&quot;:statement&quot;</span><span class="s2">: verify,</span>
+
+			<span class="s2">SwitchCase: verifyThenEnterScope,</span>
+			<span class="s3">&quot;SwitchCase:exit&quot;</span><span class="s2">: exitScope,</span>
+		<span class="s2">};</span>
+	<span class="s2">},</span>
+<span class="s2">};</span>
+</pre>
+</body>
+</html>

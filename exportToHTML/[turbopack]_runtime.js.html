@@ -1,0 +1,779 @@
+<html>
+<head>
+<title>[turbopack]_runtime.js</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #0033b3;}
+.s1 { color: #080808;}
+.s2 { color: #067d17;}
+.s3 { color: #8c8c8c; font-style: italic;}
+.s4 { color: #1750eb;}
+.s5 { color: #8c8c8c; font-style: italic;}
+.s6 { color: #264eff;}
+</style>
+</head>
+<body bgcolor="#ffffff">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#c0c0c0" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+[turbopack]_runtime.js</font>
+</center></td></tr></table>
+<pre><span class="s0">const </span><span class="s1">RUNTIME_PUBLIC_PATH = </span><span class="s2">&quot;server/chunks/ssr/[turbopack]_runtime.js&quot;</span><span class="s1">;</span>
+<span class="s0">const </span><span class="s1">RELATIVE_ROOT_PATH = </span><span class="s2">&quot;..&quot;</span><span class="s1">;</span>
+<span class="s0">const </span><span class="s1">ASSET_PREFIX = </span><span class="s2">&quot;/_next/&quot;</span><span class="s1">;</span>
+<span class="s3">/**</span>
+ <span class="s3">* This file contains runtime types and functions that are shared between all</span>
+ <span class="s3">* TurboPack ECMAScript runtimes.</span>
+ <span class="s3">*</span>
+ <span class="s3">* It will be prepended to the runtime code of each runtime.</span>
+ <span class="s3">*/ /* eslint-disable @typescript-eslint/no-unused-vars */ /// &lt;reference path=&quot;./runtime-types.d.ts&quot; /&gt;</span>
+<span class="s0">const </span><span class="s1">REEXPORTED_OBJECTS = </span><span class="s0">new </span><span class="s1">WeakMap();</span>
+<span class="s3">/**</span>
+ <span class="s3">* Constructs the `__turbopack_context__` object for a module.</span>
+ <span class="s3">*/ </span><span class="s0">function </span><span class="s1">Context(module, exports) {</span>
+    <span class="s0">this</span><span class="s1">.m = module;</span>
+    <span class="s3">// We need to store this here instead of accessing it from the module object to:</span>
+    <span class="s3">// 1. Make it available to factories directly, since we rewrite `this` to</span>
+    <span class="s3">//    `__turbopack_context__.e` in CJS modules.</span>
+    <span class="s3">// 2. Support async modules which rewrite `module.exports` to a promise, so we</span>
+    <span class="s3">//    can still access the original exports object from functions like</span>
+    <span class="s3">//    `esmExport`</span>
+    <span class="s3">// Ideally we could find a new approach for async modules and drop this property altogether.</span>
+    <span class="s0">this</span><span class="s1">.e = exports;</span>
+<span class="s1">}</span>
+<span class="s0">const </span><span class="s1">contextPrototype = Context.prototype;</span>
+<span class="s0">const </span><span class="s1">hasOwnProperty = Object.prototype.hasOwnProperty;</span>
+<span class="s0">const </span><span class="s1">toStringTag = </span><span class="s0">typeof </span><span class="s1">Symbol !== </span><span class="s2">'undefined' </span><span class="s1">&amp;&amp; Symbol.toStringTag;</span>
+<span class="s0">function </span><span class="s1">defineProp(obj, name, options) {</span>
+    <span class="s0">if </span><span class="s1">(!hasOwnProperty.call(obj, name)) Object.defineProperty(obj, name, options);</span>
+<span class="s1">}</span>
+<span class="s0">function </span><span class="s1">getOverwrittenModule(moduleCache, id) {</span>
+    <span class="s0">let </span><span class="s1">module = moduleCache[id];</span>
+    <span class="s0">if </span><span class="s1">(!module) {</span>
+        <span class="s3">// This is invoked when a module is merged into another module, thus it wasn't invoked via</span>
+        <span class="s3">// instantiateModule and the cache entry wasn't created yet.</span>
+        <span class="s1">module = createModuleObject(id);</span>
+        <span class="s1">moduleCache[id] = module;</span>
+    <span class="s1">}</span>
+    <span class="s0">return </span><span class="s1">module;</span>
+<span class="s1">}</span>
+<span class="s3">/**</span>
+ <span class="s3">* Creates the module object. Only done here to ensure all module objects have the same shape.</span>
+ <span class="s3">*/ </span><span class="s0">function </span><span class="s1">createModuleObject(id) {</span>
+    <span class="s0">return </span><span class="s1">{</span>
+        <span class="s1">exports: {},</span>
+        <span class="s1">error: undefined,</span>
+        <span class="s1">id,</span>
+        <span class="s1">namespaceObject: undefined</span>
+    <span class="s1">};</span>
+<span class="s1">}</span>
+<span class="s3">/**</span>
+ <span class="s3">* Adds the getters to the exports object.</span>
+ <span class="s3">*/ </span><span class="s0">function </span><span class="s1">esm(exports, getters) {</span>
+    <span class="s1">defineProp(exports, </span><span class="s2">'__esModule'</span><span class="s1">, {</span>
+        <span class="s1">value: </span><span class="s0">true</span>
+    <span class="s1">});</span>
+    <span class="s0">if </span><span class="s1">(toStringTag) defineProp(exports, toStringTag, {</span>
+        <span class="s1">value: </span><span class="s2">'Module'</span>
+    <span class="s1">});</span>
+    <span class="s0">let </span><span class="s1">i = </span><span class="s4">0</span><span class="s1">;</span>
+    <span class="s0">while</span><span class="s1">(i &lt; getters.length){</span>
+        <span class="s0">const </span><span class="s1">propName = getters[i++];</span>
+        <span class="s3">// TODO(luke.sandberg): we could support raw values here, but would need a discriminator beyond 'not a function'</span>
+        <span class="s0">const </span><span class="s1">getter = getters[i++];</span>
+        <span class="s0">if </span><span class="s1">(</span><span class="s0">typeof </span><span class="s1">getters[i] === </span><span class="s2">'function'</span><span class="s1">) {</span>
+            <span class="s3">// a setter</span>
+            <span class="s1">defineProp(exports, propName, {</span>
+                <span class="s1">get: getter,</span>
+                <span class="s1">set: getters[i++],</span>
+                <span class="s1">enumerable: </span><span class="s0">true</span>
+            <span class="s1">});</span>
+        <span class="s1">} </span><span class="s0">else </span><span class="s1">{</span>
+            <span class="s1">defineProp(exports, propName, {</span>
+                <span class="s1">get: getter,</span>
+                <span class="s1">enumerable: </span><span class="s0">true</span>
+            <span class="s1">});</span>
+        <span class="s1">}</span>
+    <span class="s1">}</span>
+    <span class="s1">Object.seal(exports);</span>
+<span class="s1">}</span>
+<span class="s3">/**</span>
+ <span class="s3">* Makes the module an ESM with exports</span>
+ <span class="s3">*/ </span><span class="s0">function </span><span class="s1">esmExport(getters, id) {</span>
+    <span class="s0">let </span><span class="s1">module;</span>
+    <span class="s0">let </span><span class="s1">exports;</span>
+    <span class="s0">if </span><span class="s1">(id != </span><span class="s0">null</span><span class="s1">) {</span>
+        <span class="s1">module = getOverwrittenModule(</span><span class="s0">this</span><span class="s1">.c, id);</span>
+        <span class="s1">exports = module.exports;</span>
+    <span class="s1">} </span><span class="s0">else </span><span class="s1">{</span>
+        <span class="s1">module = </span><span class="s0">this</span><span class="s1">.m;</span>
+        <span class="s1">exports = </span><span class="s0">this</span><span class="s1">.e;</span>
+    <span class="s1">}</span>
+    <span class="s1">module.namespaceObject = exports;</span>
+    <span class="s1">esm(exports, getters);</span>
+<span class="s1">}</span>
+<span class="s1">contextPrototype.s = esmExport;</span>
+<span class="s0">function </span><span class="s1">ensureDynamicExports(module, exports) {</span>
+    <span class="s0">let </span><span class="s1">reexportedObjects = REEXPORTED_OBJECTS.get(module);</span>
+    <span class="s0">if </span><span class="s1">(!reexportedObjects) {</span>
+        <span class="s1">REEXPORTED_OBJECTS.set(module, reexportedObjects = []);</span>
+        <span class="s1">module.exports = module.namespaceObject = </span><span class="s0">new </span><span class="s1">Proxy(exports, {</span>
+            <span class="s1">get (target, prop) {</span>
+                <span class="s0">if </span><span class="s1">(hasOwnProperty.call(target, prop) || prop === </span><span class="s2">'default' </span><span class="s1">|| prop === </span><span class="s2">'__esModule'</span><span class="s1">) {</span>
+                    <span class="s0">return </span><span class="s1">Reflect.get(target, prop);</span>
+                <span class="s1">}</span>
+                <span class="s0">for </span><span class="s1">(</span><span class="s0">const </span><span class="s1">obj of reexportedObjects){</span>
+                    <span class="s0">const </span><span class="s1">value = Reflect.get(obj, prop);</span>
+                    <span class="s0">if </span><span class="s1">(value !== undefined) </span><span class="s0">return </span><span class="s1">value;</span>
+                <span class="s1">}</span>
+                <span class="s0">return </span><span class="s1">undefined;</span>
+            <span class="s1">},</span>
+            <span class="s1">ownKeys (target) {</span>
+                <span class="s0">const </span><span class="s1">keys = Reflect.ownKeys(target);</span>
+                <span class="s0">for </span><span class="s1">(</span><span class="s0">const </span><span class="s1">obj of reexportedObjects){</span>
+                    <span class="s0">for </span><span class="s1">(</span><span class="s0">const </span><span class="s1">key of Reflect.ownKeys(obj)){</span>
+                        <span class="s0">if </span><span class="s1">(key !== </span><span class="s2">'default' </span><span class="s1">&amp;&amp; !keys.includes(key)) keys.push(key);</span>
+                    <span class="s1">}</span>
+                <span class="s1">}</span>
+                <span class="s0">return </span><span class="s1">keys;</span>
+            <span class="s1">}</span>
+        <span class="s1">});</span>
+    <span class="s1">}</span>
+    <span class="s0">return </span><span class="s1">reexportedObjects;</span>
+<span class="s1">}</span>
+<span class="s3">/**</span>
+ <span class="s3">* Dynamically exports properties from an object</span>
+ <span class="s3">*/ </span><span class="s0">function </span><span class="s1">dynamicExport(object, id) {</span>
+    <span class="s0">let </span><span class="s1">module;</span>
+    <span class="s0">let </span><span class="s1">exports;</span>
+    <span class="s0">if </span><span class="s1">(id != </span><span class="s0">null</span><span class="s1">) {</span>
+        <span class="s1">module = getOverwrittenModule(</span><span class="s0">this</span><span class="s1">.c, id);</span>
+        <span class="s1">exports = module.exports;</span>
+    <span class="s1">} </span><span class="s0">else </span><span class="s1">{</span>
+        <span class="s1">module = </span><span class="s0">this</span><span class="s1">.m;</span>
+        <span class="s1">exports = </span><span class="s0">this</span><span class="s1">.e;</span>
+    <span class="s1">}</span>
+    <span class="s0">const </span><span class="s1">reexportedObjects = ensureDynamicExports(module, exports);</span>
+    <span class="s0">if </span><span class="s1">(</span><span class="s0">typeof </span><span class="s1">object === </span><span class="s2">'object' </span><span class="s1">&amp;&amp; object !== </span><span class="s0">null</span><span class="s1">) {</span>
+        <span class="s1">reexportedObjects.push(object);</span>
+    <span class="s1">}</span>
+<span class="s1">}</span>
+<span class="s1">contextPrototype.j = dynamicExport;</span>
+<span class="s0">function </span><span class="s1">exportValue(value, id) {</span>
+    <span class="s0">let </span><span class="s1">module;</span>
+    <span class="s0">if </span><span class="s1">(id != </span><span class="s0">null</span><span class="s1">) {</span>
+        <span class="s1">module = getOverwrittenModule(</span><span class="s0">this</span><span class="s1">.c, id);</span>
+    <span class="s1">} </span><span class="s0">else </span><span class="s1">{</span>
+        <span class="s1">module = </span><span class="s0">this</span><span class="s1">.m;</span>
+    <span class="s1">}</span>
+    <span class="s1">module.exports = value;</span>
+<span class="s1">}</span>
+<span class="s1">contextPrototype.v = exportValue;</span>
+<span class="s0">function </span><span class="s1">exportNamespace(namespace, id) {</span>
+    <span class="s0">let </span><span class="s1">module;</span>
+    <span class="s0">if </span><span class="s1">(id != </span><span class="s0">null</span><span class="s1">) {</span>
+        <span class="s1">module = getOverwrittenModule(</span><span class="s0">this</span><span class="s1">.c, id);</span>
+    <span class="s1">} </span><span class="s0">else </span><span class="s1">{</span>
+        <span class="s1">module = </span><span class="s0">this</span><span class="s1">.m;</span>
+    <span class="s1">}</span>
+    <span class="s1">module.exports = module.namespaceObject = namespace;</span>
+<span class="s1">}</span>
+<span class="s1">contextPrototype.n = exportNamespace;</span>
+<span class="s0">function </span><span class="s1">createGetter(obj, key) {</span>
+    <span class="s0">return </span><span class="s1">()=&gt;obj[key];</span>
+<span class="s1">}</span>
+<span class="s3">/**</span>
+ <span class="s3">* </span><span class="s5">@returns </span><span class="s3">prototype of the object</span>
+ <span class="s3">*/ </span><span class="s0">const </span><span class="s1">getProto = Object.getPrototypeOf ? (obj)=&gt;Object.getPrototypeOf(obj) : (obj)=&gt;obj.__proto__;</span>
+<span class="s3">/** Prototypes that are not expanded for exports */ </span><span class="s0">const </span><span class="s1">LEAF_PROTOTYPES = [</span>
+    <span class="s0">null</span><span class="s1">,</span>
+    <span class="s1">getProto({}),</span>
+    <span class="s1">getProto([]),</span>
+    <span class="s1">getProto(getProto)</span>
+<span class="s1">];</span>
+<span class="s3">/**</span>
+ <span class="s3">* </span><span class="s5">@param </span><span class="s3">raw</span>
+ <span class="s3">* </span><span class="s5">@param </span><span class="s3">ns</span>
+ <span class="s3">* </span><span class="s5">@param </span><span class="s3">allowExportDefault</span>
+ <span class="s3">*   * `false`: will have the raw module as default export</span>
+ <span class="s3">*   * `true`: will have the default property as default export</span>
+ <span class="s3">*/ </span><span class="s0">function </span><span class="s1">interopEsm(raw, ns, allowExportDefault) {</span>
+    <span class="s0">const </span><span class="s1">getters = [];</span>
+    <span class="s3">// The index of the `default` export if any</span>
+    <span class="s0">let </span><span class="s1">defaultLocation = -</span><span class="s4">1</span><span class="s1">;</span>
+    <span class="s0">for</span><span class="s1">(</span><span class="s0">let </span><span class="s1">current = raw; (</span><span class="s0">typeof </span><span class="s1">current === </span><span class="s2">'object' </span><span class="s1">|| </span><span class="s0">typeof </span><span class="s1">current === </span><span class="s2">'function'</span><span class="s1">) &amp;&amp; !LEAF_PROTOTYPES.includes(current); current = getProto(current)){</span>
+        <span class="s0">for </span><span class="s1">(</span><span class="s0">const </span><span class="s1">key of Object.getOwnPropertyNames(current)){</span>
+            <span class="s1">getters.push(key, createGetter(raw, key));</span>
+            <span class="s0">if </span><span class="s1">(defaultLocation === -</span><span class="s4">1 </span><span class="s1">&amp;&amp; key === </span><span class="s2">'default'</span><span class="s1">) {</span>
+                <span class="s1">defaultLocation = getters.length - </span><span class="s4">1</span><span class="s1">;</span>
+            <span class="s1">}</span>
+        <span class="s1">}</span>
+    <span class="s1">}</span>
+    <span class="s3">// this is not really correct</span>
+    <span class="s3">// we should set the `default` getter if the imported module is a `.cjs file`</span>
+    <span class="s0">if </span><span class="s1">(!(allowExportDefault &amp;&amp; defaultLocation &gt;= </span><span class="s4">0</span><span class="s1">)) {</span>
+        <span class="s3">// Replace the binding with one for the namespace itself in order to preserve iteration order.</span>
+        <span class="s0">if </span><span class="s1">(defaultLocation &gt;= </span><span class="s4">0</span><span class="s1">) {</span>
+            <span class="s1">getters[defaultLocation] = ()=&gt;raw;</span>
+        <span class="s1">} </span><span class="s0">else </span><span class="s1">{</span>
+            <span class="s1">getters.push(</span><span class="s2">'default'</span><span class="s1">, ()=&gt;raw);</span>
+        <span class="s1">}</span>
+    <span class="s1">}</span>
+    <span class="s1">esm(ns, getters);</span>
+    <span class="s0">return </span><span class="s1">ns;</span>
+<span class="s1">}</span>
+<span class="s0">function </span><span class="s1">createNS(raw) {</span>
+    <span class="s0">if </span><span class="s1">(</span><span class="s0">typeof </span><span class="s1">raw === </span><span class="s2">'function'</span><span class="s1">) {</span>
+        <span class="s0">return function</span><span class="s1">(...args) {</span>
+            <span class="s0">return </span><span class="s1">raw.apply(</span><span class="s0">this</span><span class="s1">, args);</span>
+        <span class="s1">};</span>
+    <span class="s1">} </span><span class="s0">else </span><span class="s1">{</span>
+        <span class="s0">return </span><span class="s1">Object.create(</span><span class="s0">null</span><span class="s1">);</span>
+    <span class="s1">}</span>
+<span class="s1">}</span>
+<span class="s0">function </span><span class="s1">esmImport(id) {</span>
+    <span class="s0">const </span><span class="s1">module = getOrInstantiateModuleFromParent(id, </span><span class="s0">this</span><span class="s1">.m);</span>
+    <span class="s3">// any ES module has to have `module.namespaceObject` defined.</span>
+    <span class="s0">if </span><span class="s1">(module.namespaceObject) </span><span class="s0">return </span><span class="s1">module.namespaceObject;</span>
+    <span class="s3">// only ESM can be an async module, so we don't need to worry about exports being a promise here.</span>
+    <span class="s0">const </span><span class="s1">raw = module.exports;</span>
+    <span class="s0">return </span><span class="s1">module.namespaceObject = interopEsm(raw, createNS(raw), raw &amp;&amp; raw.__esModule);</span>
+<span class="s1">}</span>
+<span class="s1">contextPrototype.i = esmImport;</span>
+<span class="s0">function </span><span class="s1">asyncLoader(moduleId) {</span>
+    <span class="s0">const </span><span class="s1">loader = </span><span class="s0">this</span><span class="s1">.r(moduleId);</span>
+    <span class="s0">return </span><span class="s1">loader(</span><span class="s0">this</span><span class="s1">.i.bind(</span><span class="s0">this</span><span class="s1">));</span>
+<span class="s1">}</span>
+<span class="s1">contextPrototype.A = asyncLoader;</span>
+<span class="s3">// Add a simple runtime require so that environments without one can still pass</span>
+<span class="s3">// `typeof require` CommonJS checks so that exports are correctly registered.</span>
+<span class="s0">const </span><span class="s1">runtimeRequire = </span><span class="s3">// @ts-ignore</span>
+<span class="s0">typeof </span><span class="s1">require === </span><span class="s2">'function' </span><span class="s1">? require : </span><span class="s0">function </span><span class="s1">require1() {</span>
+    <span class="s0">throw new </span><span class="s1">Error(</span><span class="s2">'Unexpected use of runtime require'</span><span class="s1">);</span>
+<span class="s1">};</span>
+<span class="s1">contextPrototype.t = runtimeRequire;</span>
+<span class="s0">function </span><span class="s1">commonJsRequire(id) {</span>
+    <span class="s0">return </span><span class="s1">getOrInstantiateModuleFromParent(id, </span><span class="s0">this</span><span class="s1">.m).exports;</span>
+<span class="s1">}</span>
+<span class="s1">contextPrototype.r = commonJsRequire;</span>
+<span class="s3">/**</span>
+ <span class="s3">* `require.context` and require/import expression runtime.</span>
+ <span class="s3">*/ </span><span class="s0">function </span><span class="s1">moduleContext(map) {</span>
+    <span class="s0">function </span><span class="s1">moduleContext(id) {</span>
+        <span class="s0">if </span><span class="s1">(hasOwnProperty.call(map, id)) {</span>
+            <span class="s0">return </span><span class="s1">map[id].module();</span>
+        <span class="s1">}</span>
+        <span class="s0">const </span><span class="s1">e = </span><span class="s0">new </span><span class="s1">Error(</span><span class="s2">`Cannot find module '</span><span class="s1">${id}</span><span class="s2">'`</span><span class="s1">);</span>
+        <span class="s1">e.code = </span><span class="s2">'MODULE_NOT_FOUND'</span><span class="s1">;</span>
+        <span class="s0">throw </span><span class="s1">e;</span>
+    <span class="s1">}</span>
+    <span class="s1">moduleContext.keys = ()=&gt;{</span>
+        <span class="s0">return </span><span class="s1">Object.keys(map);</span>
+    <span class="s1">};</span>
+    <span class="s1">moduleContext.resolve = (id)=&gt;{</span>
+        <span class="s0">if </span><span class="s1">(hasOwnProperty.call(map, id)) {</span>
+            <span class="s0">return </span><span class="s1">map[id].id();</span>
+        <span class="s1">}</span>
+        <span class="s0">const </span><span class="s1">e = </span><span class="s0">new </span><span class="s1">Error(</span><span class="s2">`Cannot find module '</span><span class="s1">${id}</span><span class="s2">'`</span><span class="s1">);</span>
+        <span class="s1">e.code = </span><span class="s2">'MODULE_NOT_FOUND'</span><span class="s1">;</span>
+        <span class="s0">throw </span><span class="s1">e;</span>
+    <span class="s1">};</span>
+    <span class="s1">moduleContext.import = async (id)=&gt;{</span>
+        <span class="s0">return await </span><span class="s1">moduleContext(id);</span>
+    <span class="s1">};</span>
+    <span class="s0">return </span><span class="s1">moduleContext;</span>
+<span class="s1">}</span>
+<span class="s1">contextPrototype.f = moduleContext;</span>
+<span class="s3">/**</span>
+ <span class="s3">* Returns the path of a chunk defined by its data.</span>
+ <span class="s3">*/ </span><span class="s0">function </span><span class="s1">getChunkPath(chunkData) {</span>
+    <span class="s0">return typeof </span><span class="s1">chunkData === </span><span class="s2">'string' </span><span class="s1">? chunkData : chunkData.path;</span>
+<span class="s1">}</span>
+<span class="s0">function </span><span class="s1">isPromise(maybePromise) {</span>
+    <span class="s0">return </span><span class="s1">maybePromise != </span><span class="s0">null </span><span class="s1">&amp;&amp; </span><span class="s0">typeof </span><span class="s1">maybePromise === </span><span class="s2">'object' </span><span class="s1">&amp;&amp; </span><span class="s2">'then' </span><span class="s0">in </span><span class="s1">maybePromise &amp;&amp; </span><span class="s0">typeof </span><span class="s1">maybePromise.then === </span><span class="s2">'function'</span><span class="s1">;</span>
+<span class="s1">}</span>
+<span class="s0">function </span><span class="s1">isAsyncModuleExt(obj) {</span>
+    <span class="s0">return </span><span class="s1">turbopackQueues </span><span class="s0">in </span><span class="s1">obj;</span>
+<span class="s1">}</span>
+<span class="s0">function </span><span class="s1">createPromise() {</span>
+    <span class="s0">let </span><span class="s1">resolve;</span>
+    <span class="s0">let </span><span class="s1">reject;</span>
+    <span class="s0">const </span><span class="s1">promise = </span><span class="s0">new </span><span class="s1">Promise((res, rej)=&gt;{</span>
+        <span class="s1">reject = rej;</span>
+        <span class="s1">resolve = res;</span>
+    <span class="s1">});</span>
+    <span class="s0">return </span><span class="s1">{</span>
+        <span class="s1">promise,</span>
+        <span class="s1">resolve: resolve,</span>
+        <span class="s1">reject: reject</span>
+    <span class="s1">};</span>
+<span class="s1">}</span>
+<span class="s3">// Load the CompressedmoduleFactories of a chunk into the `moduleFactories` Map.</span>
+<span class="s3">// The CompressedModuleFactories format is</span>
+<span class="s3">// - 1 or more module ids</span>
+<span class="s3">// - a module factory function</span>
+<span class="s3">// So walking this is a little complex but the flat structure is also fast to</span>
+<span class="s3">// traverse, we can use `typeof` operators to distinguish the two cases.</span>
+<span class="s0">function </span><span class="s1">installCompressedModuleFactories(chunkModules, offset, moduleFactories, newModuleId) {</span>
+    <span class="s0">let </span><span class="s1">i = offset;</span>
+    <span class="s0">while</span><span class="s1">(i &lt; chunkModules.length){</span>
+        <span class="s0">let </span><span class="s1">moduleId = chunkModules[i];</span>
+        <span class="s0">let </span><span class="s1">end = i + </span><span class="s4">1</span><span class="s1">;</span>
+        <span class="s3">// Find our factory function</span>
+        <span class="s0">while</span><span class="s1">(end &lt; chunkModules.length &amp;&amp; </span><span class="s0">typeof </span><span class="s1">chunkModules[end] !== </span><span class="s2">'function'</span><span class="s1">){</span>
+            <span class="s1">end++;</span>
+        <span class="s1">}</span>
+        <span class="s0">if </span><span class="s1">(end === chunkModules.length) {</span>
+            <span class="s0">throw new </span><span class="s1">Error(</span><span class="s2">'malformed chunk format, expected a factory function'</span><span class="s1">);</span>
+        <span class="s1">}</span>
+        <span class="s3">// Each chunk item has a 'primary id' and optional additional ids. If the primary id is already</span>
+        <span class="s3">// present we know all the additional ids are also present, so we don't need to check.</span>
+        <span class="s0">if </span><span class="s1">(!moduleFactories.has(moduleId)) {</span>
+            <span class="s0">const </span><span class="s1">moduleFactoryFn = chunkModules[end];</span>
+            <span class="s1">applyModuleFactoryName(moduleFactoryFn);</span>
+            <span class="s1">newModuleId?.(moduleId);</span>
+            <span class="s0">for</span><span class="s1">(; i &lt; end; i++){</span>
+                <span class="s1">moduleId = chunkModules[i];</span>
+                <span class="s1">moduleFactories.set(moduleId, moduleFactoryFn);</span>
+            <span class="s1">}</span>
+        <span class="s1">}</span>
+        <span class="s1">i = end + </span><span class="s4">1</span><span class="s1">; </span><span class="s3">// end is pointing at the last factory advance to the next id or the end of the array.</span>
+    <span class="s1">}</span>
+<span class="s1">}</span>
+<span class="s3">// everything below is adapted from webpack</span>
+<span class="s3">// https://github.com/webpack/webpack/blob/6be4065ade1e252c1d8dcba4af0f43e32af1bdc1/lib/runtime/AsyncModuleRuntimeModule.js#L13</span>
+<span class="s0">const </span><span class="s1">turbopackQueues = Symbol(</span><span class="s2">'turbopack queues'</span><span class="s1">);</span>
+<span class="s0">const </span><span class="s1">turbopackExports = Symbol(</span><span class="s2">'turbopack exports'</span><span class="s1">);</span>
+<span class="s0">const </span><span class="s1">turbopackError = Symbol(</span><span class="s2">'turbopack error'</span><span class="s1">);</span>
+<span class="s0">function </span><span class="s1">resolveQueue(queue) {</span>
+    <span class="s0">if </span><span class="s1">(queue &amp;&amp; queue.status !== </span><span class="s4">1</span><span class="s1">) {</span>
+        <span class="s1">queue.status = </span><span class="s4">1</span><span class="s1">;</span>
+        <span class="s1">queue.forEach((fn)=&gt;fn.queueCount--);</span>
+        <span class="s1">queue.forEach((fn)=&gt;fn.queueCount-- ? fn.queueCount++ : fn());</span>
+    <span class="s1">}</span>
+<span class="s1">}</span>
+<span class="s0">function </span><span class="s1">wrapDeps(deps) {</span>
+    <span class="s0">return </span><span class="s1">deps.map((dep)=&gt;{</span>
+        <span class="s0">if </span><span class="s1">(dep !== </span><span class="s0">null </span><span class="s1">&amp;&amp; </span><span class="s0">typeof </span><span class="s1">dep === </span><span class="s2">'object'</span><span class="s1">) {</span>
+            <span class="s0">if </span><span class="s1">(isAsyncModuleExt(dep)) </span><span class="s0">return </span><span class="s1">dep;</span>
+            <span class="s0">if </span><span class="s1">(isPromise(dep)) {</span>
+                <span class="s0">const </span><span class="s1">queue = Object.assign([], {</span>
+                    <span class="s1">status: </span><span class="s4">0</span>
+                <span class="s1">});</span>
+                <span class="s0">const </span><span class="s1">obj = {</span>
+                    <span class="s1">[turbopackExports]: {},</span>
+                    <span class="s1">[turbopackQueues]: (fn)=&gt;fn(queue)</span>
+                <span class="s1">};</span>
+                <span class="s1">dep.then((res)=&gt;{</span>
+                    <span class="s1">obj[turbopackExports] = res;</span>
+                    <span class="s1">resolveQueue(queue);</span>
+                <span class="s1">}, (err)=&gt;{</span>
+                    <span class="s1">obj[turbopackError] = err;</span>
+                    <span class="s1">resolveQueue(queue);</span>
+                <span class="s1">});</span>
+                <span class="s0">return </span><span class="s1">obj;</span>
+            <span class="s1">}</span>
+        <span class="s1">}</span>
+        <span class="s0">return </span><span class="s1">{</span>
+            <span class="s1">[turbopackExports]: dep,</span>
+            <span class="s1">[turbopackQueues]: ()=&gt;{}</span>
+        <span class="s1">};</span>
+    <span class="s1">});</span>
+<span class="s1">}</span>
+<span class="s0">function </span><span class="s1">asyncModule(body, hasAwait) {</span>
+    <span class="s0">const </span><span class="s1">module = </span><span class="s0">this</span><span class="s1">.m;</span>
+    <span class="s0">const </span><span class="s1">queue = hasAwait ? Object.assign([], {</span>
+        <span class="s1">status: -</span><span class="s4">1</span>
+    <span class="s1">}) : undefined;</span>
+    <span class="s0">const </span><span class="s1">depQueues = </span><span class="s0">new </span><span class="s1">Set();</span>
+    <span class="s0">const </span><span class="s1">{ resolve, reject, promise: rawPromise } = createPromise();</span>
+    <span class="s0">const </span><span class="s1">promise = Object.assign(rawPromise, {</span>
+        <span class="s1">[turbopackExports]: module.exports,</span>
+        <span class="s1">[turbopackQueues]: (fn)=&gt;{</span>
+            <span class="s1">queue &amp;&amp; fn(queue);</span>
+            <span class="s1">depQueues.forEach(fn);</span>
+            <span class="s1">promise[</span><span class="s2">'catch'</span><span class="s1">](()=&gt;{});</span>
+        <span class="s1">}</span>
+    <span class="s1">});</span>
+    <span class="s0">const </span><span class="s1">attributes = {</span>
+        <span class="s1">get () {</span>
+            <span class="s0">return </span><span class="s1">promise;</span>
+        <span class="s1">},</span>
+        <span class="s1">set (v) {</span>
+            <span class="s3">// Calling `esmExport` leads to this.</span>
+            <span class="s0">if </span><span class="s1">(v !== promise) {</span>
+                <span class="s1">promise[turbopackExports] = v;</span>
+            <span class="s1">}</span>
+        <span class="s1">}</span>
+    <span class="s1">};</span>
+    <span class="s1">Object.defineProperty(module, </span><span class="s2">'exports'</span><span class="s1">, attributes);</span>
+    <span class="s1">Object.defineProperty(module, </span><span class="s2">'namespaceObject'</span><span class="s1">, attributes);</span>
+    <span class="s0">function </span><span class="s1">handleAsyncDependencies(deps) {</span>
+        <span class="s0">const </span><span class="s1">currentDeps = wrapDeps(deps);</span>
+        <span class="s0">const </span><span class="s1">getResult = ()=&gt;currentDeps.map((d)=&gt;{</span>
+                <span class="s0">if </span><span class="s1">(d[turbopackError]) </span><span class="s0">throw </span><span class="s1">d[turbopackError];</span>
+                <span class="s0">return </span><span class="s1">d[turbopackExports];</span>
+            <span class="s1">});</span>
+        <span class="s0">const </span><span class="s1">{ promise, resolve } = createPromise();</span>
+        <span class="s0">const </span><span class="s1">fn = Object.assign(()=&gt;resolve(getResult), {</span>
+            <span class="s1">queueCount: </span><span class="s4">0</span>
+        <span class="s1">});</span>
+        <span class="s0">function </span><span class="s1">fnQueue(q) {</span>
+            <span class="s0">if </span><span class="s1">(q !== queue &amp;&amp; !depQueues.has(q)) {</span>
+                <span class="s1">depQueues.add(q);</span>
+                <span class="s0">if </span><span class="s1">(q &amp;&amp; q.status === </span><span class="s4">0</span><span class="s1">) {</span>
+                    <span class="s1">fn.queueCount++;</span>
+                    <span class="s1">q.push(fn);</span>
+                <span class="s1">}</span>
+            <span class="s1">}</span>
+        <span class="s1">}</span>
+        <span class="s1">currentDeps.map((dep)=&gt;dep[turbopackQueues](fnQueue));</span>
+        <span class="s0">return </span><span class="s1">fn.queueCount ? promise : getResult();</span>
+    <span class="s1">}</span>
+    <span class="s0">function </span><span class="s1">asyncResult(err) {</span>
+        <span class="s0">if </span><span class="s1">(err) {</span>
+            <span class="s1">reject(promise[turbopackError] = err);</span>
+        <span class="s1">} </span><span class="s0">else </span><span class="s1">{</span>
+            <span class="s1">resolve(promise[turbopackExports]);</span>
+        <span class="s1">}</span>
+        <span class="s1">resolveQueue(queue);</span>
+    <span class="s1">}</span>
+    <span class="s1">body(handleAsyncDependencies, asyncResult);</span>
+    <span class="s0">if </span><span class="s1">(queue &amp;&amp; queue.status === -</span><span class="s4">1</span><span class="s1">) {</span>
+        <span class="s1">queue.status = </span><span class="s4">0</span><span class="s1">;</span>
+    <span class="s1">}</span>
+<span class="s1">}</span>
+<span class="s1">contextPrototype.a = asyncModule;</span>
+<span class="s3">/**</span>
+ <span class="s3">* A pseudo &quot;fake&quot; URL object to resolve to its relative path.</span>
+ <span class="s3">*</span>
+ <span class="s3">* When UrlRewriteBehavior is set to relative, calls to the `new URL()` will construct url without base using this</span>
+ <span class="s3">* runtime function to generate context-agnostic urls between different rendering context, i.e ssr / client to avoid</span>
+ <span class="s3">* hydration mismatch.</span>
+ <span class="s3">*</span>
+ <span class="s3">* This is based on webpack's existing implementation:</span>
+ <span class="s3">* https://github.com/webpack/webpack/blob/87660921808566ef3b8796f8df61bd79fc026108/lib/runtime/RelativeUrlRuntimeModule.js</span>
+ <span class="s3">*/ </span><span class="s0">const </span><span class="s1">relativeURL = </span><span class="s0">function </span><span class="s1">relativeURL(inputUrl) {</span>
+    <span class="s0">const </span><span class="s1">realUrl = </span><span class="s0">new </span><span class="s1">URL(inputUrl, </span><span class="s2">'x:/'</span><span class="s1">);</span>
+    <span class="s0">const </span><span class="s1">values = {};</span>
+    <span class="s0">for</span><span class="s1">(</span><span class="s0">const </span><span class="s1">key </span><span class="s0">in </span><span class="s1">realUrl)values[key] = realUrl[key];</span>
+    <span class="s1">values.href = inputUrl;</span>
+    <span class="s1">values.pathname = inputUrl.replace(</span><span class="s6">/[?#].*/</span><span class="s1">, </span><span class="s2">''</span><span class="s1">);</span>
+    <span class="s1">values.origin = values.protocol = </span><span class="s2">''</span><span class="s1">;</span>
+    <span class="s1">values.toString = values.toJSON = (..._args)=&gt;inputUrl;</span>
+    <span class="s0">for</span><span class="s1">(</span><span class="s0">const </span><span class="s1">key </span><span class="s0">in </span><span class="s1">values)Object.defineProperty(</span><span class="s0">this</span><span class="s1">, key, {</span>
+        <span class="s1">enumerable: </span><span class="s0">true</span><span class="s1">,</span>
+        <span class="s1">configurable: </span><span class="s0">true</span><span class="s1">,</span>
+        <span class="s1">value: values[key]</span>
+    <span class="s1">});</span>
+<span class="s1">};</span>
+<span class="s1">relativeURL.prototype = URL.prototype;</span>
+<span class="s1">contextPrototype.U = relativeURL;</span>
+<span class="s3">/**</span>
+ <span class="s3">* Utility function to ensure all variants of an enum are handled.</span>
+ <span class="s3">*/ </span><span class="s0">function </span><span class="s1">invariant(never, computeMessage) {</span>
+    <span class="s0">throw new </span><span class="s1">Error(</span><span class="s2">`Invariant: </span><span class="s1">${computeMessage(never)}</span><span class="s2">`</span><span class="s1">);</span>
+<span class="s1">}</span>
+<span class="s3">/**</span>
+ <span class="s3">* A stub function to make `require` available but non-functional in ESM.</span>
+ <span class="s3">*/ </span><span class="s0">function </span><span class="s1">requireStub(_moduleId) {</span>
+    <span class="s0">throw new </span><span class="s1">Error(</span><span class="s2">'dynamic usage of require is not supported'</span><span class="s1">);</span>
+<span class="s1">}</span>
+<span class="s1">contextPrototype.z = requireStub;</span>
+<span class="s3">// Make `globalThis` available to the module in a way that cannot be shadowed by a local variable.</span>
+<span class="s1">contextPrototype.g = globalThis;</span>
+<span class="s0">function </span><span class="s1">applyModuleFactoryName(factory) {</span>
+    <span class="s3">// Give the module factory a nice name to improve stack traces.</span>
+    <span class="s1">Object.defineProperty(factory, </span><span class="s2">'name'</span><span class="s1">, {</span>
+        <span class="s1">value: </span><span class="s2">'__TURBOPACK__module__evaluation__'</span>
+    <span class="s1">});</span>
+<span class="s1">}</span>
+<span class="s3">/* eslint-disable @typescript-eslint/no-unused-vars */ /// &lt;reference path=&quot;../shared/runtime-utils.ts&quot; /&gt;</span>
+<span class="s3">/// A 'base' utilities to support runtime can have externals.</span>
+<span class="s3">/// Currently this is for node.js / edge runtime both.</span>
+<span class="s3">/// If a fn requires node.js specific behavior, it should be placed in `node-external-utils` instead.</span>
+<span class="s1">async </span><span class="s0">function </span><span class="s1">externalImport(id) {</span>
+    <span class="s0">let </span><span class="s1">raw;</span>
+    <span class="s0">try </span><span class="s1">{</span>
+        <span class="s1">raw = </span><span class="s0">await import</span><span class="s1">(id);</span>
+    <span class="s1">} </span><span class="s0">catch </span><span class="s1">(err) {</span>
+        <span class="s3">// TODO(alexkirsz) This can happen when a client-side module tries to load</span>
+        <span class="s3">// an external module we don't provide a shim for (e.g. querystring, url).</span>
+        <span class="s3">// For now, we fail semi-silently, but in the future this should be a</span>
+        <span class="s3">// compilation error.</span>
+        <span class="s0">throw new </span><span class="s1">Error(</span><span class="s2">`Failed to load external module </span><span class="s1">${id}</span><span class="s2">: </span><span class="s1">${err}</span><span class="s2">`</span><span class="s1">);</span>
+    <span class="s1">}</span>
+    <span class="s0">if </span><span class="s1">(raw &amp;&amp; raw.__esModule &amp;&amp; raw.default &amp;&amp; </span><span class="s2">'default' </span><span class="s0">in </span><span class="s1">raw.default) {</span>
+        <span class="s0">return </span><span class="s1">interopEsm(raw.default, createNS(raw), </span><span class="s0">true</span><span class="s1">);</span>
+    <span class="s1">}</span>
+    <span class="s0">return </span><span class="s1">raw;</span>
+<span class="s1">}</span>
+<span class="s1">contextPrototype.y = externalImport;</span>
+<span class="s0">function </span><span class="s1">externalRequire(id, thunk, esm = </span><span class="s0">false</span><span class="s1">) {</span>
+    <span class="s0">let </span><span class="s1">raw;</span>
+    <span class="s0">try </span><span class="s1">{</span>
+        <span class="s1">raw = thunk();</span>
+    <span class="s1">} </span><span class="s0">catch </span><span class="s1">(err) {</span>
+        <span class="s3">// TODO(alexkirsz) This can happen when a client-side module tries to load</span>
+        <span class="s3">// an external module we don't provide a shim for (e.g. querystring, url).</span>
+        <span class="s3">// For now, we fail semi-silently, but in the future this should be a</span>
+        <span class="s3">// compilation error.</span>
+        <span class="s0">throw new </span><span class="s1">Error(</span><span class="s2">`Failed to load external module </span><span class="s1">${id}</span><span class="s2">: </span><span class="s1">${err}</span><span class="s2">`</span><span class="s1">);</span>
+    <span class="s1">}</span>
+    <span class="s0">if </span><span class="s1">(!esm || raw.__esModule) {</span>
+        <span class="s0">return </span><span class="s1">raw;</span>
+    <span class="s1">}</span>
+    <span class="s0">return </span><span class="s1">interopEsm(raw, createNS(raw), </span><span class="s0">true</span><span class="s1">);</span>
+<span class="s1">}</span>
+<span class="s1">externalRequire.resolve = (id, options)=&gt;{</span>
+    <span class="s0">return </span><span class="s1">require.resolve(id, options);</span>
+<span class="s1">};</span>
+<span class="s1">contextPrototype.x = externalRequire;</span>
+<span class="s3">/* eslint-disable @typescript-eslint/no-unused-vars */ </span><span class="s0">const </span><span class="s1">path = require(</span><span class="s2">'path'</span><span class="s1">);</span>
+<span class="s0">const </span><span class="s1">relativePathToRuntimeRoot = path.relative(RUNTIME_PUBLIC_PATH, </span><span class="s2">'.'</span><span class="s1">);</span>
+<span class="s3">// Compute the relative path to the `distDir`.</span>
+<span class="s0">const </span><span class="s1">relativePathToDistRoot = path.join(relativePathToRuntimeRoot, RELATIVE_ROOT_PATH);</span>
+<span class="s0">const </span><span class="s1">RUNTIME_ROOT = path.resolve(__filename, relativePathToRuntimeRoot);</span>
+<span class="s3">// Compute the absolute path to the root, by stripping distDir from the absolute path to this file.</span>
+<span class="s0">const </span><span class="s1">ABSOLUTE_ROOT = path.resolve(__filename, relativePathToDistRoot);</span>
+<span class="s3">/**</span>
+ <span class="s3">* Returns an absolute path to the given module path.</span>
+ <span class="s3">* Module path should be relative, either path to a file or a directory.</span>
+ <span class="s3">*</span>
+ <span class="s3">* This fn allows to calculate an absolute path for some global static values, such as</span>
+ <span class="s3">* `__dirname` or `import.meta.url` that Turbopack will not embeds in compile time.</span>
+ <span class="s3">* See ImportMetaBinding::code_generation for the usage.</span>
+ <span class="s3">*/ </span><span class="s0">function </span><span class="s1">resolveAbsolutePath(modulePath) {</span>
+    <span class="s0">if </span><span class="s1">(modulePath) {</span>
+        <span class="s0">return </span><span class="s1">path.join(ABSOLUTE_ROOT, modulePath);</span>
+    <span class="s1">}</span>
+    <span class="s0">return </span><span class="s1">ABSOLUTE_ROOT;</span>
+<span class="s1">}</span>
+<span class="s1">Context.prototype.P = resolveAbsolutePath;</span>
+<span class="s3">/* eslint-disable @typescript-eslint/no-unused-vars */ /// &lt;reference path=&quot;../shared/runtime-utils.ts&quot; /&gt;</span>
+<span class="s0">function </span><span class="s1">readWebAssemblyAsResponse(path) {</span>
+    <span class="s0">const </span><span class="s1">{ createReadStream } = require(</span><span class="s2">'fs'</span><span class="s1">);</span>
+    <span class="s0">const </span><span class="s1">{ Readable } = require(</span><span class="s2">'stream'</span><span class="s1">);</span>
+    <span class="s0">const </span><span class="s1">stream = createReadStream(path);</span>
+    <span class="s3">// @ts-ignore unfortunately there's a slight type mismatch with the stream.</span>
+    <span class="s0">return new </span><span class="s1">Response(Readable.toWeb(stream), {</span>
+        <span class="s1">headers: {</span>
+            <span class="s2">'content-type'</span><span class="s1">: </span><span class="s2">'application/wasm'</span>
+        <span class="s1">}</span>
+    <span class="s1">});</span>
+<span class="s1">}</span>
+<span class="s1">async </span><span class="s0">function </span><span class="s1">compileWebAssemblyFromPath(path) {</span>
+    <span class="s0">const </span><span class="s1">response = readWebAssemblyAsResponse(path);</span>
+    <span class="s0">return await </span><span class="s1">WebAssembly.compileStreaming(response);</span>
+<span class="s1">}</span>
+<span class="s1">async </span><span class="s0">function </span><span class="s1">instantiateWebAssemblyFromPath(path, importsObj) {</span>
+    <span class="s0">const </span><span class="s1">response = readWebAssemblyAsResponse(path);</span>
+    <span class="s0">const </span><span class="s1">{ instance } = </span><span class="s0">await </span><span class="s1">WebAssembly.instantiateStreaming(response, importsObj);</span>
+    <span class="s0">return </span><span class="s1">instance.exports;</span>
+<span class="s1">}</span>
+<span class="s3">/* eslint-disable @typescript-eslint/no-unused-vars */ /// &lt;reference path=&quot;../shared/runtime-utils.ts&quot; /&gt;</span>
+<span class="s3">/// &lt;reference path=&quot;../shared-node/base-externals-utils.ts&quot; /&gt;</span>
+<span class="s3">/// &lt;reference path=&quot;../shared-node/node-externals-utils.ts&quot; /&gt;</span>
+<span class="s3">/// &lt;reference path=&quot;../shared-node/node-wasm-utils.ts&quot; /&gt;</span>
+<span class="s0">var </span><span class="s1">SourceType = </span><span class="s3">/*#__PURE__*/ </span><span class="s0">function</span><span class="s1">(SourceType) {</span>
+    <span class="s3">/**</span>
+   <span class="s3">* The module was instantiated because it was included in an evaluated chunk's</span>
+   <span class="s3">* runtime.</span>
+   <span class="s3">* SourceData is a ChunkPath.</span>
+   <span class="s3">*/ </span><span class="s1">SourceType[SourceType[</span><span class="s2">&quot;Runtime&quot;</span><span class="s1">] = </span><span class="s4">0</span><span class="s1">] = </span><span class="s2">&quot;Runtime&quot;</span><span class="s1">;</span>
+    <span class="s3">/**</span>
+   <span class="s3">* The module was instantiated because a parent module imported it.</span>
+   <span class="s3">* SourceData is a ModuleId.</span>
+   <span class="s3">*/ </span><span class="s1">SourceType[SourceType[</span><span class="s2">&quot;Parent&quot;</span><span class="s1">] = </span><span class="s4">1</span><span class="s1">] = </span><span class="s2">&quot;Parent&quot;</span><span class="s1">;</span>
+    <span class="s0">return </span><span class="s1">SourceType;</span>
+<span class="s1">}(SourceType || {});</span>
+<span class="s1">process.env.TURBOPACK = </span><span class="s2">'1'</span><span class="s1">;</span>
+<span class="s0">const </span><span class="s1">nodeContextPrototype = Context.prototype;</span>
+<span class="s0">const </span><span class="s1">url = require(</span><span class="s2">'url'</span><span class="s1">);</span>
+<span class="s0">const </span><span class="s1">moduleFactories = </span><span class="s0">new </span><span class="s1">Map();</span>
+<span class="s1">nodeContextPrototype.M = moduleFactories;</span>
+<span class="s0">const </span><span class="s1">moduleCache = Object.create(</span><span class="s0">null</span><span class="s1">);</span>
+<span class="s1">nodeContextPrototype.c = moduleCache;</span>
+<span class="s3">/**</span>
+ <span class="s3">* Returns an absolute path to the given module's id.</span>
+ <span class="s3">*/ </span><span class="s0">function </span><span class="s1">resolvePathFromModule(moduleId) {</span>
+    <span class="s0">const </span><span class="s1">exported = </span><span class="s0">this</span><span class="s1">.r(moduleId);</span>
+    <span class="s0">const </span><span class="s1">exportedPath = exported?.default ?? exported;</span>
+    <span class="s0">if </span><span class="s1">(</span><span class="s0">typeof </span><span class="s1">exportedPath !== </span><span class="s2">'string'</span><span class="s1">) {</span>
+        <span class="s0">return </span><span class="s1">exported;</span>
+    <span class="s1">}</span>
+    <span class="s0">const </span><span class="s1">strippedAssetPrefix = exportedPath.slice(ASSET_PREFIX.length);</span>
+    <span class="s0">const </span><span class="s1">resolved = path.resolve(RUNTIME_ROOT, strippedAssetPrefix);</span>
+    <span class="s0">return </span><span class="s1">url.pathToFileURL(resolved).href;</span>
+<span class="s1">}</span>
+<span class="s1">nodeContextPrototype.R = resolvePathFromModule;</span>
+<span class="s0">function </span><span class="s1">loadRuntimeChunk(sourcePath, chunkData) {</span>
+    <span class="s0">if </span><span class="s1">(</span><span class="s0">typeof </span><span class="s1">chunkData === </span><span class="s2">'string'</span><span class="s1">) {</span>
+        <span class="s1">loadRuntimeChunkPath(sourcePath, chunkData);</span>
+    <span class="s1">} </span><span class="s0">else </span><span class="s1">{</span>
+        <span class="s1">loadRuntimeChunkPath(sourcePath, chunkData.path);</span>
+    <span class="s1">}</span>
+<span class="s1">}</span>
+<span class="s0">const </span><span class="s1">loadedChunks = </span><span class="s0">new </span><span class="s1">Set();</span>
+<span class="s0">const </span><span class="s1">unsupportedLoadChunk = Promise.resolve(undefined);</span>
+<span class="s0">const </span><span class="s1">loadedChunk = Promise.resolve(undefined);</span>
+<span class="s0">const </span><span class="s1">chunkCache = </span><span class="s0">new </span><span class="s1">Map();</span>
+<span class="s0">function </span><span class="s1">clearChunkCache() {</span>
+    <span class="s1">chunkCache.clear();</span>
+<span class="s1">}</span>
+<span class="s0">function </span><span class="s1">loadRuntimeChunkPath(sourcePath, chunkPath) {</span>
+    <span class="s0">if </span><span class="s1">(!isJs(chunkPath)) {</span>
+        <span class="s3">// We only support loading JS chunks in Node.js.</span>
+        <span class="s3">// This branch can be hit when trying to load a CSS chunk.</span>
+        <span class="s0">return</span><span class="s1">;</span>
+    <span class="s1">}</span>
+    <span class="s0">if </span><span class="s1">(loadedChunks.has(chunkPath)) {</span>
+        <span class="s0">return</span><span class="s1">;</span>
+    <span class="s1">}</span>
+    <span class="s0">try </span><span class="s1">{</span>
+        <span class="s0">const </span><span class="s1">resolved = path.resolve(RUNTIME_ROOT, chunkPath);</span>
+        <span class="s0">const </span><span class="s1">chunkModules = require(resolved);</span>
+        <span class="s1">installCompressedModuleFactories(chunkModules, </span><span class="s4">0</span><span class="s1">, moduleFactories);</span>
+        <span class="s1">loadedChunks.add(chunkPath);</span>
+    <span class="s1">} </span><span class="s0">catch </span><span class="s1">(e) {</span>
+        <span class="s0">let </span><span class="s1">errorMessage = </span><span class="s2">`Failed to load chunk </span><span class="s1">${chunkPath}</span><span class="s2">`</span><span class="s1">;</span>
+        <span class="s0">if </span><span class="s1">(sourcePath) {</span>
+            <span class="s1">errorMessage += </span><span class="s2">` from runtime for chunk </span><span class="s1">${sourcePath}</span><span class="s2">`</span><span class="s1">;</span>
+        <span class="s1">}</span>
+        <span class="s0">throw new </span><span class="s1">Error(errorMessage, {</span>
+            <span class="s1">cause: e</span>
+        <span class="s1">});</span>
+    <span class="s1">}</span>
+<span class="s1">}</span>
+<span class="s0">function </span><span class="s1">loadChunkAsync(chunkData) {</span>
+    <span class="s0">const </span><span class="s1">chunkPath = </span><span class="s0">typeof </span><span class="s1">chunkData === </span><span class="s2">'string' </span><span class="s1">? chunkData : chunkData.path;</span>
+    <span class="s0">if </span><span class="s1">(!isJs(chunkPath)) {</span>
+        <span class="s3">// We only support loading JS chunks in Node.js.</span>
+        <span class="s3">// This branch can be hit when trying to load a CSS chunk.</span>
+        <span class="s0">return </span><span class="s1">unsupportedLoadChunk;</span>
+    <span class="s1">}</span>
+    <span class="s0">let </span><span class="s1">entry = chunkCache.get(chunkPath);</span>
+    <span class="s0">if </span><span class="s1">(entry === undefined) {</span>
+        <span class="s0">try </span><span class="s1">{</span>
+            <span class="s3">// resolve to an absolute path to simplify `require` handling</span>
+            <span class="s0">const </span><span class="s1">resolved = path.resolve(RUNTIME_ROOT, chunkPath);</span>
+            <span class="s3">// TODO: consider switching to `import()` to enable concurrent chunk loading and async file io</span>
+            <span class="s3">// However this is incompatible with hot reloading (since `import` doesn't use the require cache)</span>
+            <span class="s0">const </span><span class="s1">chunkModules = require(resolved);</span>
+            <span class="s1">installCompressedModuleFactories(chunkModules, </span><span class="s4">0</span><span class="s1">, moduleFactories);</span>
+            <span class="s1">entry = loadedChunk;</span>
+        <span class="s1">} </span><span class="s0">catch </span><span class="s1">(e) {</span>
+            <span class="s0">const </span><span class="s1">errorMessage = </span><span class="s2">`Failed to load chunk </span><span class="s1">${chunkPath} </span><span class="s2">from module </span><span class="s1">${</span><span class="s0">this</span><span class="s1">.m.id}</span><span class="s2">`</span><span class="s1">;</span>
+            <span class="s3">// Cache the failure promise, future requests will also get this same rejection</span>
+            <span class="s1">entry = Promise.reject(</span><span class="s0">new </span><span class="s1">Error(errorMessage, {</span>
+                <span class="s1">cause: e</span>
+            <span class="s1">}));</span>
+        <span class="s1">}</span>
+        <span class="s1">chunkCache.set(chunkPath, entry);</span>
+    <span class="s1">}</span>
+    <span class="s3">// TODO: Return an instrumented Promise that React can use instead of relying on referential equality.</span>
+    <span class="s0">return </span><span class="s1">entry;</span>
+<span class="s1">}</span>
+<span class="s1">contextPrototype.l = loadChunkAsync;</span>
+<span class="s0">function </span><span class="s1">loadChunkAsyncByUrl(chunkUrl) {</span>
+    <span class="s0">const </span><span class="s1">path1 = url.fileURLToPath(</span><span class="s0">new </span><span class="s1">URL(chunkUrl, RUNTIME_ROOT));</span>
+    <span class="s0">return </span><span class="s1">loadChunkAsync.call(</span><span class="s0">this</span><span class="s1">, path1);</span>
+<span class="s1">}</span>
+<span class="s1">contextPrototype.L = loadChunkAsyncByUrl;</span>
+<span class="s0">function </span><span class="s1">loadWebAssembly(chunkPath, _edgeModule, imports) {</span>
+    <span class="s0">const </span><span class="s1">resolved = path.resolve(RUNTIME_ROOT, chunkPath);</span>
+    <span class="s0">return </span><span class="s1">instantiateWebAssemblyFromPath(resolved, imports);</span>
+<span class="s1">}</span>
+<span class="s1">contextPrototype.w = loadWebAssembly;</span>
+<span class="s0">function </span><span class="s1">loadWebAssemblyModule(chunkPath, _edgeModule) {</span>
+    <span class="s0">const </span><span class="s1">resolved = path.resolve(RUNTIME_ROOT, chunkPath);</span>
+    <span class="s0">return </span><span class="s1">compileWebAssemblyFromPath(resolved);</span>
+<span class="s1">}</span>
+<span class="s1">contextPrototype.u = loadWebAssemblyModule;</span>
+<span class="s0">function </span><span class="s1">getWorkerBlobURL(_chunks) {</span>
+    <span class="s0">throw new </span><span class="s1">Error(</span><span class="s2">'Worker blobs are not implemented yet for Node.js'</span><span class="s1">);</span>
+<span class="s1">}</span>
+<span class="s1">nodeContextPrototype.b = getWorkerBlobURL;</span>
+<span class="s0">function </span><span class="s1">instantiateModule(id, sourceType, sourceData) {</span>
+    <span class="s0">const </span><span class="s1">moduleFactory = moduleFactories.get(id);</span>
+    <span class="s0">if </span><span class="s1">(</span><span class="s0">typeof </span><span class="s1">moduleFactory !== </span><span class="s2">'function'</span><span class="s1">) {</span>
+        <span class="s3">// This can happen if modules incorrectly handle HMR disposes/updates,</span>
+        <span class="s3">// e.g. when they keep a `setTimeout` around which still executes old code</span>
+        <span class="s3">// and contains e.g. a `require(&quot;something&quot;)` call.</span>
+        <span class="s0">let </span><span class="s1">instantiationReason;</span>
+        <span class="s0">switch</span><span class="s1">(sourceType){</span>
+            <span class="s0">case </span><span class="s4">0</span><span class="s1">:</span>
+                <span class="s1">instantiationReason = </span><span class="s2">`as a runtime entry of chunk </span><span class="s1">${sourceData}</span><span class="s2">`</span><span class="s1">;</span>
+                <span class="s0">break</span><span class="s1">;</span>
+            <span class="s0">case </span><span class="s4">1</span><span class="s1">:</span>
+                <span class="s1">instantiationReason = </span><span class="s2">`because it was required from module </span><span class="s1">${sourceData}</span><span class="s2">`</span><span class="s1">;</span>
+                <span class="s0">break</span><span class="s1">;</span>
+            <span class="s0">default</span><span class="s1">:</span>
+                <span class="s1">invariant(sourceType, (sourceType)=&gt;</span><span class="s2">`Unknown source type: </span><span class="s1">${sourceType}</span><span class="s2">`</span><span class="s1">);</span>
+        <span class="s1">}</span>
+        <span class="s0">throw new </span><span class="s1">Error(</span><span class="s2">`Module </span><span class="s1">${id} </span><span class="s2">was instantiated </span><span class="s1">${instantiationReason}</span><span class="s2">, but the module factory is not available.`</span><span class="s1">);</span>
+    <span class="s1">}</span>
+    <span class="s0">const </span><span class="s1">module1 = createModuleObject(id);</span>
+    <span class="s0">const </span><span class="s1">exports = module1.exports;</span>
+    <span class="s1">moduleCache[id] = module1;</span>
+    <span class="s0">const </span><span class="s1">context = </span><span class="s0">new </span><span class="s1">Context(module1, exports);</span>
+    <span class="s3">// NOTE(alexkirsz) This can fail when the module encounters a runtime error.</span>
+    <span class="s0">try </span><span class="s1">{</span>
+        <span class="s1">moduleFactory(context, module1, exports);</span>
+    <span class="s1">} </span><span class="s0">catch </span><span class="s1">(error) {</span>
+        <span class="s1">module1.error = error;</span>
+        <span class="s0">throw </span><span class="s1">error;</span>
+    <span class="s1">}</span>
+    <span class="s1">module1.loaded = </span><span class="s0">true</span><span class="s1">;</span>
+    <span class="s0">if </span><span class="s1">(module1.namespaceObject &amp;&amp; module1.exports !== module1.namespaceObject) {</span>
+        <span class="s3">// in case of a circular dependency: cjs1 -&gt; esm2 -&gt; cjs1</span>
+        <span class="s1">interopEsm(module1.exports, module1.namespaceObject);</span>
+    <span class="s1">}</span>
+    <span class="s0">return </span><span class="s1">module1;</span>
+<span class="s1">}</span>
+<span class="s3">/**</span>
+ <span class="s3">* Retrieves a module from the cache, or instantiate it if it is not cached.</span>
+ <span class="s3">*/ // @ts-ignore</span>
+<span class="s0">function </span><span class="s1">getOrInstantiateModuleFromParent(id, sourceModule) {</span>
+    <span class="s0">const </span><span class="s1">module1 = moduleCache[id];</span>
+    <span class="s0">if </span><span class="s1">(module1) {</span>
+        <span class="s0">if </span><span class="s1">(module1.error) {</span>
+            <span class="s0">throw </span><span class="s1">module1.error;</span>
+        <span class="s1">}</span>
+        <span class="s0">return </span><span class="s1">module1;</span>
+    <span class="s1">}</span>
+    <span class="s0">return </span><span class="s1">instantiateModule(id, </span><span class="s4">1</span><span class="s1">, sourceModule.id);</span>
+<span class="s1">}</span>
+<span class="s3">/**</span>
+ <span class="s3">* Instantiates a runtime module.</span>
+ <span class="s3">*/ </span><span class="s0">function </span><span class="s1">instantiateRuntimeModule(chunkPath, moduleId) {</span>
+    <span class="s0">return </span><span class="s1">instantiateModule(moduleId, </span><span class="s4">0</span><span class="s1">, chunkPath);</span>
+<span class="s1">}</span>
+<span class="s3">/**</span>
+ <span class="s3">* Retrieves a module from the cache, or instantiate it as a runtime module if it is not cached.</span>
+ <span class="s3">*/ // @ts-ignore TypeScript doesn't separate this module space from the browser runtime</span>
+<span class="s0">function </span><span class="s1">getOrInstantiateRuntimeModule(chunkPath, moduleId) {</span>
+    <span class="s0">const </span><span class="s1">module1 = moduleCache[moduleId];</span>
+    <span class="s0">if </span><span class="s1">(module1) {</span>
+        <span class="s0">if </span><span class="s1">(module1.error) {</span>
+            <span class="s0">throw </span><span class="s1">module1.error;</span>
+        <span class="s1">}</span>
+        <span class="s0">return </span><span class="s1">module1;</span>
+    <span class="s1">}</span>
+    <span class="s0">return </span><span class="s1">instantiateRuntimeModule(chunkPath, moduleId);</span>
+<span class="s1">}</span>
+<span class="s0">const </span><span class="s1">regexJsUrl = </span><span class="s6">/\.js(?:\?[^#]*)?(?:#.*)?$/</span><span class="s1">;</span>
+<span class="s3">/**</span>
+ <span class="s3">* Checks if a given path/URL ends with .js, optionally followed by ?query or #fragment.</span>
+ <span class="s3">*/ </span><span class="s0">function </span><span class="s1">isJs(chunkUrlOrPath) {</span>
+    <span class="s0">return </span><span class="s1">regexJsUrl.test(chunkUrlOrPath);</span>
+<span class="s1">}</span>
+<span class="s1">module.exports = (sourcePath)=&gt;({</span>
+        <span class="s1">m: (id)=&gt;getOrInstantiateRuntimeModule(sourcePath, id),</span>
+        <span class="s1">c: (chunkData)=&gt;loadRuntimeChunk(sourcePath, chunkData)</span>
+    <span class="s1">});</span>
+
+
+<span class="s3">//# sourceMappingURL=%5Bturbopack%5D_runtime.js.map</span></pre>
+</body>
+</html>

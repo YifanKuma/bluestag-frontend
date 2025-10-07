@@ -1,0 +1,166 @@
+<html>
+<head>
+<title>jsx-closing-tag-location.js</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #8c8c8c; font-style: italic;}
+.s1 { color: #8c8c8c; font-style: italic;}
+.s2 { color: #080808;}
+.s3 { color: #067d17;}
+.s4 { color: #0033b3;}
+.s5 { color: #1750eb;}
+.s6 { color: #264eff;}
+.s7 { color: #0037a6;}
+</style>
+</head>
+<body bgcolor="#ffffff">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#c0c0c0" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+jsx-closing-tag-location.js</font>
+</center></td></tr></table>
+<pre><span class="s0">/**</span>
+ <span class="s0">* </span><span class="s1">@fileoverview </span><span class="s0">Validate closing tag location in JSX</span>
+ <span class="s0">* </span><span class="s1">@author </span><span class="s0">Ross Solomon</span>
+ <span class="s0">*/</span>
+
+<span class="s3">'use strict'</span><span class="s2">;</span>
+
+<span class="s4">const </span><span class="s2">repeat = require(</span><span class="s3">'string.prototype.repeat'</span><span class="s2">);</span>
+<span class="s4">const </span><span class="s2">has = require(</span><span class="s3">'hasown'</span><span class="s2">);</span>
+
+<span class="s4">const </span><span class="s2">astUtil = require(</span><span class="s3">'../util/ast'</span><span class="s2">);</span>
+<span class="s4">const </span><span class="s2">docsUrl = require(</span><span class="s3">'../util/docsUrl'</span><span class="s2">);</span>
+<span class="s4">const </span><span class="s2">getSourceCode = require(</span><span class="s3">'../util/eslint'</span><span class="s2">).getSourceCode;</span>
+<span class="s4">const </span><span class="s2">report = require(</span><span class="s3">'../util/report'</span><span class="s2">);</span>
+
+<span class="s0">// ------------------------------------------------------------------------------</span>
+<span class="s0">// Rule Definition</span>
+<span class="s0">// ------------------------------------------------------------------------------</span>
+
+<span class="s4">const </span><span class="s2">messages = {</span>
+  <span class="s2">onOwnLine: </span><span class="s3">'Closing tag of a multiline JSX expression must be on its own line.'</span><span class="s2">,</span>
+  <span class="s2">matchIndent: </span><span class="s3">'Expected closing tag to match indentation of opening.'</span><span class="s2">,</span>
+  <span class="s2">alignWithOpening: </span><span class="s3">'Expected closing tag to be aligned with the line containing the opening tag'</span><span class="s2">,</span>
+<span class="s2">};</span>
+
+<span class="s4">const </span><span class="s2">defaultOption = </span><span class="s3">'tag-aligned'</span><span class="s2">;</span>
+
+<span class="s4">const </span><span class="s2">optionMessageMap = {</span>
+  <span class="s3">'tag-aligned'</span><span class="s2">: </span><span class="s3">'matchIndent'</span><span class="s2">,</span>
+  <span class="s3">'line-aligned'</span><span class="s2">: </span><span class="s3">'alignWithOpening'</span><span class="s2">,</span>
+<span class="s2">};</span>
+
+<span class="s0">/** </span><span class="s1">@type </span><span class="s0">{import('eslint').Rule.RuleModule} */</span>
+<span class="s2">module.exports = {</span>
+  <span class="s2">meta: {</span>
+    <span class="s2">docs: {</span>
+      <span class="s2">description: </span><span class="s3">'Enforce closing tag location for multiline JSX'</span><span class="s2">,</span>
+      <span class="s2">category: </span><span class="s3">'Stylistic Issues'</span><span class="s2">,</span>
+      <span class="s2">recommended: </span><span class="s4">false</span><span class="s2">,</span>
+      <span class="s2">url: docsUrl(</span><span class="s3">'jsx-closing-tag-location'</span><span class="s2">),</span>
+    <span class="s2">},</span>
+    <span class="s2">fixable: </span><span class="s3">'whitespace'</span><span class="s2">,</span>
+    <span class="s2">messages,</span>
+    <span class="s2">schema: [{</span>
+      <span class="s2">anyOf: [</span>
+        <span class="s2">{</span>
+          <span class="s4">enum</span><span class="s2">: [</span><span class="s3">'tag-aligned'</span><span class="s2">, </span><span class="s3">'line-aligned'</span><span class="s2">],</span>
+        <span class="s2">},</span>
+        <span class="s2">{</span>
+          <span class="s2">type: </span><span class="s3">'object'</span><span class="s2">,</span>
+          <span class="s2">properties: {</span>
+            <span class="s2">location: {</span>
+              <span class="s4">enum</span><span class="s2">: [</span><span class="s3">'tag-aligned'</span><span class="s2">, </span><span class="s3">'line-aligned'</span><span class="s2">],</span>
+            <span class="s2">},</span>
+          <span class="s2">},</span>
+          <span class="s2">additionalProperties: </span><span class="s4">false</span><span class="s2">,</span>
+        <span class="s2">},</span>
+      <span class="s2">],</span>
+    <span class="s2">}],</span>
+  <span class="s2">},</span>
+
+  <span class="s2">create(context) {</span>
+    <span class="s4">const </span><span class="s2">config = context.options[</span><span class="s5">0</span><span class="s2">];</span>
+    <span class="s4">let </span><span class="s2">option = defaultOption;</span>
+
+    <span class="s4">if </span><span class="s2">(</span><span class="s4">typeof </span><span class="s2">config === </span><span class="s3">'string'</span><span class="s2">) {</span>
+      <span class="s2">option = config;</span>
+    <span class="s2">} </span><span class="s4">else if </span><span class="s2">(</span><span class="s4">typeof </span><span class="s2">config === </span><span class="s3">'object'</span><span class="s2">) {</span>
+      <span class="s4">if </span><span class="s2">(has(config, </span><span class="s3">'location'</span><span class="s2">)) {</span>
+        <span class="s2">option = config.location;</span>
+      <span class="s2">}</span>
+    <span class="s2">}</span>
+
+    <span class="s4">function </span><span class="s2">getIndentation(openingStartOfLine, opening) {</span>
+      <span class="s4">if </span><span class="s2">(option === </span><span class="s3">'line-aligned'</span><span class="s2">) </span><span class="s4">return </span><span class="s2">openingStartOfLine.column;</span>
+      <span class="s4">if </span><span class="s2">(option === </span><span class="s3">'tag-aligned'</span><span class="s2">) </span><span class="s4">return </span><span class="s2">opening.loc.start.column;</span>
+    <span class="s2">}</span>
+
+    <span class="s4">function </span><span class="s2">handleClosingElement(node) {</span>
+      <span class="s4">if </span><span class="s2">(!node.parent) {</span>
+        <span class="s4">return</span><span class="s2">;</span>
+      <span class="s2">}</span>
+      <span class="s4">const </span><span class="s2">sourceCode = getSourceCode(context);</span>
+
+      <span class="s4">const </span><span class="s2">opening = node.parent.openingElement || node.parent.openingFragment;</span>
+      <span class="s4">const </span><span class="s2">openingLoc = sourceCode.getFirstToken(opening).loc.start;</span>
+      <span class="s4">const </span><span class="s2">openingLine = sourceCode.lines[openingLoc.line - </span><span class="s5">1</span><span class="s2">];</span>
+
+      <span class="s4">const </span><span class="s2">openingStartOfLine = {</span>
+        <span class="s2">column: </span><span class="s6">/^\s*/</span><span class="s2">.exec(openingLine)[</span><span class="s5">0</span><span class="s2">].length,</span>
+        <span class="s2">line: openingLoc.line,</span>
+      <span class="s2">};</span>
+
+      <span class="s4">if </span><span class="s2">(opening.loc.start.line === node.loc.start.line) {</span>
+        <span class="s4">return</span><span class="s2">;</span>
+      <span class="s2">}</span>
+
+      <span class="s4">if </span><span class="s2">(</span>
+        <span class="s2">opening.loc.start.column === node.loc.start.column</span>
+        <span class="s2">&amp;&amp; option === </span><span class="s3">'tag-aligned'</span>
+      <span class="s2">) {</span>
+        <span class="s4">return</span><span class="s2">;</span>
+      <span class="s2">}</span>
+
+      <span class="s4">if </span><span class="s2">(</span>
+        <span class="s2">openingStartOfLine.column === node.loc.start.column</span>
+        <span class="s2">&amp;&amp; option === </span><span class="s3">'line-aligned'</span>
+      <span class="s2">) {</span>
+        <span class="s4">return</span><span class="s2">;</span>
+      <span class="s2">}</span>
+
+      <span class="s4">const </span><span class="s2">messageId = astUtil.isNodeFirstInLine(context, node)</span>
+        <span class="s2">? optionMessageMap[option]</span>
+        <span class="s2">: </span><span class="s3">'onOwnLine'</span><span class="s2">;</span>
+
+      <span class="s2">report(context, messages[messageId], messageId, {</span>
+        <span class="s2">node,</span>
+        <span class="s2">loc: node.loc,</span>
+        <span class="s2">fix(fixer) {</span>
+          <span class="s4">const </span><span class="s2">indent = repeat(</span>
+            <span class="s3">' '</span><span class="s2">,</span>
+            <span class="s2">getIndentation(openingStartOfLine, opening)</span>
+          <span class="s2">);</span>
+
+          <span class="s4">if </span><span class="s2">(astUtil.isNodeFirstInLine(context, node)) {</span>
+            <span class="s4">return </span><span class="s2">fixer.replaceTextRange(</span>
+              <span class="s2">[node.range[</span><span class="s5">0</span><span class="s2">] - node.loc.start.column, node.range[</span><span class="s5">0</span><span class="s2">]],</span>
+              <span class="s2">indent</span>
+            <span class="s2">);</span>
+          <span class="s2">}</span>
+
+          <span class="s4">return </span><span class="s2">fixer.insertTextBefore(node, </span><span class="s3">`</span><span class="s7">\n</span><span class="s2">${indent}</span><span class="s3">`</span><span class="s2">);</span>
+        <span class="s2">},</span>
+      <span class="s2">});</span>
+    <span class="s2">}</span>
+
+    <span class="s4">return </span><span class="s2">{</span>
+      <span class="s2">JSXClosingElement: handleClosingElement,</span>
+      <span class="s2">JSXClosingFragment: handleClosingElement,</span>
+    <span class="s2">};</span>
+  <span class="s2">},</span>
+<span class="s2">};</span>
+</pre>
+</body>
+</html>

@@ -1,0 +1,711 @@
+<html>
+<head>
+<title>on-demand-entry-handler.js</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #067d17;}
+.s1 { color: #080808;}
+.s2 { color: #0033b3;}
+.s3 { color: #1750eb;}
+.s4 { color: #8c8c8c; font-style: italic;}
+.s5 { color: #264eff;}
+</style>
+</head>
+<body bgcolor="#ffffff">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#c0c0c0" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+on-demand-entry-handler.js</font>
+</center></td></tr></table>
+<pre><span class="s0">&quot;use strict&quot;</span><span class="s1">;</span>
+<span class="s1">Object.defineProperty(exports, </span><span class="s0">&quot;__esModule&quot;</span><span class="s1">, {</span>
+    <span class="s1">value: </span><span class="s2">true</span>
+<span class="s1">});</span>
+<span class="s3">0 </span><span class="s1">&amp;&amp; (module.exports = {</span>
+    <span class="s1">ADDED: </span><span class="s2">null</span><span class="s1">,</span>
+    <span class="s1">BUILDING: </span><span class="s2">null</span><span class="s1">,</span>
+    <span class="s1">BUILT: </span><span class="s2">null</span><span class="s1">,</span>
+    <span class="s1">EntryTypes: </span><span class="s2">null</span><span class="s1">,</span>
+    <span class="s1">findPagePathData: </span><span class="s2">null</span><span class="s1">,</span>
+    <span class="s1">getEntries: </span><span class="s2">null</span><span class="s1">,</span>
+    <span class="s1">getEntryKey: </span><span class="s2">null</span><span class="s1">,</span>
+    <span class="s1">getInvalidator: </span><span class="s2">null</span><span class="s1">,</span>
+    <span class="s1">onDemandEntryHandler: </span><span class="s2">null</span>
+<span class="s1">});</span>
+<span class="s2">function </span><span class="s1">_export(target, all) {</span>
+    <span class="s2">for</span><span class="s1">(</span><span class="s2">var </span><span class="s1">name </span><span class="s2">in </span><span class="s1">all)Object.defineProperty(target, name, {</span>
+        <span class="s1">enumerable: </span><span class="s2">true</span><span class="s1">,</span>
+        <span class="s1">get: all[name]</span>
+    <span class="s1">});</span>
+<span class="s1">}</span>
+<span class="s1">_export(exports, {</span>
+    <span class="s1">ADDED: </span><span class="s2">function</span><span class="s1">() {</span>
+        <span class="s2">return </span><span class="s1">ADDED;</span>
+    <span class="s1">},</span>
+    <span class="s1">BUILDING: </span><span class="s2">function</span><span class="s1">() {</span>
+        <span class="s2">return </span><span class="s1">BUILDING;</span>
+    <span class="s1">},</span>
+    <span class="s1">BUILT: </span><span class="s2">function</span><span class="s1">() {</span>
+        <span class="s2">return </span><span class="s1">BUILT;</span>
+    <span class="s1">},</span>
+    <span class="s1">EntryTypes: </span><span class="s2">function</span><span class="s1">() {</span>
+        <span class="s2">return </span><span class="s1">EntryTypes;</span>
+    <span class="s1">},</span>
+    <span class="s1">findPagePathData: </span><span class="s2">function</span><span class="s1">() {</span>
+        <span class="s2">return </span><span class="s1">findPagePathData;</span>
+    <span class="s1">},</span>
+    <span class="s1">getEntries: </span><span class="s2">function</span><span class="s1">() {</span>
+        <span class="s2">return </span><span class="s1">getEntries;</span>
+    <span class="s1">},</span>
+    <span class="s1">getEntryKey: </span><span class="s2">function</span><span class="s1">() {</span>
+        <span class="s2">return </span><span class="s1">getEntryKey;</span>
+    <span class="s1">},</span>
+    <span class="s1">getInvalidator: </span><span class="s2">function</span><span class="s1">() {</span>
+        <span class="s2">return </span><span class="s1">getInvalidator;</span>
+    <span class="s1">},</span>
+    <span class="s1">onDemandEntryHandler: </span><span class="s2">function</span><span class="s1">() {</span>
+        <span class="s2">return </span><span class="s1">onDemandEntryHandler;</span>
+    <span class="s1">}</span>
+<span class="s1">});</span>
+<span class="s2">const </span><span class="s1">_debug = </span><span class="s4">/*#__PURE__*/ </span><span class="s1">_interop_require_default(require(</span><span class="s0">&quot;next/dist/compiled/debug&quot;</span><span class="s1">));</span>
+<span class="s2">const </span><span class="s1">_events = require(</span><span class="s0">&quot;events&quot;</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">_findpagefile = require(</span><span class="s0">&quot;../lib/find-page-file&quot;</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">_entries = require(</span><span class="s0">&quot;../../build/entries&quot;</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">_path = require(</span><span class="s0">&quot;path&quot;</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">_normalizepathsep = require(</span><span class="s0">&quot;../../shared/lib/page-path/normalize-path-sep&quot;</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">_normalizepagepath = require(</span><span class="s0">&quot;../../shared/lib/page-path/normalize-page-path&quot;</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">_ensureleadingslash = require(</span><span class="s0">&quot;../../shared/lib/page-path/ensure-leading-slash&quot;</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">_removepagepathtail = require(</span><span class="s0">&quot;../../shared/lib/page-path/remove-page-path-tail&quot;</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">_output = require(</span><span class="s0">&quot;../../build/output&quot;</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">_getroutefromentrypoint = </span><span class="s4">/*#__PURE__*/ </span><span class="s1">_interop_require_default(require(</span><span class="s0">&quot;../get-route-from-entrypoint&quot;</span><span class="s1">));</span>
+<span class="s2">const </span><span class="s1">_utils = require(</span><span class="s0">&quot;../../build/utils&quot;</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">_utils1 = require(</span><span class="s0">&quot;../../shared/lib/utils&quot;</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">_constants = require(</span><span class="s0">&quot;../../shared/lib/constants&quot;</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">_segment = require(</span><span class="s0">&quot;../../shared/lib/segment&quot;</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">_hotreloadertypes = require(</span><span class="s0">&quot;./hot-reloader-types&quot;</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">_apppageroutedefinition = require(</span><span class="s0">&quot;../route-definitions/app-page-route-definition&quot;</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">_scheduler = require(</span><span class="s0">&quot;../../lib/scheduler&quot;</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">_batcher = require(</span><span class="s0">&quot;../../lib/batcher&quot;</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">_apppaths = require(</span><span class="s0">&quot;../../shared/lib/router/utils/app-paths&quot;</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">_pagetypes = require(</span><span class="s0">&quot;../../lib/page-types&quot;</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">_flightdatahelpers = require(</span><span class="s0">&quot;../../client/flight-data-helpers&quot;</span><span class="s1">);</span>
+<span class="s2">function </span><span class="s1">_interop_require_default(obj) {</span>
+    <span class="s2">return </span><span class="s1">obj &amp;&amp; obj.__esModule ? obj : {</span>
+        <span class="s2">default</span><span class="s1">: obj</span>
+    <span class="s1">};</span>
+<span class="s1">}</span>
+<span class="s2">const </span><span class="s1">debug = (</span><span class="s3">0</span><span class="s1">, _debug.default)(</span><span class="s0">'next:on-demand-entry-handler'</span><span class="s1">);</span>
+<span class="s4">/**</span>
+ <span class="s4">* Returns object keys with type inferred from the object key</span>
+ <span class="s4">*/ </span><span class="s2">const </span><span class="s1">keys = Object.keys;</span>
+<span class="s2">const </span><span class="s1">COMPILER_KEYS = keys(_constants.COMPILER_INDEXES);</span>
+<span class="s2">function </span><span class="s1">treePathToEntrypoint(segmentPath, parentPath) {</span>
+    <span class="s2">const </span><span class="s1">[parallelRouteKey, segment] = segmentPath;</span>
+    <span class="s4">// TODO-APP: modify this path to cover parallelRouteKey convention</span>
+    <span class="s2">const </span><span class="s1">path = (parentPath ? parentPath + </span><span class="s0">'/' </span><span class="s1">: </span><span class="s0">''</span><span class="s1">) + (parallelRouteKey !== </span><span class="s0">'children' </span><span class="s1">&amp;&amp; !segment.startsWith(</span><span class="s0">'@'</span><span class="s1">) ? </span><span class="s0">`@</span><span class="s1">${parallelRouteKey}</span><span class="s0">/` </span><span class="s1">: </span><span class="s0">''</span><span class="s1">) + (segment === </span><span class="s0">'' </span><span class="s1">? </span><span class="s0">'page' </span><span class="s1">: segment);</span>
+    <span class="s4">// Last segment</span>
+    <span class="s2">if </span><span class="s1">(segmentPath.length === </span><span class="s3">2</span><span class="s1">) {</span>
+        <span class="s2">return </span><span class="s1">path;</span>
+    <span class="s1">}</span>
+    <span class="s2">const </span><span class="s1">childSegmentPath = (</span><span class="s3">0</span><span class="s1">, _flightdatahelpers.getNextFlightSegmentPath)(segmentPath);</span>
+    <span class="s2">return </span><span class="s1">treePathToEntrypoint(childSegmentPath, path);</span>
+<span class="s1">}</span>
+<span class="s2">function </span><span class="s1">convertDynamicParamTypeToSyntax(dynamicParamTypeShort, param) {</span>
+    <span class="s2">switch</span><span class="s1">(dynamicParamTypeShort){</span>
+        <span class="s2">case </span><span class="s0">'c'</span><span class="s1">:</span>
+        <span class="s2">case </span><span class="s0">'ci'</span><span class="s1">:</span>
+            <span class="s2">return </span><span class="s0">`[...</span><span class="s1">${param}</span><span class="s0">]`</span><span class="s1">;</span>
+        <span class="s2">case </span><span class="s0">'oc'</span><span class="s1">:</span>
+            <span class="s2">return </span><span class="s0">`[[...</span><span class="s1">${param}</span><span class="s0">]]`</span><span class="s1">;</span>
+        <span class="s2">case </span><span class="s0">'d'</span><span class="s1">:</span>
+        <span class="s2">case </span><span class="s0">'di'</span><span class="s1">:</span>
+            <span class="s2">return </span><span class="s0">`[</span><span class="s1">${param}</span><span class="s0">]`</span><span class="s1">;</span>
+        <span class="s2">default</span><span class="s1">:</span>
+            <span class="s2">throw </span><span class="s1">Object.defineProperty(</span><span class="s2">new </span><span class="s1">Error(</span><span class="s0">'Unknown dynamic param type'</span><span class="s1">), </span><span class="s0">&quot;__NEXT_ERROR_CODE&quot;</span><span class="s1">, {</span>
+                <span class="s1">value: </span><span class="s0">&quot;E378&quot;</span><span class="s1">,</span>
+                <span class="s1">enumerable: </span><span class="s2">false</span><span class="s1">,</span>
+                <span class="s1">configurable: </span><span class="s2">true</span>
+            <span class="s1">});</span>
+    <span class="s1">}</span>
+<span class="s1">}</span>
+<span class="s2">function </span><span class="s1">getEntryKey(compilerType, pageBundleType, page) {</span>
+    <span class="s4">// TODO: handle the /children slot better</span>
+    <span class="s4">// this is a quick hack to handle when children is provided as children/page instead of /page</span>
+    <span class="s2">const </span><span class="s1">pageKey = page.replace(</span><span class="s5">/(@[^/]+)\/children/g</span><span class="s1">, </span><span class="s0">'$1'</span><span class="s1">);</span>
+    <span class="s2">return </span><span class="s0">`</span><span class="s1">${compilerType}</span><span class="s0">@</span><span class="s1">${pageBundleType}</span><span class="s0">@</span><span class="s1">${pageKey}</span><span class="s0">`</span><span class="s1">;</span>
+<span class="s1">}</span>
+<span class="s2">function </span><span class="s1">getPageBundleType(pageBundlePath) {</span>
+    <span class="s4">// Handle special case for /_error</span>
+    <span class="s2">if </span><span class="s1">(pageBundlePath === </span><span class="s0">'/_error'</span><span class="s1">) </span><span class="s2">return </span><span class="s1">_pagetypes.PAGE_TYPES.PAGES;</span>
+    <span class="s2">if </span><span class="s1">((</span><span class="s3">0</span><span class="s1">, _utils.isMiddlewareFilename)(pageBundlePath)) </span><span class="s2">return </span><span class="s1">_pagetypes.PAGE_TYPES.ROOT;</span>
+    <span class="s2">return </span><span class="s1">pageBundlePath.startsWith(</span><span class="s0">'pages/'</span><span class="s1">) ? _pagetypes.PAGE_TYPES.PAGES : pageBundlePath.startsWith(</span><span class="s0">'app/'</span><span class="s1">) ? _pagetypes.PAGE_TYPES.APP : _pagetypes.PAGE_TYPES.ROOT;</span>
+<span class="s1">}</span>
+<span class="s2">function </span><span class="s1">getEntrypointsFromTree(tree, isFirst, parentPath = []) {</span>
+    <span class="s2">const </span><span class="s1">[segment, parallelRoutes] = tree;</span>
+    <span class="s2">const </span><span class="s1">currentSegment = Array.isArray(segment) ? convertDynamicParamTypeToSyntax(segment[</span><span class="s3">2</span><span class="s1">], segment[</span><span class="s3">0</span><span class="s1">]) : segment;</span>
+    <span class="s2">const </span><span class="s1">isPageSegment = currentSegment.startsWith(_segment.PAGE_SEGMENT_KEY);</span>
+    <span class="s2">const </span><span class="s1">currentPath = [</span>
+        <span class="s1">...parentPath,</span>
+        <span class="s1">isPageSegment ? </span><span class="s0">'' </span><span class="s1">: currentSegment</span>
+    <span class="s1">];</span>
+    <span class="s2">if </span><span class="s1">(!isFirst &amp;&amp; isPageSegment) {</span>
+        <span class="s4">// TODO get rid of '' at the start of tree</span>
+        <span class="s2">return </span><span class="s1">[</span>
+            <span class="s1">treePathToEntrypoint(currentPath.slice(</span><span class="s3">1</span><span class="s1">))</span>
+        <span class="s1">];</span>
+    <span class="s1">}</span>
+    <span class="s2">return </span><span class="s1">Object.keys(parallelRoutes).reduce((paths, key)=&gt;{</span>
+        <span class="s2">const </span><span class="s1">childTree = parallelRoutes[key];</span>
+        <span class="s2">const </span><span class="s1">childPages = getEntrypointsFromTree(childTree, </span><span class="s2">false</span><span class="s1">, [</span>
+            <span class="s1">...currentPath,</span>
+            <span class="s1">key</span>
+        <span class="s1">]);</span>
+        <span class="s2">return </span><span class="s1">[</span>
+            <span class="s1">...paths,</span>
+            <span class="s1">...childPages</span>
+        <span class="s1">];</span>
+    <span class="s1">}, []);</span>
+<span class="s1">}</span>
+<span class="s2">const </span><span class="s1">ADDED = Symbol(</span><span class="s0">'added'</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">BUILDING = Symbol(</span><span class="s0">'building'</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">BUILT = Symbol(</span><span class="s0">'built'</span><span class="s1">);</span>
+<span class="s2">var </span><span class="s1">EntryTypes = </span><span class="s4">/*#__PURE__*/ </span><span class="s2">function</span><span class="s1">(EntryTypes) {</span>
+    <span class="s1">EntryTypes[EntryTypes[</span><span class="s0">&quot;ENTRY&quot;</span><span class="s1">] = </span><span class="s3">0</span><span class="s1">] = </span><span class="s0">&quot;ENTRY&quot;</span><span class="s1">;</span>
+    <span class="s1">EntryTypes[EntryTypes[</span><span class="s0">&quot;CHILD_ENTRY&quot;</span><span class="s1">] = </span><span class="s3">1</span><span class="s1">] = </span><span class="s0">&quot;CHILD_ENTRY&quot;</span><span class="s1">;</span>
+    <span class="s2">return </span><span class="s1">EntryTypes;</span>
+<span class="s1">}({});</span>
+<span class="s2">const </span><span class="s1">entriesMap = </span><span class="s2">new </span><span class="s1">Map();</span>
+<span class="s4">// remove /server from end of output for server compiler</span>
+<span class="s2">const </span><span class="s1">normalizeOutputPath = (dir)=&gt;dir.replace(</span><span class="s5">/[/\\]server$/</span><span class="s1">, </span><span class="s0">''</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">getEntries = (dir)=&gt;{</span>
+    <span class="s1">dir = normalizeOutputPath(dir);</span>
+    <span class="s2">const </span><span class="s1">entries = entriesMap.get(dir) || {};</span>
+    <span class="s1">entriesMap.set(dir, entries);</span>
+    <span class="s2">return </span><span class="s1">entries;</span>
+<span class="s1">};</span>
+<span class="s2">const </span><span class="s1">invalidators = </span><span class="s2">new </span><span class="s1">Map();</span>
+<span class="s2">const </span><span class="s1">getInvalidator = (dir)=&gt;{</span>
+    <span class="s1">dir = normalizeOutputPath(dir);</span>
+    <span class="s2">return </span><span class="s1">invalidators.get(dir);</span>
+<span class="s1">};</span>
+<span class="s2">const </span><span class="s1">doneCallbacks = </span><span class="s2">new </span><span class="s1">_events.EventEmitter();</span>
+<span class="s2">const </span><span class="s1">lastClientAccessPages = [</span>
+    <span class="s0">''</span>
+<span class="s1">];</span>
+<span class="s2">const </span><span class="s1">lastServerAccessPagesForAppDir = [</span>
+    <span class="s0">''</span>
+<span class="s1">];</span>
+<span class="s4">// Make sure only one invalidation happens at a time</span>
+<span class="s4">// Otherwise, webpack hash gets changed and it'll force the client to reload.</span>
+<span class="s2">class </span><span class="s1">Invalidator {</span>
+    <span class="s1">constructor(multiCompiler){</span>
+        <span class="s2">this</span><span class="s1">.building = </span><span class="s2">new </span><span class="s1">Set();</span>
+        <span class="s2">this</span><span class="s1">.rebuildAgain = </span><span class="s2">new </span><span class="s1">Set();</span>
+        <span class="s2">this</span><span class="s1">.multiCompiler = multiCompiler;</span>
+    <span class="s1">}</span>
+    <span class="s1">shouldRebuildAll() {</span>
+        <span class="s2">return this</span><span class="s1">.rebuildAgain.size &gt; </span><span class="s3">0</span><span class="s1">;</span>
+    <span class="s1">}</span>
+    <span class="s1">invalidate(compilerKeys = COMPILER_KEYS) {</span>
+        <span class="s2">for </span><span class="s1">(</span><span class="s2">const </span><span class="s1">key of compilerKeys){</span>
+            <span class="s2">var </span><span class="s1">_this_multiCompiler_compilers_COMPILER_INDEXES_key_watching;</span>
+            <span class="s4">// If there's a current build is processing, we won't abort it by invalidating.</span>
+            <span class="s4">// (If aborted, it'll cause a client side hard reload)</span>
+            <span class="s4">// But let it to invalidate just after the completion.</span>
+            <span class="s4">// So, it can re-build the queued pages at once.</span>
+            <span class="s2">if </span><span class="s1">(</span><span class="s2">this</span><span class="s1">.building.has(key)) {</span>
+                <span class="s2">this</span><span class="s1">.rebuildAgain.add(key);</span>
+                <span class="s2">continue</span><span class="s1">;</span>
+            <span class="s1">}</span>
+            <span class="s2">this</span><span class="s1">.building.add(key);</span>
+            <span class="s1">(_this_multiCompiler_compilers_COMPILER_INDEXES_key_watching = </span><span class="s2">this</span><span class="s1">.multiCompiler.compilers[_constants.COMPILER_INDEXES[key]].watching) == </span><span class="s2">null </span><span class="s1">? </span><span class="s2">void </span><span class="s3">0 </span><span class="s1">: _this_multiCompiler_compilers_COMPILER_INDEXES_key_watching.invalidate();</span>
+        <span class="s1">}</span>
+    <span class="s1">}</span>
+    <span class="s1">startBuilding(compilerKey) {</span>
+        <span class="s2">this</span><span class="s1">.building.add(compilerKey);</span>
+    <span class="s1">}</span>
+    <span class="s1">doneBuilding(compilerKeys = []) {</span>
+        <span class="s2">const </span><span class="s1">rebuild = [];</span>
+        <span class="s2">for </span><span class="s1">(</span><span class="s2">const </span><span class="s1">key of compilerKeys){</span>
+            <span class="s2">this</span><span class="s1">.building.delete(key);</span>
+            <span class="s2">if </span><span class="s1">(</span><span class="s2">this</span><span class="s1">.rebuildAgain.has(key)) {</span>
+                <span class="s1">rebuild.push(key);</span>
+                <span class="s2">this</span><span class="s1">.rebuildAgain.delete(key);</span>
+            <span class="s1">}</span>
+        <span class="s1">}</span>
+        <span class="s2">if </span><span class="s1">(rebuild.length &gt; </span><span class="s3">0</span><span class="s1">) {</span>
+            <span class="s2">this</span><span class="s1">.invalidate(rebuild);</span>
+        <span class="s1">}</span>
+    <span class="s1">}</span>
+    <span class="s1">willRebuild(compilerKey) {</span>
+        <span class="s2">return this</span><span class="s1">.rebuildAgain.has(compilerKey);</span>
+    <span class="s1">}</span>
+<span class="s1">}</span>
+<span class="s2">function </span><span class="s1">disposeInactiveEntries(entries, maxInactiveAge) {</span>
+    <span class="s1">Object.keys(entries).forEach((entryKey)=&gt;{</span>
+        <span class="s2">const </span><span class="s1">entryData = entries[entryKey];</span>
+        <span class="s2">const </span><span class="s1">{ lastActiveTime, status, dispose, bundlePath } = entryData;</span>
+        <span class="s4">// TODO-APP: implement disposing of CHILD_ENTRY</span>
+        <span class="s2">if </span><span class="s1">(entryData.type === </span><span class="s3">1</span><span class="s1">) {</span>
+            <span class="s2">return</span><span class="s1">;</span>
+        <span class="s1">}</span>
+        <span class="s4">// For the root middleware and the instrumentation hook files,</span>
+        <span class="s4">// we don't dispose them periodically as it's needed for every request.</span>
+        <span class="s2">if </span><span class="s1">((</span><span class="s3">0</span><span class="s1">, _utils.isMiddlewareFilename)(bundlePath) || (</span><span class="s3">0</span><span class="s1">, _utils.isInstrumentationHookFilename)(bundlePath)) {</span>
+            <span class="s2">return</span><span class="s1">;</span>
+        <span class="s1">}</span>
+        <span class="s2">if </span><span class="s1">(dispose) </span><span class="s4">// Skip pages already scheduled for disposing</span>
+        <span class="s2">return</span><span class="s1">;</span>
+        <span class="s4">// This means this entry is currently building or just added</span>
+        <span class="s4">// We don't need to dispose those entries.</span>
+        <span class="s2">if </span><span class="s1">(status !== BUILT) </span><span class="s2">return</span><span class="s1">;</span>
+        <span class="s4">// We should not build the last accessed page even we didn't get any pings</span>
+        <span class="s4">// Sometimes, it's possible our XHR ping to wait before completing other requests.</span>
+        <span class="s4">// In that case, we should not dispose the current viewing page</span>
+        <span class="s2">if </span><span class="s1">(lastClientAccessPages.includes(entryKey) || lastServerAccessPagesForAppDir.includes(entryKey)) </span><span class="s2">return</span><span class="s1">;</span>
+        <span class="s2">if </span><span class="s1">(lastActiveTime &amp;&amp; Date.now() - lastActiveTime &gt; maxInactiveAge) {</span>
+            <span class="s1">entries[entryKey].dispose = </span><span class="s2">true</span><span class="s1">;</span>
+        <span class="s1">}</span>
+    <span class="s1">});</span>
+<span class="s1">}</span>
+<span class="s4">// Normalize both app paths and page paths</span>
+<span class="s2">function </span><span class="s1">tryToNormalizePagePath(page) {</span>
+    <span class="s2">try </span><span class="s1">{</span>
+        <span class="s2">return </span><span class="s1">(</span><span class="s3">0</span><span class="s1">, _normalizepagepath.normalizePagePath)(page);</span>
+    <span class="s1">} </span><span class="s2">catch </span><span class="s1">(err) {</span>
+        <span class="s1">console.error(err);</span>
+        <span class="s2">throw new </span><span class="s1">_utils1.PageNotFoundError(page);</span>
+    <span class="s1">}</span>
+<span class="s1">}</span>
+<span class="s1">async </span><span class="s2">function </span><span class="s1">findPagePathData(rootDir, page, extensions, pagesDir, appDir, isGlobalNotFoundEnabled) {</span>
+    <span class="s2">const </span><span class="s1">normalizedPagePath = tryToNormalizePagePath(page);</span>
+    <span class="s2">let </span><span class="s1">pagePath = </span><span class="s2">null</span><span class="s1">;</span>
+    <span class="s2">const </span><span class="s1">isInstrumentation = (</span><span class="s3">0</span><span class="s1">, _utils.isInstrumentationHookFile)(normalizedPagePath);</span>
+    <span class="s2">if </span><span class="s1">((</span><span class="s3">0</span><span class="s1">, _utils.isMiddlewareFile)(normalizedPagePath) || isInstrumentation) {</span>
+        <span class="s1">pagePath = </span><span class="s2">await </span><span class="s1">(</span><span class="s3">0</span><span class="s1">, _findpagefile.findPageFile)(rootDir, normalizedPagePath, extensions, </span><span class="s2">false</span><span class="s1">);</span>
+        <span class="s2">if </span><span class="s1">(!pagePath) {</span>
+            <span class="s2">throw new </span><span class="s1">_utils1.PageNotFoundError(normalizedPagePath);</span>
+        <span class="s1">}</span>
+        <span class="s2">const </span><span class="s1">pageUrl = (</span><span class="s3">0</span><span class="s1">, _ensureleadingslash.ensureLeadingSlash)((</span><span class="s3">0</span><span class="s1">, _removepagepathtail.removePagePathTail)((</span><span class="s3">0</span><span class="s1">, _normalizepathsep.normalizePathSep)(pagePath), {</span>
+            <span class="s1">extensions</span>
+        <span class="s1">}));</span>
+        <span class="s2">let </span><span class="s1">bundlePath = normalizedPagePath;</span>
+        <span class="s2">let </span><span class="s1">pageKey = _path.posix.normalize(pageUrl);</span>
+        <span class="s2">if </span><span class="s1">(isInstrumentation || (</span><span class="s3">0</span><span class="s1">, _utils.isMiddlewareFile)(normalizedPagePath)) {</span>
+            <span class="s1">bundlePath = bundlePath.replace(</span><span class="s0">'/src'</span><span class="s1">, </span><span class="s0">''</span><span class="s1">);</span>
+            <span class="s1">pageKey = page.replace(</span><span class="s0">'/src'</span><span class="s1">, </span><span class="s0">''</span><span class="s1">);</span>
+        <span class="s1">}</span>
+        <span class="s2">return </span><span class="s1">{</span>
+            <span class="s1">filename: (</span><span class="s3">0</span><span class="s1">, _path.join)(rootDir, pagePath),</span>
+            <span class="s1">bundlePath: bundlePath.slice(</span><span class="s3">1</span><span class="s1">),</span>
+            <span class="s1">page: pageKey</span>
+        <span class="s1">};</span>
+    <span class="s1">}</span>
+    <span class="s4">// Check appDir first falling back to pagesDir</span>
+    <span class="s2">if </span><span class="s1">(appDir) {</span>
+        <span class="s2">if </span><span class="s1">(page === _constants.UNDERSCORE_NOT_FOUND_ROUTE_ENTRY) {</span>
+            <span class="s4">// Load `global-not-found` when global-not-found is enabled.</span>
+            <span class="s4">// Prefer to load it when both `global-not-found` and root `not-found` present.</span>
+            <span class="s2">if </span><span class="s1">(isGlobalNotFoundEnabled) {</span>
+                <span class="s2">const </span><span class="s1">globalNotFoundPath = </span><span class="s2">await </span><span class="s1">(</span><span class="s3">0</span><span class="s1">, _findpagefile.findPageFile)(appDir, </span><span class="s0">'global-not-found'</span><span class="s1">, extensions, </span><span class="s2">true</span><span class="s1">);</span>
+                <span class="s2">if </span><span class="s1">(globalNotFoundPath) {</span>
+                    <span class="s2">return </span><span class="s1">{</span>
+                        <span class="s1">filename: (</span><span class="s3">0</span><span class="s1">, _path.join)(appDir, globalNotFoundPath),</span>
+                        <span class="s1">bundlePath: </span><span class="s0">`app</span><span class="s1">${_constants.UNDERSCORE_NOT_FOUND_ROUTE_ENTRY}</span><span class="s0">`</span><span class="s1">,</span>
+                        <span class="s1">page: _constants.UNDERSCORE_NOT_FOUND_ROUTE_ENTRY</span>
+                    <span class="s1">};</span>
+                <span class="s1">}</span>
+            <span class="s1">} </span><span class="s2">else </span><span class="s1">{</span>
+                <span class="s4">// Then if global-not-found.js doesn't exist then load not-found.js</span>
+                <span class="s2">const </span><span class="s1">notFoundPath = </span><span class="s2">await </span><span class="s1">(</span><span class="s3">0</span><span class="s1">, _findpagefile.findPageFile)(appDir, </span><span class="s0">'not-found'</span><span class="s1">, extensions, </span><span class="s2">true</span><span class="s1">);</span>
+                <span class="s2">if </span><span class="s1">(notFoundPath) {</span>
+                    <span class="s2">return </span><span class="s1">{</span>
+                        <span class="s1">filename: (</span><span class="s3">0</span><span class="s1">, _path.join)(appDir, notFoundPath),</span>
+                        <span class="s1">bundlePath: </span><span class="s0">`app</span><span class="s1">${_constants.UNDERSCORE_NOT_FOUND_ROUTE_ENTRY}</span><span class="s0">`</span><span class="s1">,</span>
+                        <span class="s1">page: _constants.UNDERSCORE_NOT_FOUND_ROUTE_ENTRY</span>
+                    <span class="s1">};</span>
+                <span class="s1">}</span>
+            <span class="s1">}</span>
+            <span class="s4">// If they're not presented, then fallback to global-not-found</span>
+            <span class="s2">return </span><span class="s1">{</span>
+                <span class="s1">filename: require.resolve(</span><span class="s0">'next/dist/client/components/builtin/global-not-found'</span><span class="s1">),</span>
+                <span class="s1">bundlePath: </span><span class="s0">`app</span><span class="s1">${_constants.UNDERSCORE_NOT_FOUND_ROUTE_ENTRY}</span><span class="s0">`</span><span class="s1">,</span>
+                <span class="s1">page: _constants.UNDERSCORE_NOT_FOUND_ROUTE_ENTRY</span>
+            <span class="s1">};</span>
+        <span class="s1">}</span>
+        <span class="s1">pagePath = </span><span class="s2">await </span><span class="s1">(</span><span class="s3">0</span><span class="s1">, _findpagefile.findPageFile)(appDir, normalizedPagePath, extensions, </span><span class="s2">true</span><span class="s1">);</span>
+        <span class="s2">if </span><span class="s1">(pagePath) {</span>
+            <span class="s2">const </span><span class="s1">pageUrl = (</span><span class="s3">0</span><span class="s1">, _ensureleadingslash.ensureLeadingSlash)((</span><span class="s3">0</span><span class="s1">, _removepagepathtail.removePagePathTail)((</span><span class="s3">0</span><span class="s1">, _normalizepathsep.normalizePathSep)(pagePath), {</span>
+                <span class="s1">keepIndex: </span><span class="s2">true</span><span class="s1">,</span>
+                <span class="s1">extensions</span>
+            <span class="s1">}));</span>
+            <span class="s2">return </span><span class="s1">{</span>
+                <span class="s1">filename: (</span><span class="s3">0</span><span class="s1">, _path.join)(appDir, pagePath),</span>
+                <span class="s1">bundlePath: _path.posix.join(</span><span class="s0">'app'</span><span class="s1">, pageUrl),</span>
+                <span class="s1">page: _path.posix.normalize(pageUrl)</span>
+            <span class="s1">};</span>
+        <span class="s1">}</span>
+    <span class="s1">}</span>
+    <span class="s2">if </span><span class="s1">(!pagePath &amp;&amp; pagesDir) {</span>
+        <span class="s1">pagePath = </span><span class="s2">await </span><span class="s1">(</span><span class="s3">0</span><span class="s1">, _findpagefile.findPageFile)(pagesDir, normalizedPagePath, extensions, </span><span class="s2">false</span><span class="s1">);</span>
+    <span class="s1">}</span>
+    <span class="s2">if </span><span class="s1">(pagePath !== </span><span class="s2">null </span><span class="s1">&amp;&amp; pagesDir) {</span>
+        <span class="s2">const </span><span class="s1">pageUrl = (</span><span class="s3">0</span><span class="s1">, _ensureleadingslash.ensureLeadingSlash)((</span><span class="s3">0</span><span class="s1">, _removepagepathtail.removePagePathTail)((</span><span class="s3">0</span><span class="s1">, _normalizepathsep.normalizePathSep)(pagePath), {</span>
+            <span class="s1">extensions</span>
+        <span class="s1">}));</span>
+        <span class="s2">return </span><span class="s1">{</span>
+            <span class="s1">filename: (</span><span class="s3">0</span><span class="s1">, _path.join)(pagesDir, pagePath),</span>
+            <span class="s1">bundlePath: _path.posix.join(</span><span class="s0">'pages'</span><span class="s1">, (</span><span class="s3">0</span><span class="s1">, _normalizepagepath.normalizePagePath)(pageUrl)),</span>
+            <span class="s1">page: _path.posix.normalize(pageUrl)</span>
+        <span class="s1">};</span>
+    <span class="s1">}</span>
+    <span class="s2">if </span><span class="s1">(page === </span><span class="s0">'/_error'</span><span class="s1">) {</span>
+        <span class="s2">return </span><span class="s1">{</span>
+            <span class="s1">filename: require.resolve(</span><span class="s0">'next/dist/pages/_error'</span><span class="s1">),</span>
+            <span class="s1">bundlePath: page,</span>
+            <span class="s1">page: (</span><span class="s3">0</span><span class="s1">, _normalizepathsep.normalizePathSep)(page)</span>
+        <span class="s1">};</span>
+    <span class="s1">} </span><span class="s2">else </span><span class="s1">{</span>
+        <span class="s2">throw new </span><span class="s1">_utils1.PageNotFoundError(normalizedPagePath);</span>
+    <span class="s1">}</span>
+<span class="s1">}</span>
+<span class="s2">function </span><span class="s1">onDemandEntryHandler({ hotReloader, maxInactiveAge, multiCompiler, nextConfig, pagesBufferLength, pagesDir, rootDir, appDir }) {</span>
+    <span class="s2">const </span><span class="s1">hasAppDir = !!appDir;</span>
+    <span class="s2">let </span><span class="s1">curInvalidator = getInvalidator(multiCompiler.outputPath);</span>
+    <span class="s2">const </span><span class="s1">curEntries = getEntries(multiCompiler.outputPath);</span>
+    <span class="s2">if </span><span class="s1">(!curInvalidator) {</span>
+        <span class="s1">curInvalidator = </span><span class="s2">new </span><span class="s1">Invalidator(multiCompiler);</span>
+        <span class="s1">invalidators.set(multiCompiler.outputPath, curInvalidator);</span>
+    <span class="s1">}</span>
+    <span class="s2">const </span><span class="s1">startBuilding = (compilation)=&gt;{</span>
+        <span class="s2">const </span><span class="s1">compilationName = compilation.name;</span>
+        <span class="s1">curInvalidator.startBuilding(compilationName);</span>
+    <span class="s1">};</span>
+    <span class="s2">for </span><span class="s1">(</span><span class="s2">const </span><span class="s1">compiler of multiCompiler.compilers){</span>
+        <span class="s1">compiler.hooks.make.tap(</span><span class="s0">'NextJsOnDemandEntries'</span><span class="s1">, startBuilding);</span>
+    <span class="s1">}</span>
+    <span class="s2">function </span><span class="s1">getPagePathsFromEntrypoints(type, entrypoints) {</span>
+        <span class="s2">const </span><span class="s1">pagePaths = [];</span>
+        <span class="s2">for </span><span class="s1">(</span><span class="s2">const </span><span class="s1">entrypoint of entrypoints.values()){</span>
+            <span class="s2">const </span><span class="s1">page = (</span><span class="s3">0</span><span class="s1">, _getroutefromentrypoint.default)(entrypoint.name, hasAppDir);</span>
+            <span class="s2">if </span><span class="s1">(page) {</span>
+                <span class="s2">var </span><span class="s1">_entrypoint_name;</span>
+                <span class="s2">const </span><span class="s1">pageBundleType = ((_entrypoint_name = entrypoint.name) == </span><span class="s2">null </span><span class="s1">? </span><span class="s2">void </span><span class="s3">0 </span><span class="s1">: _entrypoint_name.startsWith(</span><span class="s0">'app/'</span><span class="s1">)) ? _pagetypes.PAGE_TYPES.APP : _pagetypes.PAGE_TYPES.PAGES;</span>
+                <span class="s1">pagePaths.push(getEntryKey(type, pageBundleType, page));</span>
+            <span class="s1">} </span><span class="s2">else if </span><span class="s1">((</span><span class="s3">0</span><span class="s1">, _utils.isMiddlewareFilename)(entrypoint.name) || (</span><span class="s3">0</span><span class="s1">, _utils.isInstrumentationHookFilename)(entrypoint.name)) {</span>
+                <span class="s1">pagePaths.push(getEntryKey(type, _pagetypes.PAGE_TYPES.ROOT, </span><span class="s0">`/</span><span class="s1">${entrypoint.name}</span><span class="s0">`</span><span class="s1">));</span>
+            <span class="s1">}</span>
+        <span class="s1">}</span>
+        <span class="s2">return </span><span class="s1">pagePaths;</span>
+    <span class="s1">}</span>
+    <span class="s2">for </span><span class="s1">(</span><span class="s2">const </span><span class="s1">compiler of multiCompiler.compilers){</span>
+        <span class="s1">compiler.hooks.done.tap(</span><span class="s0">'NextJsOnDemandEntries'</span><span class="s1">, ()=&gt;{</span>
+            <span class="s2">var </span><span class="s1">_getInvalidator;</span>
+            <span class="s2">return </span><span class="s1">(_getInvalidator = getInvalidator(compiler.outputPath)) == </span><span class="s2">null </span><span class="s1">? </span><span class="s2">void </span><span class="s3">0 </span><span class="s1">: _getInvalidator.doneBuilding([</span>
+                <span class="s1">compiler.name</span>
+            <span class="s1">]);</span>
+        <span class="s1">});</span>
+    <span class="s1">}</span>
+    <span class="s1">multiCompiler.hooks.done.tap(</span><span class="s0">'NextJsOnDemandEntries'</span><span class="s1">, (multiStats)=&gt;{</span>
+        <span class="s2">var </span><span class="s1">_getInvalidator;</span>
+        <span class="s2">const </span><span class="s1">[clientStats, serverStats, edgeServerStats] = multiStats.stats;</span>
+        <span class="s2">const </span><span class="s1">entryNames = [</span>
+            <span class="s1">...getPagePathsFromEntrypoints(_constants.COMPILER_NAMES.client, clientStats.compilation.entrypoints),</span>
+            <span class="s1">...getPagePathsFromEntrypoints(_constants.COMPILER_NAMES.server, serverStats.compilation.entrypoints),</span>
+            <span class="s1">...edgeServerStats ? getPagePathsFromEntrypoints(_constants.COMPILER_NAMES.edgeServer, edgeServerStats.compilation.entrypoints) : []</span>
+        <span class="s1">];</span>
+        <span class="s2">for </span><span class="s1">(</span><span class="s2">const </span><span class="s1">name of entryNames){</span>
+            <span class="s2">const </span><span class="s1">entry = curEntries[name];</span>
+            <span class="s2">if </span><span class="s1">(!entry) {</span>
+                <span class="s2">continue</span><span class="s1">;</span>
+            <span class="s1">}</span>
+            <span class="s2">if </span><span class="s1">(entry.status !== BUILDING) {</span>
+                <span class="s2">continue</span><span class="s1">;</span>
+            <span class="s1">}</span>
+            <span class="s1">entry.status = BUILT;</span>
+            <span class="s1">doneCallbacks.emit(name);</span>
+        <span class="s1">}</span>
+        <span class="s1">(_getInvalidator = getInvalidator(multiCompiler.outputPath)) == </span><span class="s2">null </span><span class="s1">? </span><span class="s2">void </span><span class="s3">0 </span><span class="s1">: _getInvalidator.doneBuilding([</span>
+            <span class="s1">...COMPILER_KEYS</span>
+        <span class="s1">]);</span>
+    <span class="s1">});</span>
+    <span class="s2">const </span><span class="s1">pingIntervalTime = Math.max(</span><span class="s3">1000</span><span class="s1">, Math.min(</span><span class="s3">5000</span><span class="s1">, maxInactiveAge));</span>
+    <span class="s1">setInterval(</span><span class="s2">function</span><span class="s1">() {</span>
+        <span class="s1">disposeInactiveEntries(curEntries, maxInactiveAge);</span>
+    <span class="s1">}, pingIntervalTime + </span><span class="s3">1000</span><span class="s1">).unref();</span>
+    <span class="s2">function </span><span class="s1">handleAppDirPing(tree) {</span>
+        <span class="s2">const </span><span class="s1">pages = getEntrypointsFromTree(tree, </span><span class="s2">true</span><span class="s1">);</span>
+        <span class="s2">for </span><span class="s1">(</span><span class="s2">const </span><span class="s1">page of pages){</span>
+            <span class="s2">for </span><span class="s1">(</span><span class="s2">const </span><span class="s1">compilerType of [</span>
+                <span class="s1">_constants.COMPILER_NAMES.client,</span>
+                <span class="s1">_constants.COMPILER_NAMES.server,</span>
+                <span class="s1">_constants.COMPILER_NAMES.edgeServer</span>
+            <span class="s1">]){</span>
+                <span class="s2">const </span><span class="s1">entryKey = getEntryKey(compilerType, _pagetypes.PAGE_TYPES.APP, </span><span class="s0">`/</span><span class="s1">${page}</span><span class="s0">`</span><span class="s1">);</span>
+                <span class="s2">const </span><span class="s1">entryInfo = curEntries[entryKey];</span>
+                <span class="s4">// If there's no entry, it may have been invalidated and needs to be re-built.</span>
+                <span class="s2">if </span><span class="s1">(!entryInfo) {</span>
+                    <span class="s2">continue</span><span class="s1">;</span>
+                <span class="s1">}</span>
+                <span class="s4">// We don't need to maintain active state of anything other than BUILT entries</span>
+                <span class="s2">if </span><span class="s1">(entryInfo.status !== BUILT) </span><span class="s2">continue</span><span class="s1">;</span>
+                <span class="s4">// If there's an entryInfo</span>
+                <span class="s2">if </span><span class="s1">(!lastServerAccessPagesForAppDir.includes(entryKey)) {</span>
+                    <span class="s1">lastServerAccessPagesForAppDir.unshift(entryKey);</span>
+                    <span class="s4">// Maintain the buffer max length</span>
+                    <span class="s4">// TODO: verify that the current pageKey is not at the end of the array as multiple entrypoints can exist</span>
+                    <span class="s2">if </span><span class="s1">(lastServerAccessPagesForAppDir.length &gt; pagesBufferLength) {</span>
+                        <span class="s1">lastServerAccessPagesForAppDir.pop();</span>
+                    <span class="s1">}</span>
+                <span class="s1">}</span>
+                <span class="s1">entryInfo.lastActiveTime = Date.now();</span>
+                <span class="s1">entryInfo.dispose = </span><span class="s2">false</span><span class="s1">;</span>
+            <span class="s1">}</span>
+        <span class="s1">}</span>
+    <span class="s1">}</span>
+    <span class="s2">function </span><span class="s1">handlePing(pg) {</span>
+        <span class="s2">const </span><span class="s1">page = (</span><span class="s3">0</span><span class="s1">, _normalizepathsep.normalizePathSep)(pg);</span>
+        <span class="s2">for </span><span class="s1">(</span><span class="s2">const </span><span class="s1">compilerType of [</span>
+            <span class="s1">_constants.COMPILER_NAMES.client,</span>
+            <span class="s1">_constants.COMPILER_NAMES.server,</span>
+            <span class="s1">_constants.COMPILER_NAMES.edgeServer</span>
+        <span class="s1">]){</span>
+            <span class="s2">const </span><span class="s1">entryKey = getEntryKey(compilerType, _pagetypes.PAGE_TYPES.PAGES, page);</span>
+            <span class="s2">const </span><span class="s1">entryInfo = curEntries[entryKey];</span>
+            <span class="s4">// If there's no entry, it may have been invalidated and needs to be re-built.</span>
+            <span class="s2">if </span><span class="s1">(!entryInfo) {</span>
+                <span class="s4">// if (page !== lastEntry) client pings, but there's no entry for page</span>
+                <span class="s2">if </span><span class="s1">(compilerType === _constants.COMPILER_NAMES.client) {</span>
+                    <span class="s2">return</span><span class="s1">;</span>
+                <span class="s1">}</span>
+                <span class="s2">continue</span><span class="s1">;</span>
+            <span class="s1">}</span>
+            <span class="s4">// We don't need to maintain active state of anything other than BUILT entries</span>
+            <span class="s2">if </span><span class="s1">(entryInfo.status !== BUILT) </span><span class="s2">continue</span><span class="s1">;</span>
+            <span class="s4">// If there's an entryInfo</span>
+            <span class="s2">if </span><span class="s1">(!lastClientAccessPages.includes(entryKey)) {</span>
+                <span class="s1">lastClientAccessPages.unshift(entryKey);</span>
+                <span class="s4">// Maintain the buffer max length</span>
+                <span class="s2">if </span><span class="s1">(lastClientAccessPages.length &gt; pagesBufferLength) {</span>
+                    <span class="s1">lastClientAccessPages.pop();</span>
+                <span class="s1">}</span>
+            <span class="s1">}</span>
+            <span class="s1">entryInfo.lastActiveTime = Date.now();</span>
+            <span class="s1">entryInfo.dispose = </span><span class="s2">false</span><span class="s1">;</span>
+        <span class="s1">}</span>
+        <span class="s2">return</span><span class="s1">;</span>
+    <span class="s1">}</span>
+    <span class="s1">async </span><span class="s2">function </span><span class="s1">ensurePageImpl({ page, appPaths, definition, isApp, url }) {</span>
+        <span class="s2">const </span><span class="s1">stalledTime = </span><span class="s3">60</span><span class="s1">;</span>
+        <span class="s2">const </span><span class="s1">stalledEnsureTimeout = setTimeout(()=&gt;{</span>
+            <span class="s1">debug(</span><span class="s0">`Ensuring </span><span class="s1">${page} </span><span class="s0">has taken longer than </span><span class="s1">${stalledTime}</span><span class="s0">s, if this continues to stall this may be a bug`</span><span class="s1">);</span>
+        <span class="s1">}, stalledTime * </span><span class="s3">1000</span><span class="s1">);</span>
+        <span class="s2">try </span><span class="s1">{</span>
+            <span class="s2">let </span><span class="s1">route;</span>
+            <span class="s2">if </span><span class="s1">(definition) {</span>
+                <span class="s1">route = definition;</span>
+            <span class="s1">} </span><span class="s2">else </span><span class="s1">{</span>
+                <span class="s1">route = </span><span class="s2">await </span><span class="s1">findPagePathData(rootDir, page, nextConfig.pageExtensions, pagesDir, appDir, !!nextConfig.experimental.globalNotFound);</span>
+            <span class="s1">}</span>
+            <span class="s2">const </span><span class="s1">isInsideAppDir = !!appDir &amp;&amp; route.filename.startsWith(appDir);</span>
+            <span class="s2">if </span><span class="s1">(</span><span class="s2">typeof </span><span class="s1">isApp === </span><span class="s0">'boolean' </span><span class="s1">&amp;&amp; isApp !== isInsideAppDir) {</span>
+                <span class="s1">Error.stackTraceLimit = </span><span class="s3">15</span><span class="s1">;</span>
+                <span class="s2">throw </span><span class="s1">Object.defineProperty(</span><span class="s2">new </span><span class="s1">Error(</span><span class="s0">`Ensure bailed, found path &quot;</span><span class="s1">${route.page}</span><span class="s0">&quot; does not match ensure type (</span><span class="s1">${isApp ? </span><span class="s0">'app' </span><span class="s1">: </span><span class="s0">'pages'</span><span class="s1">}</span><span class="s0">)`</span><span class="s1">), </span><span class="s0">&quot;__NEXT_ERROR_CODE&quot;</span><span class="s1">, {</span>
+                    <span class="s1">value: </span><span class="s0">&quot;E419&quot;</span><span class="s1">,</span>
+                    <span class="s1">enumerable: </span><span class="s2">false</span><span class="s1">,</span>
+                    <span class="s1">configurable: </span><span class="s2">true</span>
+                <span class="s1">});</span>
+            <span class="s1">}</span>
+            <span class="s2">const </span><span class="s1">pageBundleType = getPageBundleType(route.bundlePath);</span>
+            <span class="s2">const </span><span class="s1">addEntry = (compilerType)=&gt;{</span>
+                <span class="s2">const </span><span class="s1">entryKey = getEntryKey(compilerType, pageBundleType, route.page);</span>
+                <span class="s2">if </span><span class="s1">(curEntries[entryKey] &amp;&amp; </span><span class="s4">// there can be an overlap in the entryKey for the instrumentation hook file and a page named the same</span>
+                <span class="s4">// this is a quick fix to support this scenario by overwriting the instrumentation hook entry, since we only use it one time</span>
+                <span class="s4">// any changes to the instrumentation hook file will require a restart of the dev server anyway</span>
+                <span class="s1">!(</span><span class="s3">0</span><span class="s1">, _utils.isInstrumentationHookFilename)(curEntries[entryKey].bundlePath)) {</span>
+                    <span class="s1">curEntries[entryKey].dispose = </span><span class="s2">false</span><span class="s1">;</span>
+                    <span class="s1">curEntries[entryKey].lastActiveTime = Date.now();</span>
+                    <span class="s2">if </span><span class="s1">(curEntries[entryKey].status === BUILT) {</span>
+                        <span class="s2">return </span><span class="s1">{</span>
+                            <span class="s1">entryKey,</span>
+                            <span class="s1">newEntry: </span><span class="s2">false</span><span class="s1">,</span>
+                            <span class="s1">shouldInvalidate: </span><span class="s2">false</span>
+                        <span class="s1">};</span>
+                    <span class="s1">}</span>
+                    <span class="s2">return </span><span class="s1">{</span>
+                        <span class="s1">entryKey,</span>
+                        <span class="s1">newEntry: </span><span class="s2">false</span><span class="s1">,</span>
+                        <span class="s1">shouldInvalidate: </span><span class="s2">true</span>
+                    <span class="s1">};</span>
+                <span class="s1">}</span>
+                <span class="s1">curEntries[entryKey] = {</span>
+                    <span class="s1">type: </span><span class="s3">0</span><span class="s1">,</span>
+                    <span class="s1">appPaths,</span>
+                    <span class="s1">absolutePagePath: route.filename,</span>
+                    <span class="s1">request: route.filename,</span>
+                    <span class="s1">bundlePath: route.bundlePath,</span>
+                    <span class="s1">dispose: </span><span class="s2">false</span><span class="s1">,</span>
+                    <span class="s1">lastActiveTime: Date.now(),</span>
+                    <span class="s1">status: ADDED</span>
+                <span class="s1">};</span>
+                <span class="s2">return </span><span class="s1">{</span>
+                    <span class="s1">entryKey: entryKey,</span>
+                    <span class="s1">newEntry: </span><span class="s2">true</span><span class="s1">,</span>
+                    <span class="s1">shouldInvalidate: </span><span class="s2">true</span>
+                <span class="s1">};</span>
+            <span class="s1">};</span>
+            <span class="s2">const </span><span class="s1">staticInfo = </span><span class="s2">await </span><span class="s1">(</span><span class="s3">0</span><span class="s1">, _entries.getStaticInfoIncludingLayouts)({</span>
+                <span class="s1">page,</span>
+                <span class="s1">pageFilePath: route.filename,</span>
+                <span class="s1">isInsideAppDir,</span>
+                <span class="s1">pageExtensions: nextConfig.pageExtensions,</span>
+                <span class="s1">isDev: </span><span class="s2">true</span><span class="s1">,</span>
+                <span class="s1">config: nextConfig,</span>
+                <span class="s1">appDir</span>
+            <span class="s1">});</span>
+            <span class="s2">const </span><span class="s1">added = </span><span class="s2">new </span><span class="s1">Map();</span>
+            <span class="s2">const </span><span class="s1">isServerComponent = isInsideAppDir &amp;&amp; staticInfo.rsc !== _constants.RSC_MODULE_TYPES.client;</span>
+            <span class="s2">let </span><span class="s1">pageRuntime = staticInfo.runtime;</span>
+            <span class="s1">(</span><span class="s3">0</span><span class="s1">, _entries.runDependingOnPageType)({</span>
+                <span class="s1">page: route.page,</span>
+                <span class="s1">pageRuntime,</span>
+                <span class="s1">pageType: pageBundleType,</span>
+                <span class="s1">onClient: ()=&gt;{</span>
+                    <span class="s4">// Skip adding the client entry for app / Server Components.</span>
+                    <span class="s2">if </span><span class="s1">(isServerComponent || isInsideAppDir) {</span>
+                        <span class="s2">return</span><span class="s1">;</span>
+                    <span class="s1">}</span>
+                    <span class="s1">added.set(_constants.COMPILER_NAMES.client, addEntry(_constants.COMPILER_NAMES.client));</span>
+                <span class="s1">},</span>
+                <span class="s1">onServer: ()=&gt;{</span>
+                    <span class="s1">added.set(_constants.COMPILER_NAMES.server, addEntry(_constants.COMPILER_NAMES.server));</span>
+                    <span class="s2">const </span><span class="s1">edgeServerEntry = getEntryKey(_constants.COMPILER_NAMES.edgeServer, pageBundleType, route.page);</span>
+                    <span class="s2">if </span><span class="s1">(curEntries[edgeServerEntry] &amp;&amp; !(</span><span class="s3">0</span><span class="s1">, _utils.isInstrumentationHookFile)(route.page)) {</span>
+                        <span class="s4">// Runtime switched from edge to server</span>
+                        <span class="s2">delete </span><span class="s1">curEntries[edgeServerEntry];</span>
+                    <span class="s1">}</span>
+                <span class="s1">},</span>
+                <span class="s1">onEdgeServer: ()=&gt;{</span>
+                    <span class="s1">added.set(_constants.COMPILER_NAMES.edgeServer, addEntry(_constants.COMPILER_NAMES.edgeServer));</span>
+                    <span class="s2">const </span><span class="s1">serverEntry = getEntryKey(_constants.COMPILER_NAMES.server, pageBundleType, route.page);</span>
+                    <span class="s2">if </span><span class="s1">(curEntries[serverEntry] &amp;&amp; !(</span><span class="s3">0</span><span class="s1">, _utils.isInstrumentationHookFile)(route.page)) {</span>
+                        <span class="s4">// Runtime switched from server to edge</span>
+                        <span class="s2">delete </span><span class="s1">curEntries[serverEntry];</span>
+                    <span class="s1">}</span>
+                <span class="s1">}</span>
+            <span class="s1">});</span>
+            <span class="s2">const </span><span class="s1">addedValues = [</span>
+                <span class="s1">...added.values()</span>
+            <span class="s1">];</span>
+            <span class="s2">const </span><span class="s1">entriesThatShouldBeInvalidated = [</span>
+                <span class="s1">...added.entries()</span>
+            <span class="s1">].filter(([, entry])=&gt;entry.shouldInvalidate);</span>
+            <span class="s2">const </span><span class="s1">hasNewEntry = addedValues.some((entry)=&gt;entry.newEntry);</span>
+            <span class="s2">if </span><span class="s1">(hasNewEntry) {</span>
+                <span class="s2">const </span><span class="s1">routePage = isApp ? route.page : (</span><span class="s3">0</span><span class="s1">, _apppaths.normalizeAppPath)(route.page);</span>
+                <span class="s1">(</span><span class="s3">0</span><span class="s1">, _output.reportTrigger)(routePage, url);</span>
+            <span class="s1">}</span>
+            <span class="s2">if </span><span class="s1">(entriesThatShouldBeInvalidated.length &gt; </span><span class="s3">0</span><span class="s1">) {</span>
+                <span class="s2">const </span><span class="s1">invalidatePromise = Promise.all(entriesThatShouldBeInvalidated.map(([compilerKey, { entryKey }])=&gt;{</span>
+                    <span class="s2">return new </span><span class="s1">Promise((resolve, reject)=&gt;{</span>
+                        <span class="s1">doneCallbacks.once(entryKey, (err)=&gt;{</span>
+                            <span class="s2">if </span><span class="s1">(err) {</span>
+                                <span class="s2">return </span><span class="s1">reject(err);</span>
+                            <span class="s1">}</span>
+                            <span class="s4">// If the invalidation also triggers a rebuild, we need to</span>
+                            <span class="s4">// wait for that additional build to prevent race conditions.</span>
+                            <span class="s2">const </span><span class="s1">needsRebuild = curInvalidator.willRebuild(compilerKey);</span>
+                            <span class="s2">if </span><span class="s1">(needsRebuild) {</span>
+                                <span class="s1">doneCallbacks.once(entryKey, (rebuildErr)=&gt;{</span>
+                                    <span class="s2">if </span><span class="s1">(rebuildErr) {</span>
+                                        <span class="s2">return </span><span class="s1">reject(rebuildErr);</span>
+                                    <span class="s1">}</span>
+                                    <span class="s1">resolve();</span>
+                                <span class="s1">});</span>
+                            <span class="s1">} </span><span class="s2">else </span><span class="s1">{</span>
+                                <span class="s1">resolve();</span>
+                            <span class="s1">}</span>
+                        <span class="s1">});</span>
+                    <span class="s1">});</span>
+                <span class="s1">}));</span>
+                <span class="s1">curInvalidator.invalidate([</span>
+                    <span class="s1">...added.keys()</span>
+                <span class="s1">]);</span>
+                <span class="s2">await </span><span class="s1">invalidatePromise;</span>
+            <span class="s1">}</span>
+        <span class="s1">} </span><span class="s2">finally</span><span class="s1">{</span>
+            <span class="s1">clearTimeout(stalledEnsureTimeout);</span>
+        <span class="s1">}</span>
+    <span class="s1">}</span>
+    <span class="s4">// Make sure that we won't have multiple invalidations ongoing concurrently.</span>
+    <span class="s2">const </span><span class="s1">batcher = _batcher.Batcher.create({</span>
+        <span class="s4">// The cache key here is composed of the elements that affect the</span>
+        <span class="s4">// compilation, namely, the page, whether it's client only, and whether</span>
+        <span class="s4">// it's an app page. This ensures that we don't have multiple compilations</span>
+        <span class="s4">// for the same page happening concurrently.</span>
+        <span class="s4">//</span>
+        <span class="s4">// We don't include the whole match because it contains match specific</span>
+        <span class="s4">// parameters (like route params) that would just bust this cache. Any</span>
+        <span class="s4">// details that would possibly bust the cache should be listed here.</span>
+        <span class="s1">cacheKeyFn: (options)=&gt;JSON.stringify(options),</span>
+        <span class="s4">// Schedule the invocation of the ensurePageImpl function on the next tick.</span>
+        <span class="s1">schedulerFn: _scheduler.scheduleOnNextTick</span>
+    <span class="s1">});</span>
+    <span class="s2">return </span><span class="s1">{</span>
+        <span class="s1">async ensurePage ({ page, appPaths = </span><span class="s2">null</span><span class="s1">, definition, isApp, url }) {</span>
+            <span class="s4">// If the route is actually an app page route, then we should have access</span>
+            <span class="s4">// to the app route definition, and therefore, the appPaths from it.</span>
+            <span class="s2">if </span><span class="s1">(!appPaths &amp;&amp; definition &amp;&amp; (</span><span class="s3">0</span><span class="s1">, _apppageroutedefinition.isAppPageRouteDefinition)(definition)) {</span>
+                <span class="s1">appPaths = definition.appPaths;</span>
+            <span class="s1">}</span>
+            <span class="s4">// Wrap the invocation of the ensurePageImpl function in the pending</span>
+            <span class="s4">// wrapper, which will ensure that we don't have multiple compilations</span>
+            <span class="s4">// for the same page happening concurrently.</span>
+            <span class="s2">return </span><span class="s1">batcher.batch({</span>
+                <span class="s1">page,</span>
+                <span class="s1">appPaths,</span>
+                <span class="s1">definition,</span>
+                <span class="s1">isApp</span>
+            <span class="s1">}, async ()=&gt;{</span>
+                <span class="s2">await </span><span class="s1">ensurePageImpl({</span>
+                    <span class="s1">page,</span>
+                    <span class="s1">appPaths,</span>
+                    <span class="s1">definition,</span>
+                    <span class="s1">isApp,</span>
+                    <span class="s1">url</span>
+                <span class="s1">});</span>
+            <span class="s1">});</span>
+        <span class="s1">},</span>
+        <span class="s1">onHMR (client, getHmrServerError) {</span>
+            <span class="s2">let </span><span class="s1">bufferedHmrServerError = </span><span class="s2">null</span><span class="s1">;</span>
+            <span class="s1">client.addEventListener(</span><span class="s0">'close'</span><span class="s1">, ()=&gt;{</span>
+                <span class="s1">bufferedHmrServerError = </span><span class="s2">null</span><span class="s1">;</span>
+            <span class="s1">});</span>
+            <span class="s1">client.addEventListener(</span><span class="s0">'message'</span><span class="s1">, ({ data })=&gt;{</span>
+                <span class="s2">try </span><span class="s1">{</span>
+                    <span class="s2">const </span><span class="s1">error = getHmrServerError();</span>
+                    <span class="s4">// New error occurred: buffered error is flushed and new error occurred</span>
+                    <span class="s2">if </span><span class="s1">(!bufferedHmrServerError &amp;&amp; error) {</span>
+                        <span class="s1">hotReloader.send({</span>
+                            <span class="s1">action: _hotreloadertypes.HMR_ACTIONS_SENT_TO_BROWSER.SERVER_ERROR,</span>
+                            <span class="s1">errorJSON: (</span><span class="s3">0</span><span class="s1">, _utils1.stringifyError)(error)</span>
+                        <span class="s1">});</span>
+                        <span class="s1">bufferedHmrServerError = </span><span class="s2">null</span><span class="s1">;</span>
+                    <span class="s1">}</span>
+                    <span class="s2">const </span><span class="s1">parsedData = JSON.parse(</span><span class="s2">typeof </span><span class="s1">data !== </span><span class="s0">'string' </span><span class="s1">? data.toString() : data);</span>
+                    <span class="s2">if </span><span class="s1">(parsedData.event === </span><span class="s0">'ping'</span><span class="s1">) {</span>
+                        <span class="s2">if </span><span class="s1">(parsedData.appDirRoute) {</span>
+                            <span class="s1">handleAppDirPing(parsedData.tree);</span>
+                        <span class="s1">} </span><span class="s2">else </span><span class="s1">{</span>
+                            <span class="s1">handlePing(parsedData.page);</span>
+                        <span class="s1">}</span>
+                    <span class="s1">}</span>
+                <span class="s1">} </span><span class="s2">catch  </span><span class="s1">{}</span>
+            <span class="s1">});</span>
+        <span class="s1">}</span>
+    <span class="s1">};</span>
+<span class="s1">}</span>
+
+<span class="s4">//# sourceMappingURL=on-demand-entry-handler.js.map</span></pre>
+</body>
+</html>

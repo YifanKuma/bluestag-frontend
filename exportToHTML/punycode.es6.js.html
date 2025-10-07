@@ -1,0 +1,468 @@
+<html>
+<head>
+<title>punycode.es6.js</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #067d17;}
+.s1 { color: #080808;}
+.s2 { color: #8c8c8c; font-style: italic;}
+.s3 { color: #0033b3;}
+.s4 { color: #1750eb;}
+.s5 { color: #264eff;}
+.s6 { color: #8c8c8c; font-style: italic;}
+.s7 { color: #0037a6;}
+</style>
+</head>
+<body bgcolor="#ffffff">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#c0c0c0" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+punycode.es6.js</font>
+</center></td></tr></table>
+<pre><span class="s0">'use strict'</span><span class="s1">;</span>
+
+<span class="s2">/** Highest positive signed 32-bit float value */</span>
+<span class="s3">const </span><span class="s1">maxInt = </span><span class="s4">2147483647</span><span class="s1">; </span><span class="s2">// aka. 0x7FFFFFFF or 2^31-1</span>
+
+<span class="s2">/** Bootstring parameters */</span>
+<span class="s3">const </span><span class="s1">base = </span><span class="s4">36</span><span class="s1">;</span>
+<span class="s3">const </span><span class="s1">tMin = </span><span class="s4">1</span><span class="s1">;</span>
+<span class="s3">const </span><span class="s1">tMax = </span><span class="s4">26</span><span class="s1">;</span>
+<span class="s3">const </span><span class="s1">skew = </span><span class="s4">38</span><span class="s1">;</span>
+<span class="s3">const </span><span class="s1">damp = </span><span class="s4">700</span><span class="s1">;</span>
+<span class="s3">const </span><span class="s1">initialBias = </span><span class="s4">72</span><span class="s1">;</span>
+<span class="s3">const </span><span class="s1">initialN = </span><span class="s4">128</span><span class="s1">; </span><span class="s2">// 0x80</span>
+<span class="s3">const </span><span class="s1">delimiter = </span><span class="s0">'-'</span><span class="s1">; </span><span class="s2">// '\x2D'</span>
+
+<span class="s2">/** Regular expressions */</span>
+<span class="s3">const </span><span class="s1">regexPunycode = </span><span class="s5">/^xn--/</span><span class="s1">;</span>
+<span class="s3">const </span><span class="s1">regexNonASCII = </span><span class="s5">/[^\0-\x7F]/</span><span class="s1">; </span><span class="s2">// Note: U+007F DEL is excluded too.</span>
+<span class="s3">const </span><span class="s1">regexSeparators = </span><span class="s5">/[\x2E\u3002\uFF0E\uFF61]/g</span><span class="s1">; </span><span class="s2">// RFC 3490 separators</span>
+
+<span class="s2">/** Error messages */</span>
+<span class="s3">const </span><span class="s1">errors = {</span>
+	<span class="s0">'overflow'</span><span class="s1">: </span><span class="s0">'Overflow: input needs wider integers to process'</span><span class="s1">,</span>
+	<span class="s0">'not-basic'</span><span class="s1">: </span><span class="s0">'Illegal input &gt;= 0x80 (not a basic code point)'</span><span class="s1">,</span>
+	<span class="s0">'invalid-input'</span><span class="s1">: </span><span class="s0">'Invalid input'</span>
+<span class="s1">};</span>
+
+<span class="s2">/** Convenience shortcuts */</span>
+<span class="s3">const </span><span class="s1">baseMinusTMin = base - tMin;</span>
+<span class="s3">const </span><span class="s1">floor = Math.floor;</span>
+<span class="s3">const </span><span class="s1">stringFromCharCode = String.fromCharCode;</span>
+
+<span class="s2">/*--------------------------------------------------------------------------*/</span>
+
+<span class="s2">/**</span>
+ <span class="s2">* A generic error utility function.</span>
+ <span class="s2">* </span><span class="s6">@private</span>
+ <span class="s2">* </span><span class="s6">@param </span><span class="s2">{String} type The error type.</span>
+ <span class="s2">* </span><span class="s6">@returns </span><span class="s2">{Error} Throws a `RangeError` with the applicable error message.</span>
+ <span class="s2">*/</span>
+<span class="s3">function </span><span class="s1">error(type) {</span>
+	<span class="s3">throw new </span><span class="s1">RangeError(errors[type]);</span>
+<span class="s1">}</span>
+
+<span class="s2">/**</span>
+ <span class="s2">* A generic `Array#map` utility function.</span>
+ <span class="s2">* </span><span class="s6">@private</span>
+ <span class="s2">* </span><span class="s6">@param </span><span class="s2">{Array} array The array to iterate over.</span>
+ <span class="s2">* </span><span class="s6">@param </span><span class="s2">{Function} callback The function that gets called for every array</span>
+ <span class="s2">* item.</span>
+ <span class="s2">* </span><span class="s6">@returns </span><span class="s2">{Array} A new array of values returned by the callback function.</span>
+ <span class="s2">*/</span>
+<span class="s3">function </span><span class="s1">map(array, callback) {</span>
+	<span class="s3">const </span><span class="s1">result = [];</span>
+	<span class="s3">let </span><span class="s1">length = array.length;</span>
+	<span class="s3">while </span><span class="s1">(length--) {</span>
+		<span class="s1">result[length] = callback(array[length]);</span>
+	<span class="s1">}</span>
+	<span class="s3">return </span><span class="s1">result;</span>
+<span class="s1">}</span>
+
+<span class="s2">/**</span>
+ <span class="s2">* A simple `Array#map`-like wrapper to work with domain name strings or email</span>
+ <span class="s2">* addresses.</span>
+ <span class="s2">* </span><span class="s6">@private</span>
+ <span class="s2">* </span><span class="s6">@param </span><span class="s2">{String} domain The domain name or email address.</span>
+ <span class="s2">* </span><span class="s6">@param </span><span class="s2">{Function} callback The function that gets called for every</span>
+ <span class="s2">* character.</span>
+ <span class="s2">* </span><span class="s6">@returns </span><span class="s2">{String} A new string of characters returned by the callback</span>
+ <span class="s2">* function.</span>
+ <span class="s2">*/</span>
+<span class="s3">function </span><span class="s1">mapDomain(domain, callback) {</span>
+	<span class="s3">const </span><span class="s1">parts = domain.split(</span><span class="s0">'@'</span><span class="s1">);</span>
+	<span class="s3">let </span><span class="s1">result = </span><span class="s0">''</span><span class="s1">;</span>
+	<span class="s3">if </span><span class="s1">(parts.length &gt; </span><span class="s4">1</span><span class="s1">) {</span>
+		<span class="s2">// In email addresses, only the domain name should be punycoded. Leave</span>
+		<span class="s2">// the local part (i.e. everything up to `@`) intact.</span>
+		<span class="s1">result = parts[</span><span class="s4">0</span><span class="s1">] + </span><span class="s0">'@'</span><span class="s1">;</span>
+		<span class="s1">domain = parts[</span><span class="s4">1</span><span class="s1">];</span>
+	<span class="s1">}</span>
+	<span class="s2">// Avoid `split(regex)` for IE8 compatibility. See #17.</span>
+	<span class="s1">domain = domain.replace(regexSeparators, </span><span class="s0">'</span><span class="s7">\x2E</span><span class="s0">'</span><span class="s1">);</span>
+	<span class="s3">const </span><span class="s1">labels = domain.split(</span><span class="s0">'.'</span><span class="s1">);</span>
+	<span class="s3">const </span><span class="s1">encoded = map(labels, callback).join(</span><span class="s0">'.'</span><span class="s1">);</span>
+	<span class="s3">return </span><span class="s1">result + encoded;</span>
+<span class="s1">}</span>
+
+<span class="s2">/**</span>
+ <span class="s2">* Creates an array containing the numeric code points of each Unicode</span>
+ <span class="s2">* character in the string. While JavaScript uses UCS-2 internally,</span>
+ <span class="s2">* this function will convert a pair of surrogate halves (each of which</span>
+ <span class="s2">* UCS-2 exposes as separate characters) into a single code point,</span>
+ <span class="s2">* matching UTF-16.</span>
+ <span class="s2">* </span><span class="s6">@see </span><span class="s2">`punycode.ucs2.encode`</span>
+ <span class="s2">* </span><span class="s6">@see </span><span class="s2">&lt;https://mathiasbynens.be/notes/javascript-encoding&gt;</span>
+ <span class="s2">* </span><span class="s6">@memberOf </span><span class="s2">punycode.ucs2</span>
+ <span class="s2">* </span><span class="s6">@name </span><span class="s2">decode</span>
+ <span class="s2">* </span><span class="s6">@param </span><span class="s2">{String} string The Unicode input string (UCS-2).</span>
+ <span class="s2">* </span><span class="s6">@returns </span><span class="s2">{Array} The new array of code points.</span>
+ <span class="s2">*/</span>
+<span class="s3">function </span><span class="s1">ucs2decode(string) {</span>
+	<span class="s3">const </span><span class="s1">output = [];</span>
+	<span class="s3">let </span><span class="s1">counter = </span><span class="s4">0</span><span class="s1">;</span>
+	<span class="s3">const </span><span class="s1">length = string.length;</span>
+	<span class="s3">while </span><span class="s1">(counter &lt; length) {</span>
+		<span class="s3">const </span><span class="s1">value = string.charCodeAt(counter++);</span>
+		<span class="s3">if </span><span class="s1">(value &gt;= </span><span class="s4">0xD800 </span><span class="s1">&amp;&amp; value &lt;= </span><span class="s4">0xDBFF </span><span class="s1">&amp;&amp; counter &lt; length) {</span>
+			<span class="s2">// It's a high surrogate, and there is a next character.</span>
+			<span class="s3">const </span><span class="s1">extra = string.charCodeAt(counter++);</span>
+			<span class="s3">if </span><span class="s1">((extra &amp; </span><span class="s4">0xFC00</span><span class="s1">) == </span><span class="s4">0xDC00</span><span class="s1">) { </span><span class="s2">// Low surrogate.</span>
+				<span class="s1">output.push(((value &amp; </span><span class="s4">0x3FF</span><span class="s1">) &lt;&lt; </span><span class="s4">10</span><span class="s1">) + (extra &amp; </span><span class="s4">0x3FF</span><span class="s1">) + </span><span class="s4">0x10000</span><span class="s1">);</span>
+			<span class="s1">} </span><span class="s3">else </span><span class="s1">{</span>
+				<span class="s2">// It's an unmatched surrogate; only append this code unit, in case the</span>
+				<span class="s2">// next code unit is the high surrogate of a surrogate pair.</span>
+				<span class="s1">output.push(value);</span>
+				<span class="s1">counter--;</span>
+			<span class="s1">}</span>
+		<span class="s1">} </span><span class="s3">else </span><span class="s1">{</span>
+			<span class="s1">output.push(value);</span>
+		<span class="s1">}</span>
+	<span class="s1">}</span>
+	<span class="s3">return </span><span class="s1">output;</span>
+<span class="s1">}</span>
+
+<span class="s2">/**</span>
+ <span class="s2">* Creates a string based on an array of numeric code points.</span>
+ <span class="s2">* </span><span class="s6">@see </span><span class="s2">`punycode.ucs2.decode`</span>
+ <span class="s2">* </span><span class="s6">@memberOf </span><span class="s2">punycode.ucs2</span>
+ <span class="s2">* </span><span class="s6">@name </span><span class="s2">encode</span>
+ <span class="s2">* </span><span class="s6">@param </span><span class="s2">{Array} codePoints The array of numeric code points.</span>
+ <span class="s2">* </span><span class="s6">@returns </span><span class="s2">{String} The new Unicode string (UCS-2).</span>
+ <span class="s2">*/</span>
+<span class="s3">const </span><span class="s1">ucs2encode = codePoints =&gt; String.fromCodePoint(...codePoints);</span>
+
+<span class="s2">/**</span>
+ <span class="s2">* Converts a basic code point into a digit/integer.</span>
+ <span class="s2">* </span><span class="s6">@see </span><span class="s2">`digitToBasic()`</span>
+ <span class="s2">* </span><span class="s6">@private</span>
+ <span class="s2">* </span><span class="s6">@param </span><span class="s2">{Number} codePoint The basic numeric code point value.</span>
+ <span class="s2">* </span><span class="s6">@returns </span><span class="s2">{Number} The numeric value of a basic code point (for use in</span>
+ <span class="s2">* representing integers) in the range `0` to `base - 1`, or `base` if</span>
+ <span class="s2">* the code point does not represent a value.</span>
+ <span class="s2">*/</span>
+<span class="s3">const </span><span class="s1">basicToDigit = </span><span class="s3">function</span><span class="s1">(codePoint) {</span>
+	<span class="s3">if </span><span class="s1">(codePoint &gt;= </span><span class="s4">0x30 </span><span class="s1">&amp;&amp; codePoint &lt; </span><span class="s4">0x3A</span><span class="s1">) {</span>
+		<span class="s3">return </span><span class="s4">26 </span><span class="s1">+ (codePoint - </span><span class="s4">0x30</span><span class="s1">);</span>
+	<span class="s1">}</span>
+	<span class="s3">if </span><span class="s1">(codePoint &gt;= </span><span class="s4">0x41 </span><span class="s1">&amp;&amp; codePoint &lt; </span><span class="s4">0x5B</span><span class="s1">) {</span>
+		<span class="s3">return </span><span class="s1">codePoint - </span><span class="s4">0x41</span><span class="s1">;</span>
+	<span class="s1">}</span>
+	<span class="s3">if </span><span class="s1">(codePoint &gt;= </span><span class="s4">0x61 </span><span class="s1">&amp;&amp; codePoint &lt; </span><span class="s4">0x7B</span><span class="s1">) {</span>
+		<span class="s3">return </span><span class="s1">codePoint - </span><span class="s4">0x61</span><span class="s1">;</span>
+	<span class="s1">}</span>
+	<span class="s3">return </span><span class="s1">base;</span>
+<span class="s1">};</span>
+
+<span class="s2">/**</span>
+ <span class="s2">* Converts a digit/integer into a basic code point.</span>
+ <span class="s2">* </span><span class="s6">@see </span><span class="s2">`basicToDigit()`</span>
+ <span class="s2">* </span><span class="s6">@private</span>
+ <span class="s2">* </span><span class="s6">@param </span><span class="s2">{Number} digit The numeric value of a basic code point.</span>
+ <span class="s2">* </span><span class="s6">@returns </span><span class="s2">{Number} The basic code point whose value (when used for</span>
+ <span class="s2">* representing integers) is `digit`, which needs to be in the range</span>
+ <span class="s2">* `0` to `base - 1`. If `flag` is non-zero, the uppercase form is</span>
+ <span class="s2">* used; else, the lowercase form is used. The behavior is undefined</span>
+ <span class="s2">* if `flag` is non-zero and `digit` has no uppercase form.</span>
+ <span class="s2">*/</span>
+<span class="s3">const </span><span class="s1">digitToBasic = </span><span class="s3">function</span><span class="s1">(digit, flag) {</span>
+	<span class="s2">//  0..25 map to ASCII a..z or A..Z</span>
+	<span class="s2">// 26..35 map to ASCII 0..9</span>
+	<span class="s3">return </span><span class="s1">digit + </span><span class="s4">22 </span><span class="s1">+ </span><span class="s4">75 </span><span class="s1">* (digit &lt; </span><span class="s4">26</span><span class="s1">) - ((flag != </span><span class="s4">0</span><span class="s1">) &lt;&lt; </span><span class="s4">5</span><span class="s1">);</span>
+<span class="s1">};</span>
+
+<span class="s2">/**</span>
+ <span class="s2">* Bias adaptation function as per section 3.4 of RFC 3492.</span>
+ <span class="s2">* https://tools.ietf.org/html/rfc3492#section-3.4</span>
+ <span class="s2">* </span><span class="s6">@private</span>
+ <span class="s2">*/</span>
+<span class="s3">const </span><span class="s1">adapt = </span><span class="s3">function</span><span class="s1">(delta, numPoints, firstTime) {</span>
+	<span class="s3">let </span><span class="s1">k = </span><span class="s4">0</span><span class="s1">;</span>
+	<span class="s1">delta = firstTime ? floor(delta / damp) : delta &gt;&gt; </span><span class="s4">1</span><span class="s1">;</span>
+	<span class="s1">delta += floor(delta / numPoints);</span>
+	<span class="s3">for </span><span class="s1">(</span><span class="s2">/* no initialization */</span><span class="s1">; delta &gt; baseMinusTMin * tMax &gt;&gt; </span><span class="s4">1</span><span class="s1">; k += base) {</span>
+		<span class="s1">delta = floor(delta / baseMinusTMin);</span>
+	<span class="s1">}</span>
+	<span class="s3">return </span><span class="s1">floor(k + (baseMinusTMin + </span><span class="s4">1</span><span class="s1">) * delta / (delta + skew));</span>
+<span class="s1">};</span>
+
+<span class="s2">/**</span>
+ <span class="s2">* Converts a Punycode string of ASCII-only symbols to a string of Unicode</span>
+ <span class="s2">* symbols.</span>
+ <span class="s2">* </span><span class="s6">@memberOf </span><span class="s2">punycode</span>
+ <span class="s2">* </span><span class="s6">@param </span><span class="s2">{String} input The Punycode string of ASCII-only symbols.</span>
+ <span class="s2">* </span><span class="s6">@returns </span><span class="s2">{String} The resulting string of Unicode symbols.</span>
+ <span class="s2">*/</span>
+<span class="s3">const </span><span class="s1">decode = </span><span class="s3">function</span><span class="s1">(input) {</span>
+	<span class="s2">// Don't use UCS-2.</span>
+	<span class="s3">const </span><span class="s1">output = [];</span>
+	<span class="s3">const </span><span class="s1">inputLength = input.length;</span>
+	<span class="s3">let </span><span class="s1">i = </span><span class="s4">0</span><span class="s1">;</span>
+	<span class="s3">let </span><span class="s1">n = initialN;</span>
+	<span class="s3">let </span><span class="s1">bias = initialBias;</span>
+
+	<span class="s2">// Handle the basic code points: let `basic` be the number of input code</span>
+	<span class="s2">// points before the last delimiter, or `0` if there is none, then copy</span>
+	<span class="s2">// the first basic code points to the output.</span>
+
+	<span class="s3">let </span><span class="s1">basic = input.lastIndexOf(delimiter);</span>
+	<span class="s3">if </span><span class="s1">(basic &lt; </span><span class="s4">0</span><span class="s1">) {</span>
+		<span class="s1">basic = </span><span class="s4">0</span><span class="s1">;</span>
+	<span class="s1">}</span>
+
+	<span class="s3">for </span><span class="s1">(</span><span class="s3">let </span><span class="s1">j = </span><span class="s4">0</span><span class="s1">; j &lt; basic; ++j) {</span>
+		<span class="s2">// if it's not a basic code point</span>
+		<span class="s3">if </span><span class="s1">(input.charCodeAt(j) &gt;= </span><span class="s4">0x80</span><span class="s1">) {</span>
+			<span class="s1">error(</span><span class="s0">'not-basic'</span><span class="s1">);</span>
+		<span class="s1">}</span>
+		<span class="s1">output.push(input.charCodeAt(j));</span>
+	<span class="s1">}</span>
+
+	<span class="s2">// Main decoding loop: start just after the last delimiter if any basic code</span>
+	<span class="s2">// points were copied; start at the beginning otherwise.</span>
+
+	<span class="s3">for </span><span class="s1">(</span><span class="s3">let </span><span class="s1">index = basic &gt; </span><span class="s4">0 </span><span class="s1">? basic + </span><span class="s4">1 </span><span class="s1">: </span><span class="s4">0</span><span class="s1">; index &lt; inputLength; </span><span class="s2">/* no final expression */</span><span class="s1">) {</span>
+
+		<span class="s2">// `index` is the index of the next character to be consumed.</span>
+		<span class="s2">// Decode a generalized variable-length integer into `delta`,</span>
+		<span class="s2">// which gets added to `i`. The overflow checking is easier</span>
+		<span class="s2">// if we increase `i` as we go, then subtract off its starting</span>
+		<span class="s2">// value at the end to obtain `delta`.</span>
+		<span class="s3">const </span><span class="s1">oldi = i;</span>
+		<span class="s3">for </span><span class="s1">(</span><span class="s3">let </span><span class="s1">w = </span><span class="s4">1</span><span class="s1">, k = base; </span><span class="s2">/* no condition */</span><span class="s1">; k += base) {</span>
+
+			<span class="s3">if </span><span class="s1">(index &gt;= inputLength) {</span>
+				<span class="s1">error(</span><span class="s0">'invalid-input'</span><span class="s1">);</span>
+			<span class="s1">}</span>
+
+			<span class="s3">const </span><span class="s1">digit = basicToDigit(input.charCodeAt(index++));</span>
+
+			<span class="s3">if </span><span class="s1">(digit &gt;= base) {</span>
+				<span class="s1">error(</span><span class="s0">'invalid-input'</span><span class="s1">);</span>
+			<span class="s1">}</span>
+			<span class="s3">if </span><span class="s1">(digit &gt; floor((maxInt - i) / w)) {</span>
+				<span class="s1">error(</span><span class="s0">'overflow'</span><span class="s1">);</span>
+			<span class="s1">}</span>
+
+			<span class="s1">i += digit * w;</span>
+			<span class="s3">const </span><span class="s1">t = k &lt;= bias ? tMin : (k &gt;= bias + tMax ? tMax : k - bias);</span>
+
+			<span class="s3">if </span><span class="s1">(digit &lt; t) {</span>
+				<span class="s3">break</span><span class="s1">;</span>
+			<span class="s1">}</span>
+
+			<span class="s3">const </span><span class="s1">baseMinusT = base - t;</span>
+			<span class="s3">if </span><span class="s1">(w &gt; floor(maxInt / baseMinusT)) {</span>
+				<span class="s1">error(</span><span class="s0">'overflow'</span><span class="s1">);</span>
+			<span class="s1">}</span>
+
+			<span class="s1">w *= baseMinusT;</span>
+
+		<span class="s1">}</span>
+
+		<span class="s3">const </span><span class="s1">out = output.length + </span><span class="s4">1</span><span class="s1">;</span>
+		<span class="s1">bias = adapt(i - oldi, out, oldi == </span><span class="s4">0</span><span class="s1">);</span>
+
+		<span class="s2">// `i` was supposed to wrap around from `out` to `0`,</span>
+		<span class="s2">// incrementing `n` each time, so we'll fix that now:</span>
+		<span class="s3">if </span><span class="s1">(floor(i / out) &gt; maxInt - n) {</span>
+			<span class="s1">error(</span><span class="s0">'overflow'</span><span class="s1">);</span>
+		<span class="s1">}</span>
+
+		<span class="s1">n += floor(i / out);</span>
+		<span class="s1">i %= out;</span>
+
+		<span class="s2">// Insert `n` at position `i` of the output.</span>
+		<span class="s1">output.splice(i++, </span><span class="s4">0</span><span class="s1">, n);</span>
+
+	<span class="s1">}</span>
+
+	<span class="s3">return </span><span class="s1">String.fromCodePoint(...output);</span>
+<span class="s1">};</span>
+
+<span class="s2">/**</span>
+ <span class="s2">* Converts a string of Unicode symbols (e.g. a domain name label) to a</span>
+ <span class="s2">* Punycode string of ASCII-only symbols.</span>
+ <span class="s2">* </span><span class="s6">@memberOf </span><span class="s2">punycode</span>
+ <span class="s2">* </span><span class="s6">@param </span><span class="s2">{String} input The string of Unicode symbols.</span>
+ <span class="s2">* </span><span class="s6">@returns </span><span class="s2">{String} The resulting Punycode string of ASCII-only symbols.</span>
+ <span class="s2">*/</span>
+<span class="s3">const </span><span class="s1">encode = </span><span class="s3">function</span><span class="s1">(input) {</span>
+	<span class="s3">const </span><span class="s1">output = [];</span>
+
+	<span class="s2">// Convert the input in UCS-2 to an array of Unicode code points.</span>
+	<span class="s1">input = ucs2decode(input);</span>
+
+	<span class="s2">// Cache the length.</span>
+	<span class="s3">const </span><span class="s1">inputLength = input.length;</span>
+
+	<span class="s2">// Initialize the state.</span>
+	<span class="s3">let </span><span class="s1">n = initialN;</span>
+	<span class="s3">let </span><span class="s1">delta = </span><span class="s4">0</span><span class="s1">;</span>
+	<span class="s3">let </span><span class="s1">bias = initialBias;</span>
+
+	<span class="s2">// Handle the basic code points.</span>
+	<span class="s3">for </span><span class="s1">(</span><span class="s3">const </span><span class="s1">currentValue of input) {</span>
+		<span class="s3">if </span><span class="s1">(currentValue &lt; </span><span class="s4">0x80</span><span class="s1">) {</span>
+			<span class="s1">output.push(stringFromCharCode(currentValue));</span>
+		<span class="s1">}</span>
+	<span class="s1">}</span>
+
+	<span class="s3">const </span><span class="s1">basicLength = output.length;</span>
+	<span class="s3">let </span><span class="s1">handledCPCount = basicLength;</span>
+
+	<span class="s2">// `handledCPCount` is the number of code points that have been handled;</span>
+	<span class="s2">// `basicLength` is the number of basic code points.</span>
+
+	<span class="s2">// Finish the basic string with a delimiter unless it's empty.</span>
+	<span class="s3">if </span><span class="s1">(basicLength) {</span>
+		<span class="s1">output.push(delimiter);</span>
+	<span class="s1">}</span>
+
+	<span class="s2">// Main encoding loop:</span>
+	<span class="s3">while </span><span class="s1">(handledCPCount &lt; inputLength) {</span>
+
+		<span class="s2">// All non-basic code points &lt; n have been handled already. Find the next</span>
+		<span class="s2">// larger one:</span>
+		<span class="s3">let </span><span class="s1">m = maxInt;</span>
+		<span class="s3">for </span><span class="s1">(</span><span class="s3">const </span><span class="s1">currentValue of input) {</span>
+			<span class="s3">if </span><span class="s1">(currentValue &gt;= n &amp;&amp; currentValue &lt; m) {</span>
+				<span class="s1">m = currentValue;</span>
+			<span class="s1">}</span>
+		<span class="s1">}</span>
+
+		<span class="s2">// Increase `delta` enough to advance the decoder's &lt;n,i&gt; state to &lt;m,0&gt;,</span>
+		<span class="s2">// but guard against overflow.</span>
+		<span class="s3">const </span><span class="s1">handledCPCountPlusOne = handledCPCount + </span><span class="s4">1</span><span class="s1">;</span>
+		<span class="s3">if </span><span class="s1">(m - n &gt; floor((maxInt - delta) / handledCPCountPlusOne)) {</span>
+			<span class="s1">error(</span><span class="s0">'overflow'</span><span class="s1">);</span>
+		<span class="s1">}</span>
+
+		<span class="s1">delta += (m - n) * handledCPCountPlusOne;</span>
+		<span class="s1">n = m;</span>
+
+		<span class="s3">for </span><span class="s1">(</span><span class="s3">const </span><span class="s1">currentValue of input) {</span>
+			<span class="s3">if </span><span class="s1">(currentValue &lt; n &amp;&amp; ++delta &gt; maxInt) {</span>
+				<span class="s1">error(</span><span class="s0">'overflow'</span><span class="s1">);</span>
+			<span class="s1">}</span>
+			<span class="s3">if </span><span class="s1">(currentValue === n) {</span>
+				<span class="s2">// Represent delta as a generalized variable-length integer.</span>
+				<span class="s3">let </span><span class="s1">q = delta;</span>
+				<span class="s3">for </span><span class="s1">(</span><span class="s3">let </span><span class="s1">k = base; </span><span class="s2">/* no condition */</span><span class="s1">; k += base) {</span>
+					<span class="s3">const </span><span class="s1">t = k &lt;= bias ? tMin : (k &gt;= bias + tMax ? tMax : k - bias);</span>
+					<span class="s3">if </span><span class="s1">(q &lt; t) {</span>
+						<span class="s3">break</span><span class="s1">;</span>
+					<span class="s1">}</span>
+					<span class="s3">const </span><span class="s1">qMinusT = q - t;</span>
+					<span class="s3">const </span><span class="s1">baseMinusT = base - t;</span>
+					<span class="s1">output.push(</span>
+						<span class="s1">stringFromCharCode(digitToBasic(t + qMinusT % baseMinusT, </span><span class="s4">0</span><span class="s1">))</span>
+					<span class="s1">);</span>
+					<span class="s1">q = floor(qMinusT / baseMinusT);</span>
+				<span class="s1">}</span>
+
+				<span class="s1">output.push(stringFromCharCode(digitToBasic(q, </span><span class="s4">0</span><span class="s1">)));</span>
+				<span class="s1">bias = adapt(delta, handledCPCountPlusOne, handledCPCount === basicLength);</span>
+				<span class="s1">delta = </span><span class="s4">0</span><span class="s1">;</span>
+				<span class="s1">++handledCPCount;</span>
+			<span class="s1">}</span>
+		<span class="s1">}</span>
+
+		<span class="s1">++delta;</span>
+		<span class="s1">++n;</span>
+
+	<span class="s1">}</span>
+	<span class="s3">return </span><span class="s1">output.join(</span><span class="s0">''</span><span class="s1">);</span>
+<span class="s1">};</span>
+
+<span class="s2">/**</span>
+ <span class="s2">* Converts a Punycode string representing a domain name or an email address</span>
+ <span class="s2">* to Unicode. Only the Punycoded parts of the input will be converted, i.e.</span>
+ <span class="s2">* it doesn't matter if you call it on a string that has already been</span>
+ <span class="s2">* converted to Unicode.</span>
+ <span class="s2">* </span><span class="s6">@memberOf </span><span class="s2">punycode</span>
+ <span class="s2">* </span><span class="s6">@param </span><span class="s2">{String} input The Punycoded domain name or email address to</span>
+ <span class="s2">* convert to Unicode.</span>
+ <span class="s2">* </span><span class="s6">@returns </span><span class="s2">{String} The Unicode representation of the given Punycode</span>
+ <span class="s2">* string.</span>
+ <span class="s2">*/</span>
+<span class="s3">const </span><span class="s1">toUnicode = </span><span class="s3">function</span><span class="s1">(input) {</span>
+	<span class="s3">return </span><span class="s1">mapDomain(input, </span><span class="s3">function</span><span class="s1">(string) {</span>
+		<span class="s3">return </span><span class="s1">regexPunycode.test(string)</span>
+			<span class="s1">? decode(string.slice(</span><span class="s4">4</span><span class="s1">).toLowerCase())</span>
+			<span class="s1">: string;</span>
+	<span class="s1">});</span>
+<span class="s1">};</span>
+
+<span class="s2">/**</span>
+ <span class="s2">* Converts a Unicode string representing a domain name or an email address to</span>
+ <span class="s2">* Punycode. Only the non-ASCII parts of the domain name will be converted,</span>
+ <span class="s2">* i.e. it doesn't matter if you call it with a domain that's already in</span>
+ <span class="s2">* ASCII.</span>
+ <span class="s2">* </span><span class="s6">@memberOf </span><span class="s2">punycode</span>
+ <span class="s2">* </span><span class="s6">@param </span><span class="s2">{String} input The domain name or email address to convert, as a</span>
+ <span class="s2">* Unicode string.</span>
+ <span class="s2">* </span><span class="s6">@returns </span><span class="s2">{String} The Punycode representation of the given domain name or</span>
+ <span class="s2">* email address.</span>
+ <span class="s2">*/</span>
+<span class="s3">const </span><span class="s1">toASCII = </span><span class="s3">function</span><span class="s1">(input) {</span>
+	<span class="s3">return </span><span class="s1">mapDomain(input, </span><span class="s3">function</span><span class="s1">(string) {</span>
+		<span class="s3">return </span><span class="s1">regexNonASCII.test(string)</span>
+			<span class="s1">? </span><span class="s0">'xn--' </span><span class="s1">+ encode(string)</span>
+			<span class="s1">: string;</span>
+	<span class="s1">});</span>
+<span class="s1">};</span>
+
+<span class="s2">/*--------------------------------------------------------------------------*/</span>
+
+<span class="s2">/** Define the public API */</span>
+<span class="s3">const </span><span class="s1">punycode = {</span>
+	<span class="s2">/**</span>
+	 <span class="s2">* A string representing the current Punycode.js version number.</span>
+	 <span class="s2">* </span><span class="s6">@memberOf </span><span class="s2">punycode</span>
+	 <span class="s2">* </span><span class="s6">@type </span><span class="s2">String</span>
+	 <span class="s2">*/</span>
+	<span class="s0">'version'</span><span class="s1">: </span><span class="s0">'2.3.1'</span><span class="s1">,</span>
+	<span class="s2">/**</span>
+	 <span class="s2">* An object of methods to convert from JavaScript's internal character</span>
+	 <span class="s2">* representation (UCS-2) to Unicode code points, and back.</span>
+	 <span class="s2">* </span><span class="s6">@see </span><span class="s2">&lt;https://mathiasbynens.be/notes/javascript-encoding&gt;</span>
+	 <span class="s2">* </span><span class="s6">@memberOf </span><span class="s2">punycode</span>
+	 <span class="s2">* </span><span class="s6">@type </span><span class="s2">Object</span>
+	 <span class="s2">*/</span>
+	<span class="s0">'ucs2'</span><span class="s1">: {</span>
+		<span class="s0">'decode'</span><span class="s1">: ucs2decode,</span>
+		<span class="s0">'encode'</span><span class="s1">: ucs2encode</span>
+	<span class="s1">},</span>
+	<span class="s0">'decode'</span><span class="s1">: decode,</span>
+	<span class="s0">'encode'</span><span class="s1">: encode,</span>
+	<span class="s0">'toASCII'</span><span class="s1">: toASCII,</span>
+	<span class="s0">'toUnicode'</span><span class="s1">: toUnicode</span>
+<span class="s1">};</span>
+
+<span class="s3">export </span><span class="s1">{ ucs2decode, ucs2encode, decode, encode, toASCII, toUnicode };</span>
+<span class="s3">export default </span><span class="s1">punycode;</span>
+</pre>
+</body>
+</html>

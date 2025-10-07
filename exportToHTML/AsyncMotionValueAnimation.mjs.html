@@ -1,0 +1,199 @@
+<html>
+<head>
+<title>AsyncMotionValueAnimation.mjs</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #0033b3;}
+.s1 { color: #080808;}
+.s2 { color: #067d17;}
+.s3 { color: #8c8c8c; font-style: italic;}
+.s4 { color: #1750eb;}
+</style>
+</head>
+<body bgcolor="#ffffff">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#c0c0c0" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+AsyncMotionValueAnimation.mjs</font>
+</center></td></tr></table>
+<pre><span class="s0">import </span><span class="s1">{ MotionGlobalConfig, noop } from </span><span class="s2">'motion-utils'</span><span class="s1">;</span>
+<span class="s0">import </span><span class="s1">{ time } from </span><span class="s2">'../frameloop/sync-time.mjs'</span><span class="s1">;</span>
+<span class="s0">import </span><span class="s1">{ JSAnimation } from </span><span class="s2">'./JSAnimation.mjs'</span><span class="s1">;</span>
+<span class="s0">import </span><span class="s1">{ getFinalKeyframe } from </span><span class="s2">'./keyframes/get-final.mjs'</span><span class="s1">;</span>
+<span class="s0">import </span><span class="s1">{ KeyframeResolver, flushKeyframeResolvers } from </span><span class="s2">'./keyframes/KeyframesResolver.mjs'</span><span class="s1">;</span>
+<span class="s0">import </span><span class="s1">{ NativeAnimationExtended } from </span><span class="s2">'./NativeAnimationExtended.mjs'</span><span class="s1">;</span>
+<span class="s0">import </span><span class="s1">{ canAnimate } from </span><span class="s2">'./utils/can-animate.mjs'</span><span class="s1">;</span>
+<span class="s0">import </span><span class="s1">{ makeAnimationInstant } from </span><span class="s2">'./utils/make-animation-instant.mjs'</span><span class="s1">;</span>
+<span class="s0">import </span><span class="s1">{ WithPromise } from </span><span class="s2">'./utils/WithPromise.mjs'</span><span class="s1">;</span>
+<span class="s0">import </span><span class="s1">{ supportsBrowserAnimation } from </span><span class="s2">'./waapi/supports/waapi.mjs'</span><span class="s1">;</span>
+
+<span class="s3">/**</span>
+ <span class="s3">* Maximum time allowed between an animation being created and it being</span>
+ <span class="s3">* resolved for us to use the latter as the start time.</span>
+ <span class="s3">*</span>
+ <span class="s3">* This is to ensure that while we prefer to &quot;start&quot; an animation as soon</span>
+ <span class="s3">* as it's triggered, we also want to avoid a visual jump if there's a big delay</span>
+ <span class="s3">* between these two moments.</span>
+ <span class="s3">*/</span>
+<span class="s0">const </span><span class="s1">MAX_RESOLVE_DELAY = </span><span class="s4">40</span><span class="s1">;</span>
+<span class="s0">class </span><span class="s1">AsyncMotionValueAnimation </span><span class="s0">extends </span><span class="s1">WithPromise {</span>
+    <span class="s1">constructor({ autoplay = </span><span class="s0">true</span><span class="s1">, delay = </span><span class="s4">0</span><span class="s1">, type = </span><span class="s2">&quot;keyframes&quot;</span><span class="s1">, repeat = </span><span class="s4">0</span><span class="s1">, repeatDelay = </span><span class="s4">0</span><span class="s1">, repeatType = </span><span class="s2">&quot;loop&quot;</span><span class="s1">, keyframes, name, motionValue, element, ...options }) {</span>
+        <span class="s0">super</span><span class="s1">();</span>
+        <span class="s3">/**</span>
+         <span class="s3">* Bound to support return animation.stop pattern</span>
+         <span class="s3">*/</span>
+        <span class="s0">this</span><span class="s1">.stop = () =&gt; {</span>
+            <span class="s0">if </span><span class="s1">(</span><span class="s0">this</span><span class="s1">._animation) {</span>
+                <span class="s0">this</span><span class="s1">._animation.stop();</span>
+                <span class="s0">this</span><span class="s1">.stopTimeline?.();</span>
+            <span class="s1">}</span>
+            <span class="s0">this</span><span class="s1">.keyframeResolver?.cancel();</span>
+        <span class="s1">};</span>
+        <span class="s0">this</span><span class="s1">.createdAt = time.now();</span>
+        <span class="s0">const </span><span class="s1">optionsWithDefaults = {</span>
+            <span class="s1">autoplay,</span>
+            <span class="s1">delay,</span>
+            <span class="s1">type,</span>
+            <span class="s1">repeat,</span>
+            <span class="s1">repeatDelay,</span>
+            <span class="s1">repeatType,</span>
+            <span class="s1">name,</span>
+            <span class="s1">motionValue,</span>
+            <span class="s1">element,</span>
+            <span class="s1">...options,</span>
+        <span class="s1">};</span>
+        <span class="s0">const </span><span class="s1">KeyframeResolver$1 = element?.KeyframeResolver || KeyframeResolver;</span>
+        <span class="s0">this</span><span class="s1">.keyframeResolver = </span><span class="s0">new </span><span class="s1">KeyframeResolver$1(keyframes, (resolvedKeyframes, finalKeyframe, forced) =&gt; </span><span class="s0">this</span><span class="s1">.onKeyframesResolved(resolvedKeyframes, finalKeyframe, optionsWithDefaults, !forced), name, motionValue, element);</span>
+        <span class="s0">this</span><span class="s1">.keyframeResolver?.scheduleResolve();</span>
+    <span class="s1">}</span>
+    <span class="s1">onKeyframesResolved(keyframes, finalKeyframe, options, sync) {</span>
+        <span class="s0">this</span><span class="s1">.keyframeResolver = undefined;</span>
+        <span class="s0">const </span><span class="s1">{ name, type, velocity, delay, isHandoff, onUpdate } = options;</span>
+        <span class="s0">this</span><span class="s1">.resolvedAt = time.now();</span>
+        <span class="s3">/**</span>
+         <span class="s3">* If we can't animate this value with the resolved keyframes</span>
+         <span class="s3">* then we should complete it immediately.</span>
+         <span class="s3">*/</span>
+        <span class="s0">if </span><span class="s1">(!canAnimate(keyframes, name, type, velocity)) {</span>
+            <span class="s0">if </span><span class="s1">(MotionGlobalConfig.instantAnimations || !delay) {</span>
+                <span class="s1">onUpdate?.(getFinalKeyframe(keyframes, options, finalKeyframe));</span>
+            <span class="s1">}</span>
+            <span class="s1">keyframes[</span><span class="s4">0</span><span class="s1">] = keyframes[keyframes.length - </span><span class="s4">1</span><span class="s1">];</span>
+            <span class="s1">makeAnimationInstant(options);</span>
+            <span class="s1">options.repeat = </span><span class="s4">0</span><span class="s1">;</span>
+        <span class="s1">}</span>
+        <span class="s3">/**</span>
+         <span class="s3">* Resolve startTime for the animation.</span>
+         <span class="s3">*</span>
+         <span class="s3">* This method uses the createdAt and resolvedAt to calculate the</span>
+         <span class="s3">* animation startTime. *Ideally*, we would use the createdAt time as t=0</span>
+         <span class="s3">* as the following frame would then be the first frame of the animation in</span>
+         <span class="s3">* progress, which would feel snappier.</span>
+         <span class="s3">*</span>
+         <span class="s3">* However, if there's a delay (main thread work) between the creation of</span>
+         <span class="s3">* the animation and the first commited frame, we prefer to use resolvedAt</span>
+         <span class="s3">* to avoid a sudden jump into the animation.</span>
+         <span class="s3">*/</span>
+        <span class="s0">const </span><span class="s1">startTime = sync</span>
+            <span class="s1">? !</span><span class="s0">this</span><span class="s1">.resolvedAt</span>
+                <span class="s1">? </span><span class="s0">this</span><span class="s1">.createdAt</span>
+                <span class="s1">: </span><span class="s0">this</span><span class="s1">.resolvedAt - </span><span class="s0">this</span><span class="s1">.createdAt &gt; MAX_RESOLVE_DELAY</span>
+                    <span class="s1">? </span><span class="s0">this</span><span class="s1">.resolvedAt</span>
+                    <span class="s1">: </span><span class="s0">this</span><span class="s1">.createdAt</span>
+            <span class="s1">: undefined;</span>
+        <span class="s0">const </span><span class="s1">resolvedOptions = {</span>
+            <span class="s1">startTime,</span>
+            <span class="s1">finalKeyframe,</span>
+            <span class="s1">...options,</span>
+            <span class="s1">keyframes,</span>
+        <span class="s1">};</span>
+        <span class="s3">/**</span>
+         <span class="s3">* Animate via WAAPI if possible. If this is a handoff animation, the optimised animation will be running via</span>
+         <span class="s3">* WAAPI. Therefore, this animation must be JS to ensure it runs &quot;under&quot; the</span>
+         <span class="s3">* optimised animation.</span>
+         <span class="s3">*/</span>
+        <span class="s0">const </span><span class="s1">animation = !isHandoff &amp;&amp; supportsBrowserAnimation(resolvedOptions)</span>
+            <span class="s1">? </span><span class="s0">new </span><span class="s1">NativeAnimationExtended({</span>
+                <span class="s1">...resolvedOptions,</span>
+                <span class="s1">element: resolvedOptions.motionValue.owner.current,</span>
+            <span class="s1">})</span>
+            <span class="s1">: </span><span class="s0">new </span><span class="s1">JSAnimation(resolvedOptions);</span>
+        <span class="s1">animation.finished.then(() =&gt; </span><span class="s0">this</span><span class="s1">.notifyFinished()).catch(noop);</span>
+        <span class="s0">if </span><span class="s1">(</span><span class="s0">this</span><span class="s1">.pendingTimeline) {</span>
+            <span class="s0">this</span><span class="s1">.stopTimeline = animation.attachTimeline(</span><span class="s0">this</span><span class="s1">.pendingTimeline);</span>
+            <span class="s0">this</span><span class="s1">.pendingTimeline = undefined;</span>
+        <span class="s1">}</span>
+        <span class="s0">this</span><span class="s1">._animation = animation;</span>
+    <span class="s1">}</span>
+    <span class="s1">get finished() {</span>
+        <span class="s0">if </span><span class="s1">(!</span><span class="s0">this</span><span class="s1">._animation) {</span>
+            <span class="s0">return this</span><span class="s1">._finished;</span>
+        <span class="s1">}</span>
+        <span class="s0">else </span><span class="s1">{</span>
+            <span class="s0">return this</span><span class="s1">.animation.finished;</span>
+        <span class="s1">}</span>
+    <span class="s1">}</span>
+    <span class="s1">then(onResolve, _onReject) {</span>
+        <span class="s0">return this</span><span class="s1">.finished.finally(onResolve).then(() =&gt; { });</span>
+    <span class="s1">}</span>
+    <span class="s1">get animation() {</span>
+        <span class="s0">if </span><span class="s1">(!</span><span class="s0">this</span><span class="s1">._animation) {</span>
+            <span class="s0">this</span><span class="s1">.keyframeResolver?.resume();</span>
+            <span class="s1">flushKeyframeResolvers();</span>
+        <span class="s1">}</span>
+        <span class="s0">return this</span><span class="s1">._animation;</span>
+    <span class="s1">}</span>
+    <span class="s1">get duration() {</span>
+        <span class="s0">return this</span><span class="s1">.animation.duration;</span>
+    <span class="s1">}</span>
+    <span class="s1">get iterationDuration() {</span>
+        <span class="s0">return this</span><span class="s1">.animation.iterationDuration;</span>
+    <span class="s1">}</span>
+    <span class="s1">get time() {</span>
+        <span class="s0">return this</span><span class="s1">.animation.time;</span>
+    <span class="s1">}</span>
+    <span class="s1">set time(newTime) {</span>
+        <span class="s0">this</span><span class="s1">.animation.time = newTime;</span>
+    <span class="s1">}</span>
+    <span class="s1">get speed() {</span>
+        <span class="s0">return this</span><span class="s1">.animation.speed;</span>
+    <span class="s1">}</span>
+    <span class="s1">get state() {</span>
+        <span class="s0">return this</span><span class="s1">.animation.state;</span>
+    <span class="s1">}</span>
+    <span class="s1">set speed(newSpeed) {</span>
+        <span class="s0">this</span><span class="s1">.animation.speed = newSpeed;</span>
+    <span class="s1">}</span>
+    <span class="s1">get startTime() {</span>
+        <span class="s0">return this</span><span class="s1">.animation.startTime;</span>
+    <span class="s1">}</span>
+    <span class="s1">attachTimeline(timeline) {</span>
+        <span class="s0">if </span><span class="s1">(</span><span class="s0">this</span><span class="s1">._animation) {</span>
+            <span class="s0">this</span><span class="s1">.stopTimeline = </span><span class="s0">this</span><span class="s1">.animation.attachTimeline(timeline);</span>
+        <span class="s1">}</span>
+        <span class="s0">else </span><span class="s1">{</span>
+            <span class="s0">this</span><span class="s1">.pendingTimeline = timeline;</span>
+        <span class="s1">}</span>
+        <span class="s0">return </span><span class="s1">() =&gt; </span><span class="s0">this</span><span class="s1">.stop();</span>
+    <span class="s1">}</span>
+    <span class="s1">play() {</span>
+        <span class="s0">this</span><span class="s1">.animation.play();</span>
+    <span class="s1">}</span>
+    <span class="s1">pause() {</span>
+        <span class="s0">this</span><span class="s1">.animation.pause();</span>
+    <span class="s1">}</span>
+    <span class="s1">complete() {</span>
+        <span class="s0">this</span><span class="s1">.animation.complete();</span>
+    <span class="s1">}</span>
+    <span class="s1">cancel() {</span>
+        <span class="s0">if </span><span class="s1">(</span><span class="s0">this</span><span class="s1">._animation) {</span>
+            <span class="s0">this</span><span class="s1">.animation.cancel();</span>
+        <span class="s1">}</span>
+        <span class="s0">this</span><span class="s1">.keyframeResolver?.cancel();</span>
+    <span class="s1">}</span>
+<span class="s1">}</span>
+
+<span class="s0">export </span><span class="s1">{ AsyncMotionValueAnimation };</span>
+</pre>
+</body>
+</html>

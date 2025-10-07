@@ -1,0 +1,197 @@
+<html>
+<head>
+<title>lru-cache.js</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #8c8c8c; font-style: italic;}
+.s1 { color: #080808;}
+.s2 { color: #067d17;}
+.s3 { color: #0033b3;}
+.s4 { color: #1750eb;}
+</style>
+</head>
+<body bgcolor="#ffffff">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#c0c0c0" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+lru-cache.js</font>
+</center></td></tr></table>
+<pre><span class="s0">/**</span>
+ <span class="s0">* Node in the doubly-linked list used for LRU tracking.</span>
+ <span class="s0">* Each node represents a cache entry with bidirectional pointers.</span>
+ <span class="s0">*/ </span><span class="s2">&quot;use strict&quot;</span><span class="s1">;</span>
+<span class="s1">Object.defineProperty(exports, </span><span class="s2">&quot;__esModule&quot;</span><span class="s1">, {</span>
+    <span class="s1">value: </span><span class="s3">true</span>
+<span class="s1">});</span>
+<span class="s1">Object.defineProperty(exports, </span><span class="s2">&quot;LRUCache&quot;</span><span class="s1">, {</span>
+    <span class="s1">enumerable: </span><span class="s3">true</span><span class="s1">,</span>
+    <span class="s1">get: </span><span class="s3">function</span><span class="s1">() {</span>
+        <span class="s3">return </span><span class="s1">LRUCache;</span>
+    <span class="s1">}</span>
+<span class="s1">});</span>
+<span class="s3">class </span><span class="s1">LRUNode {</span>
+    <span class="s1">constructor(key, data, size){</span>
+        <span class="s3">this</span><span class="s1">.prev = </span><span class="s3">null</span><span class="s1">;</span>
+        <span class="s3">this</span><span class="s1">.next = </span><span class="s3">null</span><span class="s1">;</span>
+        <span class="s3">this</span><span class="s1">.key = key;</span>
+        <span class="s3">this</span><span class="s1">.data = data;</span>
+        <span class="s3">this</span><span class="s1">.size = size;</span>
+    <span class="s1">}</span>
+<span class="s1">}</span>
+<span class="s0">/**</span>
+ <span class="s0">* Sentinel node used for head/tail boundaries.</span>
+ <span class="s0">* These nodes don't contain actual cache data but simplify list operations.</span>
+ <span class="s0">*/ </span><span class="s3">class </span><span class="s1">SentinelNode {</span>
+    <span class="s1">constructor(){</span>
+        <span class="s3">this</span><span class="s1">.prev = </span><span class="s3">null</span><span class="s1">;</span>
+        <span class="s3">this</span><span class="s1">.next = </span><span class="s3">null</span><span class="s1">;</span>
+    <span class="s1">}</span>
+<span class="s1">}</span>
+<span class="s3">class </span><span class="s1">LRUCache {</span>
+    <span class="s1">constructor(maxSize, calculateSize){</span>
+        <span class="s3">this</span><span class="s1">.cache = </span><span class="s3">new </span><span class="s1">Map();</span>
+        <span class="s3">this</span><span class="s1">.totalSize = </span><span class="s4">0</span><span class="s1">;</span>
+        <span class="s3">this</span><span class="s1">.maxSize = maxSize;</span>
+        <span class="s3">this</span><span class="s1">.calculateSize = calculateSize;</span>
+        <span class="s0">// Create sentinel nodes to simplify doubly-linked list operations</span>
+        <span class="s0">// HEAD &lt;-&gt; TAIL (empty list)</span>
+        <span class="s3">this</span><span class="s1">.head = </span><span class="s3">new </span><span class="s1">SentinelNode();</span>
+        <span class="s3">this</span><span class="s1">.tail = </span><span class="s3">new </span><span class="s1">SentinelNode();</span>
+        <span class="s3">this</span><span class="s1">.head.next = </span><span class="s3">this</span><span class="s1">.tail;</span>
+        <span class="s3">this</span><span class="s1">.tail.prev = </span><span class="s3">this</span><span class="s1">.head;</span>
+    <span class="s1">}</span>
+    <span class="s0">/**</span>
+   <span class="s0">* Adds a node immediately after the head (marks as most recently used).</span>
+   <span class="s0">* Used when inserting new items or when an item is accessed.</span>
+   <span class="s0">* PRECONDITION: node must be disconnected (prev/next should be null)</span>
+   <span class="s0">*/ </span><span class="s1">addToHead(node) {</span>
+        <span class="s1">node.prev = </span><span class="s3">this</span><span class="s1">.head;</span>
+        <span class="s1">node.next = </span><span class="s3">this</span><span class="s1">.head.next;</span>
+        <span class="s0">// head.next is always non-null (points to tail or another node)</span>
+        <span class="s3">this</span><span class="s1">.head.next.prev = node;</span>
+        <span class="s3">this</span><span class="s1">.head.next = node;</span>
+    <span class="s1">}</span>
+    <span class="s0">/**</span>
+   <span class="s0">* Removes a node from its current position in the doubly-linked list.</span>
+   <span class="s0">* Updates the prev/next pointers of adjacent nodes to maintain list integrity.</span>
+   <span class="s0">* PRECONDITION: node must be connected (prev/next are non-null)</span>
+   <span class="s0">*/ </span><span class="s1">removeNode(node) {</span>
+        <span class="s0">// Connected nodes always have non-null prev/next</span>
+        <span class="s1">node.prev.next = node.next;</span>
+        <span class="s1">node.next.prev = node.prev;</span>
+    <span class="s1">}</span>
+    <span class="s0">/**</span>
+   <span class="s0">* Moves an existing node to the head position (marks as most recently used).</span>
+   <span class="s0">* This is the core LRU operation - accessed items become most recent.</span>
+   <span class="s0">*/ </span><span class="s1">moveToHead(node) {</span>
+        <span class="s3">this</span><span class="s1">.removeNode(node);</span>
+        <span class="s3">this</span><span class="s1">.addToHead(node);</span>
+    <span class="s1">}</span>
+    <span class="s0">/**</span>
+   <span class="s0">* Removes and returns the least recently used node (the one before tail).</span>
+   <span class="s0">* This is called during eviction when the cache exceeds capacity.</span>
+   <span class="s0">* PRECONDITION: cache is not empty (ensured by caller)</span>
+   <span class="s0">*/ </span><span class="s1">removeTail() {</span>
+        <span class="s3">const </span><span class="s1">lastNode = </span><span class="s3">this</span><span class="s1">.tail.prev;</span>
+        <span class="s0">// tail.prev is always non-null and always LRUNode when cache is not empty</span>
+        <span class="s3">this</span><span class="s1">.removeNode(lastNode);</span>
+        <span class="s3">return </span><span class="s1">lastNode;</span>
+    <span class="s1">}</span>
+    <span class="s0">/**</span>
+   <span class="s0">* Sets a key-value pair in the cache.</span>
+   <span class="s0">* If the key exists, updates the value and moves to head.</span>
+   <span class="s0">* If new, adds at head and evicts from tail if necessary.</span>
+   <span class="s0">*</span>
+   <span class="s0">* Time Complexity:</span>
+   <span class="s0">* - O(1) for uniform item sizes</span>
+   <span class="s0">* - O(k) where k is the number of items evicted (can be O(N) for variable sizes)</span>
+   <span class="s0">*/ </span><span class="s1">set(key, value) {</span>
+        <span class="s3">const </span><span class="s1">size = (</span><span class="s3">this</span><span class="s1">.calculateSize == </span><span class="s3">null </span><span class="s1">? </span><span class="s3">void </span><span class="s4">0 </span><span class="s1">: </span><span class="s3">this</span><span class="s1">.calculateSize.call(</span><span class="s3">this</span><span class="s1">, value)) ?? </span><span class="s4">1</span><span class="s1">;</span>
+        <span class="s3">if </span><span class="s1">(size &gt; </span><span class="s3">this</span><span class="s1">.maxSize) {</span>
+            <span class="s1">console.warn(</span><span class="s2">'Single item size exceeds maxSize'</span><span class="s1">);</span>
+            <span class="s3">return</span><span class="s1">;</span>
+        <span class="s1">}</span>
+        <span class="s3">const </span><span class="s1">existing = </span><span class="s3">this</span><span class="s1">.cache.get(key);</span>
+        <span class="s3">if </span><span class="s1">(existing) {</span>
+            <span class="s0">// Update existing node: adjust size and move to head (most recent)</span>
+            <span class="s1">existing.data = value;</span>
+            <span class="s3">this</span><span class="s1">.totalSize = </span><span class="s3">this</span><span class="s1">.totalSize - existing.size + size;</span>
+            <span class="s1">existing.size = size;</span>
+            <span class="s3">this</span><span class="s1">.moveToHead(existing);</span>
+        <span class="s1">} </span><span class="s3">else </span><span class="s1">{</span>
+            <span class="s0">// Add new node at head (most recent position)</span>
+            <span class="s3">const </span><span class="s1">newNode = </span><span class="s3">new </span><span class="s1">LRUNode(key, value, size);</span>
+            <span class="s3">this</span><span class="s1">.cache.set(key, newNode);</span>
+            <span class="s3">this</span><span class="s1">.addToHead(newNode);</span>
+            <span class="s3">this</span><span class="s1">.totalSize += size;</span>
+        <span class="s1">}</span>
+        <span class="s0">// Evict least recently used items until under capacity</span>
+        <span class="s3">while</span><span class="s1">(</span><span class="s3">this</span><span class="s1">.totalSize &gt; </span><span class="s3">this</span><span class="s1">.maxSize &amp;&amp; </span><span class="s3">this</span><span class="s1">.cache.size &gt; </span><span class="s4">0</span><span class="s1">){</span>
+            <span class="s3">const </span><span class="s1">tail = </span><span class="s3">this</span><span class="s1">.removeTail();</span>
+            <span class="s3">this</span><span class="s1">.cache.delete(tail.key);</span>
+            <span class="s3">this</span><span class="s1">.totalSize -= tail.size;</span>
+        <span class="s1">}</span>
+    <span class="s1">}</span>
+    <span class="s0">/**</span>
+   <span class="s0">* Checks if a key exists in the cache.</span>
+   <span class="s0">* This is a pure query operation - does NOT update LRU order.</span>
+   <span class="s0">*</span>
+   <span class="s0">* Time Complexity: O(1)</span>
+   <span class="s0">*/ </span><span class="s1">has(key) {</span>
+        <span class="s3">return this</span><span class="s1">.cache.has(key);</span>
+    <span class="s1">}</span>
+    <span class="s0">/**</span>
+   <span class="s0">* Retrieves a value by key and marks it as most recently used.</span>
+   <span class="s0">* Moving to head maintains the LRU property for future evictions.</span>
+   <span class="s0">*</span>
+   <span class="s0">* Time Complexity: O(1)</span>
+   <span class="s0">*/ </span><span class="s1">get(key) {</span>
+        <span class="s3">const </span><span class="s1">node = </span><span class="s3">this</span><span class="s1">.cache.get(key);</span>
+        <span class="s3">if </span><span class="s1">(!node) </span><span class="s3">return </span><span class="s1">undefined;</span>
+        <span class="s0">// Mark as most recently used by moving to head</span>
+        <span class="s3">this</span><span class="s1">.moveToHead(node);</span>
+        <span class="s3">return </span><span class="s1">node.data;</span>
+    <span class="s1">}</span>
+    <span class="s0">/**</span>
+   <span class="s0">* Returns an iterator over the cache entries. The order is outputted in the</span>
+   <span class="s0">* order of most recently used to least recently used.</span>
+   <span class="s0">*/ </span><span class="s1">*[Symbol.iterator]() {</span>
+        <span class="s3">let </span><span class="s1">current = </span><span class="s3">this</span><span class="s1">.head.next;</span>
+        <span class="s3">while</span><span class="s1">(current &amp;&amp; current !== </span><span class="s3">this</span><span class="s1">.tail){</span>
+            <span class="s0">// Between head and tail, current is always LRUNode</span>
+            <span class="s3">const </span><span class="s1">node = current;</span>
+            <span class="s3">yield </span><span class="s1">[</span>
+                <span class="s1">node.key,</span>
+                <span class="s1">node.data</span>
+            <span class="s1">];</span>
+            <span class="s1">current = current.next;</span>
+        <span class="s1">}</span>
+    <span class="s1">}</span>
+    <span class="s0">/**</span>
+   <span class="s0">* Removes a specific key from the cache.</span>
+   <span class="s0">* Updates both the hash map and doubly-linked list.</span>
+   <span class="s0">*</span>
+   <span class="s0">* Time Complexity: O(1)</span>
+   <span class="s0">*/ </span><span class="s1">remove(key) {</span>
+        <span class="s3">const </span><span class="s1">node = </span><span class="s3">this</span><span class="s1">.cache.get(key);</span>
+        <span class="s3">if </span><span class="s1">(!node) </span><span class="s3">return</span><span class="s1">;</span>
+        <span class="s3">this</span><span class="s1">.removeNode(node);</span>
+        <span class="s3">this</span><span class="s1">.cache.delete(key);</span>
+        <span class="s3">this</span><span class="s1">.totalSize -= node.size;</span>
+    <span class="s1">}</span>
+    <span class="s0">/**</span>
+   <span class="s0">* Returns the number of items in the cache.</span>
+   <span class="s0">*/ </span><span class="s1">get size() {</span>
+        <span class="s3">return this</span><span class="s1">.cache.size;</span>
+    <span class="s1">}</span>
+    <span class="s0">/**</span>
+   <span class="s0">* Returns the current total size of all cached items.</span>
+   <span class="s0">* This uses the custom size calculation if provided.</span>
+   <span class="s0">*/ </span><span class="s1">get currentSize() {</span>
+        <span class="s3">return this</span><span class="s1">.totalSize;</span>
+    <span class="s1">}</span>
+<span class="s1">}</span>
+
+<span class="s0">//# sourceMappingURL=lru-cache.js.map</span></pre>
+</body>
+</html>

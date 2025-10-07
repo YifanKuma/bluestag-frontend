@@ -1,0 +1,419 @@
+<html>
+<head>
+<title>index.cjs</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #067d17;}
+.s1 { color: #080808;}
+.s2 { color: #0033b3;}
+.s3 { color: #8c8c8c; font-style: italic;}
+.s4 { color: #1750eb;}
+.s5 { color: #264eff;}
+</style>
+</head>
+<body bgcolor="#ffffff">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#c0c0c0" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+index.cjs</font>
+</center></td></tr></table>
+<pre><span class="s0">'use strict'</span><span class="s1">;</span>
+
+<span class="s2">var </span><span class="s1">fs = require(</span><span class="s0">'node:fs'</span><span class="s1">);</span>
+<span class="s2">var </span><span class="s1">module$1 = require(</span><span class="s0">'node:module'</span><span class="s1">);</span>
+<span class="s2">var </span><span class="s1">path = require(</span><span class="s0">'node:path'</span><span class="s1">);</span>
+<span class="s2">var </span><span class="s1">isNodeCoreModule = require(</span><span class="s0">'@nolyfill/is-core-module'</span><span class="s1">);</span>
+<span class="s2">var </span><span class="s1">debug = require(</span><span class="s0">'debug'</span><span class="s1">);</span>
+<span class="s2">var </span><span class="s1">getTsconfig = require(</span><span class="s0">'get-tsconfig'</span><span class="s1">);</span>
+<span class="s2">var </span><span class="s1">isBunModule = require(</span><span class="s0">'is-bun-module'</span><span class="s1">);</span>
+<span class="s2">var </span><span class="s1">stableHash = require(</span><span class="s0">'stable-hash'</span><span class="s1">);</span>
+<span class="s2">var </span><span class="s1">tinyglobby = require(</span><span class="s0">'tinyglobby'</span><span class="s1">);</span>
+<span class="s2">var </span><span class="s1">unrsResolver = require(</span><span class="s0">'unrs-resolver'</span><span class="s1">);</span>
+
+<span class="s2">var </span><span class="s1">__defProp = Object.defineProperty;</span>
+<span class="s2">var </span><span class="s1">__defProps = Object.defineProperties;</span>
+<span class="s2">var </span><span class="s1">__getOwnPropDescs = Object.getOwnPropertyDescriptors;</span>
+<span class="s2">var </span><span class="s1">__getOwnPropSymbols = Object.getOwnPropertySymbols;</span>
+<span class="s2">var </span><span class="s1">__hasOwnProp = Object.prototype.hasOwnProperty;</span>
+<span class="s2">var </span><span class="s1">__propIsEnum = Object.prototype.propertyIsEnumerable;</span>
+<span class="s2">var </span><span class="s1">__defNormalProp = (obj, key, value) =&gt; key </span><span class="s2">in </span><span class="s1">obj ? __defProp(obj, key, { enumerable: </span><span class="s2">true</span><span class="s1">, configurable: </span><span class="s2">true</span><span class="s1">, writable: </span><span class="s2">true</span><span class="s1">, value }) : obj[key] = value;</span>
+<span class="s2">var </span><span class="s1">__spreadValues = (a, b) =&gt; {</span>
+  <span class="s2">for </span><span class="s1">(</span><span class="s2">var </span><span class="s1">prop </span><span class="s2">in </span><span class="s1">b || (b = {}))</span>
+    <span class="s2">if </span><span class="s1">(__hasOwnProp.call(b, prop))</span>
+      <span class="s1">__defNormalProp(a, prop, b[prop]);</span>
+  <span class="s2">if </span><span class="s1">(__getOwnPropSymbols)</span>
+    <span class="s2">for </span><span class="s1">(</span><span class="s2">var </span><span class="s1">prop of __getOwnPropSymbols(b)) {</span>
+      <span class="s2">if </span><span class="s1">(__propIsEnum.call(b, prop))</span>
+        <span class="s1">__defNormalProp(a, prop, b[prop]);</span>
+    <span class="s1">}</span>
+  <span class="s2">return </span><span class="s1">a;</span>
+<span class="s1">};</span>
+<span class="s2">var </span><span class="s1">__spreadProps = (a, b) =&gt; __defProps(a, __getOwnPropDescs(b));</span>
+<span class="s2">const </span><span class="s1">IMPORTER_NAME = </span><span class="s0">&quot;eslint-import-resolver-typescript&quot;</span><span class="s1">;</span>
+<span class="s2">const </span><span class="s1">log = debug(IMPORTER_NAME);</span>
+<span class="s2">const </span><span class="s1">defaultConditionNames = [</span>
+  <span class="s0">&quot;types&quot;</span><span class="s1">,</span>
+  <span class="s0">&quot;import&quot;</span><span class="s1">,</span>
+  <span class="s3">// APF: https://angular.io/guide/angular-package-format</span>
+  <span class="s0">&quot;esm2020&quot;</span><span class="s1">,</span>
+  <span class="s0">&quot;es2020&quot;</span><span class="s1">,</span>
+  <span class="s0">&quot;es2015&quot;</span><span class="s1">,</span>
+  <span class="s0">&quot;require&quot;</span><span class="s1">,</span>
+  <span class="s0">&quot;node&quot;</span><span class="s1">,</span>
+  <span class="s0">&quot;node-addons&quot;</span><span class="s1">,</span>
+  <span class="s0">&quot;browser&quot;</span><span class="s1">,</span>
+  <span class="s0">&quot;default&quot;</span>
+<span class="s1">];</span>
+<span class="s2">const </span><span class="s1">defaultExtensions = [</span>
+  <span class="s0">&quot;.ts&quot;</span><span class="s1">,</span>
+  <span class="s0">&quot;.tsx&quot;</span><span class="s1">,</span>
+  <span class="s0">&quot;.d.ts&quot;</span><span class="s1">,</span>
+  <span class="s0">&quot;.js&quot;</span><span class="s1">,</span>
+  <span class="s0">&quot;.jsx&quot;</span><span class="s1">,</span>
+  <span class="s0">&quot;.json&quot;</span><span class="s1">,</span>
+  <span class="s0">&quot;.node&quot;</span>
+<span class="s1">];</span>
+<span class="s2">const </span><span class="s1">defaultExtensionAlias = {</span>
+  <span class="s0">&quot;.js&quot;</span><span class="s1">: [</span>
+    <span class="s0">&quot;.ts&quot;</span><span class="s1">,</span>
+    <span class="s3">// `.tsx` can also be compiled as `.js`</span>
+    <span class="s0">&quot;.tsx&quot;</span><span class="s1">,</span>
+    <span class="s0">&quot;.d.ts&quot;</span><span class="s1">,</span>
+    <span class="s0">&quot;.js&quot;</span>
+  <span class="s1">],</span>
+  <span class="s0">&quot;.jsx&quot;</span><span class="s1">: [</span><span class="s0">&quot;.tsx&quot;</span><span class="s1">, </span><span class="s0">&quot;.d.ts&quot;</span><span class="s1">, </span><span class="s0">&quot;.jsx&quot;</span><span class="s1">],</span>
+  <span class="s0">&quot;.cjs&quot;</span><span class="s1">: [</span><span class="s0">&quot;.cts&quot;</span><span class="s1">, </span><span class="s0">&quot;.d.cts&quot;</span><span class="s1">, </span><span class="s0">&quot;.cjs&quot;</span><span class="s1">],</span>
+  <span class="s0">&quot;.mjs&quot;</span><span class="s1">: [</span><span class="s0">&quot;.mts&quot;</span><span class="s1">, </span><span class="s0">&quot;.d.mts&quot;</span><span class="s1">, </span><span class="s0">&quot;.mjs&quot;</span><span class="s1">]</span>
+<span class="s1">};</span>
+<span class="s2">const </span><span class="s1">defaultMainFields = [</span>
+  <span class="s0">&quot;types&quot;</span><span class="s1">,</span>
+  <span class="s0">&quot;typings&quot;</span><span class="s1">,</span>
+  <span class="s3">// APF: https://angular.io/guide/angular-package-format</span>
+  <span class="s0">&quot;fesm2020&quot;</span><span class="s1">,</span>
+  <span class="s0">&quot;fesm2015&quot;</span><span class="s1">,</span>
+  <span class="s0">&quot;esm2020&quot;</span><span class="s1">,</span>
+  <span class="s0">&quot;es2020&quot;</span><span class="s1">,</span>
+  <span class="s0">&quot;module&quot;</span><span class="s1">,</span>
+  <span class="s0">&quot;jsnext:main&quot;</span><span class="s1">,</span>
+  <span class="s0">&quot;main&quot;</span>
+<span class="s1">];</span>
+<span class="s2">const </span><span class="s1">interfaceVersion = </span><span class="s4">2</span><span class="s1">;</span>
+<span class="s2">const </span><span class="s1">JS_EXT_PATTERN = </span><span class="s5">/\.(?:[cm]js|jsx?)$/</span><span class="s1">;</span>
+<span class="s2">const </span><span class="s1">RELATIVE_PATH_PATTERN = </span><span class="s5">/^\.{1,2}(?:\/.*)?$/</span><span class="s1">;</span>
+<span class="s2">let </span><span class="s1">previousOptionsHash;</span>
+<span class="s2">let </span><span class="s1">optionsHash;</span>
+<span class="s2">let </span><span class="s1">cachedOptions;</span>
+<span class="s2">let </span><span class="s1">cachedCwd;</span>
+<span class="s2">let </span><span class="s1">mappersCachedOptions;</span>
+<span class="s2">let </span><span class="s1">mappers = [];</span>
+<span class="s2">let </span><span class="s1">resolverCachedOptions;</span>
+<span class="s2">let </span><span class="s1">cachedResolver;</span>
+<span class="s2">function </span><span class="s1">resolve(source, file, options, resolver) {</span>
+  <span class="s2">var </span><span class="s1">_a, _b, _c, _d;</span>
+  <span class="s2">if </span><span class="s1">(!cachedOptions || previousOptionsHash !== (optionsHash = stableHash.stableHash(options))) {</span>
+    <span class="s1">previousOptionsHash = optionsHash;</span>
+    <span class="s1">cachedOptions = __spreadProps(__spreadValues({}, options), {</span>
+      <span class="s1">conditionNames: (_a = options == </span><span class="s2">null </span><span class="s1">? </span><span class="s2">void </span><span class="s4">0 </span><span class="s1">: options.conditionNames) != </span><span class="s2">null </span><span class="s1">? _a : defaultConditionNames,</span>
+      <span class="s1">extensions: (_b = options == </span><span class="s2">null </span><span class="s1">? </span><span class="s2">void </span><span class="s4">0 </span><span class="s1">: options.extensions) != </span><span class="s2">null </span><span class="s1">? _b : defaultExtensions,</span>
+      <span class="s1">extensionAlias: (_c = options == </span><span class="s2">null </span><span class="s1">? </span><span class="s2">void </span><span class="s4">0 </span><span class="s1">: options.extensionAlias) != </span><span class="s2">null </span><span class="s1">? _c : defaultExtensionAlias,</span>
+      <span class="s1">mainFields: (_d = options == </span><span class="s2">null </span><span class="s1">? </span><span class="s2">void </span><span class="s4">0 </span><span class="s1">: options.mainFields) != </span><span class="s2">null </span><span class="s1">? _d : defaultMainFields</span>
+    <span class="s1">});</span>
+  <span class="s1">}</span>
+  <span class="s2">if </span><span class="s1">(!resolver) {</span>
+    <span class="s2">if </span><span class="s1">(!cachedResolver || resolverCachedOptions !== cachedOptions) {</span>
+      <span class="s1">cachedResolver = </span><span class="s2">new </span><span class="s1">unrsResolver.ResolverFactory(cachedOptions);</span>
+      <span class="s1">resolverCachedOptions = cachedOptions;</span>
+    <span class="s1">}</span>
+    <span class="s1">resolver = cachedResolver;</span>
+  <span class="s1">}</span>
+  <span class="s1">log(</span><span class="s0">&quot;looking for&quot;</span><span class="s1">, source, </span><span class="s0">&quot;in&quot;</span><span class="s1">, file);</span>
+  <span class="s1">source = removeQuerystring(source);</span>
+  <span class="s2">if </span><span class="s1">(isNodeCoreModule(source) || isBunModule.isBunModule(source)) {</span>
+    <span class="s1">log(</span><span class="s0">&quot;matched core:&quot;</span><span class="s1">, source);</span>
+    <span class="s2">return </span><span class="s1">{</span>
+      <span class="s1">found: </span><span class="s2">true</span><span class="s1">,</span>
+      <span class="s1">path: </span><span class="s2">null</span>
+    <span class="s1">};</span>
+  <span class="s1">}</span>
+  <span class="s2">if </span><span class="s1">(process.versions.pnp &amp;&amp; source === </span><span class="s0">&quot;pnpapi&quot;</span><span class="s1">) {</span>
+    <span class="s2">return </span><span class="s1">{</span>
+      <span class="s1">found: </span><span class="s2">true</span><span class="s1">,</span>
+      <span class="s1">path: module$1.findPnpApi(file).resolveToUnqualified(source, file, {</span>
+        <span class="s1">considerBuiltins: </span><span class="s2">false</span>
+      <span class="s1">})</span>
+    <span class="s1">};</span>
+  <span class="s1">}</span>
+  <span class="s1">initMappers(cachedOptions);</span>
+  <span class="s2">let </span><span class="s1">mappedPaths = getMappedPaths(source, file, cachedOptions.extensions, </span><span class="s2">true</span><span class="s1">);</span>
+  <span class="s2">if </span><span class="s1">(mappedPaths.length &gt; </span><span class="s4">0</span><span class="s1">) {</span>
+    <span class="s1">log(</span><span class="s0">&quot;matched ts path:&quot;</span><span class="s1">, ...mappedPaths);</span>
+  <span class="s1">} </span><span class="s2">else </span><span class="s1">{</span>
+    <span class="s1">mappedPaths = [source];</span>
+  <span class="s1">}</span>
+  <span class="s2">let </span><span class="s1">foundNodePath;</span>
+  <span class="s2">for </span><span class="s1">(</span><span class="s2">const </span><span class="s1">mappedPath of mappedPaths) {</span>
+    <span class="s2">try </span><span class="s1">{</span>
+      <span class="s2">const </span><span class="s1">resolved = resolver.sync(</span>
+        <span class="s1">path.dirname(path.resolve(file)),</span>
+        <span class="s1">mappedPath</span>
+      <span class="s1">);</span>
+      <span class="s2">if </span><span class="s1">(resolved.path) {</span>
+        <span class="s1">foundNodePath = resolved.path;</span>
+        <span class="s2">break</span><span class="s1">;</span>
+      <span class="s1">}</span>
+    <span class="s1">} </span><span class="s2">catch </span><span class="s1">(e) {</span>
+      <span class="s1">log(</span><span class="s0">&quot;failed to resolve with&quot;</span><span class="s1">, mappedPath);</span>
+    <span class="s1">}</span>
+  <span class="s1">}</span>
+  <span class="s2">if </span><span class="s1">((JS_EXT_PATTERN.test(foundNodePath) || cachedOptions.alwaysTryTypes &amp;&amp; !foundNodePath) &amp;&amp; !</span><span class="s5">/^@types[/\\]/</span><span class="s1">.test(source) &amp;&amp; !path.isAbsolute(source) &amp;&amp; !source.startsWith(</span><span class="s0">&quot;.&quot;</span><span class="s1">)) {</span>
+    <span class="s2">const </span><span class="s1">definitelyTyped = resolve(</span>
+      <span class="s0">&quot;@types&quot; </span><span class="s1">+ path.sep + mangleScopedPackage(source),</span>
+      <span class="s1">file,</span>
+      <span class="s1">options</span>
+    <span class="s1">);</span>
+    <span class="s2">if </span><span class="s1">(definitelyTyped.found) {</span>
+      <span class="s2">return </span><span class="s1">definitelyTyped;</span>
+    <span class="s1">}</span>
+  <span class="s1">}</span>
+  <span class="s2">if </span><span class="s1">(foundNodePath) {</span>
+    <span class="s1">log(</span><span class="s0">&quot;matched node path:&quot;</span><span class="s1">, foundNodePath);</span>
+    <span class="s2">return </span><span class="s1">{</span>
+      <span class="s1">found: </span><span class="s2">true</span><span class="s1">,</span>
+      <span class="s1">path: foundNodePath</span>
+    <span class="s1">};</span>
+  <span class="s1">}</span>
+  <span class="s1">log(</span><span class="s0">&quot;didn't find &quot;</span><span class="s1">, source);</span>
+  <span class="s2">return </span><span class="s1">{</span>
+    <span class="s1">found: </span><span class="s2">false</span>
+  <span class="s1">};</span>
+<span class="s1">}</span>
+<span class="s2">function </span><span class="s1">createTypeScriptImportResolver(options) {</span>
+  <span class="s2">var </span><span class="s1">_a, _b, _c, _d;</span>
+  <span class="s2">const </span><span class="s1">resolver = </span><span class="s2">new </span><span class="s1">unrsResolver.ResolverFactory(__spreadProps(__spreadValues({}, options), {</span>
+    <span class="s1">conditionNames: (_a = options == </span><span class="s2">null </span><span class="s1">? </span><span class="s2">void </span><span class="s4">0 </span><span class="s1">: options.conditionNames) != </span><span class="s2">null </span><span class="s1">? _a : defaultConditionNames,</span>
+    <span class="s1">extensions: (_b = options == </span><span class="s2">null </span><span class="s1">? </span><span class="s2">void </span><span class="s4">0 </span><span class="s1">: options.extensions) != </span><span class="s2">null </span><span class="s1">? _b : defaultExtensions,</span>
+    <span class="s1">extensionAlias: (_c = options == </span><span class="s2">null </span><span class="s1">? </span><span class="s2">void </span><span class="s4">0 </span><span class="s1">: options.extensionAlias) != </span><span class="s2">null </span><span class="s1">? _c : defaultExtensionAlias,</span>
+    <span class="s1">mainFields: (_d = options == </span><span class="s2">null </span><span class="s1">? </span><span class="s2">void </span><span class="s4">0 </span><span class="s1">: options.mainFields) != </span><span class="s2">null </span><span class="s1">? _d : defaultMainFields</span>
+  <span class="s1">}));</span>
+  <span class="s2">return </span><span class="s1">{</span>
+    <span class="s1">interfaceVersion: </span><span class="s4">3</span><span class="s1">,</span>
+    <span class="s1">name: IMPORTER_NAME,</span>
+    <span class="s1">resolve(source, file) {</span>
+      <span class="s2">return </span><span class="s1">resolve(source, file, options, resolver);</span>
+    <span class="s1">}</span>
+  <span class="s1">};</span>
+<span class="s1">}</span>
+<span class="s2">function </span><span class="s1">removeQuerystring(id) {</span>
+  <span class="s2">const </span><span class="s1">querystringIndex = id.lastIndexOf(</span><span class="s0">&quot;?&quot;</span><span class="s1">);</span>
+  <span class="s2">if </span><span class="s1">(querystringIndex !== -</span><span class="s4">1</span><span class="s1">) {</span>
+    <span class="s2">return </span><span class="s1">id.slice(</span><span class="s4">0</span><span class="s1">, querystringIndex);</span>
+  <span class="s1">}</span>
+  <span class="s2">return </span><span class="s1">id;</span>
+<span class="s1">}</span>
+<span class="s2">const </span><span class="s1">isFile = (path2) =&gt; {</span>
+  <span class="s2">var </span><span class="s1">_a;</span>
+  <span class="s2">try </span><span class="s1">{</span>
+    <span class="s2">return </span><span class="s1">!!(path2 &amp;&amp; ((_a = fs.statSync(path2, { throwIfNoEntry: </span><span class="s2">false </span><span class="s1">})) == </span><span class="s2">null </span><span class="s1">? </span><span class="s2">void </span><span class="s4">0 </span><span class="s1">: _a.isFile()));</span>
+  <span class="s1">} </span><span class="s2">catch </span><span class="s1">(e) {</span>
+    <span class="s2">return false</span><span class="s1">;</span>
+  <span class="s1">}</span>
+<span class="s1">};</span>
+<span class="s2">const </span><span class="s1">isModule = (modulePath) =&gt; !!modulePath &amp;&amp; isFile(path.resolve(modulePath, </span><span class="s0">&quot;package.json&quot;</span><span class="s1">));</span>
+<span class="s2">function </span><span class="s1">getMappedPaths(source, file, extensions = defaultExtensions, retry) {</span>
+  <span class="s2">const </span><span class="s1">originalExtensions = extensions;</span>
+  <span class="s1">extensions = [</span><span class="s0">&quot;&quot;</span><span class="s1">, ...extensions];</span>
+  <span class="s2">let </span><span class="s1">paths = [];</span>
+  <span class="s2">if </span><span class="s1">(RELATIVE_PATH_PATTERN.test(source)) {</span>
+    <span class="s2">const </span><span class="s1">resolved = path.resolve(path.dirname(file), source);</span>
+    <span class="s2">if </span><span class="s1">(isFile(resolved)) {</span>
+      <span class="s1">paths = [resolved];</span>
+    <span class="s1">}</span>
+  <span class="s1">} </span><span class="s2">else </span><span class="s1">{</span>
+    <span class="s2">let </span><span class="s1">mapperFns = mappers.filter(({ files }) =&gt; files.has(file)).map(({ mapperFn }) =&gt; mapperFn);</span>
+    <span class="s2">if </span><span class="s1">(mapperFns.length === </span><span class="s4">0</span><span class="s1">) {</span>
+      <span class="s1">mapperFns = mappers.map((mapper) =&gt; ({</span>
+        <span class="s1">mapperFn: mapper.mapperFn,</span>
+        <span class="s1">counter: equalChars(path.dirname(file), path.dirname(mapper.path))</span>
+      <span class="s1">})).sort(</span>
+        <span class="s1">(a, b) =&gt; (</span>
+          <span class="s3">// Sort in descending order where the nearest one has the longest counter</span>
+          <span class="s1">b.counter - a.counter</span>
+        <span class="s1">)</span>
+      <span class="s1">).map(({ mapperFn }) =&gt; mapperFn);</span>
+    <span class="s1">}</span>
+    <span class="s1">paths = mapperFns.map(</span>
+      <span class="s1">(mapperFn) =&gt; mapperFn(source).map((item) =&gt; [</span>
+        <span class="s1">...extensions.map((ext) =&gt; </span><span class="s0">`</span><span class="s1">${item}${ext}</span><span class="s0">`</span><span class="s1">),</span>
+        <span class="s1">...originalExtensions.map((ext) =&gt; </span><span class="s0">`</span><span class="s1">${item}</span><span class="s0">/index</span><span class="s1">${ext}</span><span class="s0">`</span><span class="s1">)</span>
+      <span class="s1">])</span>
+    <span class="s1">).flat(</span>
+      <span class="s3">/* The depth is always 2 */</span>
+      <span class="s4">2</span>
+    <span class="s1">).map(toNativePathSeparator).filter((mappedPath) =&gt; {</span>
+      <span class="s2">try </span><span class="s1">{</span>
+        <span class="s2">const </span><span class="s1">stat = fs.statSync(mappedPath, { throwIfNoEntry: </span><span class="s2">false </span><span class="s1">});</span>
+        <span class="s2">if </span><span class="s1">(stat === </span><span class="s2">void </span><span class="s4">0</span><span class="s1">) {</span>
+          <span class="s2">return false</span><span class="s1">;</span>
+        <span class="s1">}</span>
+        <span class="s2">if </span><span class="s1">(stat.isFile()) {</span>
+          <span class="s2">return true</span><span class="s1">;</span>
+        <span class="s1">}</span>
+        <span class="s2">if </span><span class="s1">(stat.isDirectory()) {</span>
+          <span class="s2">return </span><span class="s1">isModule(mappedPath);</span>
+        <span class="s1">}</span>
+      <span class="s1">} </span><span class="s2">catch </span><span class="s1">(e) {</span>
+        <span class="s2">return false</span><span class="s1">;</span>
+      <span class="s1">}</span>
+      <span class="s2">return false</span><span class="s1">;</span>
+    <span class="s1">});</span>
+  <span class="s1">}</span>
+  <span class="s2">if </span><span class="s1">(retry &amp;&amp; paths.length === </span><span class="s4">0</span><span class="s1">) {</span>
+    <span class="s2">const </span><span class="s1">isJs = JS_EXT_PATTERN.test(source);</span>
+    <span class="s2">if </span><span class="s1">(isJs) {</span>
+      <span class="s2">const </span><span class="s1">jsExt = path.extname(source);</span>
+      <span class="s2">const </span><span class="s1">tsExt = jsExt.replace(</span><span class="s0">&quot;js&quot;</span><span class="s1">, </span><span class="s0">&quot;ts&quot;</span><span class="s1">);</span>
+      <span class="s2">const </span><span class="s1">basename = source.replace(JS_EXT_PATTERN, </span><span class="s0">&quot;&quot;</span><span class="s1">);</span>
+      <span class="s2">let </span><span class="s1">resolved = getMappedPaths(basename + tsExt, file);</span>
+      <span class="s2">if </span><span class="s1">(resolved.length === </span><span class="s4">0 </span><span class="s1">&amp;&amp; jsExt === </span><span class="s0">&quot;.js&quot;</span><span class="s1">) {</span>
+        <span class="s2">const </span><span class="s1">tsxExt = jsExt.replace(</span><span class="s0">&quot;js&quot;</span><span class="s1">, </span><span class="s0">&quot;tsx&quot;</span><span class="s1">);</span>
+        <span class="s1">resolved = getMappedPaths(basename + tsxExt, file);</span>
+      <span class="s1">}</span>
+      <span class="s2">if </span><span class="s1">(resolved.length === </span><span class="s4">0</span><span class="s1">) {</span>
+        <span class="s1">resolved = getMappedPaths(</span>
+          <span class="s1">basename + </span><span class="s0">&quot;.d&quot; </span><span class="s1">+ (tsExt === </span><span class="s0">&quot;.tsx&quot; </span><span class="s1">? </span><span class="s0">&quot;.ts&quot; </span><span class="s1">: tsExt),</span>
+          <span class="s1">file</span>
+        <span class="s1">);</span>
+      <span class="s1">}</span>
+      <span class="s2">if </span><span class="s1">(resolved.length &gt; </span><span class="s4">0</span><span class="s1">) {</span>
+        <span class="s2">return </span><span class="s1">resolved;</span>
+      <span class="s1">}</span>
+    <span class="s1">}</span>
+    <span class="s2">for </span><span class="s1">(</span><span class="s2">const </span><span class="s1">ext of extensions) {</span>
+      <span class="s2">const </span><span class="s1">mappedPaths = isJs ? [] : getMappedPaths(source + ext, file);</span>
+      <span class="s2">const </span><span class="s1">resolved = mappedPaths.length &gt; </span><span class="s4">0 </span><span class="s1">? mappedPaths : getMappedPaths(source + </span><span class="s0">`/index</span><span class="s1">${ext}</span><span class="s0">`</span><span class="s1">, file);</span>
+      <span class="s2">if </span><span class="s1">(resolved.length &gt; </span><span class="s4">0</span><span class="s1">) {</span>
+        <span class="s2">return </span><span class="s1">resolved;</span>
+      <span class="s1">}</span>
+    <span class="s1">}</span>
+  <span class="s1">}</span>
+  <span class="s2">return </span><span class="s1">paths;</span>
+<span class="s1">}</span>
+<span class="s2">function </span><span class="s1">initMappers(options) {</span>
+  <span class="s2">if </span><span class="s1">(mappers.length &gt; </span><span class="s4">0 </span><span class="s1">&amp;&amp; mappersCachedOptions === options &amp;&amp; cachedCwd === process.cwd()) {</span>
+    <span class="s2">return</span><span class="s1">;</span>
+  <span class="s1">}</span>
+  <span class="s1">cachedCwd = process.cwd();</span>
+  <span class="s2">const </span><span class="s1">configPaths = (</span><span class="s2">typeof </span><span class="s1">options.project === </span><span class="s0">&quot;string&quot; </span><span class="s1">? [options.project] : (</span>
+    <span class="s3">// eslint-disable-next-line sonarjs/no-nested-conditional</span>
+    <span class="s1">Array.isArray(options.project) ? options.project : [cachedCwd]</span>
+  <span class="s1">)).map((config) =&gt; replacePathSeparator(config, path.sep, path.posix.sep));</span>
+  <span class="s2">const </span><span class="s1">defaultInclude = [</span><span class="s0">&quot;**/*&quot;</span><span class="s1">];</span>
+  <span class="s2">const </span><span class="s1">defaultIgnore = [</span><span class="s0">&quot;**/node_modules/**&quot;</span><span class="s1">];</span>
+  <span class="s2">const </span><span class="s1">projectPaths = [</span>
+    <span class="s1">...</span><span class="s3">/* @__PURE__ */ </span><span class="s2">new </span><span class="s1">Set([</span>
+      <span class="s1">...configPaths.filter((p) =&gt; !tinyglobby.isDynamicPattern(p)).map((p) =&gt; path.resolve(process.cwd(), p)),</span>
+      <span class="s1">...tinyglobby.globSync(</span>
+        <span class="s1">configPaths.filter((path2) =&gt; tinyglobby.isDynamicPattern(path2)),</span>
+        <span class="s1">{</span>
+          <span class="s1">absolute: </span><span class="s2">true</span><span class="s1">,</span>
+          <span class="s1">dot: </span><span class="s2">true</span><span class="s1">,</span>
+          <span class="s1">expandDirectories: </span><span class="s2">false</span><span class="s1">,</span>
+          <span class="s1">ignore: defaultIgnore</span>
+        <span class="s1">}</span>
+      <span class="s1">)</span>
+    <span class="s1">])</span>
+  <span class="s1">];</span>
+  <span class="s1">mappers = projectPaths.map((projectPath) =&gt; {</span>
+    <span class="s2">var </span><span class="s1">_a, _b;</span>
+    <span class="s2">let </span><span class="s1">tsconfigResult;</span>
+    <span class="s2">if </span><span class="s1">(isFile(projectPath)) {</span>
+      <span class="s2">const </span><span class="s1">{ dir, base } = path.parse(projectPath);</span>
+      <span class="s1">tsconfigResult = getTsconfig.getTsconfig(dir, base);</span>
+    <span class="s1">} </span><span class="s2">else </span><span class="s1">{</span>
+      <span class="s1">tsconfigResult = getTsconfig.getTsconfig(projectPath);</span>
+    <span class="s1">}</span>
+    <span class="s2">if </span><span class="s1">(!tsconfigResult) {</span>
+      <span class="s2">return</span><span class="s1">;</span>
+    <span class="s1">}</span>
+    <span class="s2">const </span><span class="s1">mapperFn = getTsconfig.createPathsMatcher(tsconfigResult);</span>
+    <span class="s2">if </span><span class="s1">(!mapperFn) {</span>
+      <span class="s2">return</span><span class="s1">;</span>
+    <span class="s1">}</span>
+    <span class="s2">const </span><span class="s1">files = tsconfigResult.config.files == </span><span class="s2">null </span><span class="s1">&amp;&amp; tsconfigResult.config.include == </span><span class="s2">null </span><span class="s1">? (</span>
+      <span class="s3">// Include everything if no files or include options</span>
+      <span class="s1">tinyglobby.globSync(defaultInclude, {</span>
+        <span class="s1">absolute: </span><span class="s2">true</span><span class="s1">,</span>
+        <span class="s1">cwd: path.dirname(tsconfigResult.path),</span>
+        <span class="s1">dot: </span><span class="s2">true</span><span class="s1">,</span>
+        <span class="s1">ignore: [</span>
+          <span class="s1">...(_a = tsconfigResult.config.exclude) != </span><span class="s2">null </span><span class="s1">? _a : [],</span>
+          <span class="s1">...defaultIgnore</span>
+        <span class="s1">]</span>
+      <span class="s1">})</span>
+    <span class="s1">) : [</span>
+      <span class="s3">// https://www.typescriptlang.org/tsconfig/#files</span>
+      <span class="s1">...tsconfigResult.config.files != </span><span class="s2">null </span><span class="s1">&amp;&amp; tsconfigResult.config.files.length &gt; </span><span class="s4">0 </span><span class="s1">? tsconfigResult.config.files.map(</span>
+        <span class="s1">(file) =&gt; path.normalize(</span>
+          <span class="s1">path.resolve(path.dirname(tsconfigResult.path), file)</span>
+        <span class="s1">)</span>
+      <span class="s1">) : [],</span>
+      <span class="s3">// https://www.typescriptlang.org/tsconfig/#include</span>
+      <span class="s1">...tsconfigResult.config.include != </span><span class="s2">null </span><span class="s1">&amp;&amp; tsconfigResult.config.include.length &gt; </span><span class="s4">0 </span><span class="s1">? tinyglobby.globSync(tsconfigResult.config.include, {</span>
+        <span class="s1">absolute: </span><span class="s2">true</span><span class="s1">,</span>
+        <span class="s1">cwd: path.dirname(tsconfigResult.path),</span>
+        <span class="s1">dot: </span><span class="s2">true</span><span class="s1">,</span>
+        <span class="s1">ignore: [</span>
+          <span class="s1">...(_b = tsconfigResult.config.exclude) != </span><span class="s2">null </span><span class="s1">? _b : [],</span>
+          <span class="s1">...defaultIgnore</span>
+        <span class="s1">]</span>
+      <span class="s1">}) : []</span>
+    <span class="s1">];</span>
+    <span class="s2">return </span><span class="s1">{</span>
+      <span class="s1">path: toNativePathSeparator(tsconfigResult.path),</span>
+      <span class="s1">files: </span><span class="s2">new </span><span class="s1">Set(files.map(toNativePathSeparator)),</span>
+      <span class="s1">mapperFn</span>
+    <span class="s1">};</span>
+  <span class="s1">}).filter(Boolean);</span>
+  <span class="s1">mappersCachedOptions = options;</span>
+<span class="s1">}</span>
+<span class="s2">function </span><span class="s1">mangleScopedPackage(moduleName) {</span>
+  <span class="s2">if </span><span class="s1">(moduleName.startsWith(</span><span class="s0">&quot;@&quot;</span><span class="s1">)) {</span>
+    <span class="s2">const </span><span class="s1">replaceSlash = moduleName.replace(path.sep, </span><span class="s0">&quot;__&quot;</span><span class="s1">);</span>
+    <span class="s2">if </span><span class="s1">(replaceSlash !== moduleName) {</span>
+      <span class="s2">return </span><span class="s1">replaceSlash.slice(</span><span class="s4">1</span><span class="s1">);</span>
+    <span class="s1">}</span>
+  <span class="s1">}</span>
+  <span class="s2">return </span><span class="s1">moduleName;</span>
+<span class="s1">}</span>
+<span class="s2">function </span><span class="s1">replacePathSeparator(p, from, to) {</span>
+  <span class="s2">return </span><span class="s1">from === to ? p : p.replaceAll(from, to);</span>
+<span class="s1">}</span>
+<span class="s2">function </span><span class="s1">toNativePathSeparator(p) {</span>
+  <span class="s2">return </span><span class="s1">replacePathSeparator(</span>
+    <span class="s1">p,</span>
+    <span class="s1">path[process.platform === </span><span class="s0">&quot;win32&quot; </span><span class="s1">? </span><span class="s0">&quot;posix&quot; </span><span class="s1">: </span><span class="s0">&quot;win32&quot;</span><span class="s1">].sep,</span>
+    <span class="s1">path[process.platform === </span><span class="s0">&quot;win32&quot; </span><span class="s1">? </span><span class="s0">&quot;win32&quot; </span><span class="s1">: </span><span class="s0">&quot;posix&quot;</span><span class="s1">].sep</span>
+  <span class="s1">);</span>
+<span class="s1">}</span>
+<span class="s2">function </span><span class="s1">equalChars(a, b) {</span>
+  <span class="s2">if </span><span class="s1">(a.length === </span><span class="s4">0 </span><span class="s1">|| b.length === </span><span class="s4">0</span><span class="s1">) {</span>
+    <span class="s2">return </span><span class="s4">0</span><span class="s1">;</span>
+  <span class="s1">}</span>
+  <span class="s2">let </span><span class="s1">i = </span><span class="s4">0</span><span class="s1">;</span>
+  <span class="s2">const </span><span class="s1">length = Math.min(a.length, b.length);</span>
+  <span class="s2">while </span><span class="s1">(i &lt; length &amp;&amp; a.charAt(i) === b.charAt(i)) {</span>
+    <span class="s1">i += </span><span class="s4">1</span><span class="s1">;</span>
+  <span class="s1">}</span>
+  <span class="s2">return </span><span class="s1">i;</span>
+<span class="s1">}</span>
+
+<span class="s1">exports.createTypeScriptImportResolver = createTypeScriptImportResolver;</span>
+<span class="s1">exports.defaultConditionNames = defaultConditionNames;</span>
+<span class="s1">exports.defaultExtensionAlias = defaultExtensionAlias;</span>
+<span class="s1">exports.defaultExtensions = defaultExtensions;</span>
+<span class="s1">exports.defaultMainFields = defaultMainFields;</span>
+<span class="s1">exports.interfaceVersion = interfaceVersion;</span>
+<span class="s1">exports.resolve = resolve;</span>
+</pre>
+</body>
+</html>

@@ -1,0 +1,313 @@
+<html>
+<head>
+<title>alt-text-test.js</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #8c8c8c; font-style: italic;}
+.s1 { color: #8c8c8c; font-style: italic;}
+.s2 { color: #080808;}
+.s3 { color: #0033b3;}
+.s4 { color: #067d17;}
+.s5 { color: #0037a6;}
+</style>
+</head>
+<body bgcolor="#ffffff">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#c0c0c0" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+alt-text-test.js</font>
+</center></td></tr></table>
+<pre><span class="s0">/**</span>
+ <span class="s0">* </span><span class="s1">@fileoverview </span><span class="s0">Enforce all elements that require alternative text have it.</span>
+ <span class="s0">* </span><span class="s1">@author </span><span class="s0">Ethan Cohen</span>
+ <span class="s0">*/</span>
+
+<span class="s0">// -----------------------------------------------------------------------------</span>
+<span class="s0">// Requirements</span>
+<span class="s0">// -----------------------------------------------------------------------------</span>
+
+<span class="s3">import </span><span class="s2">{ RuleTester } from </span><span class="s4">'eslint'</span><span class="s2">;</span>
+<span class="s3">import </span><span class="s2">parserOptionsMapper from </span><span class="s4">'../../__util__/parserOptionsMapper'</span><span class="s2">;</span>
+<span class="s3">import </span><span class="s2">parsers from </span><span class="s4">'../../__util__/helpers/parsers'</span><span class="s2">;</span>
+<span class="s3">import </span><span class="s2">rule from </span><span class="s4">'../../../src/rules/alt-text'</span><span class="s2">;</span>
+
+<span class="s0">// -----------------------------------------------------------------------------</span>
+<span class="s0">// Tests</span>
+<span class="s0">// -----------------------------------------------------------------------------</span>
+
+<span class="s3">const </span><span class="s2">ruleTester = </span><span class="s3">new </span><span class="s2">RuleTester();</span>
+
+<span class="s3">const </span><span class="s2">missingPropError = (type) =&gt; ({</span>
+  <span class="s2">message: </span><span class="s4">`</span><span class="s2">${type} </span><span class="s4">elements must have an alt prop, either with meaningful text, or an empty string for decorative images.`</span><span class="s2">,</span>
+  <span class="s2">type: </span><span class="s4">'JSXOpeningElement'</span><span class="s2">,</span>
+<span class="s2">});</span>
+
+<span class="s3">const </span><span class="s2">altValueError = (type) =&gt; ({</span>
+  <span class="s2">message: </span><span class="s4">`Invalid alt value for </span><span class="s2">${type}</span><span class="s4">. </span><span class="s5">\ 
+</span><span class="s4">Use alt=&quot;&quot; for presentational images.`</span><span class="s2">,</span>
+  <span class="s2">type: </span><span class="s4">'JSXOpeningElement'</span><span class="s2">,</span>
+<span class="s2">});</span>
+
+<span class="s3">const </span><span class="s2">ariaLabelValueError = {</span>
+  <span class="s2">message: </span><span class="s4">'The aria-label attribute must have a value. The alt attribute is preferred over aria-label for images.'</span><span class="s2">,</span>
+<span class="s2">};</span>
+<span class="s3">const </span><span class="s2">ariaLabelledbyValueError = {</span>
+  <span class="s2">message: </span><span class="s4">'The aria-labelledby attribute must have a value. The alt attribute is preferred over aria-labelledby for images.'</span><span class="s2">,</span>
+<span class="s2">};</span>
+
+<span class="s3">const </span><span class="s2">preferAltError = () =&gt; ({</span>
+  <span class="s2">message: </span><span class="s4">'Prefer alt=&quot;&quot; over a presentational role. First rule of aria is to not use aria if it can be achieved via native HTML.'</span><span class="s2">,</span>
+  <span class="s2">type: </span><span class="s4">'JSXOpeningElement'</span><span class="s2">,</span>
+<span class="s2">});</span>
+
+<span class="s3">const </span><span class="s2">objectError = {</span>
+  <span class="s2">message: </span><span class="s4">'Embedded &lt;object&gt; elements must have alternative text by providing inner text, aria-label or aria-labelledby props.'</span><span class="s2">,</span>
+<span class="s2">};</span>
+
+<span class="s3">const </span><span class="s2">areaError = {</span>
+  <span class="s2">message: </span><span class="s4">'Each area of an image map must have a text alternative through the `alt`, `aria-label`, or `aria-labelledby` prop.'</span><span class="s2">,</span>
+<span class="s2">};</span>
+
+<span class="s3">const </span><span class="s2">inputImageError = {</span>
+  <span class="s2">message: </span><span class="s4">'&lt;input&gt; elements with type=&quot;image&quot; must have a text alternative through the `alt`, `aria-label`, or `aria-labelledby` prop.'</span><span class="s2">,</span>
+<span class="s2">};</span>
+
+<span class="s3">const </span><span class="s2">componentsSettings = {</span>
+  <span class="s4">'jsx-a11y'</span><span class="s2">: {</span>
+    <span class="s2">polymorphicPropName: </span><span class="s4">'as'</span><span class="s2">,</span>
+    <span class="s2">components: {</span>
+      <span class="s2">Input: </span><span class="s4">'input'</span><span class="s2">,</span>
+    <span class="s2">},</span>
+  <span class="s2">},</span>
+<span class="s2">};</span>
+
+<span class="s3">const </span><span class="s2">array = [{</span>
+  <span class="s2">img: [</span><span class="s4">'Thumbnail'</span><span class="s2">, </span><span class="s4">'Image'</span><span class="s2">],</span>
+  <span class="s2">object: [</span><span class="s4">'Object'</span><span class="s2">],</span>
+  <span class="s2">area: [</span><span class="s4">'Area'</span><span class="s2">],</span>
+  <span class="s4">'input[type=&quot;image&quot;]'</span><span class="s2">: [</span><span class="s4">'InputImage'</span><span class="s2">],</span>
+<span class="s2">}];</span>
+
+<span class="s2">ruleTester.run(</span><span class="s4">'alt-text'</span><span class="s2">, rule, {</span>
+  <span class="s2">valid: parsers.all([].concat(</span>
+    <span class="s0">// DEFAULT ELEMENT 'img' TESTS</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;img alt=&quot;foo&quot; /&gt;;' </span><span class="s2">},</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;img alt={&quot;foo&quot;} /&gt;;' </span><span class="s2">},</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;img alt={alt} /&gt;;' </span><span class="s2">},</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;img ALT=&quot;foo&quot; /&gt;;' </span><span class="s2">},</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;img ALT={`This is the ${alt} text`} /&gt;;' </span><span class="s2">},</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;img ALt=&quot;foo&quot; /&gt;;' </span><span class="s2">},</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;img alt=&quot;foo&quot; salt={undefined} /&gt;;' </span><span class="s2">},</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;img {...this.props} alt=&quot;foo&quot; /&gt;' </span><span class="s2">},</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;a /&gt;' </span><span class="s2">},</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;div /&gt;' </span><span class="s2">},</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;img alt={function(e) {} } /&gt;' </span><span class="s2">},</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;div alt={function(e) {} } /&gt;' </span><span class="s2">},</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;img alt={() =&gt; void 0} /&gt;' </span><span class="s2">},</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;IMG /&gt;' </span><span class="s2">},</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;UX.Layout&gt;test&lt;/UX.Layout&gt;' </span><span class="s2">},</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;img alt={alt || &quot;Alt text&quot; } /&gt;' </span><span class="s2">},</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;img alt={photo.caption} /&gt;;' </span><span class="s2">},</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;img alt={bar()} /&gt;;' </span><span class="s2">},</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;img alt={foo.bar || &quot;&quot;} /&gt;' </span><span class="s2">},</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;img alt={bar() || &quot;&quot;} /&gt;' </span><span class="s2">},</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;img alt={foo.bar() || &quot;&quot;} /&gt;' </span><span class="s2">},</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;img alt=&quot;&quot; /&gt;' </span><span class="s2">},</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;img alt={`${undefined}`} /&gt;' </span><span class="s2">},</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;img alt=&quot; &quot; /&gt;' </span><span class="s2">},</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;img alt=&quot;&quot; role=&quot;presentation&quot; /&gt;' </span><span class="s2">},</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;img alt=&quot;&quot; role=&quot;none&quot; /&gt;' </span><span class="s2">},</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;img alt=&quot;&quot; role={`presentation`} /&gt;' </span><span class="s2">},</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;img alt=&quot;&quot; role={&quot;presentation&quot;} /&gt;' </span><span class="s2">},</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;img alt=&quot;this is lit...&quot; role=&quot;presentation&quot; /&gt;' </span><span class="s2">},</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;img alt={error ? &quot;not working&quot;: &quot;working&quot;} /&gt;' </span><span class="s2">},</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;img alt={undefined ? &quot;working&quot;: &quot;not working&quot;} /&gt;' </span><span class="s2">},</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;img alt={plugin.name + &quot; Logo&quot;} /&gt;' </span><span class="s2">},</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;img aria-label=&quot;foo&quot; /&gt;' </span><span class="s2">},</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;img aria-labelledby=&quot;id1&quot; /&gt;' </span><span class="s2">},</span>
+
+    <span class="s0">// DEFAULT &lt;object&gt; TESTS</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;object aria-label=&quot;foo&quot; /&gt;' </span><span class="s2">},</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;object aria-labelledby=&quot;id1&quot; /&gt;' </span><span class="s2">},</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;object&gt;Foo&lt;/object&gt;' </span><span class="s2">},</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;object&gt;&lt;p&gt;This is descriptive!&lt;/p&gt;&lt;/object&gt;' </span><span class="s2">},</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;Object /&gt;' </span><span class="s2">},</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;object title=&quot;An object&quot; /&gt;' </span><span class="s2">},</span>
+
+    <span class="s0">// DEFAULT &lt;area&gt; TESTS</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;area aria-label=&quot;foo&quot; /&gt;' </span><span class="s2">},</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;area aria-labelledby=&quot;id1&quot; /&gt;' </span><span class="s2">},</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;area alt=&quot;&quot; /&gt;' </span><span class="s2">},</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;area alt=&quot;This is descriptive!&quot; /&gt;' </span><span class="s2">},</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;area alt={altText} /&gt;' </span><span class="s2">},</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;Area /&gt;' </span><span class="s2">},</span>
+
+    <span class="s0">// DEFAULT &lt;input type=&quot;image&quot;&gt; TESTS</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;input /&gt;' </span><span class="s2">},</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;input type=&quot;foo&quot; /&gt;' </span><span class="s2">},</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;input type=&quot;image&quot; aria-label=&quot;foo&quot; /&gt;' </span><span class="s2">},</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;input type=&quot;image&quot; aria-labelledby=&quot;id1&quot; /&gt;' </span><span class="s2">},</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;input type=&quot;image&quot; alt=&quot;&quot; /&gt;' </span><span class="s2">},</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;input type=&quot;image&quot; alt=&quot;This is descriptive!&quot; /&gt;' </span><span class="s2">},</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;input type=&quot;image&quot; alt={altText} /&gt;' </span><span class="s2">},</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;InputImage /&gt;' </span><span class="s2">},</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;Input type=&quot;image&quot; alt=&quot;&quot; /&gt;'</span><span class="s2">, settings: componentsSettings },</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;SomeComponent as=&quot;input&quot; type=&quot;image&quot; alt=&quot;&quot; /&gt;'</span><span class="s2">, settings: componentsSettings },</span>
+
+    <span class="s0">// CUSTOM ELEMENT TESTS FOR ARRAY OPTION TESTS</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;Thumbnail alt=&quot;foo&quot; /&gt;;'</span><span class="s2">, options: array },</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;Thumbnail alt={&quot;foo&quot;} /&gt;;'</span><span class="s2">, options: array },</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;Thumbnail alt={alt} /&gt;;'</span><span class="s2">, options: array },</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;Thumbnail ALT=&quot;foo&quot; /&gt;;'</span><span class="s2">, options: array },</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;Thumbnail ALT={`This is the ${alt} text`} /&gt;;'</span><span class="s2">, options: array },</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;Thumbnail ALt=&quot;foo&quot; /&gt;;'</span><span class="s2">, options: array },</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;Thumbnail alt=&quot;foo&quot; salt={undefined} /&gt;;'</span><span class="s2">, options: array },</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;Thumbnail {...this.props} alt=&quot;foo&quot; /&gt;'</span><span class="s2">, options: array },</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;thumbnail /&gt;'</span><span class="s2">, options: array },</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;Thumbnail alt={function(e) {} } /&gt;'</span><span class="s2">, options: array },</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;div alt={function(e) {} } /&gt;'</span><span class="s2">, options: array },</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;Thumbnail alt={() =&gt; void 0} /&gt;'</span><span class="s2">, options: array },</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;THUMBNAIL /&gt;'</span><span class="s2">, options: array },</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;Thumbnail alt={alt || &quot;foo&quot; } /&gt;'</span><span class="s2">, options: array },</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;Image alt=&quot;foo&quot; /&gt;;'</span><span class="s2">, options: array },</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;Image alt={&quot;foo&quot;} /&gt;;'</span><span class="s2">, options: array },</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;Image alt={alt} /&gt;;'</span><span class="s2">, options: array },</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;Image ALT=&quot;foo&quot; /&gt;;'</span><span class="s2">, options: array },</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;Image ALT={`This is the ${alt} text`} /&gt;;'</span><span class="s2">, options: array },</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;Image ALt=&quot;foo&quot; /&gt;;'</span><span class="s2">, options: array },</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;Image alt=&quot;foo&quot; salt={undefined} /&gt;;'</span><span class="s2">, options: array },</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;Image {...this.props} alt=&quot;foo&quot; /&gt;'</span><span class="s2">, options: array },</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;image /&gt;'</span><span class="s2">, options: array },</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;Image alt={function(e) {} } /&gt;'</span><span class="s2">, options: array },</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;div alt={function(e) {} } /&gt;'</span><span class="s2">, options: array },</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;Image alt={() =&gt; void 0} /&gt;'</span><span class="s2">, options: array },</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;IMAGE /&gt;'</span><span class="s2">, options: array },</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;Image alt={alt || &quot;foo&quot; } /&gt;'</span><span class="s2">, options: array },</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;Object aria-label=&quot;foo&quot; /&gt;'</span><span class="s2">, options: array },</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;Object aria-labelledby=&quot;id1&quot; /&gt;'</span><span class="s2">, options: array },</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;Object&gt;Foo&lt;/Object&gt;'</span><span class="s2">, options: array },</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;Object&gt;&lt;p&gt;This is descriptive!&lt;/p&gt;&lt;/Object&gt;'</span><span class="s2">, options: array },</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;Object title=&quot;An object&quot; /&gt;'</span><span class="s2">, options: array },</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;Area aria-label=&quot;foo&quot; /&gt;'</span><span class="s2">, options: array },</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;Area aria-labelledby=&quot;id1&quot; /&gt;'</span><span class="s2">, options: array },</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;Area alt=&quot;&quot; /&gt;'</span><span class="s2">, options: array },</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;Area alt=&quot;This is descriptive!&quot; /&gt;'</span><span class="s2">, options: array },</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;Area alt={altText} /&gt;'</span><span class="s2">, options: array },</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;InputImage aria-label=&quot;foo&quot; /&gt;'</span><span class="s2">, options: array },</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;InputImage aria-labelledby=&quot;id1&quot; /&gt;'</span><span class="s2">, options: array },</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;InputImage alt=&quot;&quot; /&gt;'</span><span class="s2">, options: array },</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;InputImage alt=&quot;This is descriptive!&quot; /&gt;'</span><span class="s2">, options: array },</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;InputImage alt={altText} /&gt;'</span><span class="s2">, options: array },</span>
+  <span class="s2">)).map(parserOptionsMapper),</span>
+  <span class="s2">invalid: parsers.all([].concat(</span>
+    <span class="s0">// DEFAULT ELEMENT 'img' TESTS</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;img /&gt;;'</span><span class="s2">, errors: [missingPropError(</span><span class="s4">'img'</span><span class="s2">)] },</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;img alt /&gt;;'</span><span class="s2">, errors: [altValueError(</span><span class="s4">'img'</span><span class="s2">)] },</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;img alt={undefined} /&gt;;'</span><span class="s2">, errors: [altValueError(</span><span class="s4">'img'</span><span class="s2">)] },</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;img src=&quot;xyz&quot; /&gt;'</span><span class="s2">, errors: [missingPropError(</span><span class="s4">'img'</span><span class="s2">)] },</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;img role /&gt;'</span><span class="s2">, errors: [missingPropError(</span><span class="s4">'img'</span><span class="s2">)] },</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;img {...this.props} /&gt;'</span><span class="s2">, errors: [missingPropError(</span><span class="s4">'img'</span><span class="s2">)] },</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;img alt={false || false} /&gt;'</span><span class="s2">, errors: [altValueError(</span><span class="s4">'img'</span><span class="s2">)] },</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;img alt={undefined} role=&quot;presentation&quot; /&gt;;'</span><span class="s2">, errors: [altValueError(</span><span class="s4">'img'</span><span class="s2">)] },</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;img alt role=&quot;presentation&quot; /&gt;;'</span><span class="s2">, errors: [altValueError(</span><span class="s4">'img'</span><span class="s2">)] },</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;img role=&quot;presentation&quot; /&gt;;'</span><span class="s2">, errors: [preferAltError()] },</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;img role=&quot;none&quot; /&gt;;'</span><span class="s2">, errors: [preferAltError()] },</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;img aria-label={undefined} /&gt;'</span><span class="s2">, errors: [ariaLabelValueError] },</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;img aria-labelledby={undefined} /&gt;'</span><span class="s2">, errors: [ariaLabelledbyValueError] },</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;img aria-label=&quot;&quot; /&gt;'</span><span class="s2">, errors: [ariaLabelValueError] },</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;img aria-labelledby=&quot;&quot; /&gt;'</span><span class="s2">, errors: [ariaLabelledbyValueError] },</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;SomeComponent as=&quot;img&quot; aria-label=&quot;&quot; /&gt;'</span><span class="s2">, settings: componentsSettings, errors: [ariaLabelValueError] },</span>
+
+    <span class="s0">// DEFAULT ELEMENT 'object' TESTS</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;object /&gt;'</span><span class="s2">, errors: [objectError] },</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;object&gt;&lt;div aria-hidden /&gt;&lt;/object&gt;'</span><span class="s2">, errors: [objectError] },</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;object title={undefined} /&gt;'</span><span class="s2">, errors: [objectError] },</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;object aria-label=&quot;&quot; /&gt;'</span><span class="s2">, errors: [objectError] },</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;object aria-labelledby=&quot;&quot; /&gt;'</span><span class="s2">, errors: [objectError] },</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;object aria-label={undefined} /&gt;'</span><span class="s2">, errors: [objectError] },</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;object aria-labelledby={undefined} /&gt;'</span><span class="s2">, errors: [objectError] },</span>
+
+    <span class="s0">// DEFAULT ELEMENT 'area' TESTS</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;area /&gt;'</span><span class="s2">, errors: [areaError] },</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;area alt /&gt;'</span><span class="s2">, errors: [areaError] },</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;area alt={undefined} /&gt;'</span><span class="s2">, errors: [areaError] },</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;area src=&quot;xyz&quot; /&gt;'</span><span class="s2">, errors: [areaError] },</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;area {...this.props} /&gt;'</span><span class="s2">, errors: [areaError] },</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;area aria-label=&quot;&quot; /&gt;'</span><span class="s2">, errors: [areaError] },</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;area aria-label={undefined} /&gt;'</span><span class="s2">, errors: [areaError] },</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;area aria-labelledby=&quot;&quot; /&gt;'</span><span class="s2">, errors: [areaError] },</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;area aria-labelledby={undefined} /&gt;'</span><span class="s2">, errors: [areaError] },</span>
+
+    <span class="s0">// DEFAULT ELEMENT 'input type=&quot;image&quot;' TESTS</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;input type=&quot;image&quot; /&gt;'</span><span class="s2">, errors: [inputImageError] },</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;input type=&quot;image&quot; alt /&gt;'</span><span class="s2">, errors: [inputImageError] },</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;input type=&quot;image&quot; alt={undefined} /&gt;'</span><span class="s2">, errors: [inputImageError] },</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;input type=&quot;image&quot;&gt;Foo&lt;/input&gt;'</span><span class="s2">, errors: [inputImageError] },</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;input type=&quot;image&quot; {...this.props} /&gt;'</span><span class="s2">, errors: [inputImageError] },</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;input type=&quot;image&quot; aria-label=&quot;&quot; /&gt;'</span><span class="s2">, errors: [inputImageError] },</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;input type=&quot;image&quot; aria-label={undefined} /&gt;'</span><span class="s2">, errors: [inputImageError] },</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;input type=&quot;image&quot; aria-labelledby=&quot;&quot; /&gt;'</span><span class="s2">, errors: [inputImageError] },</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;input type=&quot;image&quot; aria-labelledby={undefined} /&gt;'</span><span class="s2">, errors: [inputImageError] },</span>
+
+    <span class="s0">// CUSTOM ELEMENT TESTS FOR ARRAY OPTION TESTS</span>
+    <span class="s2">{</span>
+      <span class="s2">code: </span><span class="s4">'&lt;Thumbnail /&gt;;'</span><span class="s2">,</span>
+      <span class="s2">errors: [missingPropError(</span><span class="s4">'Thumbnail'</span><span class="s2">)],</span>
+      <span class="s2">options: array,</span>
+    <span class="s2">},</span>
+    <span class="s2">{</span>
+      <span class="s2">code: </span><span class="s4">'&lt;Thumbnail alt /&gt;;'</span><span class="s2">,</span>
+      <span class="s2">errors: [altValueError(</span><span class="s4">'Thumbnail'</span><span class="s2">)],</span>
+      <span class="s2">options: array,</span>
+    <span class="s2">},</span>
+    <span class="s2">{</span>
+      <span class="s2">code: </span><span class="s4">'&lt;Thumbnail alt={undefined} /&gt;;'</span><span class="s2">,</span>
+      <span class="s2">errors: [altValueError(</span><span class="s4">'Thumbnail'</span><span class="s2">)],</span>
+      <span class="s2">options: array,</span>
+    <span class="s2">},</span>
+    <span class="s2">{</span>
+      <span class="s2">code: </span><span class="s4">'&lt;Thumbnail src=&quot;xyz&quot; /&gt;'</span><span class="s2">,</span>
+      <span class="s2">errors: [missingPropError(</span><span class="s4">'Thumbnail'</span><span class="s2">)],</span>
+      <span class="s2">options: array,</span>
+    <span class="s2">},</span>
+    <span class="s2">{</span>
+      <span class="s2">code: </span><span class="s4">'&lt;Thumbnail {...this.props} /&gt;'</span><span class="s2">,</span>
+      <span class="s2">errors: [missingPropError(</span><span class="s4">'Thumbnail'</span><span class="s2">)],</span>
+      <span class="s2">options: array,</span>
+    <span class="s2">},</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;Image /&gt;;'</span><span class="s2">, errors: [missingPropError(</span><span class="s4">'Image'</span><span class="s2">)], options: array },</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;Image alt /&gt;;'</span><span class="s2">, errors: [altValueError(</span><span class="s4">'Image'</span><span class="s2">)], options: array },</span>
+    <span class="s2">{</span>
+      <span class="s2">code: </span><span class="s4">'&lt;Image alt={undefined} /&gt;;'</span><span class="s2">,</span>
+      <span class="s2">errors: [altValueError(</span><span class="s4">'Image'</span><span class="s2">)],</span>
+      <span class="s2">options: array,</span>
+    <span class="s2">},</span>
+    <span class="s2">{</span>
+      <span class="s2">code: </span><span class="s4">'&lt;Image src=&quot;xyz&quot; /&gt;'</span><span class="s2">,</span>
+      <span class="s2">errors: [missingPropError(</span><span class="s4">'Image'</span><span class="s2">)],</span>
+      <span class="s2">options: array,</span>
+    <span class="s2">},</span>
+    <span class="s2">{</span>
+      <span class="s2">code: </span><span class="s4">'&lt;Image {...this.props} /&gt;'</span><span class="s2">,</span>
+      <span class="s2">errors: [missingPropError(</span><span class="s4">'Image'</span><span class="s2">)],</span>
+      <span class="s2">options: array,</span>
+    <span class="s2">},</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;Object /&gt;'</span><span class="s2">, errors: [objectError], options: array },</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;Object&gt;&lt;div aria-hidden /&gt;&lt;/Object&gt;'</span><span class="s2">, errors: [objectError], options: array },</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;Object title={undefined} /&gt;'</span><span class="s2">, errors: [objectError], options: array },</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;Area /&gt;'</span><span class="s2">, errors: [areaError], options: array },</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;Area alt /&gt;'</span><span class="s2">, errors: [areaError], options: array },</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;Area alt={undefined} /&gt;'</span><span class="s2">, errors: [areaError], options: array },</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;Area src=&quot;xyz&quot; /&gt;'</span><span class="s2">, errors: [areaError], options: array },</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;Area {...this.props} /&gt;'</span><span class="s2">, errors: [areaError], options: array },</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;InputImage /&gt;'</span><span class="s2">, errors: [inputImageError], options: array },</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;InputImage alt /&gt;'</span><span class="s2">, errors: [inputImageError], options: array },</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;InputImage alt={undefined} /&gt;'</span><span class="s2">, errors: [inputImageError], options: array },</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;InputImage&gt;Foo&lt;/InputImage&gt;'</span><span class="s2">, errors: [inputImageError], options: array },</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;InputImage {...this.props} /&gt;'</span><span class="s2">, errors: [inputImageError], options: array },</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;Input type=&quot;image&quot; /&gt;'</span><span class="s2">, errors: [inputImageError], settings: componentsSettings },</span>
+  <span class="s2">)).map(parserOptionsMapper),</span>
+<span class="s2">});</span>
+</pre>
+</body>
+</html>

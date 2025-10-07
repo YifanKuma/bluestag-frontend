@@ -1,0 +1,72 @@
+<html>
+<head>
+<title>lazy-compilation-node.js</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #8c8c8c; font-style: italic;}
+.s1 { color: #080808;}
+.s2 { color: #067d17;}
+.s3 { color: #0033b3;}
+.s4 { color: #1750eb;}
+.s5 { color: #8c8c8c; font-style: italic;}
+</style>
+</head>
+<body bgcolor="#ffffff">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#c0c0c0" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+lazy-compilation-node.js</font>
+</center></td></tr></table>
+<pre><span class="s0">/* global __resourceQuery */</span>
+
+<span class="s2">&quot;use strict&quot;</span><span class="s1">;</span>
+
+<span class="s3">var </span><span class="s1">urlBase = decodeURIComponent(__resourceQuery.slice(</span><span class="s4">1</span><span class="s1">));</span>
+
+<span class="s0">/**</span>
+ <span class="s0">* </span><span class="s5">@param </span><span class="s0">{{ data: string, onError: (err: Error) =&gt; void, active: boolean, module: module }} options options</span>
+ <span class="s0">* </span><span class="s5">@returns </span><span class="s0">{() =&gt; void} function to destroy response</span>
+ <span class="s0">*/</span>
+<span class="s1">exports.keepAlive = </span><span class="s3">function </span><span class="s1">(options) {</span>
+	<span class="s3">var </span><span class="s1">data = options.data;</span>
+	<span class="s3">var </span><span class="s1">onError = options.onError;</span>
+	<span class="s3">var </span><span class="s1">active = options.active;</span>
+	<span class="s3">var </span><span class="s1">module = options.module;</span>
+	<span class="s0">/** </span><span class="s5">@type </span><span class="s0">{import(&quot;http&quot;).IncomingMessage} */</span>
+	<span class="s3">var </span><span class="s1">response;</span>
+	<span class="s3">var </span><span class="s1">request = (</span>
+		<span class="s1">urlBase.startsWith(</span><span class="s2">&quot;https&quot;</span><span class="s1">) ? require(</span><span class="s2">&quot;https&quot;</span><span class="s1">) : require(</span><span class="s2">&quot;http&quot;</span><span class="s1">)</span>
+	<span class="s1">).request(</span>
+		<span class="s1">urlBase + data,</span>
+		<span class="s1">{</span>
+			<span class="s1">agent: </span><span class="s3">false</span><span class="s1">,</span>
+			<span class="s1">headers: { accept: </span><span class="s2">&quot;text/event-stream&quot; </span><span class="s1">}</span>
+		<span class="s1">},</span>
+		<span class="s3">function </span><span class="s1">(res) {</span>
+			<span class="s1">response = res;</span>
+			<span class="s1">response.on(</span><span class="s2">&quot;error&quot;</span><span class="s1">, errorHandler);</span>
+			<span class="s3">if </span><span class="s1">(!active &amp;&amp; !module.hot) {</span>
+				<span class="s1">console.log(</span>
+					<span class="s2">&quot;Hot Module Replacement is not enabled. Waiting for process restart...&quot;</span>
+				<span class="s1">);</span>
+			<span class="s1">}</span>
+		<span class="s1">}</span>
+	<span class="s1">);</span>
+
+	<span class="s0">/**</span>
+	 <span class="s0">* </span><span class="s5">@param </span><span class="s0">{Error} err error</span>
+	 <span class="s0">*/</span>
+	<span class="s3">function </span><span class="s1">errorHandler(err) {</span>
+		<span class="s1">err.message =</span>
+			<span class="s2">&quot;Problem communicating active modules to the server: &quot; </span><span class="s1">+ err.message;</span>
+		<span class="s1">onError(err);</span>
+	<span class="s1">}</span>
+	<span class="s1">request.on(</span><span class="s2">&quot;error&quot;</span><span class="s1">, errorHandler);</span>
+	<span class="s1">request.end();</span>
+	<span class="s3">return function </span><span class="s1">() {</span>
+		<span class="s1">response.destroy();</span>
+	<span class="s1">};</span>
+<span class="s1">};</span>
+</pre>
+</body>
+</html>

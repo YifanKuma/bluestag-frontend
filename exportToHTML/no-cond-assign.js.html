@@ -1,0 +1,197 @@
+<html>
+<head>
+<title>no-cond-assign.js</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #8c8c8c; font-style: italic;}
+.s1 { color: #8c8c8c; font-style: italic;}
+.s2 { color: #080808;}
+.s3 { color: #067d17;}
+.s4 { color: #0033b3;}
+.s5 { color: #1750eb;}
+</style>
+</head>
+<body bgcolor="#ffffff">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#c0c0c0" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+no-cond-assign.js</font>
+</center></td></tr></table>
+<pre><span class="s0">/**</span>
+ <span class="s0">* </span><span class="s1">@fileoverview </span><span class="s0">Rule to flag assignment in a conditional statement's test expression</span>
+ <span class="s0">* </span><span class="s1">@author </span><span class="s0">Stephen Murray &lt;spmurrayzzz&gt;</span>
+ <span class="s0">*/</span>
+
+<span class="s3">&quot;use strict&quot;</span><span class="s2">;</span>
+
+<span class="s0">//------------------------------------------------------------------------------</span>
+<span class="s0">// Requirements</span>
+<span class="s0">//------------------------------------------------------------------------------</span>
+
+<span class="s4">const </span><span class="s2">astUtils = require(</span><span class="s3">&quot;./utils/ast-utils&quot;</span><span class="s2">);</span>
+
+<span class="s0">//------------------------------------------------------------------------------</span>
+<span class="s0">// Helpers</span>
+<span class="s0">//------------------------------------------------------------------------------</span>
+
+<span class="s4">const </span><span class="s2">TEST_CONDITION_PARENT_TYPES = </span><span class="s4">new </span><span class="s2">Set([</span>
+	<span class="s3">&quot;IfStatement&quot;</span><span class="s2">,</span>
+	<span class="s3">&quot;WhileStatement&quot;</span><span class="s2">,</span>
+	<span class="s3">&quot;DoWhileStatement&quot;</span><span class="s2">,</span>
+	<span class="s3">&quot;ForStatement&quot;</span><span class="s2">,</span>
+	<span class="s3">&quot;ConditionalExpression&quot;</span><span class="s2">,</span>
+<span class="s2">]);</span>
+
+<span class="s4">const </span><span class="s2">NODE_DESCRIPTIONS = {</span>
+	<span class="s2">DoWhileStatement: </span><span class="s3">&quot;a 'do...while' statement&quot;</span><span class="s2">,</span>
+	<span class="s2">ForStatement: </span><span class="s3">&quot;a 'for' statement&quot;</span><span class="s2">,</span>
+	<span class="s2">IfStatement: </span><span class="s3">&quot;an 'if' statement&quot;</span><span class="s2">,</span>
+	<span class="s2">WhileStatement: </span><span class="s3">&quot;a 'while' statement&quot;</span><span class="s2">,</span>
+<span class="s2">};</span>
+
+<span class="s0">//------------------------------------------------------------------------------</span>
+<span class="s0">// Rule Definition</span>
+<span class="s0">//------------------------------------------------------------------------------</span>
+
+<span class="s0">/** </span><span class="s1">@type </span><span class="s0">{import('../types').Rule.RuleModule} */</span>
+<span class="s2">module.exports = {</span>
+	<span class="s2">meta: {</span>
+		<span class="s2">type: </span><span class="s3">&quot;problem&quot;</span><span class="s2">,</span>
+
+		<span class="s2">defaultOptions: [</span><span class="s3">&quot;except-parens&quot;</span><span class="s2">],</span>
+
+		<span class="s2">docs: {</span>
+			<span class="s2">description:</span>
+				<span class="s3">&quot;Disallow assignment operators in conditional expressions&quot;</span><span class="s2">,</span>
+			<span class="s2">recommended: </span><span class="s4">true</span><span class="s2">,</span>
+			<span class="s2">url: </span><span class="s3">&quot;https://eslint.org/docs/latest/rules/no-cond-assign&quot;</span><span class="s2">,</span>
+		<span class="s2">},</span>
+
+		<span class="s2">schema: [</span>
+			<span class="s2">{</span>
+				<span class="s4">enum</span><span class="s2">: [</span><span class="s3">&quot;except-parens&quot;</span><span class="s2">, </span><span class="s3">&quot;always&quot;</span><span class="s2">],</span>
+			<span class="s2">},</span>
+		<span class="s2">],</span>
+
+		<span class="s2">messages: {</span>
+			<span class="s2">unexpected: </span><span class="s3">&quot;Unexpected assignment within {{type}}.&quot;</span><span class="s2">,</span>
+
+			<span class="s0">// must match JSHint's error message</span>
+			<span class="s2">missing:</span>
+				<span class="s3">&quot;Expected a conditional expression and instead saw an assignment.&quot;</span><span class="s2">,</span>
+		<span class="s2">},</span>
+	<span class="s2">},</span>
+
+	<span class="s2">create(context) {</span>
+		<span class="s4">const </span><span class="s2">[prohibitAssign] = context.options;</span>
+		<span class="s4">const </span><span class="s2">sourceCode = context.sourceCode;</span>
+
+		<span class="s0">/**</span>
+		 <span class="s0">* Check whether an AST node is the test expression for a conditional statement.</span>
+		 <span class="s0">* </span><span class="s1">@param </span><span class="s0">{!Object} node The node to test.</span>
+		 <span class="s0">* </span><span class="s1">@returns </span><span class="s0">{boolean} `true` if the node is the text expression for a conditional statement; otherwise, `false`.</span>
+		 <span class="s0">*/</span>
+		<span class="s4">function </span><span class="s2">isConditionalTestExpression(node) {</span>
+			<span class="s4">return </span><span class="s2">(</span>
+				<span class="s2">node.parent &amp;&amp;</span>
+				<span class="s2">TEST_CONDITION_PARENT_TYPES.has(node.parent.type) &amp;&amp;</span>
+				<span class="s2">node === node.parent.test</span>
+			<span class="s2">);</span>
+		<span class="s2">}</span>
+
+		<span class="s0">/**</span>
+		 <span class="s0">* Given an AST node, perform a bottom-up search for the first ancestor that represents a conditional statement.</span>
+		 <span class="s0">* </span><span class="s1">@param </span><span class="s0">{!Object} node The node to use at the start of the search.</span>
+		 <span class="s0">* </span><span class="s1">@returns </span><span class="s0">{?Object} The closest ancestor node that represents a conditional statement.</span>
+		 <span class="s0">*/</span>
+		<span class="s4">function </span><span class="s2">findConditionalAncestor(node) {</span>
+			<span class="s4">let </span><span class="s2">currentAncestor = node;</span>
+
+			<span class="s4">do </span><span class="s2">{</span>
+				<span class="s4">if </span><span class="s2">(isConditionalTestExpression(currentAncestor)) {</span>
+					<span class="s4">return </span><span class="s2">currentAncestor.parent;</span>
+				<span class="s2">}</span>
+			<span class="s2">} </span><span class="s4">while </span><span class="s2">(</span>
+				<span class="s2">(currentAncestor = currentAncestor.parent) &amp;&amp;</span>
+				<span class="s2">!astUtils.isFunction(currentAncestor)</span>
+			<span class="s2">);</span>
+
+			<span class="s4">return null</span><span class="s2">;</span>
+		<span class="s2">}</span>
+
+		<span class="s0">/**</span>
+		 <span class="s0">* Check whether the code represented by an AST node is enclosed in two sets of parentheses.</span>
+		 <span class="s0">* </span><span class="s1">@param </span><span class="s0">{!Object} node The node to test.</span>
+		 <span class="s0">* </span><span class="s1">@returns </span><span class="s0">{boolean} `true` if the code is enclosed in two sets of parentheses; otherwise, `false`.</span>
+		 <span class="s0">*/</span>
+		<span class="s4">function </span><span class="s2">isParenthesisedTwice(node) {</span>
+			<span class="s4">const </span><span class="s2">previousToken = sourceCode.getTokenBefore(node, </span><span class="s5">1</span><span class="s2">),</span>
+				<span class="s2">nextToken = sourceCode.getTokenAfter(node, </span><span class="s5">1</span><span class="s2">);</span>
+
+			<span class="s4">return </span><span class="s2">(</span>
+				<span class="s2">astUtils.isParenthesised(sourceCode, node) &amp;&amp;</span>
+				<span class="s2">previousToken &amp;&amp;</span>
+				<span class="s2">astUtils.isOpeningParenToken(previousToken) &amp;&amp;</span>
+				<span class="s2">previousToken.range[</span><span class="s5">1</span><span class="s2">] &lt;= node.range[</span><span class="s5">0</span><span class="s2">] &amp;&amp;</span>
+				<span class="s2">astUtils.isClosingParenToken(nextToken) &amp;&amp;</span>
+				<span class="s2">nextToken.range[</span><span class="s5">0</span><span class="s2">] &gt;= node.range[</span><span class="s5">1</span><span class="s2">]</span>
+			<span class="s2">);</span>
+		<span class="s2">}</span>
+
+		<span class="s0">/**</span>
+		 <span class="s0">* Check a conditional statement's test expression for top-level assignments that are not enclosed in parentheses.</span>
+		 <span class="s0">* </span><span class="s1">@param </span><span class="s0">{!Object} node The node for the conditional statement.</span>
+		 <span class="s0">* </span><span class="s1">@returns </span><span class="s0">{void}</span>
+		 <span class="s0">*/</span>
+		<span class="s4">function </span><span class="s2">testForAssign(node) {</span>
+			<span class="s4">if </span><span class="s2">(</span>
+				<span class="s2">node.test &amp;&amp;</span>
+				<span class="s2">node.test.type === </span><span class="s3">&quot;AssignmentExpression&quot; </span><span class="s2">&amp;&amp;</span>
+				<span class="s2">(node.type === </span><span class="s3">&quot;ForStatement&quot;</span>
+					<span class="s2">? !astUtils.isParenthesised(sourceCode, node.test)</span>
+					<span class="s2">: !isParenthesisedTwice(node.test))</span>
+			<span class="s2">) {</span>
+				<span class="s2">context.report({</span>
+					<span class="s2">node: node.test,</span>
+					<span class="s2">messageId: </span><span class="s3">&quot;missing&quot;</span><span class="s2">,</span>
+				<span class="s2">});</span>
+			<span class="s2">}</span>
+		<span class="s2">}</span>
+
+		<span class="s0">/**</span>
+		 <span class="s0">* Check whether an assignment expression is descended from a conditional statement's test expression.</span>
+		 <span class="s0">* </span><span class="s1">@param </span><span class="s0">{!Object} node The node for the assignment expression.</span>
+		 <span class="s0">* </span><span class="s1">@returns </span><span class="s0">{void}</span>
+		 <span class="s0">*/</span>
+		<span class="s4">function </span><span class="s2">testForConditionalAncestor(node) {</span>
+			<span class="s4">const </span><span class="s2">ancestor = findConditionalAncestor(node);</span>
+
+			<span class="s4">if </span><span class="s2">(ancestor) {</span>
+				<span class="s2">context.report({</span>
+					<span class="s2">node,</span>
+					<span class="s2">messageId: </span><span class="s3">&quot;unexpected&quot;</span><span class="s2">,</span>
+					<span class="s2">data: {</span>
+						<span class="s2">type: NODE_DESCRIPTIONS[ancestor.type] || ancestor.type,</span>
+					<span class="s2">},</span>
+				<span class="s2">});</span>
+			<span class="s2">}</span>
+		<span class="s2">}</span>
+
+		<span class="s4">if </span><span class="s2">(prohibitAssign === </span><span class="s3">&quot;always&quot;</span><span class="s2">) {</span>
+			<span class="s4">return </span><span class="s2">{</span>
+				<span class="s2">AssignmentExpression: testForConditionalAncestor,</span>
+			<span class="s2">};</span>
+		<span class="s2">}</span>
+
+		<span class="s4">return </span><span class="s2">{</span>
+			<span class="s2">DoWhileStatement: testForAssign,</span>
+			<span class="s2">ForStatement: testForAssign,</span>
+			<span class="s2">IfStatement: testForAssign,</span>
+			<span class="s2">WhileStatement: testForAssign,</span>
+			<span class="s2">ConditionalExpression: testForAssign,</span>
+		<span class="s2">};</span>
+	<span class="s2">},</span>
+<span class="s2">};</span>
+</pre>
+</body>
+</html>

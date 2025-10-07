@@ -1,0 +1,93 @@
+<html>
+<head>
+<title>shared-cache-controls.external.js</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #067d17;}
+.s1 { color: #080808;}
+.s2 { color: #0033b3;}
+.s3 { color: #8c8c8c; font-style: italic;}
+.s4 { color: #8c8c8c; font-style: italic;}
+</style>
+</head>
+<body bgcolor="#ffffff">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#c0c0c0" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+shared-cache-controls.external.js</font>
+</center></td></tr></table>
+<pre><span class="s0">&quot;use strict&quot;</span><span class="s1">;</span>
+<span class="s1">Object.defineProperty(exports, </span><span class="s0">&quot;__esModule&quot;</span><span class="s1">, {</span>
+    <span class="s1">value: </span><span class="s2">true</span>
+<span class="s1">});</span>
+<span class="s1">Object.defineProperty(exports, </span><span class="s0">&quot;SharedCacheControls&quot;</span><span class="s1">, {</span>
+    <span class="s1">enumerable: </span><span class="s2">true</span><span class="s1">,</span>
+    <span class="s1">get: </span><span class="s2">function</span><span class="s1">() {</span>
+        <span class="s2">return </span><span class="s1">SharedCacheControls;</span>
+    <span class="s1">}</span>
+<span class="s1">});</span>
+<span class="s2">class </span><span class="s1">SharedCacheControls {</span>
+    <span class="s2">static </span><span class="s1">#_ = </span><span class="s3">/**</span>
+   <span class="s3">* The in-memory cache of cache lives for routes. This cache is populated when</span>
+   <span class="s3">* the cache is updated with new cache lives.</span>
+   <span class="s3">*/ </span><span class="s2">this</span><span class="s1">.cacheControls = </span><span class="s2">new </span><span class="s1">Map();</span>
+    <span class="s1">constructor(</span><span class="s3">/**</span>
+     <span class="s3">* The prerender manifest that contains the initial cache controls for</span>
+     <span class="s3">* routes.</span>
+     <span class="s3">*/ </span><span class="s1">prerenderManifest){</span>
+        <span class="s2">this</span><span class="s1">.prerenderManifest = prerenderManifest;</span>
+    <span class="s1">}</span>
+    <span class="s3">/**</span>
+   <span class="s3">* Try to get the cache control value for a route. This will first try to get</span>
+   <span class="s3">* the value from the in-memory cache. If the value is not present in the</span>
+   <span class="s3">* in-memory cache, it will be sourced from the prerender manifest.</span>
+   <span class="s3">*</span>
+   <span class="s3">* </span><span class="s4">@param </span><span class="s3">route the route to get the cache control for</span>
+   <span class="s3">* </span><span class="s4">@returns </span><span class="s3">the cache control for the route, or undefined if the values</span>
+   <span class="s3">*          are not present in the in-memory cache or the prerender manifest</span>
+   <span class="s3">*/ </span><span class="s1">get(route) {</span>
+        <span class="s3">// This is a copy on write cache that is updated when the cache is updated.</span>
+        <span class="s3">// If the cache is never written to, then the values will be sourced from</span>
+        <span class="s3">// the prerender manifest.</span>
+        <span class="s2">let </span><span class="s1">cacheControl = SharedCacheControls.cacheControls.get(route);</span>
+        <span class="s2">if </span><span class="s1">(cacheControl) </span><span class="s2">return </span><span class="s1">cacheControl;</span>
+        <span class="s2">let </span><span class="s1">prerenderData = </span><span class="s2">this</span><span class="s1">.prerenderManifest.routes[route];</span>
+        <span class="s2">if </span><span class="s1">(prerenderData) {</span>
+            <span class="s2">const </span><span class="s1">{ initialRevalidateSeconds, initialExpireSeconds } = prerenderData;</span>
+            <span class="s2">if </span><span class="s1">(</span><span class="s2">typeof </span><span class="s1">initialRevalidateSeconds !== </span><span class="s0">'undefined'</span><span class="s1">) {</span>
+                <span class="s2">return </span><span class="s1">{</span>
+                    <span class="s1">revalidate: initialRevalidateSeconds,</span>
+                    <span class="s1">expire: initialExpireSeconds</span>
+                <span class="s1">};</span>
+            <span class="s1">}</span>
+        <span class="s1">}</span>
+        <span class="s2">const </span><span class="s1">dynamicPrerenderData = </span><span class="s2">this</span><span class="s1">.prerenderManifest.dynamicRoutes[route];</span>
+        <span class="s2">if </span><span class="s1">(dynamicPrerenderData) {</span>
+            <span class="s2">const </span><span class="s1">{ fallbackRevalidate, fallbackExpire } = dynamicPrerenderData;</span>
+            <span class="s2">if </span><span class="s1">(</span><span class="s2">typeof </span><span class="s1">fallbackRevalidate !== </span><span class="s0">'undefined'</span><span class="s1">) {</span>
+                <span class="s2">return </span><span class="s1">{</span>
+                    <span class="s1">revalidate: fallbackRevalidate,</span>
+                    <span class="s1">expire: fallbackExpire</span>
+                <span class="s1">};</span>
+            <span class="s1">}</span>
+        <span class="s1">}</span>
+        <span class="s2">return </span><span class="s1">undefined;</span>
+    <span class="s1">}</span>
+    <span class="s3">/**</span>
+   <span class="s3">* Set the cache control for a route.</span>
+   <span class="s3">*</span>
+   <span class="s3">* </span><span class="s4">@param </span><span class="s3">route the route to set the cache control for</span>
+   <span class="s3">* </span><span class="s4">@param </span><span class="s3">cacheControl the cache control for the route</span>
+   <span class="s3">*/ </span><span class="s1">set(route, cacheControl) {</span>
+        <span class="s1">SharedCacheControls.cacheControls.set(route, cacheControl);</span>
+    <span class="s1">}</span>
+    <span class="s3">/**</span>
+   <span class="s3">* Clear the in-memory cache of cache controls for routes.</span>
+   <span class="s3">*/ </span><span class="s1">clear() {</span>
+        <span class="s1">SharedCacheControls.cacheControls.clear();</span>
+    <span class="s1">}</span>
+<span class="s1">}</span>
+
+<span class="s3">//# sourceMappingURL=shared-cache-controls.external.js.map</span></pre>
+</body>
+</html>

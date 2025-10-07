@@ -1,0 +1,231 @@
+<html>
+<head>
+<title>require-default-props.js</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #8c8c8c; font-style: italic;}
+.s1 { color: #8c8c8c; font-style: italic;}
+.s2 { color: #080808;}
+.s3 { color: #067d17;}
+.s4 { color: #0033b3;}
+.s5 { color: #1750eb;}
+</style>
+</head>
+<body bgcolor="#ffffff">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#c0c0c0" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+require-default-props.js</font>
+</center></td></tr></table>
+<pre><span class="s0">/**</span>
+ <span class="s0">* </span><span class="s1">@fileOverview </span><span class="s0">Enforce a defaultProps definition for every prop that is not a required prop.</span>
+ <span class="s0">* </span><span class="s1">@author </span><span class="s0">Vitor Balocco</span>
+ <span class="s0">*/</span>
+
+<span class="s3">'use strict'</span><span class="s2">;</span>
+
+<span class="s4">const </span><span class="s2">entries = require(</span><span class="s3">'object.entries'</span><span class="s2">);</span>
+<span class="s4">const </span><span class="s2">values = require(</span><span class="s3">'object.values'</span><span class="s2">);</span>
+<span class="s4">const </span><span class="s2">Components = require(</span><span class="s3">'../util/Components'</span><span class="s2">);</span>
+<span class="s4">const </span><span class="s2">docsUrl = require(</span><span class="s3">'../util/docsUrl'</span><span class="s2">);</span>
+<span class="s4">const </span><span class="s2">astUtil = require(</span><span class="s3">'../util/ast'</span><span class="s2">);</span>
+<span class="s4">const </span><span class="s2">report = require(</span><span class="s3">'../util/report'</span><span class="s2">);</span>
+
+<span class="s0">// ------------------------------------------------------------------------------</span>
+<span class="s0">// Rule Definition</span>
+<span class="s0">// ------------------------------------------------------------------------------</span>
+
+<span class="s4">const </span><span class="s2">messages = {</span>
+  <span class="s2">noDefaultWithRequired: </span><span class="s3">'propType &quot;{{name}}&quot; is required and should not have a defaultProps declaration.'</span><span class="s2">,</span>
+  <span class="s2">shouldHaveDefault: </span><span class="s3">'propType &quot;{{name}}&quot; is not required, but has no corresponding defaultProps declaration.'</span><span class="s2">,</span>
+  <span class="s2">noDefaultPropsWithFunction: </span><span class="s3">'Don’t use defaultProps with function components.'</span><span class="s2">,</span>
+  <span class="s2">shouldAssignObjectDefault: </span><span class="s3">'propType &quot;{{name}}&quot; is not required, but has no corresponding default argument value.'</span><span class="s2">,</span>
+  <span class="s2">destructureInSignature: </span><span class="s3">'Must destructure props in the function signature to initialize an optional prop.'</span><span class="s2">,</span>
+<span class="s2">};</span>
+
+<span class="s4">function </span><span class="s2">isPropWithNoDefaulVal(prop) {</span>
+  <span class="s4">if </span><span class="s2">(prop.type === </span><span class="s3">'RestElement' </span><span class="s2">|| prop.type === </span><span class="s3">'ExperimentalRestProperty'</span><span class="s2">) {</span>
+    <span class="s4">return false</span><span class="s2">;</span>
+  <span class="s2">}</span>
+  <span class="s4">return </span><span class="s2">prop.value.type !== </span><span class="s3">'AssignmentPattern'</span><span class="s2">;</span>
+<span class="s2">}</span>
+
+<span class="s0">/** </span><span class="s1">@type </span><span class="s0">{import('eslint').Rule.RuleModule} */</span>
+<span class="s2">module.exports = {</span>
+  <span class="s2">meta: {</span>
+    <span class="s2">docs: {</span>
+      <span class="s2">description: </span><span class="s3">'Enforce a defaultProps definition for every prop that is not a required prop'</span><span class="s2">,</span>
+      <span class="s2">category: </span><span class="s3">'Best Practices'</span><span class="s2">,</span>
+      <span class="s2">url: docsUrl(</span><span class="s3">'require-default-props'</span><span class="s2">),</span>
+    <span class="s2">},</span>
+
+    <span class="s2">messages,</span>
+
+    <span class="s2">schema: [{</span>
+      <span class="s2">type: </span><span class="s3">'object'</span><span class="s2">,</span>
+      <span class="s2">properties: {</span>
+        <span class="s2">forbidDefaultForRequired: {</span>
+          <span class="s2">type: </span><span class="s3">'boolean'</span><span class="s2">,</span>
+        <span class="s2">},</span>
+        <span class="s2">classes: {</span>
+          <span class="s4">enum</span><span class="s2">: [</span><span class="s3">'defaultProps'</span><span class="s2">, </span><span class="s3">'ignore'</span><span class="s2">],</span>
+        <span class="s2">},</span>
+        <span class="s2">functions: {</span>
+          <span class="s4">enum</span><span class="s2">: [</span><span class="s3">'defaultArguments'</span><span class="s2">, </span><span class="s3">'defaultProps'</span><span class="s2">, </span><span class="s3">'ignore'</span><span class="s2">],</span>
+        <span class="s2">},</span>
+        <span class="s0">/**</span>
+         <span class="s0">* </span><span class="s1">@deprecated</span>
+         <span class="s0">*/</span>
+        <span class="s2">ignoreFunctionalComponents: {</span>
+          <span class="s2">type: </span><span class="s3">'boolean'</span><span class="s2">,</span>
+        <span class="s2">},</span>
+      <span class="s2">},</span>
+      <span class="s2">additionalProperties: </span><span class="s4">false</span><span class="s2">,</span>
+    <span class="s2">}],</span>
+  <span class="s2">},</span>
+
+  <span class="s2">create: Components.detect((context, components) =&gt; {</span>
+    <span class="s4">const </span><span class="s2">configuration = context.options[</span><span class="s5">0</span><span class="s2">] || {};</span>
+    <span class="s4">const </span><span class="s2">forbidDefaultForRequired = configuration.forbidDefaultForRequired || </span><span class="s4">false</span><span class="s2">;</span>
+    <span class="s4">const </span><span class="s2">classes = configuration.classes || </span><span class="s3">'defaultProps'</span><span class="s2">;</span>
+    <span class="s0">/**</span>
+     <span class="s0">* </span><span class="s1">@todo</span>
+     <span class="s0">* - Remove ignoreFunctionalComponents</span>
+     <span class="s0">* - Change default to 'defaultArguments'</span>
+     <span class="s0">*/</span>
+    <span class="s4">const </span><span class="s2">functions = configuration.ignoreFunctionalComponents</span>
+      <span class="s2">? </span><span class="s3">'ignore'</span>
+      <span class="s2">: configuration.functions || </span><span class="s3">'defaultProps'</span><span class="s2">;</span>
+
+    <span class="s0">/**</span>
+     <span class="s0">* Reports all propTypes passed in that don't have a defaultProps counterpart.</span>
+     <span class="s0">* </span><span class="s1">@param  </span><span class="s0">{Object[]} propTypes    List of propTypes to check.</span>
+     <span class="s0">* </span><span class="s1">@param  </span><span class="s0">{Object}   defaultProps Object of defaultProps to check. Keys are the props names.</span>
+     <span class="s0">* </span><span class="s1">@return </span><span class="s0">{void}</span>
+     <span class="s0">*/</span>
+    <span class="s4">function </span><span class="s2">reportPropTypesWithoutDefault(propTypes, defaultProps) {</span>
+      <span class="s2">entries(propTypes).forEach((propType) =&gt; {</span>
+        <span class="s4">const </span><span class="s2">propName = propType[</span><span class="s5">0</span><span class="s2">];</span>
+        <span class="s4">const </span><span class="s2">prop = propType[</span><span class="s5">1</span><span class="s2">];</span>
+
+        <span class="s4">if </span><span class="s2">(!prop.node) {</span>
+          <span class="s4">return</span><span class="s2">;</span>
+        <span class="s2">}</span>
+        <span class="s4">if </span><span class="s2">(prop.isRequired) {</span>
+          <span class="s4">if </span><span class="s2">(forbidDefaultForRequired &amp;&amp; defaultProps[propName]) {</span>
+            <span class="s2">report(context, messages.noDefaultWithRequired, </span><span class="s3">'noDefaultWithRequired'</span><span class="s2">, {</span>
+              <span class="s2">node: prop.node,</span>
+              <span class="s2">data: { name: propName },</span>
+            <span class="s2">});</span>
+          <span class="s2">}</span>
+          <span class="s4">return</span><span class="s2">;</span>
+        <span class="s2">}</span>
+
+        <span class="s4">if </span><span class="s2">(defaultProps[propName]) {</span>
+          <span class="s4">return</span><span class="s2">;</span>
+        <span class="s2">}</span>
+
+        <span class="s2">report(context, messages.shouldHaveDefault, </span><span class="s3">'shouldHaveDefault'</span><span class="s2">, {</span>
+          <span class="s2">node: prop.node,</span>
+          <span class="s2">data: { name: propName },</span>
+        <span class="s2">});</span>
+      <span class="s2">});</span>
+    <span class="s2">}</span>
+
+    <span class="s0">/**</span>
+     <span class="s0">* If functions option is 'defaultArguments', reports defaultProps is used and all params that doesn't initialized.</span>
+     <span class="s0">* </span><span class="s1">@param </span><span class="s0">{Object} componentNode Node of component.</span>
+     <span class="s0">* </span><span class="s1">@param </span><span class="s0">{Object[]} declaredPropTypes List of propTypes to check `isRequired`.</span>
+     <span class="s0">* </span><span class="s1">@param </span><span class="s0">{Object} defaultProps Object of defaultProps to check used.</span>
+     <span class="s0">*/</span>
+    <span class="s4">function </span><span class="s2">reportFunctionComponent(componentNode, declaredPropTypes, defaultProps) {</span>
+      <span class="s4">if </span><span class="s2">(defaultProps) {</span>
+        <span class="s2">report(context, messages.noDefaultPropsWithFunction, </span><span class="s3">'noDefaultPropsWithFunction'</span><span class="s2">, {</span>
+          <span class="s2">node: componentNode,</span>
+        <span class="s2">});</span>
+      <span class="s2">}</span>
+
+      <span class="s4">const </span><span class="s2">props = componentNode.params[</span><span class="s5">0</span><span class="s2">];</span>
+      <span class="s4">const </span><span class="s2">propTypes = declaredPropTypes;</span>
+
+      <span class="s4">if </span><span class="s2">(!props) {</span>
+        <span class="s4">return</span><span class="s2">;</span>
+      <span class="s2">}</span>
+
+      <span class="s4">if </span><span class="s2">(props.type === </span><span class="s3">'Identifier'</span><span class="s2">) {</span>
+        <span class="s4">const </span><span class="s2">hasOptionalProp = values(propTypes).some((propType) =&gt; !propType.isRequired);</span>
+        <span class="s4">if </span><span class="s2">(hasOptionalProp) {</span>
+          <span class="s2">report(context, messages.destructureInSignature, </span><span class="s3">'destructureInSignature'</span><span class="s2">, {</span>
+            <span class="s2">node: props,</span>
+          <span class="s2">});</span>
+        <span class="s2">}</span>
+      <span class="s2">} </span><span class="s4">else if </span><span class="s2">(props.type === </span><span class="s3">'ObjectPattern'</span><span class="s2">) {</span>
+        <span class="s0">// Filter required props with default value and report error</span>
+        <span class="s2">props.properties.filter((prop) =&gt; {</span>
+          <span class="s4">const </span><span class="s2">propName = prop &amp;&amp; prop.key &amp;&amp; prop.key.name;</span>
+          <span class="s4">const </span><span class="s2">isPropRequired = propTypes[propName] &amp;&amp; propTypes[propName].isRequired;</span>
+          <span class="s4">return </span><span class="s2">propTypes[propName] &amp;&amp; isPropRequired &amp;&amp; !isPropWithNoDefaulVal(prop);</span>
+        <span class="s2">}).forEach((prop) =&gt; {</span>
+          <span class="s2">report(context, messages.noDefaultWithRequired, </span><span class="s3">'noDefaultWithRequired'</span><span class="s2">, {</span>
+            <span class="s2">node: prop,</span>
+            <span class="s2">data: { name: prop.key.name },</span>
+          <span class="s2">});</span>
+        <span class="s2">});</span>
+
+        <span class="s0">// Filter non required props with no default value and report error</span>
+        <span class="s2">props.properties.filter((prop) =&gt; {</span>
+          <span class="s4">const </span><span class="s2">propName = prop &amp;&amp; prop.key &amp;&amp; prop.key.name;</span>
+          <span class="s4">const </span><span class="s2">isPropRequired = propTypes[propName] &amp;&amp; propTypes[propName].isRequired;</span>
+          <span class="s4">return </span><span class="s2">propTypes[propName] &amp;&amp; !isPropRequired &amp;&amp; isPropWithNoDefaulVal(prop);</span>
+        <span class="s2">}).forEach((prop) =&gt; {</span>
+          <span class="s2">report(context, messages.shouldAssignObjectDefault, </span><span class="s3">'shouldAssignObjectDefault'</span><span class="s2">, {</span>
+            <span class="s2">node: prop,</span>
+            <span class="s2">data: { name: prop.key.name },</span>
+          <span class="s2">});</span>
+        <span class="s2">});</span>
+      <span class="s2">}</span>
+    <span class="s2">}</span>
+
+    <span class="s0">// --------------------------------------------------------------------------</span>
+    <span class="s0">// Public API</span>
+    <span class="s0">// --------------------------------------------------------------------------</span>
+
+    <span class="s4">return </span><span class="s2">{</span>
+      <span class="s3">'Program:exit'</span><span class="s2">() {</span>
+        <span class="s4">const </span><span class="s2">list = components.list();</span>
+
+        <span class="s2">values(list).filter((component) =&gt; {</span>
+          <span class="s4">if </span><span class="s2">(functions === </span><span class="s3">'ignore' </span><span class="s2">&amp;&amp; astUtil.isFunctionLike(component.node)) {</span>
+            <span class="s4">return false</span><span class="s2">;</span>
+          <span class="s2">}</span>
+          <span class="s4">if </span><span class="s2">(classes === </span><span class="s3">'ignore' </span><span class="s2">&amp;&amp; astUtil.isClass(component.node)) {</span>
+            <span class="s4">return false</span><span class="s2">;</span>
+          <span class="s2">}</span>
+
+          <span class="s0">// If this defaultProps is &quot;unresolved&quot;, then we should ignore this component and not report</span>
+          <span class="s0">// any errors for it, to avoid false-positives with e.g. external defaultProps declarations or spread operators.</span>
+          <span class="s4">if </span><span class="s2">(component.defaultProps === </span><span class="s3">'unresolved'</span><span class="s2">) {</span>
+            <span class="s4">return false</span><span class="s2">;</span>
+          <span class="s2">}</span>
+          <span class="s4">return </span><span class="s2">component.declaredPropTypes !== undefined;</span>
+        <span class="s2">}).forEach((component) =&gt; {</span>
+          <span class="s4">if </span><span class="s2">(functions === </span><span class="s3">'defaultArguments' </span><span class="s2">&amp;&amp; astUtil.isFunctionLike(component.node)) {</span>
+            <span class="s2">reportFunctionComponent(</span>
+              <span class="s2">component.node,</span>
+              <span class="s2">component.declaredPropTypes,</span>
+              <span class="s2">component.defaultProps</span>
+            <span class="s2">);</span>
+          <span class="s2">} </span><span class="s4">else </span><span class="s2">{</span>
+            <span class="s2">reportPropTypesWithoutDefault(</span>
+              <span class="s2">component.declaredPropTypes,</span>
+              <span class="s2">component.defaultProps || {}</span>
+            <span class="s2">);</span>
+          <span class="s2">}</span>
+        <span class="s2">});</span>
+      <span class="s2">},</span>
+    <span class="s2">};</span>
+  <span class="s2">}),</span>
+<span class="s2">};</span>
+</pre>
+</body>
+</html>

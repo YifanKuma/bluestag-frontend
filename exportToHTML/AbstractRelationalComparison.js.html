@@ -1,0 +1,100 @@
+<html>
+<head>
+<title>AbstractRelationalComparison.js</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #067d17;}
+.s1 { color: #080808;}
+.s2 { color: #0033b3;}
+.s3 { color: #8c8c8c; font-style: italic;}
+</style>
+</head>
+<body bgcolor="#ffffff">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#c0c0c0" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+AbstractRelationalComparison.js</font>
+</center></td></tr></table>
+<pre><span class="s0">'use strict'</span><span class="s1">;</span>
+
+<span class="s2">var </span><span class="s1">GetIntrinsic = require(</span><span class="s0">'get-intrinsic'</span><span class="s1">);</span>
+
+<span class="s2">var </span><span class="s1">$Number = GetIntrinsic(</span><span class="s0">'%Number%'</span><span class="s1">);</span>
+<span class="s2">var </span><span class="s1">$TypeError = require(</span><span class="s0">'es-errors/type'</span><span class="s1">);</span>
+
+<span class="s2">var </span><span class="s1">$isNaN = require(</span><span class="s0">'math-intrinsics/isNaN'</span><span class="s1">);</span>
+
+<span class="s2">var </span><span class="s1">IsStringPrefix = require(</span><span class="s0">'./IsStringPrefix'</span><span class="s1">);</span>
+<span class="s2">var </span><span class="s1">StringToBigInt = require(</span><span class="s0">'./StringToBigInt'</span><span class="s1">);</span>
+<span class="s2">var </span><span class="s1">ToNumeric = require(</span><span class="s0">'./ToNumeric'</span><span class="s1">);</span>
+<span class="s2">var </span><span class="s1">ToPrimitive = require(</span><span class="s0">'./ToPrimitive'</span><span class="s1">);</span>
+
+<span class="s2">var </span><span class="s1">BigIntLessThan = require(</span><span class="s0">'./BigInt/lessThan'</span><span class="s1">);</span>
+<span class="s2">var </span><span class="s1">NumberLessThan = require(</span><span class="s0">'./Number/lessThan'</span><span class="s1">);</span>
+
+<span class="s2">var </span><span class="s1">isSameType = require(</span><span class="s0">'../helpers/isSameType'</span><span class="s1">);</span>
+
+<span class="s3">// https://262.ecma-international.org/11.0/#sec-abstract-relational-comparison</span>
+
+<span class="s3">// eslint-disable-next-line max-statements, max-lines-per-function</span>
+<span class="s1">module.exports = </span><span class="s2">function </span><span class="s1">AbstractRelationalComparison(x, y, LeftFirst) {</span>
+	<span class="s2">if </span><span class="s1">(</span><span class="s2">typeof </span><span class="s1">LeftFirst !== </span><span class="s0">'boolean'</span><span class="s1">) {</span>
+		<span class="s2">throw new </span><span class="s1">$TypeError(</span><span class="s0">'Assertion failed: LeftFirst argument must be a Boolean'</span><span class="s1">);</span>
+	<span class="s1">}</span>
+	<span class="s2">var </span><span class="s1">px;</span>
+	<span class="s2">var </span><span class="s1">py;</span>
+	<span class="s2">if </span><span class="s1">(LeftFirst) {</span>
+		<span class="s1">px = ToPrimitive(x, $Number);</span>
+		<span class="s1">py = ToPrimitive(y, $Number);</span>
+	<span class="s1">} </span><span class="s2">else </span><span class="s1">{</span>
+		<span class="s1">py = ToPrimitive(y, $Number);</span>
+		<span class="s1">px = ToPrimitive(x, $Number);</span>
+	<span class="s1">}</span>
+	<span class="s2">if </span><span class="s1">(</span><span class="s2">typeof </span><span class="s1">px === </span><span class="s0">'string' </span><span class="s1">&amp;&amp; </span><span class="s2">typeof </span><span class="s1">py === </span><span class="s0">'string'</span><span class="s1">) {</span>
+		<span class="s2">if </span><span class="s1">(IsStringPrefix(py, px)) {</span>
+			<span class="s2">return false</span><span class="s1">;</span>
+		<span class="s1">}</span>
+		<span class="s2">if </span><span class="s1">(IsStringPrefix(px, py)) {</span>
+			<span class="s2">return true</span><span class="s1">;</span>
+		<span class="s1">}</span>
+		<span class="s2">return </span><span class="s1">px &lt; py; </span><span class="s3">// both strings, neither a prefix of the other. shortcut for steps 3 c-f</span>
+	<span class="s1">}</span>
+
+	<span class="s2">var </span><span class="s1">nx;</span>
+	<span class="s2">var </span><span class="s1">ny;</span>
+	<span class="s2">if </span><span class="s1">(</span><span class="s2">typeof </span><span class="s1">px === </span><span class="s0">'bigint' </span><span class="s1">&amp;&amp; </span><span class="s2">typeof </span><span class="s1">py === </span><span class="s0">'string'</span><span class="s1">) {</span>
+		<span class="s1">ny = StringToBigInt(py);</span>
+		<span class="s2">if </span><span class="s1">($isNaN(ny)) {</span>
+			<span class="s2">return void </span><span class="s1">undefined;</span>
+		<span class="s1">}</span>
+		<span class="s2">return </span><span class="s1">BigIntLessThan(px, ny);</span>
+	<span class="s1">}</span>
+	<span class="s2">if </span><span class="s1">(</span><span class="s2">typeof </span><span class="s1">px === </span><span class="s0">'string' </span><span class="s1">&amp;&amp; </span><span class="s2">typeof </span><span class="s1">py === </span><span class="s0">'bigint'</span><span class="s1">) {</span>
+		<span class="s1">nx = StringToBigInt(px);</span>
+		<span class="s2">if </span><span class="s1">($isNaN(nx)) {</span>
+			<span class="s2">return void </span><span class="s1">undefined;</span>
+		<span class="s1">}</span>
+		<span class="s2">return </span><span class="s1">BigIntLessThan(nx, py);</span>
+	<span class="s1">}</span>
+
+	<span class="s1">nx = ToNumeric(px);</span>
+	<span class="s1">ny = ToNumeric(py);</span>
+	<span class="s2">if </span><span class="s1">(isSameType(nx, ny)) {</span>
+		<span class="s2">return typeof </span><span class="s1">nx === </span><span class="s0">'number' </span><span class="s1">? NumberLessThan(nx, ny) : BigIntLessThan(nx, ny);</span>
+	<span class="s1">}</span>
+
+	<span class="s2">if </span><span class="s1">($isNaN(nx) || $isNaN(ny)) {</span>
+		<span class="s2">return void </span><span class="s1">undefined;</span>
+	<span class="s1">}</span>
+	<span class="s2">if </span><span class="s1">(nx === -Infinity || ny === Infinity) {</span>
+		<span class="s2">return true</span><span class="s1">;</span>
+	<span class="s1">}</span>
+	<span class="s2">if </span><span class="s1">(nx === Infinity || ny === -Infinity) {</span>
+		<span class="s2">return false</span><span class="s1">;</span>
+	<span class="s1">}</span>
+
+	<span class="s2">return </span><span class="s1">nx &lt; ny; </span><span class="s3">// by now, these are both nonzero, finite, and not equal</span>
+<span class="s1">};</span>
+</pre>
+</body>
+</html>

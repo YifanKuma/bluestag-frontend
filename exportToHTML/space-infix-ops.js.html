@@ -1,0 +1,274 @@
+<html>
+<head>
+<title>space-infix-ops.js</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #8c8c8c; font-style: italic;}
+.s1 { color: #8c8c8c; font-style: italic;}
+.s2 { color: #080808;}
+.s3 { color: #067d17;}
+.s4 { color: #0033b3;}
+.s5 { color: #1750eb;}
+</style>
+</head>
+<body bgcolor="#ffffff">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#c0c0c0" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+space-infix-ops.js</font>
+</center></td></tr></table>
+<pre><span class="s0">/**</span>
+ <span class="s0">* </span><span class="s1">@fileoverview </span><span class="s0">Require spaces around infix operators</span>
+ <span class="s0">* </span><span class="s1">@author </span><span class="s0">Michael Ficarra</span>
+ <span class="s0">* </span><span class="s1">@deprecated </span><span class="s0">in ESLint v8.53.0</span>
+ <span class="s0">*/</span>
+<span class="s3">&quot;use strict&quot;</span><span class="s2">;</span>
+
+<span class="s4">const </span><span class="s2">{ isEqToken } = require(</span><span class="s3">&quot;./utils/ast-utils&quot;</span><span class="s2">);</span>
+
+<span class="s0">//------------------------------------------------------------------------------</span>
+<span class="s0">// Rule Definition</span>
+<span class="s0">//------------------------------------------------------------------------------</span>
+
+<span class="s0">/** </span><span class="s1">@type </span><span class="s0">{import('../types').Rule.RuleModule} */</span>
+<span class="s2">module.exports = {</span>
+	<span class="s2">meta: {</span>
+		<span class="s2">deprecated: {</span>
+			<span class="s2">message: </span><span class="s3">&quot;Formatting rules are being moved out of ESLint core.&quot;</span><span class="s2">,</span>
+			<span class="s2">url: </span><span class="s3">&quot;https://eslint.org/blog/2023/10/deprecating-formatting-rules/&quot;</span><span class="s2">,</span>
+			<span class="s2">deprecatedSince: </span><span class="s3">&quot;8.53.0&quot;</span><span class="s2">,</span>
+			<span class="s2">availableUntil: </span><span class="s3">&quot;10.0.0&quot;</span><span class="s2">,</span>
+			<span class="s2">replacedBy: [</span>
+				<span class="s2">{</span>
+					<span class="s2">message:</span>
+						<span class="s3">&quot;ESLint Stylistic now maintains deprecated stylistic core rules.&quot;</span><span class="s2">,</span>
+					<span class="s2">url: </span><span class="s3">&quot;https://eslint.style/guide/migration&quot;</span><span class="s2">,</span>
+					<span class="s2">plugin: {</span>
+						<span class="s2">name: </span><span class="s3">&quot;@stylistic/eslint-plugin&quot;</span><span class="s2">,</span>
+						<span class="s2">url: </span><span class="s3">&quot;https://eslint.style&quot;</span><span class="s2">,</span>
+					<span class="s2">},</span>
+					<span class="s2">rule: {</span>
+						<span class="s2">name: </span><span class="s3">&quot;space-infix-ops&quot;</span><span class="s2">,</span>
+						<span class="s2">url: </span><span class="s3">&quot;https://eslint.style/rules/space-infix-ops&quot;</span><span class="s2">,</span>
+					<span class="s2">},</span>
+				<span class="s2">},</span>
+			<span class="s2">],</span>
+		<span class="s2">},</span>
+		<span class="s2">type: </span><span class="s3">&quot;layout&quot;</span><span class="s2">,</span>
+
+		<span class="s2">docs: {</span>
+			<span class="s2">description: </span><span class="s3">&quot;Require spacing around infix operators&quot;</span><span class="s2">,</span>
+			<span class="s2">recommended: </span><span class="s4">false</span><span class="s2">,</span>
+			<span class="s2">url: </span><span class="s3">&quot;https://eslint.org/docs/latest/rules/space-infix-ops&quot;</span><span class="s2">,</span>
+		<span class="s2">},</span>
+
+		<span class="s2">fixable: </span><span class="s3">&quot;whitespace&quot;</span><span class="s2">,</span>
+
+		<span class="s2">schema: [</span>
+			<span class="s2">{</span>
+				<span class="s2">type: </span><span class="s3">&quot;object&quot;</span><span class="s2">,</span>
+				<span class="s2">properties: {</span>
+					<span class="s2">int32Hint: {</span>
+						<span class="s2">type: </span><span class="s3">&quot;boolean&quot;</span><span class="s2">,</span>
+						<span class="s4">default</span><span class="s2">: </span><span class="s4">false</span><span class="s2">,</span>
+					<span class="s2">},</span>
+				<span class="s2">},</span>
+				<span class="s2">additionalProperties: </span><span class="s4">false</span><span class="s2">,</span>
+			<span class="s2">},</span>
+		<span class="s2">],</span>
+
+		<span class="s2">messages: {</span>
+			<span class="s2">missingSpace: </span><span class="s3">&quot;Operator '{{operator}}' must be spaced.&quot;</span><span class="s2">,</span>
+		<span class="s2">},</span>
+	<span class="s2">},</span>
+
+	<span class="s2">create(context) {</span>
+		<span class="s4">const </span><span class="s2">int32Hint = context.options[</span><span class="s5">0</span><span class="s2">]</span>
+			<span class="s2">? context.options[</span><span class="s5">0</span><span class="s2">].int32Hint === </span><span class="s4">true</span>
+			<span class="s2">: </span><span class="s4">false</span><span class="s2">;</span>
+		<span class="s4">const </span><span class="s2">sourceCode = context.sourceCode;</span>
+
+		<span class="s0">/**</span>
+		 <span class="s0">* Returns the first token which violates the rule</span>
+		 <span class="s0">* </span><span class="s1">@param </span><span class="s0">{ASTNode} left The left node of the main node</span>
+		 <span class="s0">* </span><span class="s1">@param </span><span class="s0">{ASTNode} right The right node of the main node</span>
+		 <span class="s0">* </span><span class="s1">@param </span><span class="s0">{string} op The operator of the main node</span>
+		 <span class="s0">* </span><span class="s1">@returns </span><span class="s0">{Object} The violator token or null</span>
+		 <span class="s0">* </span><span class="s1">@private</span>
+		 <span class="s0">*/</span>
+		<span class="s4">function </span><span class="s2">getFirstNonSpacedToken(left, right, op) {</span>
+			<span class="s4">const </span><span class="s2">operator = sourceCode.getFirstTokenBetween(</span>
+				<span class="s2">left,</span>
+				<span class="s2">right,</span>
+				<span class="s2">token =&gt; token.value === op,</span>
+			<span class="s2">);</span>
+			<span class="s4">const </span><span class="s2">prev = sourceCode.getTokenBefore(operator);</span>
+			<span class="s4">const </span><span class="s2">next = sourceCode.getTokenAfter(operator);</span>
+
+			<span class="s4">if </span><span class="s2">(</span>
+				<span class="s2">!sourceCode.isSpaceBetweenTokens(prev, operator) ||</span>
+				<span class="s2">!sourceCode.isSpaceBetweenTokens(operator, next)</span>
+			<span class="s2">) {</span>
+				<span class="s4">return </span><span class="s2">operator;</span>
+			<span class="s2">}</span>
+
+			<span class="s4">return null</span><span class="s2">;</span>
+		<span class="s2">}</span>
+
+		<span class="s0">/**</span>
+		 <span class="s0">* Reports an AST node as a rule violation</span>
+		 <span class="s0">* </span><span class="s1">@param </span><span class="s0">{ASTNode} mainNode The node to report</span>
+		 <span class="s0">* </span><span class="s1">@param </span><span class="s0">{Object} culpritToken The token which has a problem</span>
+		 <span class="s0">* </span><span class="s1">@returns </span><span class="s0">{void}</span>
+		 <span class="s0">* </span><span class="s1">@private</span>
+		 <span class="s0">*/</span>
+		<span class="s4">function </span><span class="s2">report(mainNode, culpritToken) {</span>
+			<span class="s2">context.report({</span>
+				<span class="s2">node: mainNode,</span>
+				<span class="s2">loc: culpritToken.loc,</span>
+				<span class="s2">messageId: </span><span class="s3">&quot;missingSpace&quot;</span><span class="s2">,</span>
+				<span class="s2">data: {</span>
+					<span class="s2">operator: culpritToken.value,</span>
+				<span class="s2">},</span>
+				<span class="s2">fix(fixer) {</span>
+					<span class="s4">const </span><span class="s2">previousToken =</span>
+						<span class="s2">sourceCode.getTokenBefore(culpritToken);</span>
+					<span class="s4">const </span><span class="s2">afterToken = sourceCode.getTokenAfter(culpritToken);</span>
+					<span class="s4">let </span><span class="s2">fixString = </span><span class="s3">&quot;&quot;</span><span class="s2">;</span>
+
+					<span class="s4">if </span><span class="s2">(culpritToken.range[</span><span class="s5">0</span><span class="s2">] - previousToken.range[</span><span class="s5">1</span><span class="s2">] === </span><span class="s5">0</span><span class="s2">) {</span>
+						<span class="s2">fixString = </span><span class="s3">&quot; &quot;</span><span class="s2">;</span>
+					<span class="s2">}</span>
+
+					<span class="s2">fixString += culpritToken.value;</span>
+
+					<span class="s4">if </span><span class="s2">(afterToken.range[</span><span class="s5">0</span><span class="s2">] - culpritToken.range[</span><span class="s5">1</span><span class="s2">] === </span><span class="s5">0</span><span class="s2">) {</span>
+						<span class="s2">fixString += </span><span class="s3">&quot; &quot;</span><span class="s2">;</span>
+					<span class="s2">}</span>
+
+					<span class="s4">return </span><span class="s2">fixer.replaceText(culpritToken, fixString);</span>
+				<span class="s2">},</span>
+			<span class="s2">});</span>
+		<span class="s2">}</span>
+
+		<span class="s0">/**</span>
+		 <span class="s0">* Check if the node is binary then report</span>
+		 <span class="s0">* </span><span class="s1">@param </span><span class="s0">{ASTNode} node node to evaluate</span>
+		 <span class="s0">* </span><span class="s1">@returns </span><span class="s0">{void}</span>
+		 <span class="s0">* </span><span class="s1">@private</span>
+		 <span class="s0">*/</span>
+		<span class="s4">function </span><span class="s2">checkBinary(node) {</span>
+			<span class="s4">const </span><span class="s2">leftNode = node.left.typeAnnotation</span>
+				<span class="s2">? node.left.typeAnnotation</span>
+				<span class="s2">: node.left;</span>
+			<span class="s4">const </span><span class="s2">rightNode = node.right;</span>
+
+			<span class="s0">// search for = in AssignmentPattern nodes</span>
+			<span class="s4">const </span><span class="s2">operator = node.operator || </span><span class="s3">&quot;=&quot;</span><span class="s2">;</span>
+
+			<span class="s4">const </span><span class="s2">nonSpacedNode = getFirstNonSpacedToken(</span>
+				<span class="s2">leftNode,</span>
+				<span class="s2">rightNode,</span>
+				<span class="s2">operator,</span>
+			<span class="s2">);</span>
+
+			<span class="s4">if </span><span class="s2">(nonSpacedNode) {</span>
+				<span class="s4">if </span><span class="s2">(!(int32Hint &amp;&amp; sourceCode.getText(node).endsWith(</span><span class="s3">&quot;|0&quot;</span><span class="s2">))) {</span>
+					<span class="s2">report(node, nonSpacedNode);</span>
+				<span class="s2">}</span>
+			<span class="s2">}</span>
+		<span class="s2">}</span>
+
+		<span class="s0">/**</span>
+		 <span class="s0">* Check if the node is conditional</span>
+		 <span class="s0">* </span><span class="s1">@param </span><span class="s0">{ASTNode} node node to evaluate</span>
+		 <span class="s0">* </span><span class="s1">@returns </span><span class="s0">{void}</span>
+		 <span class="s0">* </span><span class="s1">@private</span>
+		 <span class="s0">*/</span>
+		<span class="s4">function </span><span class="s2">checkConditional(node) {</span>
+			<span class="s4">const </span><span class="s2">nonSpacedConsequentNode = getFirstNonSpacedToken(</span>
+				<span class="s2">node.test,</span>
+				<span class="s2">node.consequent,</span>
+				<span class="s3">&quot;?&quot;</span><span class="s2">,</span>
+			<span class="s2">);</span>
+			<span class="s4">const </span><span class="s2">nonSpacedAlternateNode = getFirstNonSpacedToken(</span>
+				<span class="s2">node.consequent,</span>
+				<span class="s2">node.alternate,</span>
+				<span class="s3">&quot;:&quot;</span><span class="s2">,</span>
+			<span class="s2">);</span>
+
+			<span class="s4">if </span><span class="s2">(nonSpacedConsequentNode) {</span>
+				<span class="s2">report(node, nonSpacedConsequentNode);</span>
+			<span class="s2">}</span>
+
+			<span class="s4">if </span><span class="s2">(nonSpacedAlternateNode) {</span>
+				<span class="s2">report(node, nonSpacedAlternateNode);</span>
+			<span class="s2">}</span>
+		<span class="s2">}</span>
+
+		<span class="s0">/**</span>
+		 <span class="s0">* Check if the node is a variable</span>
+		 <span class="s0">* </span><span class="s1">@param </span><span class="s0">{ASTNode} node node to evaluate</span>
+		 <span class="s0">* </span><span class="s1">@returns </span><span class="s0">{void}</span>
+		 <span class="s0">* </span><span class="s1">@private</span>
+		 <span class="s0">*/</span>
+		<span class="s4">function </span><span class="s2">checkVar(node) {</span>
+			<span class="s4">const </span><span class="s2">leftNode = node.id.typeAnnotation</span>
+				<span class="s2">? node.id.typeAnnotation</span>
+				<span class="s2">: node.id;</span>
+			<span class="s4">const </span><span class="s2">rightNode = node.init;</span>
+
+			<span class="s4">if </span><span class="s2">(rightNode) {</span>
+				<span class="s4">const </span><span class="s2">nonSpacedNode = getFirstNonSpacedToken(</span>
+					<span class="s2">leftNode,</span>
+					<span class="s2">rightNode,</span>
+					<span class="s3">&quot;=&quot;</span><span class="s2">,</span>
+				<span class="s2">);</span>
+
+				<span class="s4">if </span><span class="s2">(nonSpacedNode) {</span>
+					<span class="s2">report(node, nonSpacedNode);</span>
+				<span class="s2">}</span>
+			<span class="s2">}</span>
+		<span class="s2">}</span>
+
+		<span class="s4">return </span><span class="s2">{</span>
+			<span class="s2">AssignmentExpression: checkBinary,</span>
+			<span class="s2">AssignmentPattern: checkBinary,</span>
+			<span class="s2">BinaryExpression: checkBinary,</span>
+			<span class="s2">LogicalExpression: checkBinary,</span>
+			<span class="s2">ConditionalExpression: checkConditional,</span>
+			<span class="s2">VariableDeclarator: checkVar,</span>
+
+			<span class="s2">PropertyDefinition(node) {</span>
+				<span class="s4">if </span><span class="s2">(!node.value) {</span>
+					<span class="s4">return</span><span class="s2">;</span>
+				<span class="s2">}</span>
+
+				<span class="s0">/* 
+                 * Because of computed properties and type annotations, some 
+                 * tokens may exist between `node.key` and `=`. 
+                 * Therefore, find the `=` from the right. 
+                 */</span>
+				<span class="s4">const </span><span class="s2">operatorToken = sourceCode.getTokenBefore(</span>
+					<span class="s2">node.value,</span>
+					<span class="s2">isEqToken,</span>
+				<span class="s2">);</span>
+				<span class="s4">const </span><span class="s2">leftToken = sourceCode.getTokenBefore(operatorToken);</span>
+				<span class="s4">const </span><span class="s2">rightToken = sourceCode.getTokenAfter(operatorToken);</span>
+
+				<span class="s4">if </span><span class="s2">(</span>
+					<span class="s2">!sourceCode.isSpaceBetweenTokens(</span>
+						<span class="s2">leftToken,</span>
+						<span class="s2">operatorToken,</span>
+					<span class="s2">) ||</span>
+					<span class="s2">!sourceCode.isSpaceBetweenTokens(operatorToken, rightToken)</span>
+				<span class="s2">) {</span>
+					<span class="s2">report(node, operatorToken);</span>
+				<span class="s2">}</span>
+			<span class="s2">},</span>
+		<span class="s2">};</span>
+	<span class="s2">},</span>
+<span class="s2">};</span>
+</pre>
+</body>
+</html>

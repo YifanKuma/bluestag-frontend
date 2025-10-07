@@ -1,0 +1,308 @@
+<html>
+<head>
+<title>function-component-definition.js</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #8c8c8c; font-style: italic;}
+.s1 { color: #8c8c8c; font-style: italic;}
+.s2 { color: #080808;}
+.s3 { color: #067d17;}
+.s4 { color: #0033b3;}
+.s5 { color: #1750eb;}
+.s6 { color: #0037a6;}
+</style>
+</head>
+<body bgcolor="#ffffff">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#c0c0c0" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+function-component-definition.js</font>
+</center></td></tr></table>
+<pre><span class="s0">/**</span>
+ <span class="s0">* </span><span class="s1">@fileoverview </span><span class="s0">Standardize the way function component get defined</span>
+ <span class="s0">* </span><span class="s1">@author </span><span class="s0">Stefan Wullems</span>
+ <span class="s0">*/</span>
+
+<span class="s3">'use strict'</span><span class="s2">;</span>
+
+<span class="s4">const </span><span class="s2">arrayIncludes = require(</span><span class="s3">'array-includes'</span><span class="s2">);</span>
+<span class="s4">const </span><span class="s2">Components = require(</span><span class="s3">'../util/Components'</span><span class="s2">);</span>
+<span class="s4">const </span><span class="s2">docsUrl = require(</span><span class="s3">'../util/docsUrl'</span><span class="s2">);</span>
+<span class="s4">const </span><span class="s2">reportC = require(</span><span class="s3">'../util/report'</span><span class="s2">);</span>
+<span class="s4">const </span><span class="s2">getText = require(</span><span class="s3">'../util/eslint'</span><span class="s2">).getText;</span>
+<span class="s4">const </span><span class="s2">propsUtil = require(</span><span class="s3">'../util/props'</span><span class="s2">);</span>
+
+<span class="s0">// ------------------------------------------------------------------------------</span>
+<span class="s0">// Rule Definition</span>
+<span class="s0">// ------------------------------------------------------------------------------</span>
+
+<span class="s4">function </span><span class="s2">buildFunction(template, parts) {</span>
+  <span class="s4">return </span><span class="s2">Object.keys(parts).reduce(</span>
+    <span class="s2">(acc, key) =&gt; acc.replace(</span><span class="s3">`{</span><span class="s2">${key}</span><span class="s3">}`</span><span class="s2">, () =&gt; parts[key] || </span><span class="s3">''</span><span class="s2">),</span>
+    <span class="s2">template</span>
+  <span class="s2">);</span>
+<span class="s2">}</span>
+
+<span class="s4">const </span><span class="s2">NAMED_FUNCTION_TEMPLATES = {</span>
+  <span class="s3">'function-declaration'</span><span class="s2">: </span><span class="s3">'function {name}{typeParams}({params}){returnType} {body}'</span><span class="s2">,</span>
+  <span class="s3">'arrow-function'</span><span class="s2">: </span><span class="s3">'{varType} {name}{typeAnnotation} = {typeParams}({params}){returnType} =&gt; {body}'</span><span class="s2">,</span>
+  <span class="s3">'function-expression'</span><span class="s2">: </span><span class="s3">'{varType} {name}{typeAnnotation} = function{typeParams}({params}){returnType} {body}'</span><span class="s2">,</span>
+<span class="s2">};</span>
+
+<span class="s4">const </span><span class="s2">UNNAMED_FUNCTION_TEMPLATES = {</span>
+  <span class="s3">'function-expression'</span><span class="s2">: </span><span class="s3">'function{typeParams}({params}){returnType} {body}'</span><span class="s2">,</span>
+  <span class="s3">'arrow-function'</span><span class="s2">: </span><span class="s3">'{typeParams}({params}){returnType} =&gt; {body}'</span><span class="s2">,</span>
+<span class="s2">};</span>
+
+<span class="s4">function </span><span class="s2">hasOneUnconstrainedTypeParam(node) {</span>
+  <span class="s4">const </span><span class="s2">nodeTypeArguments = propsUtil.getTypeArguments(node);</span>
+
+  <span class="s4">return </span><span class="s2">nodeTypeArguments</span>
+    <span class="s2">&amp;&amp; nodeTypeArguments.params</span>
+    <span class="s2">&amp;&amp; nodeTypeArguments.params.length === </span><span class="s5">1</span>
+    <span class="s2">&amp;&amp; !nodeTypeArguments.params[</span><span class="s5">0</span><span class="s2">].constraint;</span>
+<span class="s2">}</span>
+
+<span class="s4">function </span><span class="s2">hasName(node) {</span>
+  <span class="s4">return </span><span class="s2">(</span>
+    <span class="s2">node.type === </span><span class="s3">'FunctionDeclaration'</span>
+    <span class="s2">|| node.parent.type === </span><span class="s3">'VariableDeclarator'</span>
+  <span class="s2">);</span>
+<span class="s2">}</span>
+
+<span class="s4">function </span><span class="s2">getNodeText(prop, source) {</span>
+  <span class="s4">if </span><span class="s2">(!prop) </span><span class="s4">return null</span><span class="s2">;</span>
+  <span class="s4">return </span><span class="s2">source.slice(prop.range[</span><span class="s5">0</span><span class="s2">], prop.range[</span><span class="s5">1</span><span class="s2">]);</span>
+<span class="s2">}</span>
+
+<span class="s4">function </span><span class="s2">getName(node) {</span>
+  <span class="s4">if </span><span class="s2">(node.type === </span><span class="s3">'FunctionDeclaration'</span><span class="s2">) {</span>
+    <span class="s4">return </span><span class="s2">node.id.name;</span>
+  <span class="s2">}</span>
+
+  <span class="s4">if </span><span class="s2">(</span>
+    <span class="s2">node.type === </span><span class="s3">'ArrowFunctionExpression'</span>
+    <span class="s2">|| node.type === </span><span class="s3">'FunctionExpression'</span>
+  <span class="s2">) {</span>
+    <span class="s4">return </span><span class="s2">hasName(node) &amp;&amp; node.parent.id.name;</span>
+  <span class="s2">}</span>
+<span class="s2">}</span>
+
+<span class="s4">function </span><span class="s2">getParams(node, source) {</span>
+  <span class="s4">if </span><span class="s2">(node.params.length === </span><span class="s5">0</span><span class="s2">) </span><span class="s4">return null</span><span class="s2">;</span>
+  <span class="s4">return </span><span class="s2">source.slice(</span>
+    <span class="s2">node.params[</span><span class="s5">0</span><span class="s2">].range[</span><span class="s5">0</span><span class="s2">],</span>
+    <span class="s2">node.params[node.params.length - </span><span class="s5">1</span><span class="s2">].range[</span><span class="s5">1</span><span class="s2">]</span>
+  <span class="s2">);</span>
+<span class="s2">}</span>
+
+<span class="s4">function </span><span class="s2">getBody(node, source) {</span>
+  <span class="s4">const </span><span class="s2">range = node.body.range;</span>
+
+  <span class="s4">if </span><span class="s2">(node.body.type !== </span><span class="s3">'BlockStatement'</span><span class="s2">) {</span>
+    <span class="s4">return </span><span class="s2">[</span><span class="s3">'{'</span><span class="s2">, </span><span class="s3">`  return </span><span class="s2">${source.slice(range[</span><span class="s5">0</span><span class="s2">], range[</span><span class="s5">1</span><span class="s2">])}</span><span class="s3">`</span><span class="s2">, </span><span class="s3">'}'</span><span class="s2">].join(</span><span class="s3">'</span><span class="s6">\n</span><span class="s3">'</span><span class="s2">);</span>
+  <span class="s2">}</span>
+
+  <span class="s4">return </span><span class="s2">source.slice(range[</span><span class="s5">0</span><span class="s2">], range[</span><span class="s5">1</span><span class="s2">]);</span>
+<span class="s2">}</span>
+
+<span class="s4">function </span><span class="s2">getTypeAnnotation(node, source) {</span>
+  <span class="s4">if </span><span class="s2">(!hasName(node) || node.type === </span><span class="s3">'FunctionDeclaration'</span><span class="s2">) </span><span class="s4">return</span><span class="s2">;</span>
+
+  <span class="s4">if </span><span class="s2">(</span>
+    <span class="s2">node.type === </span><span class="s3">'ArrowFunctionExpression'</span>
+    <span class="s2">|| node.type === </span><span class="s3">'FunctionExpression'</span>
+  <span class="s2">) {</span>
+    <span class="s4">return </span><span class="s2">getNodeText(node.parent.id.typeAnnotation, source);</span>
+  <span class="s2">}</span>
+<span class="s2">}</span>
+
+<span class="s4">function </span><span class="s2">isUnfixableBecauseOfExport(node) {</span>
+  <span class="s4">return </span><span class="s2">(</span>
+    <span class="s2">node.type === </span><span class="s3">'FunctionDeclaration'</span>
+    <span class="s2">&amp;&amp; node.parent</span>
+    <span class="s2">&amp;&amp; node.parent.type === </span><span class="s3">'ExportDefaultDeclaration'</span>
+  <span class="s2">);</span>
+<span class="s2">}</span>
+
+<span class="s4">function </span><span class="s2">isFunctionExpressionWithName(node) {</span>
+  <span class="s4">return </span><span class="s2">node.type === </span><span class="s3">'FunctionExpression' </span><span class="s2">&amp;&amp; node.id &amp;&amp; node.id.name;</span>
+<span class="s2">}</span>
+
+<span class="s4">const </span><span class="s2">messages = {</span>
+  <span class="s3">'function-declaration'</span><span class="s2">: </span><span class="s3">'Function component is not a function declaration'</span><span class="s2">,</span>
+  <span class="s3">'function-expression'</span><span class="s2">: </span><span class="s3">'Function component is not a function expression'</span><span class="s2">,</span>
+  <span class="s3">'arrow-function'</span><span class="s2">: </span><span class="s3">'Function component is not an arrow function'</span><span class="s2">,</span>
+<span class="s2">};</span>
+
+<span class="s0">/** </span><span class="s1">@type </span><span class="s0">{import('eslint').Rule.RuleModule} */</span>
+<span class="s2">module.exports = {</span>
+  <span class="s2">meta: {</span>
+    <span class="s2">docs: {</span>
+      <span class="s2">description: </span><span class="s3">'Enforce a specific function type for function components'</span><span class="s2">,</span>
+      <span class="s2">category: </span><span class="s3">'Stylistic Issues'</span><span class="s2">,</span>
+      <span class="s2">recommended: </span><span class="s4">false</span><span class="s2">,</span>
+      <span class="s2">url: docsUrl(</span><span class="s3">'function-component-definition'</span><span class="s2">),</span>
+    <span class="s2">},</span>
+    <span class="s2">fixable: </span><span class="s3">'code'</span><span class="s2">,</span>
+
+    <span class="s2">messages,</span>
+
+    <span class="s2">schema: [</span>
+      <span class="s2">{</span>
+        <span class="s2">type: </span><span class="s3">'object'</span><span class="s2">,</span>
+        <span class="s2">properties: {</span>
+          <span class="s2">namedComponents: {</span>
+            <span class="s2">anyOf: [</span>
+              <span class="s2">{</span>
+                <span class="s4">enum</span><span class="s2">: [</span>
+                  <span class="s3">'function-declaration'</span><span class="s2">,</span>
+                  <span class="s3">'arrow-function'</span><span class="s2">,</span>
+                  <span class="s3">'function-expression'</span><span class="s2">,</span>
+                <span class="s2">],</span>
+              <span class="s2">},</span>
+              <span class="s2">{</span>
+                <span class="s2">type: </span><span class="s3">'array'</span><span class="s2">,</span>
+                <span class="s2">items: {</span>
+                  <span class="s2">type: </span><span class="s3">'string'</span><span class="s2">,</span>
+                  <span class="s4">enum</span><span class="s2">: [</span>
+                    <span class="s3">'function-declaration'</span><span class="s2">,</span>
+                    <span class="s3">'arrow-function'</span><span class="s2">,</span>
+                    <span class="s3">'function-expression'</span><span class="s2">,</span>
+                  <span class="s2">],</span>
+                <span class="s2">},</span>
+              <span class="s2">},</span>
+            <span class="s2">],</span>
+          <span class="s2">},</span>
+          <span class="s2">unnamedComponents: {</span>
+            <span class="s2">anyOf: [</span>
+              <span class="s2">{ </span><span class="s4">enum</span><span class="s2">: [</span><span class="s3">'arrow-function'</span><span class="s2">, </span><span class="s3">'function-expression'</span><span class="s2">] },</span>
+              <span class="s2">{</span>
+                <span class="s2">type: </span><span class="s3">'array'</span><span class="s2">,</span>
+                <span class="s2">items: {</span>
+                  <span class="s2">type: </span><span class="s3">'string'</span><span class="s2">,</span>
+                  <span class="s4">enum</span><span class="s2">: [</span><span class="s3">'arrow-function'</span><span class="s2">, </span><span class="s3">'function-expression'</span><span class="s2">],</span>
+                <span class="s2">},</span>
+              <span class="s2">},</span>
+            <span class="s2">],</span>
+          <span class="s2">},</span>
+        <span class="s2">},</span>
+      <span class="s2">},</span>
+    <span class="s2">],</span>
+  <span class="s2">},</span>
+
+  <span class="s2">create: Components.detect((context, components) =&gt; {</span>
+    <span class="s4">const </span><span class="s2">configuration = context.options[</span><span class="s5">0</span><span class="s2">] || {};</span>
+    <span class="s4">let </span><span class="s2">fileVarType = </span><span class="s3">'var'</span><span class="s2">;</span>
+
+    <span class="s4">const </span><span class="s2">namedConfig = [].concat(</span>
+      <span class="s2">configuration.namedComponents || </span><span class="s3">'function-declaration'</span>
+    <span class="s2">);</span>
+    <span class="s4">const </span><span class="s2">unnamedConfig = [].concat(</span>
+      <span class="s2">configuration.unnamedComponents || </span><span class="s3">'function-expression'</span>
+    <span class="s2">);</span>
+
+    <span class="s4">function </span><span class="s2">getFixer(node, options) {</span>
+      <span class="s4">const </span><span class="s2">source = getText(context);</span>
+
+      <span class="s4">const </span><span class="s2">typeAnnotation = getTypeAnnotation(node, source);</span>
+
+      <span class="s4">if </span><span class="s2">(options.type === </span><span class="s3">'function-declaration' </span><span class="s2">&amp;&amp; typeAnnotation) {</span>
+        <span class="s4">return</span><span class="s2">;</span>
+      <span class="s2">}</span>
+      <span class="s4">if </span><span class="s2">(options.type === </span><span class="s3">'arrow-function' </span><span class="s2">&amp;&amp; hasOneUnconstrainedTypeParam(node)) {</span>
+        <span class="s4">return</span><span class="s2">;</span>
+      <span class="s2">}</span>
+      <span class="s4">if </span><span class="s2">(isUnfixableBecauseOfExport(node)) </span><span class="s4">return</span><span class="s2">;</span>
+      <span class="s4">if </span><span class="s2">(isFunctionExpressionWithName(node)) </span><span class="s4">return</span><span class="s2">;</span>
+      <span class="s4">let </span><span class="s2">varType = fileVarType;</span>
+      <span class="s4">if </span><span class="s2">(</span>
+        <span class="s2">(node.type === </span><span class="s3">'FunctionExpression' </span><span class="s2">|| node.type === </span><span class="s3">'ArrowFunctionExpression'</span><span class="s2">)</span>
+        <span class="s2">&amp;&amp; node.parent.type === </span><span class="s3">'VariableDeclarator'</span>
+      <span class="s2">) {</span>
+        <span class="s2">varType = node.parent.parent.kind;</span>
+      <span class="s2">}</span>
+
+      <span class="s4">const </span><span class="s2">nodeTypeArguments = propsUtil.getTypeArguments(node);</span>
+      <span class="s4">return </span><span class="s2">(fixer) =&gt; fixer.replaceTextRange(</span>
+        <span class="s2">options.range,</span>
+        <span class="s2">buildFunction(options.template, {</span>
+          <span class="s2">typeAnnotation,</span>
+          <span class="s2">typeParams: getNodeText(nodeTypeArguments, source),</span>
+          <span class="s2">params: getParams(node, source),</span>
+          <span class="s2">returnType: getNodeText(node.returnType, source),</span>
+          <span class="s2">body: getBody(node, source),</span>
+          <span class="s2">name: getName(node),</span>
+          <span class="s2">varType,</span>
+        <span class="s2">})</span>
+      <span class="s2">);</span>
+    <span class="s2">}</span>
+
+    <span class="s4">function </span><span class="s2">report(node, options) {</span>
+      <span class="s2">reportC(context, messages[options.messageId], options.messageId, {</span>
+        <span class="s2">node,</span>
+        <span class="s2">fix: getFixer(node, options.fixerOptions),</span>
+      <span class="s2">});</span>
+    <span class="s2">}</span>
+
+    <span class="s4">function </span><span class="s2">validate(node, functionType) {</span>
+      <span class="s4">if </span><span class="s2">(!components.get(node)) </span><span class="s4">return</span><span class="s2">;</span>
+
+      <span class="s4">if </span><span class="s2">(node.parent &amp;&amp; node.parent.type === </span><span class="s3">'Property'</span><span class="s2">) </span><span class="s4">return</span><span class="s2">;</span>
+
+      <span class="s4">if </span><span class="s2">(hasName(node) &amp;&amp; !arrayIncludes(namedConfig, functionType)) {</span>
+        <span class="s2">report(node, {</span>
+          <span class="s2">messageId: namedConfig[</span><span class="s5">0</span><span class="s2">],</span>
+          <span class="s2">fixerOptions: {</span>
+            <span class="s2">type: namedConfig[</span><span class="s5">0</span><span class="s2">],</span>
+            <span class="s2">template: NAMED_FUNCTION_TEMPLATES[namedConfig[</span><span class="s5">0</span><span class="s2">]],</span>
+            <span class="s2">range:</span>
+              <span class="s2">node.type === </span><span class="s3">'FunctionDeclaration'</span>
+                <span class="s2">? node.range</span>
+                <span class="s2">: node.parent.parent.range,</span>
+          <span class="s2">},</span>
+        <span class="s2">});</span>
+      <span class="s2">}</span>
+      <span class="s4">if </span><span class="s2">(!hasName(node) &amp;&amp; !arrayIncludes(unnamedConfig, functionType)) {</span>
+        <span class="s2">report(node, {</span>
+          <span class="s2">messageId: unnamedConfig[</span><span class="s5">0</span><span class="s2">],</span>
+          <span class="s2">fixerOptions: {</span>
+            <span class="s2">type: unnamedConfig[</span><span class="s5">0</span><span class="s2">],</span>
+            <span class="s2">template: UNNAMED_FUNCTION_TEMPLATES[unnamedConfig[</span><span class="s5">0</span><span class="s2">]],</span>
+            <span class="s2">range: node.range,</span>
+          <span class="s2">},</span>
+        <span class="s2">});</span>
+      <span class="s2">}</span>
+    <span class="s2">}</span>
+
+    <span class="s0">// --------------------------------------------------------------------------</span>
+    <span class="s0">// Public</span>
+    <span class="s0">// --------------------------------------------------------------------------</span>
+    <span class="s4">const </span><span class="s2">validatePairs = [];</span>
+    <span class="s4">let </span><span class="s2">hasES6OrJsx = </span><span class="s4">false</span><span class="s2">;</span>
+    <span class="s4">return </span><span class="s2">{</span>
+      <span class="s2">FunctionDeclaration(node) {</span>
+        <span class="s2">validatePairs.push([node, </span><span class="s3">'function-declaration'</span><span class="s2">]);</span>
+      <span class="s2">},</span>
+      <span class="s2">ArrowFunctionExpression(node) {</span>
+        <span class="s2">validatePairs.push([node, </span><span class="s3">'arrow-function'</span><span class="s2">]);</span>
+      <span class="s2">},</span>
+      <span class="s2">FunctionExpression(node) {</span>
+        <span class="s2">validatePairs.push([node, </span><span class="s3">'function-expression'</span><span class="s2">]);</span>
+      <span class="s2">},</span>
+      <span class="s2">VariableDeclaration(node) {</span>
+        <span class="s2">hasES6OrJsx = hasES6OrJsx || node.kind === </span><span class="s3">'const' </span><span class="s2">|| node.kind === </span><span class="s3">'let'</span><span class="s2">;</span>
+      <span class="s2">},</span>
+      <span class="s3">'Program:exit'</span><span class="s2">() {</span>
+        <span class="s4">if </span><span class="s2">(hasES6OrJsx) fileVarType = </span><span class="s3">'const'</span><span class="s2">;</span>
+        <span class="s2">validatePairs.forEach((pair) =&gt; validate(pair[</span><span class="s5">0</span><span class="s2">], pair[</span><span class="s5">1</span><span class="s2">]));</span>
+      <span class="s2">},</span>
+      <span class="s3">'ImportDeclaration, ExportNamedDeclaration, ExportDefaultDeclaration, ExportAllDeclaration, ExportSpecifier, ExportDefaultSpecifier, JSXElement, TSExportAssignment, TSImportEqualsDeclaration'</span><span class="s2">() {</span>
+        <span class="s2">hasES6OrJsx = </span><span class="s4">true</span><span class="s2">;</span>
+      <span class="s2">},</span>
+    <span class="s2">};</span>
+  <span class="s2">}),</span>
+<span class="s2">};</span>
+</pre>
+</body>
+</html>

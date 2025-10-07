@@ -1,0 +1,110 @@
+<html>
+<head>
+<title>bfcache.js</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #067d17;}
+.s1 { color: #080808;}
+.s2 { color: #0033b3;}
+.s3 { color: #8c8c8c; font-style: italic;}
+.s4 { color: #1750eb;}
+</style>
+</head>
+<body bgcolor="#ffffff">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#c0c0c0" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+bfcache.js</font>
+</center></td></tr></table>
+<pre><span class="s0">&quot;use strict&quot;</span><span class="s1">;</span>
+<span class="s1">Object.defineProperty(exports, </span><span class="s0">&quot;__esModule&quot;</span><span class="s1">, {</span>
+    <span class="s1">value: </span><span class="s2">true</span>
+<span class="s1">});</span>
+<span class="s1">Object.defineProperty(exports, </span><span class="s0">&quot;useRouterBFCache&quot;</span><span class="s1">, {</span>
+    <span class="s1">enumerable: </span><span class="s2">true</span><span class="s1">,</span>
+    <span class="s1">get: </span><span class="s2">function</span><span class="s1">() {</span>
+        <span class="s2">return </span><span class="s1">useRouterBFCache;</span>
+    <span class="s1">}</span>
+<span class="s1">});</span>
+<span class="s2">const </span><span class="s1">_react = require(</span><span class="s0">&quot;react&quot;</span><span class="s1">);</span>
+<span class="s3">// When the flag is disabled, only track the currently active tree</span>
+<span class="s2">const </span><span class="s1">MAX_BF_CACHE_ENTRIES = process.env.__NEXT_ROUTER_BF_CACHE ? </span><span class="s4">3 </span><span class="s1">: </span><span class="s4">1</span><span class="s1">;</span>
+<span class="s2">function </span><span class="s1">useRouterBFCache(activeTree, activeStateKey) {</span>
+    <span class="s3">// The currently active entry. The entries form a linked list, sorted in</span>
+    <span class="s3">// order of most recently active. This allows us to reuse parts of the list</span>
+    <span class="s3">// without cloning, unless there's a reordering or removal.</span>
+    <span class="s3">// TODO: Once we start tracking back/forward history at each route level,</span>
+    <span class="s3">// we should use the history order instead. In other words, when traversing</span>
+    <span class="s3">// to an existing entry as a result of a popstate event, we should maintain</span>
+    <span class="s3">// the existing order instead of moving it to the front of the list. I think</span>
+    <span class="s3">// an initial implementation of this could be to pass an incrementing id</span>
+    <span class="s3">// to history.pushState/replaceState, then use that here for ordering.</span>
+    <span class="s2">const </span><span class="s1">[prevActiveEntry, setPrevActiveEntry] = (</span><span class="s4">0</span><span class="s1">, _react.useState)(()=&gt;{</span>
+        <span class="s2">const </span><span class="s1">initialEntry = {</span>
+            <span class="s1">tree: activeTree,</span>
+            <span class="s1">stateKey: activeStateKey,</span>
+            <span class="s1">next: </span><span class="s2">null</span>
+        <span class="s1">};</span>
+        <span class="s2">return </span><span class="s1">initialEntry;</span>
+    <span class="s1">});</span>
+    <span class="s2">if </span><span class="s1">(prevActiveEntry.tree === activeTree) {</span>
+        <span class="s3">// Fast path. The active tree hasn't changed, so we can reuse the</span>
+        <span class="s3">// existing state.</span>
+        <span class="s2">return </span><span class="s1">prevActiveEntry;</span>
+    <span class="s1">}</span>
+    <span class="s3">// The route tree changed. Note that this doesn't mean that the tree changed</span>
+    <span class="s3">// *at this level* — the change may be due to a child route. Either way, we</span>
+    <span class="s3">// need to either add or update the router tree in the bfcache.</span>
+    <span class="s3">//</span>
+    <span class="s3">// The rest of the code looks more complicated than it actually is because we</span>
+    <span class="s3">// can't mutate the state in place; we have to copy-on-write.</span>
+    <span class="s3">// Create a new entry for the active cache key. This is the head of the new</span>
+    <span class="s3">// linked list.</span>
+    <span class="s2">const </span><span class="s1">newActiveEntry = {</span>
+        <span class="s1">tree: activeTree,</span>
+        <span class="s1">stateKey: activeStateKey,</span>
+        <span class="s1">next: </span><span class="s2">null</span>
+    <span class="s1">};</span>
+    <span class="s3">// We need to append the old list onto the new list. If the head of the new</span>
+    <span class="s3">// list was already present in the cache, then we'll need to clone everything</span>
+    <span class="s3">// that came before it. Then we can reuse the rest.</span>
+    <span class="s2">let </span><span class="s1">n = </span><span class="s4">1</span><span class="s1">;</span>
+    <span class="s2">let </span><span class="s1">oldEntry = prevActiveEntry;</span>
+    <span class="s2">let </span><span class="s1">clonedEntry = newActiveEntry;</span>
+    <span class="s2">while</span><span class="s1">(oldEntry !== </span><span class="s2">null </span><span class="s1">&amp;&amp; n &lt; MAX_BF_CACHE_ENTRIES){</span>
+        <span class="s2">if </span><span class="s1">(oldEntry.stateKey === activeStateKey) {</span>
+            <span class="s3">// Fast path. This entry in the old list that corresponds to the key that</span>
+            <span class="s3">// is now active. We've already placed a clone of this entry at the front</span>
+            <span class="s3">// of the new list. We can reuse the rest of the old list without cloning.</span>
+            <span class="s3">// NOTE: We don't need to worry about eviction in this case because we</span>
+            <span class="s3">// haven't increased the size of the cache, and we assume the max size</span>
+            <span class="s3">// is constant across renders. If we were to change it to a dynamic limit,</span>
+            <span class="s3">// then the implementation would need to account for that.</span>
+            <span class="s1">clonedEntry.next = oldEntry.next;</span>
+            <span class="s2">break</span><span class="s1">;</span>
+        <span class="s1">} </span><span class="s2">else </span><span class="s1">{</span>
+            <span class="s3">// Clone the entry and append it to the list.</span>
+            <span class="s1">n++;</span>
+            <span class="s2">const </span><span class="s1">entry = {</span>
+                <span class="s1">tree: oldEntry.tree,</span>
+                <span class="s1">stateKey: oldEntry.stateKey,</span>
+                <span class="s1">next: </span><span class="s2">null</span>
+            <span class="s1">};</span>
+            <span class="s1">clonedEntry.next = entry;</span>
+            <span class="s1">clonedEntry = entry;</span>
+        <span class="s1">}</span>
+        <span class="s1">oldEntry = oldEntry.next;</span>
+    <span class="s1">}</span>
+    <span class="s1">setPrevActiveEntry(newActiveEntry);</span>
+    <span class="s2">return </span><span class="s1">newActiveEntry;</span>
+<span class="s1">}</span>
+
+<span class="s2">if </span><span class="s1">((</span><span class="s2">typeof </span><span class="s1">exports.default === </span><span class="s0">'function' </span><span class="s1">|| (</span><span class="s2">typeof </span><span class="s1">exports.default === </span><span class="s0">'object' </span><span class="s1">&amp;&amp; exports.default !== </span><span class="s2">null</span><span class="s1">)) &amp;&amp; </span><span class="s2">typeof </span><span class="s1">exports.default.__esModule === </span><span class="s0">'undefined'</span><span class="s1">) {</span>
+  <span class="s1">Object.defineProperty(exports.default, </span><span class="s0">'__esModule'</span><span class="s1">, { value: </span><span class="s2">true </span><span class="s1">});</span>
+  <span class="s1">Object.assign(exports.default, exports);</span>
+  <span class="s1">module.exports = exports.default;</span>
+<span class="s1">}</span>
+
+<span class="s3">//# sourceMappingURL=bfcache.js.map</span></pre>
+</body>
+</html>

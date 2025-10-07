@@ -1,0 +1,211 @@
+<html>
+<head>
+<title>no-unreachable-loop.js</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #8c8c8c; font-style: italic;}
+.s1 { color: #8c8c8c; font-style: italic;}
+.s2 { color: #080808;}
+.s3 { color: #067d17;}
+.s4 { color: #0033b3;}
+</style>
+</head>
+<body bgcolor="#ffffff">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#c0c0c0" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+no-unreachable-loop.js</font>
+</center></td></tr></table>
+<pre><span class="s0">/**</span>
+ <span class="s0">* </span><span class="s1">@fileoverview </span><span class="s0">Rule to disallow loops with a body that allows only one iteration</span>
+ <span class="s0">* </span><span class="s1">@author </span><span class="s0">Milos Djermanovic</span>
+ <span class="s0">*/</span>
+
+<span class="s3">&quot;use strict&quot;</span><span class="s2">;</span>
+
+<span class="s0">//------------------------------------------------------------------------------</span>
+<span class="s0">// Helpers</span>
+<span class="s0">//------------------------------------------------------------------------------</span>
+
+<span class="s4">const </span><span class="s2">allLoopTypes = [</span>
+	<span class="s3">&quot;WhileStatement&quot;</span><span class="s2">,</span>
+	<span class="s3">&quot;DoWhileStatement&quot;</span><span class="s2">,</span>
+	<span class="s3">&quot;ForStatement&quot;</span><span class="s2">,</span>
+	<span class="s3">&quot;ForInStatement&quot;</span><span class="s2">,</span>
+	<span class="s3">&quot;ForOfStatement&quot;</span><span class="s2">,</span>
+<span class="s2">];</span>
+
+<span class="s0">/**</span>
+ <span class="s0">* Checks all segments in a set and returns true if any are reachable.</span>
+ <span class="s0">* </span><span class="s1">@param </span><span class="s0">{Set&lt;CodePathSegment&gt;} segments The segments to check.</span>
+ <span class="s0">* </span><span class="s1">@returns </span><span class="s0">{boolean} True if any segment is reachable; false otherwise.</span>
+ <span class="s0">*/</span>
+<span class="s4">function </span><span class="s2">isAnySegmentReachable(segments) {</span>
+	<span class="s4">for </span><span class="s2">(</span><span class="s4">const </span><span class="s2">segment of segments) {</span>
+		<span class="s4">if </span><span class="s2">(segment.reachable) {</span>
+			<span class="s4">return true</span><span class="s2">;</span>
+		<span class="s2">}</span>
+	<span class="s2">}</span>
+
+	<span class="s4">return false</span><span class="s2">;</span>
+<span class="s2">}</span>
+
+<span class="s0">/**</span>
+ <span class="s0">* Determines whether the given node is the first node in the code path to which a loop statement</span>
+ <span class="s0">* 'loops' for the next iteration.</span>
+ <span class="s0">* </span><span class="s1">@param </span><span class="s0">{ASTNode} node The node to check.</span>
+ <span class="s0">* </span><span class="s1">@returns </span><span class="s0">{boolean} `true` if the node is a looping target.</span>
+ <span class="s0">*/</span>
+<span class="s4">function </span><span class="s2">isLoopingTarget(node) {</span>
+	<span class="s4">const </span><span class="s2">parent = node.parent;</span>
+
+	<span class="s4">if </span><span class="s2">(parent) {</span>
+		<span class="s4">switch </span><span class="s2">(parent.type) {</span>
+			<span class="s4">case </span><span class="s3">&quot;WhileStatement&quot;</span><span class="s2">:</span>
+				<span class="s4">return </span><span class="s2">node === parent.test;</span>
+			<span class="s4">case </span><span class="s3">&quot;DoWhileStatement&quot;</span><span class="s2">:</span>
+				<span class="s4">return </span><span class="s2">node === parent.body;</span>
+			<span class="s4">case </span><span class="s3">&quot;ForStatement&quot;</span><span class="s2">:</span>
+				<span class="s4">return </span><span class="s2">node === (parent.update || parent.test || parent.body);</span>
+			<span class="s4">case </span><span class="s3">&quot;ForInStatement&quot;</span><span class="s2">:</span>
+			<span class="s4">case </span><span class="s3">&quot;ForOfStatement&quot;</span><span class="s2">:</span>
+				<span class="s4">return </span><span class="s2">node === parent.left;</span>
+
+			<span class="s0">// no default</span>
+		<span class="s2">}</span>
+	<span class="s2">}</span>
+
+	<span class="s4">return false</span><span class="s2">;</span>
+<span class="s2">}</span>
+
+<span class="s0">/**</span>
+ <span class="s0">* Creates an array with elements from the first given array that are not included in the second given array.</span>
+ <span class="s0">* </span><span class="s1">@param </span><span class="s0">{Array} arrA The array to compare from.</span>
+ <span class="s0">* </span><span class="s1">@param </span><span class="s0">{Array} arrB The array to compare against.</span>
+ <span class="s0">* </span><span class="s1">@returns </span><span class="s0">{Array} a new array that represents `arrA \ arrB`.</span>
+ <span class="s0">*/</span>
+<span class="s4">function </span><span class="s2">getDifference(arrA, arrB) {</span>
+	<span class="s4">return </span><span class="s2">arrA.filter(a =&gt; !arrB.includes(a));</span>
+<span class="s2">}</span>
+
+<span class="s0">//------------------------------------------------------------------------------</span>
+<span class="s0">// Rule Definition</span>
+<span class="s0">//------------------------------------------------------------------------------</span>
+
+<span class="s0">/** </span><span class="s1">@type </span><span class="s0">{import('../types').Rule.RuleModule} */</span>
+<span class="s2">module.exports = {</span>
+	<span class="s2">meta: {</span>
+		<span class="s2">type: </span><span class="s3">&quot;problem&quot;</span><span class="s2">,</span>
+
+		<span class="s2">defaultOptions: [{ ignore: [] }],</span>
+
+		<span class="s2">docs: {</span>
+			<span class="s2">description:</span>
+				<span class="s3">&quot;Disallow loops with a body that allows only one iteration&quot;</span><span class="s2">,</span>
+			<span class="s2">recommended: </span><span class="s4">false</span><span class="s2">,</span>
+			<span class="s2">url: </span><span class="s3">&quot;https://eslint.org/docs/latest/rules/no-unreachable-loop&quot;</span><span class="s2">,</span>
+		<span class="s2">},</span>
+
+		<span class="s2">schema: [</span>
+			<span class="s2">{</span>
+				<span class="s2">type: </span><span class="s3">&quot;object&quot;</span><span class="s2">,</span>
+				<span class="s2">properties: {</span>
+					<span class="s2">ignore: {</span>
+						<span class="s2">type: </span><span class="s3">&quot;array&quot;</span><span class="s2">,</span>
+						<span class="s2">items: {</span>
+							<span class="s4">enum</span><span class="s2">: allLoopTypes,</span>
+						<span class="s2">},</span>
+						<span class="s2">uniqueItems: </span><span class="s4">true</span><span class="s2">,</span>
+					<span class="s2">},</span>
+				<span class="s2">},</span>
+				<span class="s2">additionalProperties: </span><span class="s4">false</span><span class="s2">,</span>
+			<span class="s2">},</span>
+		<span class="s2">],</span>
+
+		<span class="s2">messages: {</span>
+			<span class="s2">invalid: </span><span class="s3">&quot;Invalid loop. Its body allows only one iteration.&quot;</span><span class="s2">,</span>
+		<span class="s2">},</span>
+	<span class="s2">},</span>
+
+	<span class="s2">create(context) {</span>
+		<span class="s4">const </span><span class="s2">[{ ignore: ignoredLoopTypes }] = context.options;</span>
+		<span class="s4">const </span><span class="s2">loopTypesToCheck = getDifference(allLoopTypes, ignoredLoopTypes),</span>
+			<span class="s2">loopSelector = loopTypesToCheck.join(</span><span class="s3">&quot;,&quot;</span><span class="s2">),</span>
+			<span class="s2">loopsByTargetSegments = </span><span class="s4">new </span><span class="s2">Map(),</span>
+			<span class="s2">loopsToReport = </span><span class="s4">new </span><span class="s2">Set();</span>
+
+		<span class="s4">const </span><span class="s2">codePathSegments = [];</span>
+		<span class="s4">let </span><span class="s2">currentCodePathSegments = </span><span class="s4">new </span><span class="s2">Set();</span>
+
+		<span class="s4">return </span><span class="s2">{</span>
+			<span class="s2">onCodePathStart() {</span>
+				<span class="s2">codePathSegments.push(currentCodePathSegments);</span>
+				<span class="s2">currentCodePathSegments = </span><span class="s4">new </span><span class="s2">Set();</span>
+			<span class="s2">},</span>
+
+			<span class="s2">onCodePathEnd() {</span>
+				<span class="s2">currentCodePathSegments = codePathSegments.pop();</span>
+			<span class="s2">},</span>
+
+			<span class="s2">onUnreachableCodePathSegmentStart(segment) {</span>
+				<span class="s2">currentCodePathSegments.add(segment);</span>
+			<span class="s2">},</span>
+
+			<span class="s2">onUnreachableCodePathSegmentEnd(segment) {</span>
+				<span class="s2">currentCodePathSegments.delete(segment);</span>
+			<span class="s2">},</span>
+
+			<span class="s2">onCodePathSegmentEnd(segment) {</span>
+				<span class="s2">currentCodePathSegments.delete(segment);</span>
+			<span class="s2">},</span>
+
+			<span class="s2">onCodePathSegmentStart(segment, node) {</span>
+				<span class="s2">currentCodePathSegments.add(segment);</span>
+
+				<span class="s4">if </span><span class="s2">(isLoopingTarget(node)) {</span>
+					<span class="s4">const </span><span class="s2">loop = node.parent;</span>
+
+					<span class="s2">loopsByTargetSegments.set(segment, loop);</span>
+				<span class="s2">}</span>
+			<span class="s2">},</span>
+
+			<span class="s2">onCodePathSegmentLoop(_, toSegment, node) {</span>
+				<span class="s4">const </span><span class="s2">loop = loopsByTargetSegments.get(toSegment);</span>
+
+				<span class="s0">/**</span>
+				 <span class="s0">* The second iteration is reachable, meaning that the loop is valid by the logic of this rule,</span>
+				 <span class="s0">* only if there is at least one loop event with the appropriate target (which has been already</span>
+				 <span class="s0">* determined in the `loopsByTargetSegments` map), raised from either:</span>
+				 <span class="s0">*</span>
+				 <span class="s0">* - the end of the loop's body (in which case `node === loop`)</span>
+				 <span class="s0">* - a `continue` statement</span>
+				 <span class="s0">*</span>
+				 <span class="s0">* This condition skips loop events raised from `ForInStatement &gt; .right` and `ForOfStatement &gt; .right` nodes.</span>
+				 <span class="s0">*/</span>
+				<span class="s4">if </span><span class="s2">(node === loop || node.type === </span><span class="s3">&quot;ContinueStatement&quot;</span><span class="s2">) {</span>
+					<span class="s0">// Removes loop if it exists in the set. Otherwise, `Set#delete` has no effect and doesn't throw.</span>
+					<span class="s2">loopsToReport.delete(loop);</span>
+				<span class="s2">}</span>
+			<span class="s2">},</span>
+
+			<span class="s2">[loopSelector](node) {</span>
+				<span class="s0">/**</span>
+				 <span class="s0">* Ignore unreachable loop statements to avoid unnecessary complexity in the implementation, or false positives otherwise.</span>
+				 <span class="s0">* For unreachable segments, the code path analysis does not raise events required for this implementation.</span>
+				 <span class="s0">*/</span>
+				<span class="s4">if </span><span class="s2">(isAnySegmentReachable(currentCodePathSegments)) {</span>
+					<span class="s2">loopsToReport.add(node);</span>
+				<span class="s2">}</span>
+			<span class="s2">},</span>
+
+			<span class="s3">&quot;Program:exit&quot;</span><span class="s2">() {</span>
+				<span class="s2">loopsToReport.forEach(node =&gt;</span>
+					<span class="s2">context.report({ node, messageId: </span><span class="s3">&quot;invalid&quot; </span><span class="s2">}),</span>
+				<span class="s2">);</span>
+			<span class="s2">},</span>
+		<span class="s2">};</span>
+	<span class="s2">},</span>
+<span class="s2">};</span>
+</pre>
+</body>
+</html>

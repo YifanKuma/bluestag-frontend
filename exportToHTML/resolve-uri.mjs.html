@@ -1,0 +1,254 @@
+<html>
+<head>
+<title>resolve-uri.mjs</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #8c8c8c; font-style: italic;}
+.s1 { color: #080808;}
+.s2 { color: #0033b3;}
+.s3 { color: #264eff;}
+.s4 { color: #067d17;}
+.s5 { color: #1750eb;}
+</style>
+</head>
+<body bgcolor="#ffffff">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#c0c0c0" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+resolve-uri.mjs</font>
+</center></td></tr></table>
+<pre><span class="s0">// Matches the scheme of a URL, eg &quot;http://&quot;</span>
+<span class="s2">const </span><span class="s1">schemeRegex = </span><span class="s3">/^[\w+.-]+:\/\//</span><span class="s1">;</span>
+<span class="s0">/**</span>
+ <span class="s0">* Matches the parts of a URL:</span>
+ <span class="s0">* 1. Scheme, including &quot;:&quot;, guaranteed.</span>
+ <span class="s0">* 2. User/password, including &quot;@&quot;, optional.</span>
+ <span class="s0">* 3. Host, guaranteed.</span>
+ <span class="s0">* 4. Port, including &quot;:&quot;, optional.</span>
+ <span class="s0">* 5. Path, including &quot;/&quot;, optional.</span>
+ <span class="s0">* 6. Query, including &quot;?&quot;, optional.</span>
+ <span class="s0">* 7. Hash, including &quot;#&quot;, optional.</span>
+ <span class="s0">*/</span>
+<span class="s2">const </span><span class="s1">urlRegex = </span><span class="s3">/^([\w+.-]+:)\/\/([^@/#?]*@)?([^:/#?]*)(:\d+)?(\/[^#?]*)?(\?[^#]*)?(#.*)?/</span><span class="s1">;</span>
+<span class="s0">/**</span>
+ <span class="s0">* File URLs are weird. They dont' need the regular `//` in the scheme, they may or may not start</span>
+ <span class="s0">* with a leading `/`, they can have a domain (but only if they don't start with a Windows drive).</span>
+ <span class="s0">*</span>
+ <span class="s0">* 1. Host, optional.</span>
+ <span class="s0">* 2. Path, which may include &quot;/&quot;, guaranteed.</span>
+ <span class="s0">* 3. Query, including &quot;?&quot;, optional.</span>
+ <span class="s0">* 4. Hash, including &quot;#&quot;, optional.</span>
+ <span class="s0">*/</span>
+<span class="s2">const </span><span class="s1">fileRegex = </span><span class="s3">/^file:(?:\/\/((?![a-z]:)[^/#?]*)?)?(\/?[^#?]*)(\?[^#]*)?(#.*)?/i</span><span class="s1">;</span>
+<span class="s2">function </span><span class="s1">isAbsoluteUrl(input) {</span>
+    <span class="s2">return </span><span class="s1">schemeRegex.test(input);</span>
+<span class="s1">}</span>
+<span class="s2">function </span><span class="s1">isSchemeRelativeUrl(input) {</span>
+    <span class="s2">return </span><span class="s1">input.startsWith(</span><span class="s4">'//'</span><span class="s1">);</span>
+<span class="s1">}</span>
+<span class="s2">function </span><span class="s1">isAbsolutePath(input) {</span>
+    <span class="s2">return </span><span class="s1">input.startsWith(</span><span class="s4">'/'</span><span class="s1">);</span>
+<span class="s1">}</span>
+<span class="s2">function </span><span class="s1">isFileUrl(input) {</span>
+    <span class="s2">return </span><span class="s1">input.startsWith(</span><span class="s4">'file:'</span><span class="s1">);</span>
+<span class="s1">}</span>
+<span class="s2">function </span><span class="s1">isRelative(input) {</span>
+    <span class="s2">return </span><span class="s3">/^[.?#]/</span><span class="s1">.test(input);</span>
+<span class="s1">}</span>
+<span class="s2">function </span><span class="s1">parseAbsoluteUrl(input) {</span>
+    <span class="s2">const </span><span class="s1">match = urlRegex.exec(input);</span>
+    <span class="s2">return </span><span class="s1">makeUrl(match[</span><span class="s5">1</span><span class="s1">], match[</span><span class="s5">2</span><span class="s1">] || </span><span class="s4">''</span><span class="s1">, match[</span><span class="s5">3</span><span class="s1">], match[</span><span class="s5">4</span><span class="s1">] || </span><span class="s4">''</span><span class="s1">, match[</span><span class="s5">5</span><span class="s1">] || </span><span class="s4">'/'</span><span class="s1">, match[</span><span class="s5">6</span><span class="s1">] || </span><span class="s4">''</span><span class="s1">, match[</span><span class="s5">7</span><span class="s1">] || </span><span class="s4">''</span><span class="s1">);</span>
+<span class="s1">}</span>
+<span class="s2">function </span><span class="s1">parseFileUrl(input) {</span>
+    <span class="s2">const </span><span class="s1">match = fileRegex.exec(input);</span>
+    <span class="s2">const </span><span class="s1">path = match[</span><span class="s5">2</span><span class="s1">];</span>
+    <span class="s2">return </span><span class="s1">makeUrl(</span><span class="s4">'file:'</span><span class="s1">, </span><span class="s4">''</span><span class="s1">, match[</span><span class="s5">1</span><span class="s1">] || </span><span class="s4">''</span><span class="s1">, </span><span class="s4">''</span><span class="s1">, isAbsolutePath(path) ? path : </span><span class="s4">'/' </span><span class="s1">+ path, match[</span><span class="s5">3</span><span class="s1">] || </span><span class="s4">''</span><span class="s1">, match[</span><span class="s5">4</span><span class="s1">] || </span><span class="s4">''</span><span class="s1">);</span>
+<span class="s1">}</span>
+<span class="s2">function </span><span class="s1">makeUrl(scheme, user, host, port, path, query, hash) {</span>
+    <span class="s2">return </span><span class="s1">{</span>
+        <span class="s1">scheme,</span>
+        <span class="s1">user,</span>
+        <span class="s1">host,</span>
+        <span class="s1">port,</span>
+        <span class="s1">path,</span>
+        <span class="s1">query,</span>
+        <span class="s1">hash,</span>
+        <span class="s1">type: </span><span class="s5">7 </span><span class="s0">/* Absolute */</span><span class="s1">,</span>
+    <span class="s1">};</span>
+<span class="s1">}</span>
+<span class="s2">function </span><span class="s1">parseUrl(input) {</span>
+    <span class="s2">if </span><span class="s1">(isSchemeRelativeUrl(input)) {</span>
+        <span class="s2">const </span><span class="s1">url = parseAbsoluteUrl(</span><span class="s4">'http:' </span><span class="s1">+ input);</span>
+        <span class="s1">url.scheme = </span><span class="s4">''</span><span class="s1">;</span>
+        <span class="s1">url.type = </span><span class="s5">6 </span><span class="s0">/* SchemeRelative */</span><span class="s1">;</span>
+        <span class="s2">return </span><span class="s1">url;</span>
+    <span class="s1">}</span>
+    <span class="s2">if </span><span class="s1">(isAbsolutePath(input)) {</span>
+        <span class="s2">const </span><span class="s1">url = parseAbsoluteUrl(</span><span class="s4">'http://foo.com' </span><span class="s1">+ input);</span>
+        <span class="s1">url.scheme = </span><span class="s4">''</span><span class="s1">;</span>
+        <span class="s1">url.host = </span><span class="s4">''</span><span class="s1">;</span>
+        <span class="s1">url.type = </span><span class="s5">5 </span><span class="s0">/* AbsolutePath */</span><span class="s1">;</span>
+        <span class="s2">return </span><span class="s1">url;</span>
+    <span class="s1">}</span>
+    <span class="s2">if </span><span class="s1">(isFileUrl(input))</span>
+        <span class="s2">return </span><span class="s1">parseFileUrl(input);</span>
+    <span class="s2">if </span><span class="s1">(isAbsoluteUrl(input))</span>
+        <span class="s2">return </span><span class="s1">parseAbsoluteUrl(input);</span>
+    <span class="s2">const </span><span class="s1">url = parseAbsoluteUrl(</span><span class="s4">'http://foo.com/' </span><span class="s1">+ input);</span>
+    <span class="s1">url.scheme = </span><span class="s4">''</span><span class="s1">;</span>
+    <span class="s1">url.host = </span><span class="s4">''</span><span class="s1">;</span>
+    <span class="s1">url.type = input</span>
+        <span class="s1">? input.startsWith(</span><span class="s4">'?'</span><span class="s1">)</span>
+            <span class="s1">? </span><span class="s5">3 </span><span class="s0">/* Query */</span>
+            <span class="s1">: input.startsWith(</span><span class="s4">'#'</span><span class="s1">)</span>
+                <span class="s1">? </span><span class="s5">2 </span><span class="s0">/* Hash */</span>
+                <span class="s1">: </span><span class="s5">4 </span><span class="s0">/* RelativePath */</span>
+        <span class="s1">: </span><span class="s5">1 </span><span class="s0">/* Empty */</span><span class="s1">;</span>
+    <span class="s2">return </span><span class="s1">url;</span>
+<span class="s1">}</span>
+<span class="s2">function </span><span class="s1">stripPathFilename(path) {</span>
+    <span class="s0">// If a path ends with a parent directory &quot;..&quot;, then it's a relative path with excess parent</span>
+    <span class="s0">// paths. It's not a file, so we can't strip it.</span>
+    <span class="s2">if </span><span class="s1">(path.endsWith(</span><span class="s4">'/..'</span><span class="s1">))</span>
+        <span class="s2">return </span><span class="s1">path;</span>
+    <span class="s2">const </span><span class="s1">index = path.lastIndexOf(</span><span class="s4">'/'</span><span class="s1">);</span>
+    <span class="s2">return </span><span class="s1">path.slice(</span><span class="s5">0</span><span class="s1">, index + </span><span class="s5">1</span><span class="s1">);</span>
+<span class="s1">}</span>
+<span class="s2">function </span><span class="s1">mergePaths(url, base) {</span>
+    <span class="s1">normalizePath(base, base.type);</span>
+    <span class="s0">// If the path is just a &quot;/&quot;, then it was an empty path to begin with (remember, we're a relative</span>
+    <span class="s0">// path).</span>
+    <span class="s2">if </span><span class="s1">(url.path === </span><span class="s4">'/'</span><span class="s1">) {</span>
+        <span class="s1">url.path = base.path;</span>
+    <span class="s1">}</span>
+    <span class="s2">else </span><span class="s1">{</span>
+        <span class="s0">// Resolution happens relative to the base path's directory, not the file.</span>
+        <span class="s1">url.path = stripPathFilename(base.path) + url.path;</span>
+    <span class="s1">}</span>
+<span class="s1">}</span>
+<span class="s0">/**</span>
+ <span class="s0">* The path can have empty directories &quot;//&quot;, unneeded parents &quot;foo/..&quot;, or current directory</span>
+ <span class="s0">* &quot;foo/.&quot;. We need to normalize to a standard representation.</span>
+ <span class="s0">*/</span>
+<span class="s2">function </span><span class="s1">normalizePath(url, type) {</span>
+    <span class="s2">const </span><span class="s1">rel = type &lt;= </span><span class="s5">4 </span><span class="s0">/* RelativePath */</span><span class="s1">;</span>
+    <span class="s2">const </span><span class="s1">pieces = url.path.split(</span><span class="s4">'/'</span><span class="s1">);</span>
+    <span class="s0">// We need to preserve the first piece always, so that we output a leading slash. The item at</span>
+    <span class="s0">// pieces[0] is an empty string.</span>
+    <span class="s2">let </span><span class="s1">pointer = </span><span class="s5">1</span><span class="s1">;</span>
+    <span class="s0">// Positive is the number of real directories we've output, used for popping a parent directory.</span>
+    <span class="s0">// Eg, &quot;foo/bar/..&quot; will have a positive 2, and we can decrement to be left with just &quot;foo&quot;.</span>
+    <span class="s2">let </span><span class="s1">positive = </span><span class="s5">0</span><span class="s1">;</span>
+    <span class="s0">// We need to keep a trailing slash if we encounter an empty directory (eg, splitting &quot;foo/&quot; will</span>
+    <span class="s0">// generate `[&quot;foo&quot;, &quot;&quot;]` pieces). And, if we pop a parent directory. But once we encounter a</span>
+    <span class="s0">// real directory, we won't need to append, unless the other conditions happen again.</span>
+    <span class="s2">let </span><span class="s1">addTrailingSlash = </span><span class="s2">false</span><span class="s1">;</span>
+    <span class="s2">for </span><span class="s1">(</span><span class="s2">let </span><span class="s1">i = </span><span class="s5">1</span><span class="s1">; i &lt; pieces.length; i++) {</span>
+        <span class="s2">const </span><span class="s1">piece = pieces[i];</span>
+        <span class="s0">// An empty directory, could be a trailing slash, or just a double &quot;//&quot; in the path.</span>
+        <span class="s2">if </span><span class="s1">(!piece) {</span>
+            <span class="s1">addTrailingSlash = </span><span class="s2">true</span><span class="s1">;</span>
+            <span class="s2">continue</span><span class="s1">;</span>
+        <span class="s1">}</span>
+        <span class="s0">// If we encounter a real directory, then we don't need to append anymore.</span>
+        <span class="s1">addTrailingSlash = </span><span class="s2">false</span><span class="s1">;</span>
+        <span class="s0">// A current directory, which we can always drop.</span>
+        <span class="s2">if </span><span class="s1">(piece === </span><span class="s4">'.'</span><span class="s1">)</span>
+            <span class="s2">continue</span><span class="s1">;</span>
+        <span class="s0">// A parent directory, we need to see if there are any real directories we can pop. Else, we</span>
+        <span class="s0">// have an excess of parents, and we'll need to keep the &quot;..&quot;.</span>
+        <span class="s2">if </span><span class="s1">(piece === </span><span class="s4">'..'</span><span class="s1">) {</span>
+            <span class="s2">if </span><span class="s1">(positive) {</span>
+                <span class="s1">addTrailingSlash = </span><span class="s2">true</span><span class="s1">;</span>
+                <span class="s1">positive--;</span>
+                <span class="s1">pointer--;</span>
+            <span class="s1">}</span>
+            <span class="s2">else if </span><span class="s1">(rel) {</span>
+                <span class="s0">// If we're in a relativePath, then we need to keep the excess parents. Else, in an absolute</span>
+                <span class="s0">// URL, protocol relative URL, or an absolute path, we don't need to keep excess.</span>
+                <span class="s1">pieces[pointer++] = piece;</span>
+            <span class="s1">}</span>
+            <span class="s2">continue</span><span class="s1">;</span>
+        <span class="s1">}</span>
+        <span class="s0">// We've encountered a real directory. Move it to the next insertion pointer, which accounts for</span>
+        <span class="s0">// any popped or dropped directories.</span>
+        <span class="s1">pieces[pointer++] = piece;</span>
+        <span class="s1">positive++;</span>
+    <span class="s1">}</span>
+    <span class="s2">let </span><span class="s1">path = </span><span class="s4">''</span><span class="s1">;</span>
+    <span class="s2">for </span><span class="s1">(</span><span class="s2">let </span><span class="s1">i = </span><span class="s5">1</span><span class="s1">; i &lt; pointer; i++) {</span>
+        <span class="s1">path += </span><span class="s4">'/' </span><span class="s1">+ pieces[i];</span>
+    <span class="s1">}</span>
+    <span class="s2">if </span><span class="s1">(!path || (addTrailingSlash &amp;&amp; !path.endsWith(</span><span class="s4">'/..'</span><span class="s1">))) {</span>
+        <span class="s1">path += </span><span class="s4">'/'</span><span class="s1">;</span>
+    <span class="s1">}</span>
+    <span class="s1">url.path = path;</span>
+<span class="s1">}</span>
+<span class="s0">/**</span>
+ <span class="s0">* Attempts to resolve `input` URL/path relative to `base`.</span>
+ <span class="s0">*/</span>
+<span class="s2">function </span><span class="s1">resolve(input, base) {</span>
+    <span class="s2">if </span><span class="s1">(!input &amp;&amp; !base)</span>
+        <span class="s2">return </span><span class="s4">''</span><span class="s1">;</span>
+    <span class="s2">const </span><span class="s1">url = parseUrl(input);</span>
+    <span class="s2">let </span><span class="s1">inputType = url.type;</span>
+    <span class="s2">if </span><span class="s1">(base &amp;&amp; inputType !== </span><span class="s5">7 </span><span class="s0">/* Absolute */</span><span class="s1">) {</span>
+        <span class="s2">const </span><span class="s1">baseUrl = parseUrl(base);</span>
+        <span class="s2">const </span><span class="s1">baseType = baseUrl.type;</span>
+        <span class="s2">switch </span><span class="s1">(inputType) {</span>
+            <span class="s2">case </span><span class="s5">1 </span><span class="s0">/* Empty */</span><span class="s1">:</span>
+                <span class="s1">url.hash = baseUrl.hash;</span>
+            <span class="s0">// fall through</span>
+            <span class="s2">case </span><span class="s5">2 </span><span class="s0">/* Hash */</span><span class="s1">:</span>
+                <span class="s1">url.query = baseUrl.query;</span>
+            <span class="s0">// fall through</span>
+            <span class="s2">case </span><span class="s5">3 </span><span class="s0">/* Query */</span><span class="s1">:</span>
+            <span class="s2">case </span><span class="s5">4 </span><span class="s0">/* RelativePath */</span><span class="s1">:</span>
+                <span class="s1">mergePaths(url, baseUrl);</span>
+            <span class="s0">// fall through</span>
+            <span class="s2">case </span><span class="s5">5 </span><span class="s0">/* AbsolutePath */</span><span class="s1">:</span>
+                <span class="s0">// The host, user, and port are joined, you can't copy one without the others.</span>
+                <span class="s1">url.user = baseUrl.user;</span>
+                <span class="s1">url.host = baseUrl.host;</span>
+                <span class="s1">url.port = baseUrl.port;</span>
+            <span class="s0">// fall through</span>
+            <span class="s2">case </span><span class="s5">6 </span><span class="s0">/* SchemeRelative */</span><span class="s1">:</span>
+                <span class="s0">// The input doesn't have a schema at least, so we need to copy at least that over.</span>
+                <span class="s1">url.scheme = baseUrl.scheme;</span>
+        <span class="s1">}</span>
+        <span class="s2">if </span><span class="s1">(baseType &gt; inputType)</span>
+            <span class="s1">inputType = baseType;</span>
+    <span class="s1">}</span>
+    <span class="s1">normalizePath(url, inputType);</span>
+    <span class="s2">const </span><span class="s1">queryHash = url.query + url.hash;</span>
+    <span class="s2">switch </span><span class="s1">(inputType) {</span>
+        <span class="s0">// This is impossible, because of the empty checks at the start of the function.</span>
+        <span class="s0">// case UrlType.Empty:</span>
+        <span class="s2">case </span><span class="s5">2 </span><span class="s0">/* Hash */</span><span class="s1">:</span>
+        <span class="s2">case </span><span class="s5">3 </span><span class="s0">/* Query */</span><span class="s1">:</span>
+            <span class="s2">return </span><span class="s1">queryHash;</span>
+        <span class="s2">case </span><span class="s5">4 </span><span class="s0">/* RelativePath */</span><span class="s1">: {</span>
+            <span class="s0">// The first char is always a &quot;/&quot;, and we need it to be relative.</span>
+            <span class="s2">const </span><span class="s1">path = url.path.slice(</span><span class="s5">1</span><span class="s1">);</span>
+            <span class="s2">if </span><span class="s1">(!path)</span>
+                <span class="s2">return </span><span class="s1">queryHash || </span><span class="s4">'.'</span><span class="s1">;</span>
+            <span class="s2">if </span><span class="s1">(isRelative(base || input) &amp;&amp; !isRelative(path)) {</span>
+                <span class="s0">// If base started with a leading &quot;.&quot;, or there is no base and input started with a &quot;.&quot;,</span>
+                <span class="s0">// then we need to ensure that the relative path starts with a &quot;.&quot;. We don't know if</span>
+                <span class="s0">// relative starts with a &quot;..&quot;, though, so check before prepending.</span>
+                <span class="s2">return </span><span class="s4">'./' </span><span class="s1">+ path + queryHash;</span>
+            <span class="s1">}</span>
+            <span class="s2">return </span><span class="s1">path + queryHash;</span>
+        <span class="s1">}</span>
+        <span class="s2">case </span><span class="s5">5 </span><span class="s0">/* AbsolutePath */</span><span class="s1">:</span>
+            <span class="s2">return </span><span class="s1">url.path + queryHash;</span>
+        <span class="s2">default</span><span class="s1">:</span>
+            <span class="s2">return </span><span class="s1">url.scheme + </span><span class="s4">'//' </span><span class="s1">+ url.user + url.host + url.port + url.path + queryHash;</span>
+    <span class="s1">}</span>
+<span class="s1">}</span>
+
+<span class="s2">export </span><span class="s1">{ resolve as </span><span class="s2">default </span><span class="s1">};</span>
+<span class="s0">//# sourceMappingURL=resolve-uri.mjs.map</span>
+</pre>
+</body>
+</html>

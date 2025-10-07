@@ -1,0 +1,523 @@
+<html>
+<head>
+<title>no-static-element-interactions-test.js</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #8c8c8c; font-style: italic;}
+.s1 { color: #8c8c8c; font-style: italic;}
+.s2 { color: #080808;}
+.s3 { color: #0033b3;}
+.s4 { color: #067d17;}
+.s5 { color: #1750eb;}
+</style>
+</head>
+<body bgcolor="#ffffff">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#c0c0c0" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+no-static-element-interactions-test.js</font>
+</center></td></tr></table>
+<pre><span class="s0">/**</span>
+ <span class="s0">* </span><span class="s1">@fileoverview </span><span class="s0">Enforce static elements have no interactive handlers.</span>
+ <span class="s0">* </span><span class="s1">@author </span><span class="s0">Ethan Cohen</span>
+ <span class="s0">*/</span>
+
+<span class="s0">// -----------------------------------------------------------------------------</span>
+<span class="s0">// Requirements</span>
+<span class="s0">// -----------------------------------------------------------------------------</span>
+
+<span class="s3">import </span><span class="s2">{ RuleTester } from </span><span class="s4">'eslint'</span><span class="s2">;</span>
+<span class="s3">import </span><span class="s2">{ configs } from </span><span class="s4">'../../../src/index'</span><span class="s2">;</span>
+<span class="s3">import </span><span class="s2">parserOptionsMapper from </span><span class="s4">'../../__util__/parserOptionsMapper'</span><span class="s2">;</span>
+<span class="s3">import </span><span class="s2">parsers from </span><span class="s4">'../../__util__/helpers/parsers'</span><span class="s2">;</span>
+<span class="s3">import </span><span class="s2">rule from </span><span class="s4">'../../../src/rules/no-static-element-interactions'</span><span class="s2">;</span>
+<span class="s3">import </span><span class="s2">ruleOptionsMapperFactory from </span><span class="s4">'../../__util__/ruleOptionsMapperFactory'</span><span class="s2">;</span>
+
+<span class="s0">// -----------------------------------------------------------------------------</span>
+<span class="s0">// Tests</span>
+<span class="s0">// -----------------------------------------------------------------------------</span>
+
+<span class="s3">const </span><span class="s2">ruleTester = </span><span class="s3">new </span><span class="s2">RuleTester();</span>
+
+<span class="s3">const </span><span class="s2">errorMessage = </span><span class="s4">'Avoid non-native interactive elements. If using native HTML is not possible, add an appropriate role and support for tabbing, mouse, keyboard, and touch inputs to an interactive content element.'</span><span class="s2">;</span>
+
+<span class="s3">const </span><span class="s2">expectedError = {</span>
+  <span class="s2">message: errorMessage,</span>
+  <span class="s2">type: </span><span class="s4">'JSXOpeningElement'</span><span class="s2">,</span>
+<span class="s2">};</span>
+
+<span class="s3">const </span><span class="s2">ruleName = </span><span class="s4">'no-static-element-interactions'</span><span class="s2">;</span>
+
+<span class="s3">const </span><span class="s2">componentsSettings = {</span>
+  <span class="s4">'jsx-a11y'</span><span class="s2">: {</span>
+    <span class="s2">components: {</span>
+      <span class="s2">Button: </span><span class="s4">'button'</span><span class="s2">,</span>
+      <span class="s2">TestComponent: </span><span class="s4">'div'</span><span class="s2">,</span>
+    <span class="s2">},</span>
+  <span class="s2">},</span>
+<span class="s2">};</span>
+
+<span class="s3">const </span><span class="s2">alwaysValid = [</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;TestComponent onClick={doFoo} /&gt;' </span><span class="s2">},</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;Button onClick={doFoo} /&gt;' </span><span class="s2">},</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;Button onClick={doFoo} /&gt;'</span><span class="s2">, settings: componentsSettings },</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;div /&gt;;' </span><span class="s2">},</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;div className=&quot;foo&quot; /&gt;;' </span><span class="s2">},</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;div className=&quot;foo&quot; {...props} /&gt;;' </span><span class="s2">},</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;div onClick={() =&gt; void 0} aria-hidden /&gt;;' </span><span class="s2">},</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;div onClick={() =&gt; void 0} aria-hidden={true} /&gt;;' </span><span class="s2">},</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;div onClick={null} /&gt;;' </span><span class="s2">},</span>
+  <span class="s0">/* All flavors of input */</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;input onClick={() =&gt; void 0} /&gt;' </span><span class="s2">},</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;input type=&quot;button&quot; onClick={() =&gt; void 0} /&gt;' </span><span class="s2">},</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;input type=&quot;checkbox&quot; onClick={() =&gt; void 0} /&gt;' </span><span class="s2">},</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;input type=&quot;color&quot; onClick={() =&gt; void 0} /&gt;' </span><span class="s2">},</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;input type=&quot;date&quot; onClick={() =&gt; void 0} /&gt;' </span><span class="s2">},</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;input type=&quot;datetime&quot; onClick={() =&gt; void 0} /&gt;' </span><span class="s2">},</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;input type=&quot;datetime-local&quot; onClick={() =&gt; void 0} /&gt;' </span><span class="s2">},</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;input type=&quot;email&quot; onClick={() =&gt; void 0} /&gt;' </span><span class="s2">},</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;input type=&quot;file&quot; onClick={() =&gt; void 0} /&gt;' </span><span class="s2">},</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;input type=&quot;hidden&quot; onClick={() =&gt; void 0} /&gt;' </span><span class="s2">},</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;input type=&quot;image&quot; onClick={() =&gt; void 0} /&gt;' </span><span class="s2">},</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;input type=&quot;month&quot; onClick={() =&gt; void 0} /&gt;' </span><span class="s2">},</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;input type=&quot;number&quot; onClick={() =&gt; void 0} /&gt;' </span><span class="s2">},</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;input type=&quot;password&quot; onClick={() =&gt; void 0} /&gt;' </span><span class="s2">},</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;input type=&quot;radio&quot; onClick={() =&gt; void 0} /&gt;' </span><span class="s2">},</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;input type=&quot;range&quot; onClick={() =&gt; void 0} /&gt;' </span><span class="s2">},</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;input type=&quot;reset&quot; onClick={() =&gt; void 0} /&gt;' </span><span class="s2">},</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;input type=&quot;search&quot; onClick={() =&gt; void 0} /&gt;' </span><span class="s2">},</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;input type=&quot;submit&quot; onClick={() =&gt; void 0} /&gt;' </span><span class="s2">},</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;input type=&quot;tel&quot; onClick={() =&gt; void 0} /&gt;' </span><span class="s2">},</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;input type=&quot;text&quot; onClick={() =&gt; void 0} /&gt;' </span><span class="s2">},</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;input type=&quot;time&quot; onClick={() =&gt; void 0} /&gt;' </span><span class="s2">},</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;input type=&quot;url&quot; onClick={() =&gt; void 0} /&gt;' </span><span class="s2">},</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;input type=&quot;week&quot; onClick={() =&gt; void 0} /&gt;' </span><span class="s2">},</span>
+  <span class="s0">/* End all flavors of input */</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;button onClick={() =&gt; void 0} className=&quot;foo&quot; /&gt;' </span><span class="s2">},</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;datalist onClick={() =&gt; {}} /&gt;;' </span><span class="s2">},</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;menuitem onClick={() =&gt; {}} /&gt;;' </span><span class="s2">},</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;option onClick={() =&gt; void 0} className=&quot;foo&quot; /&gt;' </span><span class="s2">},</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;select onClick={() =&gt; void 0} className=&quot;foo&quot; /&gt;' </span><span class="s2">},</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;textarea onClick={() =&gt; void 0} className=&quot;foo&quot; /&gt;' </span><span class="s2">},</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;a onClick={() =&gt; void 0} href=&quot;http://x.y.z&quot; /&gt;' </span><span class="s2">},</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;a onClick={() =&gt; void 0} href=&quot;http://x.y.z&quot; tabIndex=&quot;0&quot; /&gt;' </span><span class="s2">},</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;audio onClick={() =&gt; {}} /&gt;;' </span><span class="s2">},</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;form onClick={() =&gt; {}} /&gt;;' </span><span class="s2">},</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;form onSubmit={() =&gt; {}} /&gt;;' </span><span class="s2">},</span>
+  <span class="s0">// { code: '&lt;link onClick={() =&gt; {}} href=&quot;#&quot; /&gt;;' },</span>
+  <span class="s0">/* HTML elements attributed with an interactive role */</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;div role=&quot;button&quot; onClick={() =&gt; {}} /&gt;;' </span><span class="s2">},</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;div role=&quot;checkbox&quot; onClick={() =&gt; {}} /&gt;;' </span><span class="s2">},</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;div role=&quot;columnheader&quot; onClick={() =&gt; {}} /&gt;;' </span><span class="s2">},</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;div role=&quot;combobox&quot; onClick={() =&gt; {}} /&gt;;' </span><span class="s2">},</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;div role=&quot;form&quot; onClick={() =&gt; {}} /&gt;;' </span><span class="s2">},</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;div role=&quot;gridcell&quot; onClick={() =&gt; {}} /&gt;;' </span><span class="s2">},</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;div role=&quot;link&quot; onClick={() =&gt; {}} /&gt;;' </span><span class="s2">},</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;div role=&quot;menuitem&quot; onClick={() =&gt; {}} /&gt;;' </span><span class="s2">},</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;div role=&quot;menuitemcheckbox&quot; onClick={() =&gt; {}} /&gt;;' </span><span class="s2">},</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;div role=&quot;menuitemradio&quot; onClick={() =&gt; {}} /&gt;;' </span><span class="s2">},</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;div role=&quot;option&quot; onClick={() =&gt; {}} /&gt;;' </span><span class="s2">},</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;div role=&quot;radio&quot; onClick={() =&gt; {}} /&gt;;' </span><span class="s2">},</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;div role=&quot;rowheader&quot; onClick={() =&gt; {}} /&gt;;' </span><span class="s2">},</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;div role=&quot;searchbox&quot; onClick={() =&gt; {}} /&gt;;' </span><span class="s2">},</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;div role=&quot;slider&quot; onClick={() =&gt; {}} /&gt;;' </span><span class="s2">},</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;div role=&quot;spinbutton&quot; onClick={() =&gt; {}} /&gt;;' </span><span class="s2">},</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;div role=&quot;switch&quot; onClick={() =&gt; {}} /&gt;;' </span><span class="s2">},</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;div role=&quot;tab&quot; onClick={() =&gt; {}} /&gt;;' </span><span class="s2">},</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;div role=&quot;textbox&quot; onClick={() =&gt; {}} /&gt;;' </span><span class="s2">},</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;div role=&quot;treeitem&quot; onClick={() =&gt; {}} /&gt;;' </span><span class="s2">},</span>
+  <span class="s0">/* Presentation is a special case role that indicates intentional static semantics */</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;div role=&quot;presentation&quot; onClick={() =&gt; {}} /&gt;;' </span><span class="s2">},</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;div role=&quot;presentation&quot; onKeyDown={() =&gt; {}} /&gt;;' </span><span class="s2">},</span>
+  <span class="s0">/* HTML elements with an inherent, non-interactive role */</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;address onClick={() =&gt; {}} /&gt;;' </span><span class="s2">},</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;article onClick={() =&gt; {}} /&gt;;' </span><span class="s2">},</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;article onDblClick={() =&gt; void 0} /&gt;;' </span><span class="s2">},</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;aside onClick={() =&gt; {}} /&gt;;' </span><span class="s2">},</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;blockquote onClick={() =&gt; {}} /&gt;;' </span><span class="s2">},</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;br onClick={() =&gt; {}} /&gt;;' </span><span class="s2">},</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;canvas onClick={() =&gt; {}} /&gt;;' </span><span class="s2">},</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;caption onClick={() =&gt; {}} /&gt;;' </span><span class="s2">},</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;code onClick={() =&gt; {}} /&gt;;' </span><span class="s2">},</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;dd onClick={() =&gt; {}} /&gt;;' </span><span class="s2">},</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;del onClick={() =&gt; {}} /&gt;;' </span><span class="s2">},</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;details onClick={() =&gt; {}} /&gt;;' </span><span class="s2">},</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;dfn onClick={() =&gt; {}} /&gt;;' </span><span class="s2">},</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;dir onClick={() =&gt; {}} /&gt;;' </span><span class="s2">},</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;dl onClick={() =&gt; {}} /&gt;;' </span><span class="s2">},</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;dt onClick={() =&gt; {}} /&gt;;' </span><span class="s2">},</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;em onClick={() =&gt; {}} /&gt;;' </span><span class="s2">},</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;embed onClick={() =&gt; {}} /&gt;;' </span><span class="s2">},</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;fieldset onClick={() =&gt; {}} /&gt;;' </span><span class="s2">},</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;figcaption onClick={() =&gt; {}} /&gt;;' </span><span class="s2">},</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;figure onClick={() =&gt; {}} /&gt;;' </span><span class="s2">},</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;footer onClick={() =&gt; {}} /&gt;;' </span><span class="s2">},</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;h1 onClick={() =&gt; {}} /&gt;;' </span><span class="s2">},</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;h2 onClick={() =&gt; {}} /&gt;;' </span><span class="s2">},</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;h3 onClick={() =&gt; {}} /&gt;;' </span><span class="s2">},</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;h4 onClick={() =&gt; {}} /&gt;;' </span><span class="s2">},</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;h5 onClick={() =&gt; {}} /&gt;;' </span><span class="s2">},</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;h6 onClick={() =&gt; {}} /&gt;;' </span><span class="s2">},</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;hr onClick={() =&gt; {}} /&gt;;' </span><span class="s2">},</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;html onClick={() =&gt; {}} /&gt;;' </span><span class="s2">},</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;iframe onClick={() =&gt; {}} /&gt;;' </span><span class="s2">},</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;img onClick={() =&gt; {}} /&gt;;' </span><span class="s2">},</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;ins onClick={() =&gt; {}} /&gt;;' </span><span class="s2">},</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;label onClick={() =&gt; {}} /&gt;;' </span><span class="s2">},</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;legend onClick={() =&gt; {}} /&gt;;' </span><span class="s2">},</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;li onClick={() =&gt; {}} /&gt;;' </span><span class="s2">},</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;main onClick={() =&gt; void 0} /&gt;;' </span><span class="s2">},</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;mark onClick={() =&gt; {}} /&gt;;' </span><span class="s2">},</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;marquee onClick={() =&gt; {}} /&gt;;' </span><span class="s2">},</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;menu onClick={() =&gt; {}} /&gt;;' </span><span class="s2">},</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;meter onClick={() =&gt; {}} /&gt;;' </span><span class="s2">},</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;nav onClick={() =&gt; {}} /&gt;;' </span><span class="s2">},</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;ol onClick={() =&gt; {}} /&gt;;' </span><span class="s2">},</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;optgroup onClick={() =&gt; {}} /&gt;;' </span><span class="s2">},</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;output onClick={() =&gt; {}} /&gt;;' </span><span class="s2">},</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;p onClick={() =&gt; {}} /&gt;;' </span><span class="s2">},</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;pre onClick={() =&gt; {}} /&gt;;' </span><span class="s2">},</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;progress onClick={() =&gt; {}} /&gt;;' </span><span class="s2">},</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;ruby onClick={() =&gt; {}} /&gt;;' </span><span class="s2">},</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;section onClick={() =&gt; {}} aria-label=&quot;Aa&quot; /&gt;;' </span><span class="s2">},</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;section onClick={() =&gt; {}} aria-labelledby=&quot;js_1&quot; /&gt;;' </span><span class="s2">},</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;strong onClick={() =&gt; {}} /&gt;;' </span><span class="s2">},</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;sub onClick={() =&gt; {}} /&gt;;' </span><span class="s2">},</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;summary onClick={() =&gt; {}} /&gt;;' </span><span class="s2">},</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;sup onClick={() =&gt; {}} /&gt;;' </span><span class="s2">},</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;table onClick={() =&gt; {}} /&gt;;' </span><span class="s2">},</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;tbody onClick={() =&gt; {}} /&gt;;' </span><span class="s2">},</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;tfoot onClick={() =&gt; {}} /&gt;;' </span><span class="s2">},</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;th onClick={() =&gt; {}} /&gt;;' </span><span class="s2">},</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;thead onClick={() =&gt; {}} /&gt;;' </span><span class="s2">},</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;time onClick={() =&gt; {}} /&gt;;' </span><span class="s2">},</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;tr onClick={() =&gt; {}} /&gt;;' </span><span class="s2">},</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;video onClick={() =&gt; {}} /&gt;;' </span><span class="s2">},</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;ul onClick={() =&gt; {}} /&gt;;' </span><span class="s2">},</span>
+  <span class="s0">/* HTML elements attributed with an abstract role */</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;div role=&quot;command&quot; onClick={() =&gt; {}} /&gt;;' </span><span class="s2">},</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;div role=&quot;composite&quot; onClick={() =&gt; {}} /&gt;;' </span><span class="s2">},</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;div role=&quot;input&quot; onClick={() =&gt; {}} /&gt;;' </span><span class="s2">},</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;div role=&quot;landmark&quot; onClick={() =&gt; {}} /&gt;;' </span><span class="s2">},</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;div role=&quot;range&quot; onClick={() =&gt; {}} /&gt;;' </span><span class="s2">},</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;div role=&quot;roletype&quot; onClick={() =&gt; {}} /&gt;;' </span><span class="s2">},</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;div role=&quot;sectionhead&quot; onClick={() =&gt; {}} /&gt;;' </span><span class="s2">},</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;div role=&quot;select&quot; onClick={() =&gt; {}} /&gt;;' </span><span class="s2">},</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;div role=&quot;structure&quot; onClick={() =&gt; {}} /&gt;;' </span><span class="s2">},</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;div role=&quot;widget&quot; onClick={() =&gt; {}} /&gt;;' </span><span class="s2">},</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;div role=&quot;window&quot; onClick={() =&gt; {}} /&gt;;' </span><span class="s2">},</span>
+  <span class="s0">/* HTML elements attributed with a non-interactive role */</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;div role=&quot;alert&quot; onClick={() =&gt; {}} /&gt;;' </span><span class="s2">},</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;div role=&quot;alertdialog&quot; onClick={() =&gt; {}} /&gt;;' </span><span class="s2">},</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;div role=&quot;application&quot; onClick={() =&gt; {}} /&gt;;' </span><span class="s2">},</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;div role=&quot;article&quot; onClick={() =&gt; {}} /&gt;;' </span><span class="s2">},</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;div role=&quot;banner&quot; onClick={() =&gt; {}} /&gt;;' </span><span class="s2">},</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;div role=&quot;cell&quot; onClick={() =&gt; {}} /&gt;;' </span><span class="s2">},</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;div role=&quot;complementary&quot; onClick={() =&gt; {}} /&gt;;' </span><span class="s2">},</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;div role=&quot;contentinfo&quot; onClick={() =&gt; {}} /&gt;;' </span><span class="s2">},</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;div role=&quot;definition&quot; onClick={() =&gt; {}} /&gt;;' </span><span class="s2">},</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;div role=&quot;dialog&quot; onClick={() =&gt; {}} /&gt;;' </span><span class="s2">},</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;div role=&quot;directory&quot; onClick={() =&gt; {}} /&gt;;' </span><span class="s2">},</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;div role=&quot;document&quot; onClick={() =&gt; {}} /&gt;;' </span><span class="s2">},</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;div role=&quot;feed&quot; onClick={() =&gt; {}} /&gt;;' </span><span class="s2">},</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;div role=&quot;figure&quot; onClick={() =&gt; {}} /&gt;;' </span><span class="s2">},</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;div role=&quot;grid&quot; onClick={() =&gt; {}} /&gt;;' </span><span class="s2">},</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;div role=&quot;group&quot; onClick={() =&gt; {}} /&gt;;' </span><span class="s2">},</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;div role=&quot;heading&quot; onClick={() =&gt; {}} /&gt;;' </span><span class="s2">},</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;div role=&quot;img&quot; onClick={() =&gt; {}} /&gt;;' </span><span class="s2">},</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;div role=&quot;list&quot; onClick={() =&gt; {}} /&gt;;' </span><span class="s2">},</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;div role=&quot;listbox&quot; onClick={() =&gt; {}} /&gt;;' </span><span class="s2">},</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;div role=&quot;listitem&quot; onClick={() =&gt; {}} /&gt;;' </span><span class="s2">},</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;div role=&quot;log&quot; onClick={() =&gt; {}} /&gt;;' </span><span class="s2">},</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;div role=&quot;main&quot; onClick={() =&gt; {}} /&gt;;' </span><span class="s2">},</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;div role=&quot;marquee&quot; onClick={() =&gt; {}} /&gt;;' </span><span class="s2">},</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;div role=&quot;math&quot; onClick={() =&gt; {}} /&gt;;' </span><span class="s2">},</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;div role=&quot;menu&quot; onClick={() =&gt; {}} /&gt;;' </span><span class="s2">},</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;div role=&quot;menubar&quot; onClick={() =&gt; {}} /&gt;;' </span><span class="s2">},</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;div role=&quot;navigation&quot; onClick={() =&gt; {}} /&gt;;' </span><span class="s2">},</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;div role=&quot;note&quot; onClick={() =&gt; {}} /&gt;;' </span><span class="s2">},</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;div role=&quot;progressbar&quot; onClick={() =&gt; {}} /&gt;;' </span><span class="s2">},</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;div role=&quot;radiogroup&quot; onClick={() =&gt; {}} /&gt;;' </span><span class="s2">},</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;div role=&quot;region&quot; onClick={() =&gt; {}} /&gt;;' </span><span class="s2">},</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;div role=&quot;row&quot; onClick={() =&gt; {}} /&gt;;' </span><span class="s2">},</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;div role=&quot;rowgroup&quot; onClick={() =&gt; {}} /&gt;;' </span><span class="s2">},</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;div role=&quot;section&quot; onClick={() =&gt; {}} /&gt;;' </span><span class="s2">},</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;div role=&quot;search&quot; onClick={() =&gt; {}} /&gt;;' </span><span class="s2">},</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;div role=&quot;separator&quot; onClick={() =&gt; {}} /&gt;;' </span><span class="s2">},</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;div role=&quot;scrollbar&quot; onClick={() =&gt; {}} /&gt;;' </span><span class="s2">},</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;div role=&quot;status&quot; onClick={() =&gt; {}} /&gt;;' </span><span class="s2">},</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;div role=&quot;table&quot; onClick={() =&gt; {}} /&gt;;' </span><span class="s2">},</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;div role=&quot;tablist&quot; onClick={() =&gt; {}} /&gt;;' </span><span class="s2">},</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;div role=&quot;tabpanel&quot; onClick={() =&gt; {}} /&gt;;' </span><span class="s2">},</span>
+  <span class="s0">// { code: '&lt;td onClick={() =&gt; {}} /&gt;;' },</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;div role=&quot;term&quot; onClick={() =&gt; {}} /&gt;;' </span><span class="s2">},</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;div role=&quot;timer&quot; onClick={() =&gt; {}} /&gt;;' </span><span class="s2">},</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;div role=&quot;toolbar&quot; onClick={() =&gt; {}} /&gt;;' </span><span class="s2">},</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;div role=&quot;tooltip&quot; onClick={() =&gt; {}} /&gt;;' </span><span class="s2">},</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;div role=&quot;tree&quot; onClick={() =&gt; {}} /&gt;;' </span><span class="s2">},</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;div role=&quot;treegrid&quot; onClick={() =&gt; {}} /&gt;;' </span><span class="s2">},</span>
+  <span class="s0">// All the possible handlers</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;div onCopy={() =&gt; {}} /&gt;;' </span><span class="s2">},</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;div onCut={() =&gt; {}} /&gt;;' </span><span class="s2">},</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;div onPaste={() =&gt; {}} /&gt;;' </span><span class="s2">},</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;div onCompositionEnd={() =&gt; {}} /&gt;;' </span><span class="s2">},</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;div onCompositionStart={() =&gt; {}} /&gt;;' </span><span class="s2">},</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;div onCompositionUpdate={() =&gt; {}} /&gt;;' </span><span class="s2">},</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;div onChange={() =&gt; {}} /&gt;;' </span><span class="s2">},</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;div onInput={() =&gt; {}} /&gt;;' </span><span class="s2">},</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;div onSubmit={() =&gt; {}} /&gt;;' </span><span class="s2">},</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;div onSelect={() =&gt; {}} /&gt;;' </span><span class="s2">},</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;div onTouchCancel={() =&gt; {}} /&gt;;' </span><span class="s2">},</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;div onTouchEnd={() =&gt; {}} /&gt;;' </span><span class="s2">},</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;div onTouchMove={() =&gt; {}} /&gt;;' </span><span class="s2">},</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;div onTouchStart={() =&gt; {}} /&gt;;' </span><span class="s2">},</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;div onScroll={() =&gt; {}} /&gt;;' </span><span class="s2">},</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;div onWheel={() =&gt; {}} /&gt;;' </span><span class="s2">},</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;div onAbort={() =&gt; {}} /&gt;;' </span><span class="s2">},</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;div onCanPlay={() =&gt; {}} /&gt;;' </span><span class="s2">},</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;div onCanPlayThrough={() =&gt; {}} /&gt;;' </span><span class="s2">},</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;div onDurationChange={() =&gt; {}} /&gt;;' </span><span class="s2">},</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;div onEmptied={() =&gt; {}} /&gt;;' </span><span class="s2">},</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;div onEncrypted={() =&gt; {}} /&gt;;' </span><span class="s2">},</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;div onEnded={() =&gt; {}} /&gt;;' </span><span class="s2">},</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;div onError={() =&gt; {}} /&gt;;' </span><span class="s2">},</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;div onLoadedData={() =&gt; {}} /&gt;;' </span><span class="s2">},</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;div onLoadedMetadata={() =&gt; {}} /&gt;;' </span><span class="s2">},</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;div onLoadStart={() =&gt; {}} /&gt;;' </span><span class="s2">},</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;div onPause={() =&gt; {}} /&gt;;' </span><span class="s2">},</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;div onPlay={() =&gt; {}} /&gt;;' </span><span class="s2">},</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;div onPlaying={() =&gt; {}} /&gt;;' </span><span class="s2">},</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;div onProgress={() =&gt; {}} /&gt;;' </span><span class="s2">},</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;div onRateChange={() =&gt; {}} /&gt;;' </span><span class="s2">},</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;div onSeeked={() =&gt; {}} /&gt;;' </span><span class="s2">},</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;div onSeeking={() =&gt; {}} /&gt;;' </span><span class="s2">},</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;div onStalled={() =&gt; {}} /&gt;;' </span><span class="s2">},</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;div onSuspend={() =&gt; {}} /&gt;;' </span><span class="s2">},</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;div onTimeUpdate={() =&gt; {}} /&gt;;' </span><span class="s2">},</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;div onVolumeChange={() =&gt; {}} /&gt;;' </span><span class="s2">},</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;div onWaiting={() =&gt; {}} /&gt;;' </span><span class="s2">},</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;div onLoad={() =&gt; {}} /&gt;;' </span><span class="s2">},</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;div onError={() =&gt; {}} /&gt;;' </span><span class="s2">},</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;div onAnimationStart={() =&gt; {}} /&gt;;' </span><span class="s2">},</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;div onAnimationEnd={() =&gt; {}} /&gt;;' </span><span class="s2">},</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;div onAnimationIteration={() =&gt; {}} /&gt;;' </span><span class="s2">},</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;div onTransitionEnd={() =&gt; {}} /&gt;;' </span><span class="s2">},</span>
+<span class="s2">];</span>
+
+<span class="s3">const </span><span class="s2">neverValid = [</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;div onClick={() =&gt; void 0} /&gt;;'</span><span class="s2">, errors: [expectedError] },</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;div onClick={() =&gt; void 0} role={undefined} /&gt;;'</span><span class="s2">, errors: [expectedError] },</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;div onClick={() =&gt; void 0} {...props} /&gt;;'</span><span class="s2">, errors: [expectedError] },</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;div onKeyUp={() =&gt; void 0} aria-hidden={false} /&gt;;'</span><span class="s2">, errors: [expectedError] },</span>
+  <span class="s0">/* Static elements; no inherent role */</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;a onClick={() =&gt; {}} /&gt;;'</span><span class="s2">, errors: [expectedError] },</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;a onClick={() =&gt; void 0} /&gt;'</span><span class="s2">, errors: [expectedError] },</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;a tabIndex=&quot;0&quot; onClick={() =&gt; void 0} /&gt;'</span><span class="s2">, errors: [expectedError] },</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;acronym onClick={() =&gt; {}} /&gt;;'</span><span class="s2">, errors: [expectedError] },</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;applet onClick={() =&gt; {}} /&gt;;'</span><span class="s2">, errors: [expectedError] },</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;area onClick={() =&gt; {}} /&gt;;'</span><span class="s2">, errors: [expectedError] },</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;b onClick={() =&gt; {}} /&gt;;'</span><span class="s2">, errors: [expectedError] },</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;base onClick={() =&gt; {}} /&gt;;'</span><span class="s2">, errors: [expectedError] },</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;bdi onClick={() =&gt; {}} /&gt;;'</span><span class="s2">, errors: [expectedError] },</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;bdo onClick={() =&gt; {}} /&gt;;'</span><span class="s2">, errors: [expectedError] },</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;big onClick={() =&gt; {}} /&gt;;'</span><span class="s2">, errors: [expectedError] },</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;blink onClick={() =&gt; {}} /&gt;;'</span><span class="s2">, errors: [expectedError] },</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;body onClick={() =&gt; {}} /&gt;;'</span><span class="s2">, errors: [expectedError] },</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;center onClick={() =&gt; {}} /&gt;;'</span><span class="s2">, errors: [expectedError] },</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;cite onClick={() =&gt; {}} /&gt;;'</span><span class="s2">, errors: [expectedError] },</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;col onClick={() =&gt; {}} /&gt;;'</span><span class="s2">, errors: [expectedError] },</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;colgroup onClick={() =&gt; {}} /&gt;;'</span><span class="s2">, errors: [expectedError] },</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;content onClick={() =&gt; {}} /&gt;;'</span><span class="s2">, errors: [expectedError] },</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;data onClick={() =&gt; {}} /&gt;;'</span><span class="s2">, errors: [expectedError] },</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;font onClick={() =&gt; {}} /&gt;;'</span><span class="s2">, errors: [expectedError] },</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;frame onClick={() =&gt; {}} /&gt;;'</span><span class="s2">, errors: [expectedError] },</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;frameset onClick={() =&gt; {}} /&gt;;'</span><span class="s2">, errors: [expectedError] },</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;head onClick={() =&gt; {}} /&gt;;'</span><span class="s2">, errors: [expectedError] },</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;header onClick={() =&gt; {}} /&gt;;'</span><span class="s2">, errors: [expectedError] },</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;hgroup onClick={() =&gt; {}} /&gt;;'</span><span class="s2">, errors: [expectedError] },</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;i onClick={() =&gt; {}} /&gt;;'</span><span class="s2">, errors: [expectedError] },</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;kbd onClick={() =&gt; {}} /&gt;;'</span><span class="s2">, errors: [expectedError] },</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;keygen onClick={() =&gt; {}} /&gt;;'</span><span class="s2">, errors: [expectedError] },</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;map onClick={() =&gt; {}} /&gt;;'</span><span class="s2">, errors: [expectedError] },</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;meta onClick={() =&gt; {}} /&gt;;'</span><span class="s2">, errors: [expectedError] },</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;noembed onClick={() =&gt; {}} /&gt;;'</span><span class="s2">, errors: [expectedError] },</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;noscript onClick={() =&gt; {}} /&gt;;'</span><span class="s2">, errors: [expectedError] },</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;object onClick={() =&gt; {}} /&gt;;'</span><span class="s2">, errors: [expectedError] },</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;param onClick={() =&gt; {}} /&gt;;'</span><span class="s2">, errors: [expectedError] },</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;picture onClick={() =&gt; {}} /&gt;;'</span><span class="s2">, errors: [expectedError] },</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;q onClick={() =&gt; {}} /&gt;;'</span><span class="s2">, errors: [expectedError] },</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;rp onClick={() =&gt; {}} /&gt;;'</span><span class="s2">, errors: [expectedError] },</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;rt onClick={() =&gt; {}} /&gt;;'</span><span class="s2">, errors: [expectedError] },</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;rtc onClick={() =&gt; {}} /&gt;;'</span><span class="s2">, errors: [expectedError] },</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;s onClick={() =&gt; {}} /&gt;;'</span><span class="s2">, errors: [expectedError] },</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;samp onClick={() =&gt; {}} /&gt;;'</span><span class="s2">, errors: [expectedError] },</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;script onClick={() =&gt; {}} /&gt;;'</span><span class="s2">, errors: [expectedError] },</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;section onClick={() =&gt; {}} /&gt;;'</span><span class="s2">, errors: [expectedError] },</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;small onClick={() =&gt; {}} /&gt;;'</span><span class="s2">, errors: [expectedError] },</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;source onClick={() =&gt; {}} /&gt;;'</span><span class="s2">, errors: [expectedError] },</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;spacer onClick={() =&gt; {}} /&gt;;'</span><span class="s2">, errors: [expectedError] },</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;span onClick={() =&gt; {}} /&gt;;'</span><span class="s2">, errors: [expectedError] },</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;strike onClick={() =&gt; {}} /&gt;;'</span><span class="s2">, errors: [expectedError] },</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;style onClick={() =&gt; {}} /&gt;;'</span><span class="s2">, errors: [expectedError] },</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;title onClick={() =&gt; {}} /&gt;;'</span><span class="s2">, errors: [expectedError] },</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;track onClick={() =&gt; {}} /&gt;;'</span><span class="s2">, errors: [expectedError] },</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;tt onClick={() =&gt; {}} /&gt;;'</span><span class="s2">, errors: [expectedError] },</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;u onClick={() =&gt; {}} /&gt;;'</span><span class="s2">, errors: [expectedError] },</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;var onClick={() =&gt; {}} /&gt;;'</span><span class="s2">, errors: [expectedError] },</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;wbr onClick={() =&gt; {}} /&gt;;'</span><span class="s2">, errors: [expectedError] },</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;xmp onClick={() =&gt; {}} /&gt;;'</span><span class="s2">, errors: [expectedError] },</span>
+  <span class="s0">// Handlers</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;div onKeyDown={() =&gt; {}} /&gt;;'</span><span class="s2">, errors: [expectedError] },</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;div onKeyPress={() =&gt; {}} /&gt;;'</span><span class="s2">, errors: [expectedError] },</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;div onKeyUp={() =&gt; {}} /&gt;;'</span><span class="s2">, errors: [expectedError] },</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;div onClick={() =&gt; {}} /&gt;;'</span><span class="s2">, errors: [expectedError] },</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;div onMouseDown={() =&gt; {}} /&gt;;'</span><span class="s2">, errors: [expectedError] },</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;div onMouseUp={() =&gt; {}} /&gt;;'</span><span class="s2">, errors: [expectedError] },</span>
+  <span class="s0">// Custom components</span>
+  <span class="s2">{ code: </span><span class="s4">'&lt;TestComponent onClick={doFoo} /&gt;'</span><span class="s2">, settings: componentsSettings, errors: [expectedError] },</span>
+<span class="s2">];</span>
+
+<span class="s3">const </span><span class="s2">recommendedOptions = configs.recommended.rules[</span><span class="s4">`jsx-a11y/</span><span class="s2">${ruleName}</span><span class="s4">`</span><span class="s2">][</span><span class="s5">1</span><span class="s2">] || {};</span>
+<span class="s2">ruleTester.run(</span><span class="s4">`</span><span class="s2">${ruleName}</span><span class="s4">:recommended`</span><span class="s2">, rule, {</span>
+  <span class="s2">valid: parsers.all([].concat(</span>
+    <span class="s2">alwaysValid,</span>
+    <span class="s0">// All the possible handlers</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;div onCopy={() =&gt; {}} /&gt;;' </span><span class="s2">},</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;div onCut={() =&gt; {}} /&gt;;' </span><span class="s2">},</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;div onPaste={() =&gt; {}} /&gt;;' </span><span class="s2">},</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;div onCompositionEnd={() =&gt; {}} /&gt;;' </span><span class="s2">},</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;div onCompositionStart={() =&gt; {}} /&gt;;' </span><span class="s2">},</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;div onCompositionUpdate={() =&gt; {}} /&gt;;' </span><span class="s2">},</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;div onFocus={() =&gt; {}} /&gt;;' </span><span class="s2">},</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;div onBlur={() =&gt; {}} /&gt;;' </span><span class="s2">},</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;div onChange={() =&gt; {}} /&gt;;' </span><span class="s2">},</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;div onInput={() =&gt; {}} /&gt;;' </span><span class="s2">},</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;div onSubmit={() =&gt; {}} /&gt;;' </span><span class="s2">},</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;div onContextMenu={() =&gt; {}} /&gt;;' </span><span class="s2">},</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;div onDblClick={() =&gt; {}} /&gt;;' </span><span class="s2">},</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;div onDoubleClick={() =&gt; {}} /&gt;;' </span><span class="s2">},</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;div onDrag={() =&gt; {}} /&gt;;' </span><span class="s2">},</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;div onDragEnd={() =&gt; {}} /&gt;;' </span><span class="s2">},</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;div onDragEnter={() =&gt; {}} /&gt;;' </span><span class="s2">},</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;div onDragExit={() =&gt; {}} /&gt;;' </span><span class="s2">},</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;div onDragLeave={() =&gt; {}} /&gt;;' </span><span class="s2">},</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;div onDragOver={() =&gt; {}} /&gt;;' </span><span class="s2">},</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;div onDragStart={() =&gt; {}} /&gt;;' </span><span class="s2">},</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;div onDrop={() =&gt; {}} /&gt;;' </span><span class="s2">},</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;div onMouseEnter={() =&gt; {}} /&gt;;' </span><span class="s2">},</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;div onMouseLeave={() =&gt; {}} /&gt;;' </span><span class="s2">},</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;div onMouseMove={() =&gt; {}} /&gt;;' </span><span class="s2">},</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;div onMouseOut={() =&gt; {}} /&gt;;' </span><span class="s2">},</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;div onMouseOver={() =&gt; {}} /&gt;;' </span><span class="s2">},</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;div onSelect={() =&gt; {}} /&gt;;' </span><span class="s2">},</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;div onTouchCancel={() =&gt; {}} /&gt;;' </span><span class="s2">},</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;div onTouchEnd={() =&gt; {}} /&gt;;' </span><span class="s2">},</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;div onTouchMove={() =&gt; {}} /&gt;;' </span><span class="s2">},</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;div onTouchStart={() =&gt; {}} /&gt;;' </span><span class="s2">},</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;div onScroll={() =&gt; {}} /&gt;;' </span><span class="s2">},</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;div onWheel={() =&gt; {}} /&gt;;' </span><span class="s2">},</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;div onAbort={() =&gt; {}} /&gt;;' </span><span class="s2">},</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;div onCanPlay={() =&gt; {}} /&gt;;' </span><span class="s2">},</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;div onCanPlayThrough={() =&gt; {}} /&gt;;' </span><span class="s2">},</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;div onDurationChange={() =&gt; {}} /&gt;;' </span><span class="s2">},</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;div onEmptied={() =&gt; {}} /&gt;;' </span><span class="s2">},</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;div onEncrypted={() =&gt; {}} /&gt;;' </span><span class="s2">},</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;div onEnded={() =&gt; {}} /&gt;;' </span><span class="s2">},</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;div onError={() =&gt; {}} /&gt;;' </span><span class="s2">},</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;div onLoadedData={() =&gt; {}} /&gt;;' </span><span class="s2">},</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;div onLoadedMetadata={() =&gt; {}} /&gt;;' </span><span class="s2">},</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;div onLoadStart={() =&gt; {}} /&gt;;' </span><span class="s2">},</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;div onPause={() =&gt; {}} /&gt;;' </span><span class="s2">},</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;div onPlay={() =&gt; {}} /&gt;;' </span><span class="s2">},</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;div onPlaying={() =&gt; {}} /&gt;;' </span><span class="s2">},</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;div onProgress={() =&gt; {}} /&gt;;' </span><span class="s2">},</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;div onRateChange={() =&gt; {}} /&gt;;' </span><span class="s2">},</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;div onSeeked={() =&gt; {}} /&gt;;' </span><span class="s2">},</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;div onSeeking={() =&gt; {}} /&gt;;' </span><span class="s2">},</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;div onStalled={() =&gt; {}} /&gt;;' </span><span class="s2">},</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;div onSuspend={() =&gt; {}} /&gt;;' </span><span class="s2">},</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;div onTimeUpdate={() =&gt; {}} /&gt;;' </span><span class="s2">},</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;div onVolumeChange={() =&gt; {}} /&gt;;' </span><span class="s2">},</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;div onWaiting={() =&gt; {}} /&gt;;' </span><span class="s2">},</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;div onLoad={() =&gt; {}} /&gt;;' </span><span class="s2">},</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;div onError={() =&gt; {}} /&gt;;' </span><span class="s2">},</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;div onAnimationStart={() =&gt; {}} /&gt;;' </span><span class="s2">},</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;div onAnimationEnd={() =&gt; {}} /&gt;;' </span><span class="s2">},</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;div onAnimationIteration={() =&gt; {}} /&gt;;' </span><span class="s2">},</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;div onTransitionEnd={() =&gt; {}} /&gt;;' </span><span class="s2">},</span>
+    <span class="s0">// Expressions should pass in recommended mode</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;div role={ROLE_BUTTON} onClick={() =&gt; {}} /&gt;;' </span><span class="s2">},</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;div  {...this.props} role={this.props.role} onKeyPress={e =&gt; this.handleKeyPress(e)}&gt;{this.props.children}&lt;/div&gt;' </span><span class="s2">},</span>
+    <span class="s0">// Cases for allowExpressionValues set to true</span>
+    <span class="s2">{</span>
+      <span class="s2">code: </span><span class="s4">'&lt;div role={BUTTON} onClick={() =&gt; {}} /&gt;;'</span><span class="s2">,</span>
+      <span class="s2">options: [{ allowExpressionValues: </span><span class="s3">true </span><span class="s2">}],</span>
+    <span class="s2">},</span>
+    <span class="s0">// Specific case for ternary operator with literals on both side</span>
+    <span class="s2">{</span>
+      <span class="s2">code: </span><span class="s4">'&lt;div role={isButton ? &quot;button&quot; : &quot;link&quot;} onClick={() =&gt; {}} /&gt;;'</span><span class="s2">,</span>
+      <span class="s2">options: [{ allowExpressionValues: </span><span class="s3">true </span><span class="s2">}],</span>
+    <span class="s2">},</span>
+    <span class="s2">{</span>
+      <span class="s2">code: </span><span class="s4">'&lt;div role={isButton ? &quot;button&quot; : LINK} onClick={() =&gt; {}} /&gt;;'</span><span class="s2">,</span>
+      <span class="s2">options: [{ allowExpressionValues: </span><span class="s3">true </span><span class="s2">}],</span>
+      <span class="s2">errors: [expectedError],</span>
+    <span class="s2">},</span>
+    <span class="s2">{</span>
+      <span class="s2">code: </span><span class="s4">'&lt;div role={isButton ? BUTTON : LINK} onClick={() =&gt; {}} /&gt;;'</span><span class="s2">,</span>
+      <span class="s2">options: [{ allowExpressionValues: </span><span class="s3">true </span><span class="s2">}],</span>
+      <span class="s2">errors: [expectedError],</span>
+    <span class="s2">},</span>
+  <span class="s2">))</span>
+    <span class="s2">.map(ruleOptionsMapperFactory(recommendedOptions))</span>
+    <span class="s2">.map(parserOptionsMapper),</span>
+  <span class="s2">invalid: parsers.all([].concat(</span>
+    <span class="s2">neverValid,</span>
+  <span class="s2">))</span>
+    <span class="s2">.map(ruleOptionsMapperFactory(recommendedOptions))</span>
+    <span class="s2">.map(parserOptionsMapper),</span>
+<span class="s2">});</span>
+
+<span class="s2">ruleTester.run(</span><span class="s4">`</span><span class="s2">${ruleName}</span><span class="s4">:strict`</span><span class="s2">, rule, {</span>
+  <span class="s2">valid: parsers.all([].concat(</span>
+    <span class="s2">alwaysValid,</span>
+  <span class="s2">)).map(parserOptionsMapper),</span>
+  <span class="s2">invalid: parsers.all([].concat(</span>
+    <span class="s2">neverValid,</span>
+    <span class="s0">// All the possible handlers</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;div onContextMenu={() =&gt; {}} /&gt;;'</span><span class="s2">, errors: [expectedError] },</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;div onDblClick={() =&gt; {}} /&gt;;'</span><span class="s2">, errors: [expectedError] },</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;div onDoubleClick={() =&gt; {}} /&gt;;'</span><span class="s2">, errors: [expectedError] },</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;div onDrag={() =&gt; {}} /&gt;;'</span><span class="s2">, errors: [expectedError] },</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;div onDragEnd={() =&gt; {}} /&gt;;'</span><span class="s2">, errors: [expectedError] },</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;div onDragEnter={() =&gt; {}} /&gt;;'</span><span class="s2">, errors: [expectedError] },</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;div onDragExit={() =&gt; {}} /&gt;;'</span><span class="s2">, errors: [expectedError] },</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;div onDragLeave={() =&gt; {}} /&gt;;'</span><span class="s2">, errors: [expectedError] },</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;div onDragOver={() =&gt; {}} /&gt;;'</span><span class="s2">, errors: [expectedError] },</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;div onDragStart={() =&gt; {}} /&gt;;'</span><span class="s2">, errors: [expectedError] },</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;div onDrop={() =&gt; {}} /&gt;;'</span><span class="s2">, errors: [expectedError] },</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;div onMouseEnter={() =&gt; {}} /&gt;;'</span><span class="s2">, errors: [expectedError] },</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;div onMouseLeave={() =&gt; {}} /&gt;;'</span><span class="s2">, errors: [expectedError] },</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;div onMouseMove={() =&gt; {}} /&gt;;'</span><span class="s2">, errors: [expectedError] },</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;div onMouseOut={() =&gt; {}} /&gt;;'</span><span class="s2">, errors: [expectedError] },</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;div onMouseOver={() =&gt; {}} /&gt;;'</span><span class="s2">, errors: [expectedError] },</span>
+    <span class="s0">// Expressions should fail in strict mode</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;div role={ROLE_BUTTON} onClick={() =&gt; {}} /&gt;;'</span><span class="s2">, errors: [expectedError] },</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;div  {...this.props} role={this.props.role} onKeyPress={e =&gt; this.handleKeyPress(e)}&gt;{this.props.children}&lt;/div&gt;'</span><span class="s2">, errors: [expectedError] },</span>
+    <span class="s0">// Cases for allowExpressionValues set to false</span>
+    <span class="s2">{</span>
+      <span class="s2">code: </span><span class="s4">'&lt;div role={BUTTON} onClick={() =&gt; {}} /&gt;;'</span><span class="s2">,</span>
+      <span class="s2">options: [{ allowExpressionValues: </span><span class="s3">false </span><span class="s2">}],</span>
+      <span class="s2">errors: [expectedError],</span>
+    <span class="s2">},</span>
+    <span class="s0">// Specific case for ternary operator with literals on both side</span>
+    <span class="s2">{</span>
+      <span class="s2">code: </span><span class="s4">'&lt;div role={isButton ? &quot;button&quot; : &quot;link&quot;} onClick={() =&gt; {}} /&gt;;'</span><span class="s2">,</span>
+      <span class="s2">options: [{ allowExpressionValues: </span><span class="s3">false </span><span class="s2">}],</span>
+      <span class="s2">errors: [expectedError],</span>
+    <span class="s2">},</span>
+  <span class="s2">)).map(parserOptionsMapper),</span>
+<span class="s2">});</span>
+</pre>
+</body>
+</html>

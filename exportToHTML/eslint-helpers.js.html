@@ -1,0 +1,1486 @@
+<html>
+<head>
+<title>eslint-helpers.js</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #8c8c8c; font-style: italic;}
+.s1 { color: #8c8c8c; font-style: italic;}
+.s2 { color: #080808;}
+.s3 { color: #067d17;}
+.s4 { color: #0033b3;}
+.s5 { color: #1750eb;}
+.s6 { color: #264eff;}
+.s7 { color: #0037a6;}
+</style>
+</head>
+<body bgcolor="#ffffff">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#c0c0c0" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+eslint-helpers.js</font>
+</center></td></tr></table>
+<pre><span class="s0">/**</span>
+ <span class="s0">* </span><span class="s1">@fileoverview </span><span class="s0">Helper functions for ESLint class</span>
+ <span class="s0">* </span><span class="s1">@author </span><span class="s0">Nicholas C. Zakas</span>
+ <span class="s0">*/</span>
+
+<span class="s3">&quot;use strict&quot;</span><span class="s2">;</span>
+
+<span class="s0">//-----------------------------------------------------------------------------</span>
+<span class="s0">// Requirements</span>
+<span class="s0">//-----------------------------------------------------------------------------</span>
+
+<span class="s4">const </span><span class="s2">path = require(</span><span class="s3">&quot;node:path&quot;</span><span class="s2">);</span>
+<span class="s4">const </span><span class="s2">fs = require(</span><span class="s3">&quot;node:fs&quot;</span><span class="s2">);</span>
+<span class="s4">const </span><span class="s2">{ isMainThread, threadId } = require(</span><span class="s3">&quot;node:worker_threads&quot;</span><span class="s2">);</span>
+<span class="s4">const </span><span class="s2">fsp = fs.promises;</span>
+<span class="s4">const </span><span class="s2">isGlob = require(</span><span class="s3">&quot;is-glob&quot;</span><span class="s2">);</span>
+<span class="s4">const </span><span class="s2">hash = require(</span><span class="s3">&quot;../cli-engine/hash&quot;</span><span class="s2">);</span>
+<span class="s4">const </span><span class="s2">minimatch = require(</span><span class="s3">&quot;minimatch&quot;</span><span class="s2">);</span>
+<span class="s4">const </span><span class="s2">globParent = require(</span><span class="s3">&quot;glob-parent&quot;</span><span class="s2">);</span>
+<span class="s4">const </span><span class="s2">{ Linter } = require(</span><span class="s3">&quot;../linter&quot;</span><span class="s2">);</span>
+<span class="s4">const </span><span class="s2">{ getShorthandName } = require(</span><span class="s3">&quot;../shared/naming&quot;</span><span class="s2">);</span>
+<span class="s4">const </span><span class="s2">LintResultCache = require(</span><span class="s3">&quot;../cli-engine/lint-result-cache&quot;</span><span class="s2">);</span>
+<span class="s4">const </span><span class="s2">{ ConfigLoader, LegacyConfigLoader } = require(</span><span class="s3">&quot;../config/config-loader&quot;</span><span class="s2">);</span>
+<span class="s4">const </span><span class="s2">createDebug = require(</span><span class="s3">&quot;debug&quot;</span><span class="s2">);</span>
+
+<span class="s0">//-----------------------------------------------------------------------------</span>
+<span class="s0">// Fixup references</span>
+<span class="s0">//-----------------------------------------------------------------------------</span>
+
+<span class="s4">const </span><span class="s2">Minimatch = minimatch.Minimatch;</span>
+<span class="s4">const </span><span class="s2">MINIMATCH_OPTIONS = { dot: </span><span class="s4">true </span><span class="s2">};</span>
+
+<span class="s0">//-----------------------------------------------------------------------------</span>
+<span class="s0">// Types</span>
+<span class="s0">//-----------------------------------------------------------------------------</span>
+
+<span class="s0">/**</span>
+ <span class="s0">* </span><span class="s1">@import </span><span class="s0">{ ESLintOptions } from &quot;./eslint.js&quot;;</span>
+ <span class="s0">* </span><span class="s1">@import </span><span class="s0">{ Config as CalculatedConfig } from &quot;../config/config.js&quot;;</span>
+ <span class="s0">* </span><span class="s1">@import </span><span class="s0">{ FlatConfigArray } from &quot;../config/flat-config-array.js&quot;;</span>
+ <span class="s0">* </span><span class="s1">@import </span><span class="s0">{ WarningService } from &quot;../services/warning-service.js&quot;;</span>
+ <span class="s0">* </span><span class="s1">@import </span><span class="s0">{ Retrier } from &quot;@humanwhocodes/retry&quot;;</span>
+ <span class="s0">*/</span>
+
+<span class="s0">/** </span><span class="s1">@typedef </span><span class="s0">{import(&quot;../types&quot;).Linter.Config} Config */</span>
+<span class="s0">/** </span><span class="s1">@typedef </span><span class="s0">{import(&quot;../types&quot;).Linter.LintMessage} LintMessage */</span>
+<span class="s0">/** </span><span class="s1">@typedef </span><span class="s0">{import(&quot;../types&quot;).ESLint.LintResult} LintResult */</span>
+<span class="s0">/** </span><span class="s1">@typedef </span><span class="s0">{import(&quot;../types&quot;).ESLint.Plugin} Plugin */</span>
+
+<span class="s0">/**</span>
+ <span class="s0">* </span><span class="s1">@typedef </span><span class="s0">{Object} GlobSearch</span>
+ <span class="s0">* </span><span class="s1">@property </span><span class="s0">{Array&lt;string&gt;} patterns The normalized patterns to use for a search.</span>
+ <span class="s0">* </span><span class="s1">@property </span><span class="s0">{Array&lt;string&gt;} rawPatterns The patterns as entered by the user</span>
+ <span class="s0">*      before doing any normalization.</span>
+ <span class="s0">*/</span>
+
+<span class="s0">//------------------------------------------------------------------------------</span>
+<span class="s0">// Internal Helpers</span>
+<span class="s0">//------------------------------------------------------------------------------</span>
+
+<span class="s4">const </span><span class="s2">hrtimeBigint = process.hrtime.bigint;</span>
+
+<span class="s2">createDebug.formatters.t = timeDiff =&gt;</span>
+	<span class="s3">`</span><span class="s2">${(timeDiff + </span><span class="s5">500_000n</span><span class="s2">) / </span><span class="s5">1_000_000n</span><span class="s2">} </span><span class="s3">ms`</span><span class="s2">;</span>
+<span class="s4">const </span><span class="s2">debug = createDebug(</span>
+	<span class="s3">`eslint:eslint-helpers</span><span class="s2">${isMainThread ? </span><span class="s3">&quot;&quot; </span><span class="s2">: </span><span class="s3">`:thread-</span><span class="s2">${threadId}</span><span class="s3">`</span><span class="s2">}</span><span class="s3">`</span><span class="s2">,</span>
+<span class="s2">);</span>
+
+<span class="s0">//-----------------------------------------------------------------------------</span>
+<span class="s0">// Errors</span>
+<span class="s0">//-----------------------------------------------------------------------------</span>
+
+<span class="s0">/**</span>
+ <span class="s0">* The error type when no files match a glob.</span>
+ <span class="s0">*/</span>
+<span class="s4">class </span><span class="s2">NoFilesFoundError </span><span class="s4">extends </span><span class="s2">Error {</span>
+	<span class="s0">/**</span>
+	 <span class="s0">* </span><span class="s1">@param </span><span class="s0">{string} pattern The glob pattern which was not found.</span>
+	 <span class="s0">* </span><span class="s1">@param </span><span class="s0">{boolean} globEnabled If `false` then the pattern was a glob pattern, but glob was disabled.</span>
+	 <span class="s0">*/</span>
+	<span class="s2">constructor(pattern, globEnabled) {</span>
+		<span class="s4">super</span><span class="s2">(</span>
+			<span class="s3">`No files matching '</span><span class="s2">${pattern}</span><span class="s3">' were found</span><span class="s2">${!globEnabled ? </span><span class="s3">&quot; (glob was disabled)&quot; </span><span class="s2">: </span><span class="s3">&quot;&quot;</span><span class="s2">}</span><span class="s3">.`</span><span class="s2">,</span>
+		<span class="s2">);</span>
+		<span class="s4">this</span><span class="s2">.messageTemplate = </span><span class="s3">&quot;file-not-found&quot;</span><span class="s2">;</span>
+		<span class="s4">this</span><span class="s2">.messageData = { pattern, globDisabled: !globEnabled };</span>
+	<span class="s2">}</span>
+<span class="s2">}</span>
+
+<span class="s0">/**</span>
+ <span class="s0">* The error type when a search fails to match multiple patterns.</span>
+ <span class="s0">*/</span>
+<span class="s4">class </span><span class="s2">UnmatchedSearchPatternsError </span><span class="s4">extends </span><span class="s2">Error {</span>
+	<span class="s0">/**</span>
+	 <span class="s0">* </span><span class="s1">@param </span><span class="s0">{Object} options The options for the error.</span>
+	 <span class="s0">* </span><span class="s1">@param </span><span class="s0">{string} options.basePath The directory that was searched.</span>
+	 <span class="s0">* </span><span class="s1">@param </span><span class="s0">{Array&lt;string&gt;} options.unmatchedPatterns The glob patterns</span>
+	 <span class="s0">*      which were not found.</span>
+	 <span class="s0">* </span><span class="s1">@param </span><span class="s0">{Array&lt;string&gt;} options.patterns The glob patterns that were</span>
+	 <span class="s0">*      searched.</span>
+	 <span class="s0">* </span><span class="s1">@param </span><span class="s0">{Array&lt;string&gt;} options.rawPatterns The raw glob patterns that</span>
+	 <span class="s0">*      were searched.</span>
+	 <span class="s0">*/</span>
+	<span class="s2">constructor({ basePath, unmatchedPatterns, patterns, rawPatterns }) {</span>
+		<span class="s4">super</span><span class="s2">(</span>
+			<span class="s3">`No files matching '</span><span class="s2">${rawPatterns}</span><span class="s3">' in '</span><span class="s2">${basePath}</span><span class="s3">' were found.`</span><span class="s2">,</span>
+		<span class="s2">);</span>
+		<span class="s4">this</span><span class="s2">.basePath = basePath;</span>
+		<span class="s4">this</span><span class="s2">.unmatchedPatterns = unmatchedPatterns;</span>
+		<span class="s4">this</span><span class="s2">.patterns = patterns;</span>
+		<span class="s4">this</span><span class="s2">.rawPatterns = rawPatterns;</span>
+	<span class="s2">}</span>
+<span class="s2">}</span>
+
+<span class="s0">/**</span>
+ <span class="s0">* The error type when there are files matched by a glob, but all of them have been ignored.</span>
+ <span class="s0">*/</span>
+<span class="s4">class </span><span class="s2">AllFilesIgnoredError </span><span class="s4">extends </span><span class="s2">Error {</span>
+	<span class="s0">/**</span>
+	 <span class="s0">* </span><span class="s1">@param </span><span class="s0">{string} pattern The glob pattern which was not found.</span>
+	 <span class="s0">*/</span>
+	<span class="s2">constructor(pattern) {</span>
+		<span class="s4">super</span><span class="s2">(</span><span class="s3">`All files matched by '</span><span class="s2">${pattern}</span><span class="s3">' are ignored.`</span><span class="s2">);</span>
+		<span class="s4">this</span><span class="s2">.messageTemplate = </span><span class="s3">&quot;all-matched-files-ignored&quot;</span><span class="s2">;</span>
+		<span class="s4">this</span><span class="s2">.messageData = { pattern };</span>
+	<span class="s2">}</span>
+<span class="s2">}</span>
+
+<span class="s0">//-----------------------------------------------------------------------------</span>
+<span class="s0">// General Helpers</span>
+<span class="s0">//-----------------------------------------------------------------------------</span>
+
+<span class="s0">/**</span>
+ <span class="s0">* Check if a given value is a non-empty string or not.</span>
+ <span class="s0">* </span><span class="s1">@param </span><span class="s0">{any} value The value to check.</span>
+ <span class="s0">* </span><span class="s1">@returns </span><span class="s0">{boolean} `true` if `value` is a non-empty string.</span>
+ <span class="s0">*/</span>
+<span class="s4">function </span><span class="s2">isNonEmptyString(value) {</span>
+	<span class="s4">return typeof </span><span class="s2">value === </span><span class="s3">&quot;string&quot; </span><span class="s2">&amp;&amp; value.trim() !== </span><span class="s3">&quot;&quot;</span><span class="s2">;</span>
+<span class="s2">}</span>
+
+<span class="s0">/**</span>
+ <span class="s0">* Check if a given value is an array of non-empty strings or not.</span>
+ <span class="s0">* </span><span class="s1">@param </span><span class="s0">{any} value The value to check.</span>
+ <span class="s0">* </span><span class="s1">@returns </span><span class="s0">{boolean} `true` if `value` is an array of non-empty strings.</span>
+ <span class="s0">*/</span>
+<span class="s4">function </span><span class="s2">isArrayOfNonEmptyString(value) {</span>
+	<span class="s4">return </span><span class="s2">(</span>
+		<span class="s2">Array.isArray(value) &amp;&amp; !!value.length &amp;&amp; value.every(isNonEmptyString)</span>
+	<span class="s2">);</span>
+<span class="s2">}</span>
+
+<span class="s0">/**</span>
+ <span class="s0">* Check if a given value is an empty array or an array of non-empty strings.</span>
+ <span class="s0">* </span><span class="s1">@param </span><span class="s0">{any} value The value to check.</span>
+ <span class="s0">* </span><span class="s1">@returns </span><span class="s0">{boolean} `true` if `value` is an empty array or an array of non-empty</span>
+ <span class="s0">*      strings.</span>
+ <span class="s0">*/</span>
+<span class="s4">function </span><span class="s2">isEmptyArrayOrArrayOfNonEmptyString(value) {</span>
+	<span class="s4">return </span><span class="s2">Array.isArray(value) &amp;&amp; value.every(isNonEmptyString);</span>
+<span class="s2">}</span>
+
+<span class="s0">/**</span>
+ <span class="s0">* Check if a given value is a positive integer.</span>
+ <span class="s0">* </span><span class="s1">@param </span><span class="s0">{unknown} value The value to check.</span>
+ <span class="s0">* </span><span class="s1">@returns </span><span class="s0">{boolean} `true` if `value` is a positive integer.</span>
+ <span class="s0">*/</span>
+<span class="s4">function </span><span class="s2">isPositiveInteger(value) {</span>
+	<span class="s4">return </span><span class="s2">Number.isInteger(value) &amp;&amp; value &gt; </span><span class="s5">0</span><span class="s2">;</span>
+<span class="s2">}</span>
+
+<span class="s0">//-----------------------------------------------------------------------------</span>
+<span class="s0">// File-related Helpers</span>
+<span class="s0">//-----------------------------------------------------------------------------</span>
+
+<span class="s0">/**</span>
+ <span class="s0">* Normalizes slashes in a file pattern to posix-style.</span>
+ <span class="s0">* </span><span class="s1">@param </span><span class="s0">{string} pattern The pattern to replace slashes in.</span>
+ <span class="s0">* </span><span class="s1">@returns </span><span class="s0">{string} The pattern with slashes normalized.</span>
+ <span class="s0">*/</span>
+<span class="s4">function </span><span class="s2">normalizeToPosix(pattern) {</span>
+	<span class="s4">return </span><span class="s2">pattern.replace(</span><span class="s6">/\\/gu</span><span class="s2">, </span><span class="s3">&quot;/&quot;</span><span class="s2">);</span>
+<span class="s2">}</span>
+
+<span class="s0">/**</span>
+ <span class="s0">* Check if a string is a glob pattern or not.</span>
+ <span class="s0">* </span><span class="s1">@param </span><span class="s0">{string} pattern A glob pattern.</span>
+ <span class="s0">* </span><span class="s1">@returns </span><span class="s0">{boolean} `true` if the string is a glob pattern.</span>
+ <span class="s0">*/</span>
+<span class="s4">function </span><span class="s2">isGlobPattern(pattern) {</span>
+	<span class="s4">return </span><span class="s2">isGlob(path.sep === </span><span class="s3">&quot;</span><span class="s7">\\</span><span class="s3">&quot; </span><span class="s2">? normalizeToPosix(pattern) : pattern);</span>
+<span class="s2">}</span>
+
+<span class="s0">/**</span>
+ <span class="s0">* Determines if a given glob pattern will return any results.</span>
+ <span class="s0">* Used primarily to help with useful error messages.</span>
+ <span class="s0">* </span><span class="s1">@param </span><span class="s0">{Object} options The options for the function.</span>
+ <span class="s0">* </span><span class="s1">@param </span><span class="s0">{string} options.basePath The directory to search.</span>
+ <span class="s0">* </span><span class="s1">@param </span><span class="s0">{string} options.pattern An absolute path glob pattern to match.</span>
+ <span class="s0">* </span><span class="s1">@returns </span><span class="s0">{Promise&lt;boolean&gt;} True if there is a glob match, false if not.</span>
+ <span class="s0">*/</span>
+<span class="s2">async </span><span class="s4">function </span><span class="s2">globMatch({ basePath, pattern }) {</span>
+	<span class="s4">let </span><span class="s2">found = </span><span class="s4">false</span><span class="s2">;</span>
+	<span class="s4">const </span><span class="s2">{ hfs } = </span><span class="s4">await import</span><span class="s2">(</span><span class="s3">&quot;@humanfs/node&quot;</span><span class="s2">);</span>
+	<span class="s4">const </span><span class="s2">patternToUse = normalizeToPosix(path.relative(basePath, pattern));</span>
+
+	<span class="s4">const </span><span class="s2">matcher = </span><span class="s4">new </span><span class="s2">Minimatch(patternToUse, MINIMATCH_OPTIONS);</span>
+
+	<span class="s4">const </span><span class="s2">walkSettings = {</span>
+		<span class="s2">directoryFilter(entry) {</span>
+			<span class="s4">return </span><span class="s2">!found &amp;&amp; matcher.match(entry.path, </span><span class="s4">true</span><span class="s2">);</span>
+		<span class="s2">},</span>
+
+		<span class="s2">entryFilter(entry) {</span>
+			<span class="s4">if </span><span class="s2">(found || entry.isDirectory) {</span>
+				<span class="s4">return false</span><span class="s2">;</span>
+			<span class="s2">}</span>
+
+			<span class="s4">if </span><span class="s2">(matcher.match(entry.path)) {</span>
+				<span class="s2">found = </span><span class="s4">true</span><span class="s2">;</span>
+				<span class="s4">return true</span><span class="s2">;</span>
+			<span class="s2">}</span>
+
+			<span class="s4">return false</span><span class="s2">;</span>
+		<span class="s2">},</span>
+	<span class="s2">};</span>
+
+	<span class="s4">if </span><span class="s2">(</span><span class="s4">await </span><span class="s2">hfs.isDirectory(basePath)) {</span>
+		<span class="s4">return </span><span class="s2">hfs</span>
+			<span class="s2">.walk(basePath, walkSettings)</span>
+			<span class="s2">.next()</span>
+			<span class="s2">.then(() =&gt; found);</span>
+	<span class="s2">}</span>
+
+	<span class="s4">return </span><span class="s2">found;</span>
+<span class="s2">}</span>
+
+<span class="s0">/**</span>
+ <span class="s0">* Searches a directory looking for matching glob patterns. This uses</span>
+ <span class="s0">* the config array's logic to determine if a directory or file should</span>
+ <span class="s0">* be ignored, so it is consistent with how ignoring works throughout</span>
+ <span class="s0">* ESLint.</span>
+ <span class="s0">* </span><span class="s1">@param </span><span class="s0">{Object} options The options for this function.</span>
+ <span class="s0">* </span><span class="s1">@param </span><span class="s0">{string} options.basePath The directory to search.</span>
+ <span class="s0">* </span><span class="s1">@param </span><span class="s0">{Array&lt;string&gt;} options.patterns An array of absolute path glob patterns</span>
+ <span class="s0">*      to match.</span>
+ <span class="s0">* </span><span class="s1">@param </span><span class="s0">{Array&lt;string&gt;} options.rawPatterns An array of glob patterns</span>
+ <span class="s0">*      as the user inputted them. Used for errors.</span>
+ <span class="s0">* </span><span class="s1">@param </span><span class="s0">{ConfigLoader|LegacyConfigLoader} options.configLoader The config array to use for</span>
+ <span class="s0">*      determining what to ignore.</span>
+ <span class="s0">* </span><span class="s1">@param </span><span class="s0">{boolean} options.errorOnUnmatchedPattern Determines if an error</span>
+ <span class="s0">*      should be thrown when a pattern is unmatched.</span>
+ <span class="s0">* </span><span class="s1">@returns </span><span class="s0">{Promise&lt;Array&lt;string&gt;&gt;} An array of matching file paths</span>
+ <span class="s0">*      or an empty array if there are no matches.</span>
+ <span class="s0">* </span><span class="s1">@throws </span><span class="s0">{UnmatchedSearchPatternsError} If there is a pattern that doesn't</span>
+ <span class="s0">*      match any files.</span>
+ <span class="s0">*/</span>
+<span class="s2">async </span><span class="s4">function </span><span class="s2">globSearch({</span>
+	<span class="s2">basePath,</span>
+	<span class="s2">patterns,</span>
+	<span class="s2">rawPatterns,</span>
+	<span class="s2">configLoader,</span>
+	<span class="s2">errorOnUnmatchedPattern,</span>
+<span class="s2">}) {</span>
+	<span class="s4">if </span><span class="s2">(patterns.length === </span><span class="s5">0</span><span class="s2">) {</span>
+		<span class="s4">return </span><span class="s2">[];</span>
+	<span class="s2">}</span>
+
+	<span class="s0">/* 
+     * In this section we are converting the patterns into Minimatch 
+     * instances for performance reasons. Because we are doing the same 
+     * matches repeatedly, it's best to compile those patterns once and 
+     * reuse them multiple times. 
+     * 
+     * To do that, we convert any patterns with an absolute path into a 
+     * relative path and normalize it to Posix-style slashes. We also keep 
+     * track of the relative patterns to map them back to the original 
+     * patterns, which we need in order to throw an error if there are any 
+     * unmatched patterns. 
+     */</span>
+	<span class="s4">const </span><span class="s2">relativeToPatterns = </span><span class="s4">new </span><span class="s2">Map();</span>
+	<span class="s4">const </span><span class="s2">matchers = patterns.map((pattern, i) =&gt; {</span>
+		<span class="s4">const </span><span class="s2">patternToUse = normalizeToPosix(path.relative(basePath, pattern));</span>
+
+		<span class="s2">relativeToPatterns.set(patternToUse, patterns[i]);</span>
+
+		<span class="s4">return new </span><span class="s2">Minimatch(patternToUse, MINIMATCH_OPTIONS);</span>
+	<span class="s2">});</span>
+
+	<span class="s0">/* 
+     * We track unmatched patterns because we may want to throw an error when 
+     * they occur. To start, this set is initialized with all of the patterns. 
+     * Every time a match occurs, the pattern is removed from the set, making 
+     * it easy to tell if we have any unmatched patterns left at the end of 
+     * search. 
+     */</span>
+	<span class="s4">const </span><span class="s2">unmatchedPatterns = </span><span class="s4">new </span><span class="s2">Set([...relativeToPatterns.keys()]);</span>
+	<span class="s4">const </span><span class="s2">{ hfs } = </span><span class="s4">await import</span><span class="s2">(</span><span class="s3">&quot;@humanfs/node&quot;</span><span class="s2">);</span>
+
+	<span class="s4">const </span><span class="s2">walk = hfs.walk(basePath, {</span>
+		<span class="s2">async directoryFilter(entry) {</span>
+			<span class="s4">if </span><span class="s2">(!matchers.some(matcher =&gt; matcher.match(entry.path, </span><span class="s4">true</span><span class="s2">))) {</span>
+				<span class="s4">return false</span><span class="s2">;</span>
+			<span class="s2">}</span>
+
+			<span class="s4">const </span><span class="s2">absolutePath = path.resolve(basePath, entry.path);</span>
+			<span class="s4">const </span><span class="s2">configs =</span>
+				<span class="s4">await </span><span class="s2">configLoader.loadConfigArrayForDirectory(absolutePath);</span>
+
+			<span class="s4">return </span><span class="s2">!configs.isDirectoryIgnored(absolutePath);</span>
+		<span class="s2">},</span>
+		<span class="s2">async entryFilter(entry) {</span>
+			<span class="s4">const </span><span class="s2">absolutePath = path.resolve(basePath, entry.path);</span>
+
+			<span class="s0">// entries may be directories or files so filter out directories</span>
+			<span class="s4">if </span><span class="s2">(entry.isDirectory) {</span>
+				<span class="s4">return false</span><span class="s2">;</span>
+			<span class="s2">}</span>
+
+			<span class="s4">const </span><span class="s2">configs =</span>
+				<span class="s4">await </span><span class="s2">configLoader.loadConfigArrayForFile(absolutePath);</span>
+			<span class="s4">const </span><span class="s2">config = configs.getConfig(absolutePath);</span>
+
+			<span class="s0">/* 
+             * Optimization: We need to track when patterns are left unmatched 
+             * and so we use `unmatchedPatterns` to do that. There is a bit of 
+             * complexity here because the same file can be matched by more than 
+             * one pattern. So, when we start, we actually need to test every 
+             * pattern against every file. Once we know there are no remaining 
+             * unmatched patterns, then we can switch to just looking for the 
+             * first matching pattern for improved speed. 
+             */</span>
+			<span class="s4">const </span><span class="s2">matchesPattern =</span>
+				<span class="s2">unmatchedPatterns.size &gt; </span><span class="s5">0</span>
+					<span class="s2">? matchers.reduce((previousValue, matcher) =&gt; {</span>
+							<span class="s4">const </span><span class="s2">pathMatches = matcher.match(entry.path);</span>
+
+							<span class="s0">/* 
+                             * We updated the unmatched patterns set only if the path 
+                             * matches and the file has a config. If the file has no 
+                             * config, that means there wasn't a match for the 
+                             * pattern so it should not be removed. 
+                             * 
+                             * Performance note: `getConfig()` aggressively caches 
+                             * results so there is no performance penalty for calling 
+                             * it multiple times with the same argument. 
+                             */</span>
+							<span class="s4">if </span><span class="s2">(pathMatches &amp;&amp; config) {</span>
+								<span class="s2">unmatchedPatterns.delete(matcher.pattern);</span>
+							<span class="s2">}</span>
+
+							<span class="s4">return </span><span class="s2">pathMatches || previousValue;</span>
+						<span class="s2">}, </span><span class="s4">false</span><span class="s2">)</span>
+					<span class="s2">: matchers.some(matcher =&gt; matcher.match(entry.path));</span>
+
+			<span class="s4">return </span><span class="s2">matchesPattern &amp;&amp; config !== </span><span class="s4">void </span><span class="s5">0</span><span class="s2">;</span>
+		<span class="s2">},</span>
+	<span class="s2">});</span>
+
+	<span class="s4">const </span><span class="s2">filePaths = [];</span>
+
+	<span class="s4">if </span><span class="s2">(</span><span class="s4">await </span><span class="s2">hfs.isDirectory(basePath)) {</span>
+		<span class="s4">for await </span><span class="s2">(</span><span class="s4">const </span><span class="s2">entry of walk) {</span>
+			<span class="s2">filePaths.push(path.resolve(basePath, entry.path));</span>
+		<span class="s2">}</span>
+	<span class="s2">}</span>
+
+	<span class="s0">// now check to see if we have any unmatched patterns</span>
+	<span class="s4">if </span><span class="s2">(errorOnUnmatchedPattern &amp;&amp; unmatchedPatterns.size &gt; </span><span class="s5">0</span><span class="s2">) {</span>
+		<span class="s4">throw new </span><span class="s2">UnmatchedSearchPatternsError({</span>
+			<span class="s2">basePath,</span>
+			<span class="s2">unmatchedPatterns: [...unmatchedPatterns].map(pattern =&gt;</span>
+				<span class="s2">relativeToPatterns.get(pattern),</span>
+			<span class="s2">),</span>
+			<span class="s2">patterns,</span>
+			<span class="s2">rawPatterns,</span>
+		<span class="s2">});</span>
+	<span class="s2">}</span>
+
+	<span class="s4">return </span><span class="s2">filePaths;</span>
+<span class="s2">}</span>
+
+<span class="s0">/**</span>
+ <span class="s0">* Throws an error for unmatched patterns. The error will only contain information about the first one.</span>
+ <span class="s0">* Checks to see if there are any ignored results for a given search.</span>
+ <span class="s0">* </span><span class="s1">@param </span><span class="s0">{Object} options The options for this function.</span>
+ <span class="s0">* </span><span class="s1">@param </span><span class="s0">{string} options.basePath The directory to search.</span>
+ <span class="s0">* </span><span class="s1">@param </span><span class="s0">{Array&lt;string&gt;} options.patterns An array of glob patterns</span>
+ <span class="s0">*      that were used in the original search.</span>
+ <span class="s0">* </span><span class="s1">@param </span><span class="s0">{Array&lt;string&gt;} options.rawPatterns An array of glob patterns</span>
+ <span class="s0">*      as the user inputted them. Used for errors.</span>
+ <span class="s0">* </span><span class="s1">@param </span><span class="s0">{Array&lt;string&gt;} options.unmatchedPatterns A non-empty array of absolute path glob patterns</span>
+ <span class="s0">*      that were unmatched in the original search.</span>
+ <span class="s0">* </span><span class="s1">@returns </span><span class="s0">{Promise&lt;never&gt;} Always throws an error.</span>
+ <span class="s0">* </span><span class="s1">@throws </span><span class="s0">{NoFilesFoundError} If the first unmatched pattern</span>
+ <span class="s0">*      doesn't match any files even when there are no ignores.</span>
+ <span class="s0">* </span><span class="s1">@throws </span><span class="s0">{AllFilesIgnoredError} If the first unmatched pattern</span>
+ <span class="s0">*      matches some files when there are no ignores.</span>
+ <span class="s0">*/</span>
+<span class="s2">async </span><span class="s4">function </span><span class="s2">throwErrorForUnmatchedPatterns({</span>
+	<span class="s2">basePath,</span>
+	<span class="s2">patterns,</span>
+	<span class="s2">rawPatterns,</span>
+	<span class="s2">unmatchedPatterns,</span>
+<span class="s2">}) {</span>
+	<span class="s4">const </span><span class="s2">pattern = unmatchedPatterns[</span><span class="s5">0</span><span class="s2">];</span>
+	<span class="s4">const </span><span class="s2">rawPattern = rawPatterns[patterns.indexOf(pattern)];</span>
+
+	<span class="s4">const </span><span class="s2">patternHasMatch = </span><span class="s4">await </span><span class="s2">globMatch({</span>
+		<span class="s2">basePath,</span>
+		<span class="s2">pattern,</span>
+	<span class="s2">});</span>
+
+	<span class="s4">if </span><span class="s2">(patternHasMatch) {</span>
+		<span class="s4">throw new </span><span class="s2">AllFilesIgnoredError(rawPattern);</span>
+	<span class="s2">}</span>
+
+	<span class="s0">// if we get here there are truly no matches</span>
+	<span class="s4">throw new </span><span class="s2">NoFilesFoundError(rawPattern, </span><span class="s4">true</span><span class="s2">);</span>
+<span class="s2">}</span>
+
+<span class="s0">/**</span>
+ <span class="s0">* Performs multiple glob searches in parallel.</span>
+ <span class="s0">* </span><span class="s1">@param </span><span class="s0">{Object} options The options for this function.</span>
+ <span class="s0">* </span><span class="s1">@param </span><span class="s0">{Map&lt;string,GlobSearch&gt;} options.searches</span>
+ <span class="s0">*      A map of absolute path glob patterns to match.</span>
+ <span class="s0">* </span><span class="s1">@param </span><span class="s0">{ConfigLoader|LegacyConfigLoader} options.configLoader The config loader to use for</span>
+ <span class="s0">*      determining what to ignore.</span>
+ <span class="s0">* </span><span class="s1">@param </span><span class="s0">{boolean} options.errorOnUnmatchedPattern Determines if an</span>
+ <span class="s0">*      unmatched glob pattern should throw an error.</span>
+ <span class="s0">* </span><span class="s1">@returns </span><span class="s0">{Promise&lt;Array&lt;string&gt;&gt;} An array of matching file paths</span>
+ <span class="s0">*      or an empty array if there are no matches.</span>
+ <span class="s0">*/</span>
+<span class="s2">async </span><span class="s4">function </span><span class="s2">globMultiSearch({</span>
+	<span class="s2">searches,</span>
+	<span class="s2">configLoader,</span>
+	<span class="s2">errorOnUnmatchedPattern,</span>
+<span class="s2">}) {</span>
+	<span class="s0">/* 
+     * For convenience, we normalized the search map into an array of objects. 
+     * Next, we filter out all searches that have no patterns. This happens 
+     * primarily for the cwd, which is prepopulated in the searches map as an 
+     * optimization. However, if it has no patterns, it means all patterns 
+     * occur outside of the cwd and we can safely filter out that search. 
+     */</span>
+	<span class="s4">const </span><span class="s2">normalizedSearches = [...searches]</span>
+		<span class="s2">.map(([basePath, { patterns, rawPatterns }]) =&gt; ({</span>
+			<span class="s2">basePath,</span>
+			<span class="s2">patterns,</span>
+			<span class="s2">rawPatterns,</span>
+		<span class="s2">}))</span>
+		<span class="s2">.filter(({ patterns }) =&gt; patterns.length &gt; </span><span class="s5">0</span><span class="s2">);</span>
+
+	<span class="s4">const </span><span class="s2">results = </span><span class="s4">await </span><span class="s2">Promise.allSettled(</span>
+		<span class="s2">normalizedSearches.map(({ basePath, patterns, rawPatterns }) =&gt;</span>
+			<span class="s2">globSearch({</span>
+				<span class="s2">basePath,</span>
+				<span class="s2">patterns,</span>
+				<span class="s2">rawPatterns,</span>
+				<span class="s2">configLoader,</span>
+				<span class="s2">errorOnUnmatchedPattern,</span>
+			<span class="s2">}),</span>
+		<span class="s2">),</span>
+	<span class="s2">);</span>
+
+	<span class="s0">/* 
+     * The first loop handles errors from the glob searches. Since we can't 
+     * use `await` inside `flatMap`, we process errors separately in this loop. 
+     * This results in two iterations over `results`, but since the length is 
+     * less than or equal to the number of globs and directories passed on the 
+     * command line, the performance impact should be minimal. 
+     */</span>
+	<span class="s4">for </span><span class="s2">(</span><span class="s4">let </span><span class="s2">i = </span><span class="s5">0</span><span class="s2">; i &lt; results.length; i++) {</span>
+		<span class="s4">const </span><span class="s2">result = results[i];</span>
+		<span class="s4">const </span><span class="s2">currentSearch = normalizedSearches[i];</span>
+
+		<span class="s4">if </span><span class="s2">(result.status === </span><span class="s3">&quot;fulfilled&quot;</span><span class="s2">) {</span>
+			<span class="s4">continue</span><span class="s2">;</span>
+		<span class="s2">}</span>
+
+		<span class="s0">// if we make it here then there was an error</span>
+		<span class="s4">const </span><span class="s2">error = result.reason;</span>
+
+		<span class="s0">// unexpected errors should be re-thrown</span>
+		<span class="s4">if </span><span class="s2">(!error.basePath) {</span>
+			<span class="s4">throw </span><span class="s2">error;</span>
+		<span class="s2">}</span>
+
+		<span class="s4">if </span><span class="s2">(errorOnUnmatchedPattern) {</span>
+			<span class="s4">await </span><span class="s2">throwErrorForUnmatchedPatterns({</span>
+				<span class="s2">...currentSearch,</span>
+				<span class="s2">unmatchedPatterns: error.unmatchedPatterns,</span>
+			<span class="s2">});</span>
+		<span class="s2">}</span>
+	<span class="s2">}</span>
+
+	<span class="s0">// second loop for `fulfilled` results</span>
+	<span class="s4">return </span><span class="s2">results.flatMap(result =&gt; result.value);</span>
+<span class="s2">}</span>
+
+<span class="s0">/**</span>
+ <span class="s0">* Finds all files matching the options specified.</span>
+ <span class="s0">* </span><span class="s1">@param </span><span class="s0">{Object} args The arguments objects.</span>
+ <span class="s0">* </span><span class="s1">@param </span><span class="s0">{Array&lt;string&gt;} args.patterns An array of glob patterns.</span>
+ <span class="s0">* </span><span class="s1">@param </span><span class="s0">{boolean} args.globInputPaths true to interpret glob patterns,</span>
+ <span class="s0">*      false to not interpret glob patterns.</span>
+ <span class="s0">* </span><span class="s1">@param </span><span class="s0">{string} args.cwd The current working directory to find from.</span>
+ <span class="s0">* </span><span class="s1">@param </span><span class="s0">{ConfigLoader|LegacyConfigLoader} args.configLoader The config loeader for the current run.</span>
+ <span class="s0">* </span><span class="s1">@param </span><span class="s0">{boolean} args.errorOnUnmatchedPattern Determines if an unmatched pattern</span>
+ <span class="s0">*      should throw an error.</span>
+ <span class="s0">* </span><span class="s1">@returns </span><span class="s0">{Promise&lt;Array&lt;string&gt;&gt;} The fully resolved file paths.</span>
+ <span class="s0">* </span><span class="s1">@throws </span><span class="s0">{AllFilesIgnoredError} If there are no results due to an ignore pattern.</span>
+ <span class="s0">* </span><span class="s1">@throws </span><span class="s0">{NoFilesFoundError} If no files matched the given patterns.</span>
+ <span class="s0">*/</span>
+<span class="s2">async </span><span class="s4">function </span><span class="s2">findFiles({</span>
+	<span class="s2">patterns,</span>
+	<span class="s2">globInputPaths,</span>
+	<span class="s2">cwd,</span>
+	<span class="s2">configLoader,</span>
+	<span class="s2">errorOnUnmatchedPattern,</span>
+<span class="s2">}) {</span>
+	<span class="s4">const </span><span class="s2">results = [];</span>
+	<span class="s4">const </span><span class="s2">missingPatterns = [];</span>
+	<span class="s4">let </span><span class="s2">globbyPatterns = [];</span>
+	<span class="s4">let </span><span class="s2">rawPatterns = [];</span>
+	<span class="s4">const </span><span class="s2">searches = </span><span class="s4">new </span><span class="s2">Map([</span>
+		<span class="s2">[cwd, { patterns: globbyPatterns, rawPatterns: [] }],</span>
+	<span class="s2">]);</span>
+
+	<span class="s0">/* 
+     * This part is a bit involved because we need to account for 
+     * the different ways that the patterns can match directories. 
+     * For each different way, we need to decide if we should look 
+     * for a config file or just use the default config. (Directories 
+     * without a config file always use the default config.) 
+     * 
+     * Here are the cases: 
+     * 
+     * 1. A directory is passed directly (e.g., &quot;subdir&quot;). In this case, we 
+     * can assume that the user intends to lint this directory and we should 
+     * not look for a config file in the parent directory, because the only 
+     * reason to do that would be to ignore this directory (which we already 
+     * know we don't want to do). Instead, we use the default config until we 
+     * get to the directory that was passed, at which point we start looking 
+     * for config files again. 
+     * 
+     * 2. A dot (&quot;.&quot;) or star (&quot;*&quot;). In this case, we want to read 
+     * the config file in the current directory because the user is 
+     * explicitly asking to lint the current directory. Note that &quot;.&quot; 
+     * will traverse into subdirectories while &quot;*&quot; will not. 
+     * 
+     * 3. A directory is passed in the form of &quot;subdir/subsubdir&quot;. 
+     * In this case, we don't want to look for a config file in the 
+     * parent directory (&quot;subdir&quot;). We can skip looking for a config 
+     * file until `entry.depth` is greater than 1 because there's no 
+     * way that the pattern can match `entry.path` yet. 
+     * 
+     * 4. A directory glob pattern is passed (e.g., &quot;subd*&quot;). We want 
+     * this case to act like case 2 because it's unclear whether or not 
+     * any particular directory is meant to be traversed. 
+     * 
+     * 5. A recursive glob pattern is passed (e.g., &quot;**&quot;). We want this 
+     * case to act like case 2. 
+     */</span>
+
+	<span class="s0">// check to see if we have explicit files and directories</span>
+	<span class="s4">const </span><span class="s2">filePaths = patterns.map(filePath =&gt; path.resolve(cwd, filePath));</span>
+	<span class="s4">const </span><span class="s2">stats = </span><span class="s4">await </span><span class="s2">Promise.all(</span>
+		<span class="s2">filePaths.map(filePath =&gt; fsp.stat(filePath).catch(() =&gt; {})),</span>
+	<span class="s2">);</span>
+
+	<span class="s4">const </span><span class="s2">promises = [];</span>
+	<span class="s2">stats.forEach((stat, index) =&gt; {</span>
+		<span class="s4">const </span><span class="s2">filePath = filePaths[index];</span>
+		<span class="s4">const </span><span class="s2">pattern = normalizeToPosix(patterns[index]);</span>
+
+		<span class="s4">if </span><span class="s2">(stat) {</span>
+			<span class="s0">// files are added directly to the list</span>
+			<span class="s4">if </span><span class="s2">(stat.isFile()) {</span>
+				<span class="s2">results.push(filePath);</span>
+				<span class="s2">promises.push(configLoader.loadConfigArrayForFile(filePath));</span>
+			<span class="s2">}</span>
+
+			<span class="s0">// directories need extensions attached</span>
+			<span class="s4">if </span><span class="s2">(stat.isDirectory()) {</span>
+				<span class="s4">if </span><span class="s2">(!searches.has(filePath)) {</span>
+					<span class="s2">searches.set(filePath, { patterns: [], rawPatterns: [] });</span>
+				<span class="s2">}</span>
+				<span class="s2">({ patterns: globbyPatterns, rawPatterns } =</span>
+					<span class="s2">searches.get(filePath));</span>
+
+				<span class="s2">globbyPatterns.push(</span><span class="s3">`</span><span class="s2">${normalizeToPosix(filePath)}</span><span class="s3">/**`</span><span class="s2">);</span>
+				<span class="s2">rawPatterns.push(pattern);</span>
+			<span class="s2">}</span>
+
+			<span class="s4">return</span><span class="s2">;</span>
+		<span class="s2">}</span>
+
+		<span class="s0">// save patterns for later use based on whether globs are enabled</span>
+		<span class="s4">if </span><span class="s2">(globInputPaths &amp;&amp; isGlobPattern(pattern)) {</span>
+			<span class="s0">/* 
+             * We are grouping patterns by their glob parent. This is done to 
+             * make it easier to determine when a config file should be loaded. 
+             */</span>
+
+			<span class="s4">const </span><span class="s2">basePath = path.resolve(cwd, globParent(pattern));</span>
+
+			<span class="s4">if </span><span class="s2">(!searches.has(basePath)) {</span>
+				<span class="s2">searches.set(basePath, { patterns: [], rawPatterns: [] });</span>
+			<span class="s2">}</span>
+			<span class="s2">({ patterns: globbyPatterns, rawPatterns } =</span>
+				<span class="s2">searches.get(basePath));</span>
+
+			<span class="s2">globbyPatterns.push(filePath);</span>
+			<span class="s2">rawPatterns.push(pattern);</span>
+		<span class="s2">} </span><span class="s4">else </span><span class="s2">{</span>
+			<span class="s2">missingPatterns.push(pattern);</span>
+		<span class="s2">}</span>
+	<span class="s2">});</span>
+
+	<span class="s0">// there were patterns that didn't match anything, tell the user</span>
+	<span class="s4">if </span><span class="s2">(errorOnUnmatchedPattern &amp;&amp; missingPatterns.length) {</span>
+		<span class="s4">throw new </span><span class="s2">NoFilesFoundError(missingPatterns[</span><span class="s5">0</span><span class="s2">], globInputPaths);</span>
+	<span class="s2">}</span>
+
+	<span class="s0">// now we are safe to do the search</span>
+	<span class="s2">promises.push(</span>
+		<span class="s2">globMultiSearch({</span>
+			<span class="s2">searches,</span>
+			<span class="s2">configLoader,</span>
+			<span class="s2">errorOnUnmatchedPattern,</span>
+		<span class="s2">}),</span>
+	<span class="s2">);</span>
+	<span class="s4">const </span><span class="s2">globbyResults = (</span><span class="s4">await </span><span class="s2">Promise.all(promises)).at(-</span><span class="s5">1</span><span class="s2">);</span>
+
+	<span class="s4">return </span><span class="s2">[...</span><span class="s4">new </span><span class="s2">Set([...results, ...globbyResults])];</span>
+<span class="s2">}</span>
+
+<span class="s0">/**</span>
+ <span class="s0">* Return the absolute path of a file named `&quot;__placeholder__.js&quot;` in a given directory.</span>
+ <span class="s0">* This is used as a replacement for a missing file path.</span>
+ <span class="s0">* </span><span class="s1">@param </span><span class="s0">{string} cwd An absolute directory path.</span>
+ <span class="s0">* </span><span class="s1">@returns </span><span class="s0">{string} The absolute path of a file named `&quot;__placeholder__.js&quot;` in the given directory.</span>
+ <span class="s0">*/</span>
+<span class="s4">function </span><span class="s2">getPlaceholderPath(cwd) {</span>
+	<span class="s4">return </span><span class="s2">path.join(cwd, </span><span class="s3">&quot;__placeholder__.js&quot;</span><span class="s2">);</span>
+<span class="s2">}</span>
+
+<span class="s0">//-----------------------------------------------------------------------------</span>
+<span class="s0">// Results-related Helpers</span>
+<span class="s0">//-----------------------------------------------------------------------------</span>
+
+<span class="s0">/**</span>
+ <span class="s0">* Checks if the given message is an error message.</span>
+ <span class="s0">* </span><span class="s1">@param </span><span class="s0">{LintMessage} message The message to check.</span>
+ <span class="s0">* </span><span class="s1">@returns </span><span class="s0">{boolean} Whether or not the message is an error message.</span>
+ <span class="s0">* </span><span class="s1">@private</span>
+ <span class="s0">*/</span>
+<span class="s4">function </span><span class="s2">isErrorMessage(message) {</span>
+	<span class="s4">return </span><span class="s2">message.severity === </span><span class="s5">2</span><span class="s2">;</span>
+<span class="s2">}</span>
+
+<span class="s0">/**</span>
+ <span class="s0">* Returns result with warning by ignore settings</span>
+ <span class="s0">* </span><span class="s1">@param </span><span class="s0">{string} filePath Absolute file path of checked code</span>
+ <span class="s0">* </span><span class="s1">@param </span><span class="s0">{string} baseDir Absolute path of base directory</span>
+ <span class="s0">* </span><span class="s1">@param </span><span class="s0">{&quot;ignored&quot;|&quot;external&quot;|&quot;unconfigured&quot;} configStatus A status that determines why the file is ignored</span>
+ <span class="s0">* </span><span class="s1">@returns </span><span class="s0">{LintResult} Result with single warning</span>
+ <span class="s0">* </span><span class="s1">@private</span>
+ <span class="s0">*/</span>
+<span class="s4">function </span><span class="s2">createIgnoreResult(filePath, baseDir, configStatus) {</span>
+	<span class="s4">let </span><span class="s2">message;</span>
+
+	<span class="s4">switch </span><span class="s2">(configStatus) {</span>
+		<span class="s4">case </span><span class="s3">&quot;external&quot;</span><span class="s2">:</span>
+			<span class="s2">message = </span><span class="s3">&quot;File ignored because outside of base path.&quot;</span><span class="s2">;</span>
+			<span class="s4">break</span><span class="s2">;</span>
+		<span class="s4">case </span><span class="s3">&quot;unconfigured&quot;</span><span class="s2">:</span>
+			<span class="s2">message =</span>
+				<span class="s3">&quot;File ignored because no matching configuration was supplied.&quot;</span><span class="s2">;</span>
+			<span class="s4">break</span><span class="s2">;</span>
+		<span class="s4">default</span><span class="s2">:</span>
+			<span class="s2">{</span>
+				<span class="s4">const </span><span class="s2">isInNodeModules =</span>
+					<span class="s2">baseDir &amp;&amp;</span>
+					<span class="s2">path</span>
+						<span class="s2">.dirname(path.relative(baseDir, filePath))</span>
+						<span class="s2">.split(path.sep)</span>
+						<span class="s2">.includes(</span><span class="s3">&quot;node_modules&quot;</span><span class="s2">);</span>
+
+				<span class="s4">if </span><span class="s2">(isInNodeModules) {</span>
+					<span class="s2">message =</span>
+						<span class="s3">'File ignored by default because it is located under the node_modules directory. Use ignore pattern &quot;!**/node_modules/&quot; to disable file ignore settings or use &quot;--no-warn-ignored&quot; to suppress this warning.'</span><span class="s2">;</span>
+				<span class="s2">} </span><span class="s4">else </span><span class="s2">{</span>
+					<span class="s2">message =</span>
+						<span class="s3">'File ignored because of a matching ignore pattern. Use &quot;--no-ignore&quot; to disable file ignore settings or use &quot;--no-warn-ignored&quot; to suppress this warning.'</span><span class="s2">;</span>
+				<span class="s2">}</span>
+			<span class="s2">}</span>
+			<span class="s4">break</span><span class="s2">;</span>
+	<span class="s2">}</span>
+
+	<span class="s4">return </span><span class="s2">{</span>
+		<span class="s2">filePath,</span>
+		<span class="s2">messages: [</span>
+			<span class="s2">{</span>
+				<span class="s2">ruleId: </span><span class="s4">null</span><span class="s2">,</span>
+				<span class="s2">fatal: </span><span class="s4">false</span><span class="s2">,</span>
+				<span class="s2">severity: </span><span class="s5">1</span><span class="s2">,</span>
+				<span class="s2">message,</span>
+				<span class="s2">nodeType: </span><span class="s4">null</span><span class="s2">,</span>
+			<span class="s2">},</span>
+		<span class="s2">],</span>
+		<span class="s2">suppressedMessages: [],</span>
+		<span class="s2">errorCount: </span><span class="s5">0</span><span class="s2">,</span>
+		<span class="s2">warningCount: </span><span class="s5">1</span><span class="s2">,</span>
+		<span class="s2">fatalErrorCount: </span><span class="s5">0</span><span class="s2">,</span>
+		<span class="s2">fixableErrorCount: </span><span class="s5">0</span><span class="s2">,</span>
+		<span class="s2">fixableWarningCount: </span><span class="s5">0</span><span class="s2">,</span>
+	<span class="s2">};</span>
+<span class="s2">}</span>
+
+<span class="s0">/**</span>
+ <span class="s0">* It will calculate the error and warning count for collection of messages per file</span>
+ <span class="s0">* </span><span class="s1">@param </span><span class="s0">{LintMessage[]} messages Collection of messages</span>
+ <span class="s0">* </span><span class="s1">@returns </span><span class="s0">{Object} Contains the stats</span>
+ <span class="s0">* </span><span class="s1">@private</span>
+ <span class="s0">*/</span>
+<span class="s4">function </span><span class="s2">calculateStatsPerFile(messages) {</span>
+	<span class="s4">const </span><span class="s2">stat = {</span>
+		<span class="s2">errorCount: </span><span class="s5">0</span><span class="s2">,</span>
+		<span class="s2">fatalErrorCount: </span><span class="s5">0</span><span class="s2">,</span>
+		<span class="s2">warningCount: </span><span class="s5">0</span><span class="s2">,</span>
+		<span class="s2">fixableErrorCount: </span><span class="s5">0</span><span class="s2">,</span>
+		<span class="s2">fixableWarningCount: </span><span class="s5">0</span><span class="s2">,</span>
+	<span class="s2">};</span>
+
+	<span class="s4">for </span><span class="s2">(</span><span class="s4">let </span><span class="s2">i = </span><span class="s5">0</span><span class="s2">; i &lt; messages.length; i++) {</span>
+		<span class="s4">const </span><span class="s2">message = messages[i];</span>
+
+		<span class="s4">if </span><span class="s2">(message.fatal || message.severity === </span><span class="s5">2</span><span class="s2">) {</span>
+			<span class="s2">stat.errorCount++;</span>
+			<span class="s4">if </span><span class="s2">(message.fatal) {</span>
+				<span class="s2">stat.fatalErrorCount++;</span>
+			<span class="s2">}</span>
+			<span class="s4">if </span><span class="s2">(message.fix) {</span>
+				<span class="s2">stat.fixableErrorCount++;</span>
+			<span class="s2">}</span>
+		<span class="s2">} </span><span class="s4">else </span><span class="s2">{</span>
+			<span class="s2">stat.warningCount++;</span>
+			<span class="s4">if </span><span class="s2">(message.fix) {</span>
+				<span class="s2">stat.fixableWarningCount++;</span>
+			<span class="s2">}</span>
+		<span class="s2">}</span>
+	<span class="s2">}</span>
+	<span class="s4">return </span><span class="s2">stat;</span>
+<span class="s2">}</span>
+
+<span class="s0">//-----------------------------------------------------------------------------</span>
+<span class="s0">// Options-related Helpers</span>
+<span class="s0">//-----------------------------------------------------------------------------</span>
+
+<span class="s0">/**</span>
+ <span class="s0">* Check if a given value is a valid fix type or not.</span>
+ <span class="s0">* </span><span class="s1">@param </span><span class="s0">{any} x The value to check.</span>
+ <span class="s0">* </span><span class="s1">@returns </span><span class="s0">{boolean} `true` if `x` is valid fix type.</span>
+ <span class="s0">*/</span>
+<span class="s4">function </span><span class="s2">isFixType(x) {</span>
+	<span class="s4">return </span><span class="s2">(</span>
+		<span class="s2">x === </span><span class="s3">&quot;directive&quot; </span><span class="s2">||</span>
+		<span class="s2">x === </span><span class="s3">&quot;problem&quot; </span><span class="s2">||</span>
+		<span class="s2">x === </span><span class="s3">&quot;suggestion&quot; </span><span class="s2">||</span>
+		<span class="s2">x === </span><span class="s3">&quot;layout&quot;</span>
+	<span class="s2">);</span>
+<span class="s2">}</span>
+
+<span class="s0">/**</span>
+ <span class="s0">* Check if a given value is an array of fix types or not.</span>
+ <span class="s0">* </span><span class="s1">@param </span><span class="s0">{any} x The value to check.</span>
+ <span class="s0">* </span><span class="s1">@returns </span><span class="s0">{boolean} `true` if `x` is an array of fix types.</span>
+ <span class="s0">*/</span>
+<span class="s4">function </span><span class="s2">isFixTypeArray(x) {</span>
+	<span class="s4">return </span><span class="s2">Array.isArray(x) &amp;&amp; x.every(isFixType);</span>
+<span class="s2">}</span>
+
+<span class="s0">/**</span>
+ <span class="s0">* The error for invalid options.</span>
+ <span class="s0">*/</span>
+<span class="s4">class </span><span class="s2">ESLintInvalidOptionsError </span><span class="s4">extends </span><span class="s2">Error {</span>
+	<span class="s2">constructor(messages) {</span>
+		<span class="s4">super</span><span class="s2">(</span><span class="s3">`Invalid Options:</span><span class="s7">\n</span><span class="s3">- </span><span class="s2">${messages.join(</span><span class="s3">&quot;</span><span class="s7">\n</span><span class="s3">- &quot;</span><span class="s2">)}</span><span class="s3">`</span><span class="s2">);</span>
+		<span class="s4">this</span><span class="s2">.code = </span><span class="s3">&quot;ESLINT_INVALID_OPTIONS&quot;</span><span class="s2">;</span>
+		<span class="s2">Error.captureStackTrace(</span><span class="s4">this</span><span class="s2">, ESLintInvalidOptionsError);</span>
+	<span class="s2">}</span>
+<span class="s2">}</span>
+
+<span class="s0">/**</span>
+ <span class="s0">* Validates and normalizes options for the wrapped CLIEngine instance.</span>
+ <span class="s0">* </span><span class="s1">@param </span><span class="s0">{ESLintOptions} options The options to process.</span>
+ <span class="s0">* </span><span class="s1">@throws </span><span class="s0">{ESLintInvalidOptionsError} If of any of a variety of type errors.</span>
+ <span class="s0">* </span><span class="s1">@returns </span><span class="s0">{ESLintOptions} The normalized options.</span>
+ <span class="s0">*/</span>
+<span class="s4">function </span><span class="s2">processOptions({</span>
+	<span class="s2">allowInlineConfig = </span><span class="s4">true</span><span class="s2">, </span><span class="s0">// ← we cannot use `overrideConfig.noInlineConfig` instead because `allowInlineConfig` has side-effect that suppress warnings that show inline configs are ignored.</span>
+	<span class="s2">baseConfig = </span><span class="s4">null</span><span class="s2">,</span>
+	<span class="s2">cache = </span><span class="s4">false</span><span class="s2">,</span>
+	<span class="s2">cacheLocation = </span><span class="s3">&quot;.eslintcache&quot;</span><span class="s2">,</span>
+	<span class="s2">cacheStrategy = </span><span class="s3">&quot;metadata&quot;</span><span class="s2">,</span>
+	<span class="s2">concurrency = </span><span class="s3">&quot;off&quot;</span><span class="s2">,</span>
+	<span class="s2">cwd = process.cwd(),</span>
+	<span class="s2">errorOnUnmatchedPattern = </span><span class="s4">true</span><span class="s2">,</span>
+	<span class="s2">fix = </span><span class="s4">false</span><span class="s2">,</span>
+	<span class="s2">fixTypes = </span><span class="s4">null</span><span class="s2">, </span><span class="s0">// ← should be null by default because if it's an array then it suppresses rules that don't have the `meta.type` property.</span>
+	<span class="s2">flags = [],</span>
+	<span class="s2">globInputPaths = </span><span class="s4">true</span><span class="s2">,</span>
+	<span class="s2">ignore = </span><span class="s4">true</span><span class="s2">,</span>
+	<span class="s2">ignorePatterns = </span><span class="s4">null</span><span class="s2">,</span>
+	<span class="s2">overrideConfig = </span><span class="s4">null</span><span class="s2">,</span>
+	<span class="s2">overrideConfigFile = </span><span class="s4">null</span><span class="s2">,</span>
+	<span class="s2">plugins = {},</span>
+	<span class="s2">stats = </span><span class="s4">false</span><span class="s2">,</span>
+	<span class="s2">warnIgnored = </span><span class="s4">true</span><span class="s2">,</span>
+	<span class="s2">passOnNoPatterns = </span><span class="s4">false</span><span class="s2">,</span>
+	<span class="s2">ruleFilter = () =&gt; </span><span class="s4">true</span><span class="s2">,</span>
+	<span class="s2">...unknownOptions</span>
+<span class="s2">}) {</span>
+	<span class="s4">const </span><span class="s2">errors = [];</span>
+	<span class="s4">const </span><span class="s2">unknownOptionKeys = Object.keys(unknownOptions);</span>
+
+	<span class="s4">if </span><span class="s2">(unknownOptionKeys.length &gt;= </span><span class="s5">1</span><span class="s2">) {</span>
+		<span class="s2">errors.push(</span><span class="s3">`Unknown options: </span><span class="s2">${unknownOptionKeys.join(</span><span class="s3">&quot;, &quot;</span><span class="s2">)}</span><span class="s3">`</span><span class="s2">);</span>
+		<span class="s4">if </span><span class="s2">(unknownOptionKeys.includes(</span><span class="s3">&quot;cacheFile&quot;</span><span class="s2">)) {</span>
+			<span class="s2">errors.push(</span>
+				<span class="s3">&quot;'cacheFile' has been removed. Please use the 'cacheLocation' option instead.&quot;</span><span class="s2">,</span>
+			<span class="s2">);</span>
+		<span class="s2">}</span>
+		<span class="s4">if </span><span class="s2">(unknownOptionKeys.includes(</span><span class="s3">&quot;configFile&quot;</span><span class="s2">)) {</span>
+			<span class="s2">errors.push(</span>
+				<span class="s3">&quot;'configFile' has been removed. Please use the 'overrideConfigFile' option instead.&quot;</span><span class="s2">,</span>
+			<span class="s2">);</span>
+		<span class="s2">}</span>
+		<span class="s4">if </span><span class="s2">(unknownOptionKeys.includes(</span><span class="s3">&quot;envs&quot;</span><span class="s2">)) {</span>
+			<span class="s2">errors.push(</span><span class="s3">&quot;'envs' has been removed.&quot;</span><span class="s2">);</span>
+		<span class="s2">}</span>
+		<span class="s4">if </span><span class="s2">(unknownOptionKeys.includes(</span><span class="s3">&quot;extensions&quot;</span><span class="s2">)) {</span>
+			<span class="s2">errors.push(</span><span class="s3">&quot;'extensions' has been removed.&quot;</span><span class="s2">);</span>
+		<span class="s2">}</span>
+		<span class="s4">if </span><span class="s2">(unknownOptionKeys.includes(</span><span class="s3">&quot;resolvePluginsRelativeTo&quot;</span><span class="s2">)) {</span>
+			<span class="s2">errors.push(</span><span class="s3">&quot;'resolvePluginsRelativeTo' has been removed.&quot;</span><span class="s2">);</span>
+		<span class="s2">}</span>
+		<span class="s4">if </span><span class="s2">(unknownOptionKeys.includes(</span><span class="s3">&quot;globals&quot;</span><span class="s2">)) {</span>
+			<span class="s2">errors.push(</span>
+				<span class="s3">&quot;'globals' has been removed. Please use the 'overrideConfig.languageOptions.globals' option instead.&quot;</span><span class="s2">,</span>
+			<span class="s2">);</span>
+		<span class="s2">}</span>
+		<span class="s4">if </span><span class="s2">(unknownOptionKeys.includes(</span><span class="s3">&quot;ignorePath&quot;</span><span class="s2">)) {</span>
+			<span class="s2">errors.push(</span><span class="s3">&quot;'ignorePath' has been removed.&quot;</span><span class="s2">);</span>
+		<span class="s2">}</span>
+		<span class="s4">if </span><span class="s2">(unknownOptionKeys.includes(</span><span class="s3">&quot;ignorePattern&quot;</span><span class="s2">)) {</span>
+			<span class="s2">errors.push(</span>
+				<span class="s3">&quot;'ignorePattern' has been removed. Please use the 'overrideConfig.ignorePatterns' option instead.&quot;</span><span class="s2">,</span>
+			<span class="s2">);</span>
+		<span class="s2">}</span>
+		<span class="s4">if </span><span class="s2">(unknownOptionKeys.includes(</span><span class="s3">&quot;parser&quot;</span><span class="s2">)) {</span>
+			<span class="s2">errors.push(</span>
+				<span class="s3">&quot;'parser' has been removed. Please use the 'overrideConfig.languageOptions.parser' option instead.&quot;</span><span class="s2">,</span>
+			<span class="s2">);</span>
+		<span class="s2">}</span>
+		<span class="s4">if </span><span class="s2">(unknownOptionKeys.includes(</span><span class="s3">&quot;parserOptions&quot;</span><span class="s2">)) {</span>
+			<span class="s2">errors.push(</span>
+				<span class="s3">&quot;'parserOptions' has been removed. Please use the 'overrideConfig.languageOptions.parserOptions' option instead.&quot;</span><span class="s2">,</span>
+			<span class="s2">);</span>
+		<span class="s2">}</span>
+		<span class="s4">if </span><span class="s2">(unknownOptionKeys.includes(</span><span class="s3">&quot;rules&quot;</span><span class="s2">)) {</span>
+			<span class="s2">errors.push(</span>
+				<span class="s3">&quot;'rules' has been removed. Please use the 'overrideConfig.rules' option instead.&quot;</span><span class="s2">,</span>
+			<span class="s2">);</span>
+		<span class="s2">}</span>
+		<span class="s4">if </span><span class="s2">(unknownOptionKeys.includes(</span><span class="s3">&quot;rulePaths&quot;</span><span class="s2">)) {</span>
+			<span class="s2">errors.push(</span>
+				<span class="s3">&quot;'rulePaths' has been removed. Please define your rules using plugins.&quot;</span><span class="s2">,</span>
+			<span class="s2">);</span>
+		<span class="s2">}</span>
+		<span class="s4">if </span><span class="s2">(unknownOptionKeys.includes(</span><span class="s3">&quot;reportUnusedDisableDirectives&quot;</span><span class="s2">)) {</span>
+			<span class="s2">errors.push(</span>
+				<span class="s3">&quot;'reportUnusedDisableDirectives' has been removed. Please use the 'overrideConfig.linterOptions.reportUnusedDisableDirectives' option instead.&quot;</span><span class="s2">,</span>
+			<span class="s2">);</span>
+		<span class="s2">}</span>
+	<span class="s2">}</span>
+	<span class="s4">if </span><span class="s2">(</span><span class="s4">typeof </span><span class="s2">allowInlineConfig !== </span><span class="s3">&quot;boolean&quot;</span><span class="s2">) {</span>
+		<span class="s2">errors.push(</span><span class="s3">&quot;'allowInlineConfig' must be a boolean.&quot;</span><span class="s2">);</span>
+	<span class="s2">}</span>
+	<span class="s4">if </span><span class="s2">(</span><span class="s4">typeof </span><span class="s2">baseConfig !== </span><span class="s3">&quot;object&quot;</span><span class="s2">) {</span>
+		<span class="s2">errors.push(</span><span class="s3">&quot;'baseConfig' must be an object or null.&quot;</span><span class="s2">);</span>
+	<span class="s2">}</span>
+	<span class="s4">if </span><span class="s2">(</span><span class="s4">typeof </span><span class="s2">cache !== </span><span class="s3">&quot;boolean&quot;</span><span class="s2">) {</span>
+		<span class="s2">errors.push(</span><span class="s3">&quot;'cache' must be a boolean.&quot;</span><span class="s2">);</span>
+	<span class="s2">}</span>
+	<span class="s4">if </span><span class="s2">(!isNonEmptyString(cacheLocation)) {</span>
+		<span class="s2">errors.push(</span><span class="s3">&quot;'cacheLocation' must be a non-empty string.&quot;</span><span class="s2">);</span>
+	<span class="s2">}</span>
+	<span class="s4">if </span><span class="s2">(cacheStrategy !== </span><span class="s3">&quot;metadata&quot; </span><span class="s2">&amp;&amp; cacheStrategy !== </span><span class="s3">&quot;content&quot;</span><span class="s2">) {</span>
+		<span class="s2">errors.push(</span><span class="s3">'</span><span class="s7">\'</span><span class="s3">cacheStrategy</span><span class="s7">\' </span><span class="s3">must be any of &quot;metadata&quot;, &quot;content&quot;.'</span><span class="s2">);</span>
+	<span class="s2">}</span>
+	<span class="s4">if </span><span class="s2">(</span>
+		<span class="s2">concurrency !== </span><span class="s3">&quot;off&quot; </span><span class="s2">&amp;&amp;</span>
+		<span class="s2">concurrency !== </span><span class="s3">&quot;auto&quot; </span><span class="s2">&amp;&amp;</span>
+		<span class="s2">!isPositiveInteger(concurrency)</span>
+	<span class="s2">) {</span>
+		<span class="s2">errors.push(</span>
+			<span class="s3">'</span><span class="s7">\'</span><span class="s3">concurrency</span><span class="s7">\' </span><span class="s3">must be a positive integer, &quot;auto&quot;, or &quot;off&quot;.'</span><span class="s2">,</span>
+		<span class="s2">);</span>
+	<span class="s2">}</span>
+	<span class="s4">if </span><span class="s2">(!isNonEmptyString(cwd) || !path.isAbsolute(cwd)) {</span>
+		<span class="s2">errors.push(</span><span class="s3">&quot;'cwd' must be an absolute path.&quot;</span><span class="s2">);</span>
+	<span class="s2">}</span>
+	<span class="s4">if </span><span class="s2">(</span><span class="s4">typeof </span><span class="s2">errorOnUnmatchedPattern !== </span><span class="s3">&quot;boolean&quot;</span><span class="s2">) {</span>
+		<span class="s2">errors.push(</span><span class="s3">&quot;'errorOnUnmatchedPattern' must be a boolean.&quot;</span><span class="s2">);</span>
+	<span class="s2">}</span>
+	<span class="s4">if </span><span class="s2">(</span><span class="s4">typeof </span><span class="s2">fix !== </span><span class="s3">&quot;boolean&quot; </span><span class="s2">&amp;&amp; </span><span class="s4">typeof </span><span class="s2">fix !== </span><span class="s3">&quot;function&quot;</span><span class="s2">) {</span>
+		<span class="s2">errors.push(</span><span class="s3">&quot;'fix' must be a boolean or a function.&quot;</span><span class="s2">);</span>
+	<span class="s2">}</span>
+	<span class="s4">if </span><span class="s2">(fixTypes !== </span><span class="s4">null </span><span class="s2">&amp;&amp; !isFixTypeArray(fixTypes)) {</span>
+		<span class="s2">errors.push(</span>
+			<span class="s3">'</span><span class="s7">\'</span><span class="s3">fixTypes</span><span class="s7">\' </span><span class="s3">must be an array of any of &quot;directive&quot;, &quot;problem&quot;, &quot;suggestion&quot;, and &quot;layout&quot;.'</span><span class="s2">,</span>
+		<span class="s2">);</span>
+	<span class="s2">}</span>
+	<span class="s4">if </span><span class="s2">(!isEmptyArrayOrArrayOfNonEmptyString(flags)) {</span>
+		<span class="s2">errors.push(</span><span class="s3">&quot;'flags' must be an array of non-empty strings.&quot;</span><span class="s2">);</span>
+	<span class="s2">}</span>
+	<span class="s4">if </span><span class="s2">(</span><span class="s4">typeof </span><span class="s2">globInputPaths !== </span><span class="s3">&quot;boolean&quot;</span><span class="s2">) {</span>
+		<span class="s2">errors.push(</span><span class="s3">&quot;'globInputPaths' must be a boolean.&quot;</span><span class="s2">);</span>
+	<span class="s2">}</span>
+	<span class="s4">if </span><span class="s2">(</span><span class="s4">typeof </span><span class="s2">ignore !== </span><span class="s3">&quot;boolean&quot;</span><span class="s2">) {</span>
+		<span class="s2">errors.push(</span><span class="s3">&quot;'ignore' must be a boolean.&quot;</span><span class="s2">);</span>
+	<span class="s2">}</span>
+	<span class="s4">if </span><span class="s2">(</span>
+		<span class="s2">!isEmptyArrayOrArrayOfNonEmptyString(ignorePatterns) &amp;&amp;</span>
+		<span class="s2">ignorePatterns !== </span><span class="s4">null</span>
+	<span class="s2">) {</span>
+		<span class="s2">errors.push(</span>
+			<span class="s3">&quot;'ignorePatterns' must be an array of non-empty strings or null.&quot;</span><span class="s2">,</span>
+		<span class="s2">);</span>
+	<span class="s2">}</span>
+	<span class="s4">if </span><span class="s2">(</span><span class="s4">typeof </span><span class="s2">overrideConfig !== </span><span class="s3">&quot;object&quot;</span><span class="s2">) {</span>
+		<span class="s2">errors.push(</span><span class="s3">&quot;'overrideConfig' must be an object or null.&quot;</span><span class="s2">);</span>
+	<span class="s2">}</span>
+	<span class="s4">if </span><span class="s2">(</span>
+		<span class="s2">!isNonEmptyString(overrideConfigFile) &amp;&amp;</span>
+		<span class="s2">overrideConfigFile !== </span><span class="s4">null </span><span class="s2">&amp;&amp;</span>
+		<span class="s2">overrideConfigFile !== </span><span class="s4">true</span>
+	<span class="s2">) {</span>
+		<span class="s2">errors.push(</span>
+			<span class="s3">&quot;'overrideConfigFile' must be a non-empty string, null, or true.&quot;</span><span class="s2">,</span>
+		<span class="s2">);</span>
+	<span class="s2">}</span>
+	<span class="s4">if </span><span class="s2">(</span><span class="s4">typeof </span><span class="s2">passOnNoPatterns !== </span><span class="s3">&quot;boolean&quot;</span><span class="s2">) {</span>
+		<span class="s2">errors.push(</span><span class="s3">&quot;'passOnNoPatterns' must be a boolean.&quot;</span><span class="s2">);</span>
+	<span class="s2">}</span>
+	<span class="s4">if </span><span class="s2">(</span><span class="s4">typeof </span><span class="s2">plugins !== </span><span class="s3">&quot;object&quot;</span><span class="s2">) {</span>
+		<span class="s2">errors.push(</span><span class="s3">&quot;'plugins' must be an object or null.&quot;</span><span class="s2">);</span>
+	<span class="s2">} </span><span class="s4">else if </span><span class="s2">(plugins !== </span><span class="s4">null </span><span class="s2">&amp;&amp; Object.keys(plugins).includes(</span><span class="s3">&quot;&quot;</span><span class="s2">)) {</span>
+		<span class="s2">errors.push(</span><span class="s3">&quot;'plugins' must not include an empty string.&quot;</span><span class="s2">);</span>
+	<span class="s2">}</span>
+	<span class="s4">if </span><span class="s2">(Array.isArray(plugins)) {</span>
+		<span class="s2">errors.push(</span>
+			<span class="s3">&quot;'plugins' doesn't add plugins to configuration to load. Please use the 'overrideConfig.plugins' option instead.&quot;</span><span class="s2">,</span>
+		<span class="s2">);</span>
+	<span class="s2">}</span>
+	<span class="s4">if </span><span class="s2">(</span><span class="s4">typeof </span><span class="s2">stats !== </span><span class="s3">&quot;boolean&quot;</span><span class="s2">) {</span>
+		<span class="s2">errors.push(</span><span class="s3">&quot;'stats' must be a boolean.&quot;</span><span class="s2">);</span>
+	<span class="s2">}</span>
+	<span class="s4">if </span><span class="s2">(</span><span class="s4">typeof </span><span class="s2">warnIgnored !== </span><span class="s3">&quot;boolean&quot;</span><span class="s2">) {</span>
+		<span class="s2">errors.push(</span><span class="s3">&quot;'warnIgnored' must be a boolean.&quot;</span><span class="s2">);</span>
+	<span class="s2">}</span>
+	<span class="s4">if </span><span class="s2">(</span><span class="s4">typeof </span><span class="s2">ruleFilter !== </span><span class="s3">&quot;function&quot;</span><span class="s2">) {</span>
+		<span class="s2">errors.push(</span><span class="s3">&quot;'ruleFilter' must be a function.&quot;</span><span class="s2">);</span>
+	<span class="s2">}</span>
+	<span class="s4">if </span><span class="s2">(errors.length &gt; </span><span class="s5">0</span><span class="s2">) {</span>
+		<span class="s4">throw new </span><span class="s2">ESLintInvalidOptionsError(errors);</span>
+	<span class="s2">}</span>
+
+	<span class="s4">return </span><span class="s2">{</span>
+		<span class="s2">allowInlineConfig,</span>
+		<span class="s2">baseConfig,</span>
+		<span class="s2">cache,</span>
+		<span class="s2">cacheLocation,</span>
+		<span class="s2">cacheStrategy,</span>
+		<span class="s2">concurrency,</span>
+
+		<span class="s0">// when overrideConfigFile is true that means don't do config file lookup</span>
+		<span class="s2">configFile: overrideConfigFile === </span><span class="s4">true </span><span class="s2">? </span><span class="s4">false </span><span class="s2">: overrideConfigFile,</span>
+		<span class="s2">overrideConfig,</span>
+		<span class="s2">cwd: path.normalize(cwd),</span>
+		<span class="s2">errorOnUnmatchedPattern,</span>
+		<span class="s2">fix,</span>
+		<span class="s2">fixTypes,</span>
+		<span class="s2">flags: [...flags],</span>
+		<span class="s2">globInputPaths,</span>
+		<span class="s2">ignore,</span>
+		<span class="s2">ignorePatterns,</span>
+		<span class="s2">stats,</span>
+		<span class="s2">passOnNoPatterns,</span>
+		<span class="s2">warnIgnored,</span>
+		<span class="s2">ruleFilter,</span>
+	<span class="s2">};</span>
+<span class="s2">}</span>
+
+<span class="s0">/**</span>
+ <span class="s0">* Loads ESLint constructor options from an options module.</span>
+ <span class="s0">* </span><span class="s1">@param </span><span class="s0">{string} optionsURL The URL string of the options module to load.</span>
+ <span class="s0">* </span><span class="s1">@returns </span><span class="s0">{Promise&lt;ESLintOptions&gt;} ESLint constructor options.</span>
+ <span class="s0">*/</span>
+<span class="s2">async </span><span class="s4">function </span><span class="s2">loadOptionsFromModule(optionsURL) {</span>
+	<span class="s4">return </span><span class="s2">(</span><span class="s4">await import</span><span class="s2">(optionsURL)).default;</span>
+<span class="s2">}</span>
+
+<span class="s0">//-----------------------------------------------------------------------------</span>
+<span class="s0">// Cache-related helpers</span>
+<span class="s0">//-----------------------------------------------------------------------------</span>
+
+<span class="s0">/**</span>
+ <span class="s0">* return the cacheFile to be used by eslint, based on whether the provided parameter is</span>
+ <span class="s0">* a directory or looks like a directory (ends in `path.sep`), in which case the file</span>
+ <span class="s0">* name will be the `cacheFile/.cache_hashOfCWD`</span>
+ <span class="s0">*</span>
+ <span class="s0">* if cacheFile points to a file or looks like a file then in will just use that file</span>
+ <span class="s0">* </span><span class="s1">@param </span><span class="s0">{string} cacheFile The name of file to be used to store the cache</span>
+ <span class="s0">* </span><span class="s1">@param </span><span class="s0">{string} cwd Current working directory</span>
+ <span class="s0">* </span><span class="s1">@param </span><span class="s0">{Object} options The options</span>
+ <span class="s0">* </span><span class="s1">@param </span><span class="s0">{string} [options.prefix] The prefix to use for the cache file</span>
+ <span class="s0">* </span><span class="s1">@returns </span><span class="s0">{string} the resolved path to the cache file</span>
+ <span class="s0">*/</span>
+<span class="s4">function </span><span class="s2">getCacheFile(cacheFile, cwd, { prefix = </span><span class="s3">&quot;.cache_&quot; </span><span class="s2">} = {}) {</span>
+	<span class="s0">/* 
+     * make sure the path separators are normalized for the environment/os 
+     * keeping the trailing path separator if present 
+     */</span>
+	<span class="s4">const </span><span class="s2">normalizedCacheFile = path.normalize(cacheFile);</span>
+
+	<span class="s4">const </span><span class="s2">resolvedCacheFile = path.resolve(cwd, normalizedCacheFile);</span>
+	<span class="s4">const </span><span class="s2">looksLikeADirectory = normalizedCacheFile.slice(-</span><span class="s5">1</span><span class="s2">) === path.sep;</span>
+
+	<span class="s0">/**</span>
+	 <span class="s0">* return the name for the cache file in case the provided parameter is a directory</span>
+	 <span class="s0">* </span><span class="s1">@returns </span><span class="s0">{string} the resolved path to the cacheFile</span>
+	 <span class="s0">*/</span>
+	<span class="s4">function </span><span class="s2">getCacheFileForDirectory() {</span>
+		<span class="s4">return </span><span class="s2">path.join(resolvedCacheFile, </span><span class="s3">`</span><span class="s2">${prefix}${hash(cwd)}</span><span class="s3">`</span><span class="s2">);</span>
+	<span class="s2">}</span>
+
+	<span class="s4">let </span><span class="s2">fileStats;</span>
+
+	<span class="s4">try </span><span class="s2">{</span>
+		<span class="s2">fileStats = fs.lstatSync(resolvedCacheFile);</span>
+	<span class="s2">} </span><span class="s4">catch </span><span class="s2">{</span>
+		<span class="s2">fileStats = </span><span class="s4">null</span><span class="s2">;</span>
+	<span class="s2">}</span>
+
+	<span class="s0">/* 
+     * in case the file exists we need to verify if the provided path 
+     * is a directory or a file. If it is a directory we want to create a file 
+     * inside that directory 
+     */</span>
+	<span class="s4">if </span><span class="s2">(fileStats) {</span>
+		<span class="s0">/* 
+         * is a directory or is a file, but the original file the user provided 
+         * looks like a directory but `path.resolve` removed the `last path.sep` 
+         * so we need to still treat this like a directory 
+         */</span>
+		<span class="s4">if </span><span class="s2">(fileStats.isDirectory() || looksLikeADirectory) {</span>
+			<span class="s4">return </span><span class="s2">getCacheFileForDirectory();</span>
+		<span class="s2">}</span>
+
+		<span class="s0">// is file so just use that file</span>
+		<span class="s4">return </span><span class="s2">resolvedCacheFile;</span>
+	<span class="s2">}</span>
+
+	<span class="s0">/* 
+     * here we known the file or directory doesn't exist, 
+     * so we will try to infer if its a directory if it looks like a directory 
+     * for the current operating system. 
+     */</span>
+
+	<span class="s0">// if the last character passed is a path separator we assume is a directory</span>
+	<span class="s4">if </span><span class="s2">(looksLikeADirectory) {</span>
+		<span class="s4">return </span><span class="s2">getCacheFileForDirectory();</span>
+	<span class="s2">}</span>
+
+	<span class="s4">return </span><span class="s2">resolvedCacheFile;</span>
+<span class="s2">}</span>
+
+<span class="s0">/**</span>
+ <span class="s0">* Creates a new lint result cache.</span>
+ <span class="s0">* </span><span class="s1">@param </span><span class="s0">{ESLintOptions} eslintOptions The processed ESLint options.</span>
+ <span class="s0">* </span><span class="s1">@param </span><span class="s0">{string} cacheFilePath The path to the cache file.</span>
+ <span class="s0">* </span><span class="s1">@returns </span><span class="s0">{?LintResultCache} A new lint result cache or `null`.</span>
+ <span class="s0">*/</span>
+<span class="s4">function </span><span class="s2">createLintResultCache({ cache, cacheStrategy }, cacheFilePath) {</span>
+	<span class="s4">return </span><span class="s2">cache ? </span><span class="s4">new </span><span class="s2">LintResultCache(cacheFilePath, cacheStrategy) : </span><span class="s4">null</span><span class="s2">;</span>
+<span class="s2">}</span>
+
+<span class="s0">//-----------------------------------------------------------------------------</span>
+<span class="s0">// Lint helpers</span>
+<span class="s0">//-----------------------------------------------------------------------------</span>
+
+<span class="s0">/**</span>
+ <span class="s0">* Checks whether a message's rule type should be fixed.</span>
+ <span class="s0">* </span><span class="s1">@param </span><span class="s0">{LintMessage} message The message to check.</span>
+ <span class="s0">* </span><span class="s1">@param </span><span class="s0">{CalculatedConfig} config The config for the file that generated the message.</span>
+ <span class="s0">* </span><span class="s1">@param </span><span class="s0">{string[]} fixTypes An array of fix types to check.</span>
+ <span class="s0">* </span><span class="s1">@returns </span><span class="s0">{boolean} Whether the message should be fixed.</span>
+ <span class="s0">*/</span>
+<span class="s4">function </span><span class="s2">shouldMessageBeFixed(message, config, fixTypes) {</span>
+	<span class="s4">if </span><span class="s2">(!message.ruleId) {</span>
+		<span class="s4">return </span><span class="s2">fixTypes.has(</span><span class="s3">&quot;directive&quot;</span><span class="s2">);</span>
+	<span class="s2">}</span>
+
+	<span class="s4">const </span><span class="s2">rule = message.ruleId &amp;&amp; config.getRuleDefinition(message.ruleId);</span>
+
+	<span class="s4">return </span><span class="s2">Boolean(rule &amp;&amp; rule.meta &amp;&amp; fixTypes.has(rule.meta.type));</span>
+<span class="s2">}</span>
+
+<span class="s0">/**</span>
+ <span class="s0">* Creates a fixer function based on the provided fix, fixTypesSet, and config.</span>
+ <span class="s0">* </span><span class="s1">@param </span><span class="s0">{Function|boolean} fix The original fix option.</span>
+ <span class="s0">* </span><span class="s1">@param </span><span class="s0">{Set&lt;string&gt;} fixTypesSet A set of fix types to filter messages for fixing.</span>
+ <span class="s0">* </span><span class="s1">@param </span><span class="s0">{CalculatedConfig} config The config for the file that generated the message.</span>
+ <span class="s0">* </span><span class="s1">@returns </span><span class="s0">{Function|boolean} The fixer function or the original fix value.</span>
+ <span class="s0">*/</span>
+<span class="s4">function </span><span class="s2">getFixerForFixTypes(fix, fixTypesSet, config) {</span>
+	<span class="s4">if </span><span class="s2">(!fix || !fixTypesSet) {</span>
+		<span class="s4">return </span><span class="s2">fix;</span>
+	<span class="s2">}</span>
+
+	<span class="s4">const </span><span class="s2">originalFix = </span><span class="s4">typeof </span><span class="s2">fix === </span><span class="s3">&quot;function&quot; </span><span class="s2">? fix : () =&gt; </span><span class="s4">true</span><span class="s2">;</span>
+
+	<span class="s4">return </span><span class="s2">message =&gt;</span>
+		<span class="s2">shouldMessageBeFixed(message, config, fixTypesSet) &amp;&amp;</span>
+		<span class="s2">originalFix(message);</span>
+<span class="s2">}</span>
+
+<span class="s0">/**</span>
+ <span class="s0">* Processes a source code using ESLint.</span>
+ <span class="s0">* </span><span class="s1">@param </span><span class="s0">{Object} config The config object.</span>
+ <span class="s0">* </span><span class="s1">@param </span><span class="s0">{string} config.text The source code to verify.</span>
+ <span class="s0">* </span><span class="s1">@param </span><span class="s0">{string} config.cwd The path to the current working directory.</span>
+ <span class="s0">* </span><span class="s1">@param </span><span class="s0">{string|undefined} config.filePath The path to the file of `text`. If this is undefined, it uses `&lt;text&gt;`.</span>
+ <span class="s0">* </span><span class="s1">@param </span><span class="s0">{FlatConfigArray} config.configs The config.</span>
+ <span class="s0">* </span><span class="s1">@param </span><span class="s0">{boolean} config.fix If `true` then it does fix.</span>
+ <span class="s0">* </span><span class="s1">@param </span><span class="s0">{boolean} config.allowInlineConfig If `true` then it uses directive comments.</span>
+ <span class="s0">* </span><span class="s1">@param </span><span class="s0">{Function} config.ruleFilter A predicate function to filter which rules should be run.</span>
+ <span class="s0">* </span><span class="s1">@param </span><span class="s0">{boolean} config.stats If `true`, then if reports extra statistics with the lint results.</span>
+ <span class="s0">* </span><span class="s1">@param </span><span class="s0">{Linter} config.linter The linter instance to verify.</span>
+ <span class="s0">* </span><span class="s1">@returns </span><span class="s0">{LintResult} The result of linting.</span>
+ <span class="s0">* </span><span class="s1">@private</span>
+ <span class="s0">*/</span>
+<span class="s4">function </span><span class="s2">verifyText({</span>
+	<span class="s2">text,</span>
+	<span class="s2">cwd,</span>
+	<span class="s2">filePath: providedFilePath,</span>
+	<span class="s2">configs,</span>
+	<span class="s2">fix,</span>
+	<span class="s2">allowInlineConfig,</span>
+	<span class="s2">ruleFilter,</span>
+	<span class="s2">stats,</span>
+	<span class="s2">linter,</span>
+<span class="s2">}) {</span>
+	<span class="s4">const </span><span class="s2">startTime = hrtimeBigint();</span>
+
+	<span class="s4">const </span><span class="s2">filePath = providedFilePath || </span><span class="s3">&quot;&lt;text&gt;&quot;</span><span class="s2">;</span>
+
+	<span class="s0">/* 
+     * Verify. 
+     * `config.extractConfig(filePath)` requires an absolute path, but `linter` 
+     * doesn't know CWD, so it gives `linter` an absolute path always. 
+     */</span>
+	<span class="s4">const </span><span class="s2">filePathToVerify =</span>
+		<span class="s2">filePath === </span><span class="s3">&quot;&lt;text&gt;&quot; </span><span class="s2">? getPlaceholderPath(cwd) : filePath;</span>
+	<span class="s4">const </span><span class="s2">{ fixed, messages, output } = linter.verifyAndFix(text, configs, {</span>
+		<span class="s2">allowInlineConfig,</span>
+		<span class="s2">filename: filePathToVerify,</span>
+		<span class="s2">fix,</span>
+		<span class="s2">ruleFilter,</span>
+		<span class="s2">stats,</span>
+
+		<span class="s0">/**</span>
+		 <span class="s0">* Check if the linter should adopt a given code block or not.</span>
+		 <span class="s0">* </span><span class="s1">@param </span><span class="s0">{string} blockFilename The virtual filename of a code block.</span>
+		 <span class="s0">* </span><span class="s1">@returns </span><span class="s0">{boolean} `true` if the linter should adopt the code block.</span>
+		 <span class="s0">*/</span>
+		<span class="s2">filterCodeBlock(blockFilename) {</span>
+			<span class="s4">return </span><span class="s2">configs.getConfig(blockFilename) !== </span><span class="s4">void </span><span class="s5">0</span><span class="s2">;</span>
+		<span class="s2">},</span>
+	<span class="s2">});</span>
+
+	<span class="s0">// Tweak and return.</span>
+	<span class="s4">const </span><span class="s2">result = {</span>
+		<span class="s2">filePath: filePath === </span><span class="s3">&quot;&lt;text&gt;&quot; </span><span class="s2">? filePath : path.resolve(filePath),</span>
+		<span class="s2">messages,</span>
+		<span class="s2">suppressedMessages: linter.getSuppressedMessages(),</span>
+		<span class="s2">...calculateStatsPerFile(messages),</span>
+	<span class="s2">};</span>
+
+	<span class="s4">if </span><span class="s2">(fixed) {</span>
+		<span class="s2">result.output = output;</span>
+	<span class="s2">}</span>
+
+	<span class="s4">if </span><span class="s2">(</span>
+		<span class="s2">result.errorCount + result.warningCount &gt; </span><span class="s5">0 </span><span class="s2">&amp;&amp;</span>
+		<span class="s4">typeof </span><span class="s2">result.output === </span><span class="s3">&quot;undefined&quot;</span>
+	<span class="s2">) {</span>
+		<span class="s2">result.source = text;</span>
+	<span class="s2">}</span>
+
+	<span class="s4">if </span><span class="s2">(stats) {</span>
+		<span class="s2">result.stats = {</span>
+			<span class="s2">times: linter.getTimes(),</span>
+			<span class="s2">fixPasses: linter.getFixPassCount(),</span>
+		<span class="s2">};</span>
+	<span class="s2">}</span>
+
+	<span class="s4">const </span><span class="s2">endTime = hrtimeBigint();</span>
+	<span class="s2">debug(</span><span class="s3">'File &quot;%s&quot; linted in %t'</span><span class="s2">, filePath, endTime - startTime);</span>
+
+	<span class="s4">return </span><span class="s2">result;</span>
+<span class="s2">}</span>
+
+<span class="s0">/**</span>
+ <span class="s0">* Lints a single file.</span>
+ <span class="s0">* </span><span class="s1">@param </span><span class="s0">{string} filePath File path to lint.</span>
+ <span class="s0">* </span><span class="s1">@param </span><span class="s0">{FlatConfigArray} configs The config array for the file.</span>
+ <span class="s0">* </span><span class="s1">@param </span><span class="s0">{ESLintOptions} eslintOptions The processed ESLint options.</span>
+ <span class="s0">* </span><span class="s1">@param </span><span class="s0">{Linter} linter The linter instance to use.</span>
+ <span class="s0">* </span><span class="s1">@param </span><span class="s0">{?LintResultCache} lintResultCache The result cache or `null`.</span>
+ <span class="s0">* </span><span class="s1">@param </span><span class="s0">{?{ duration: bigint; }} readFileCounter Used to keep track of the time spent reading files.</span>
+ <span class="s0">* </span><span class="s1">@param </span><span class="s0">{Retrier} [retrier] Used to retry linting on certain errors.</span>
+ <span class="s0">* </span><span class="s1">@param </span><span class="s0">{AbortController} [controller] Used to stop linting when an error occurs.</span>
+ <span class="s0">* </span><span class="s1">@returns </span><span class="s0">{Promise&lt;LintResult&gt;} The lint result.</span>
+ <span class="s0">*/</span>
+<span class="s2">async </span><span class="s4">function </span><span class="s2">lintFile(</span>
+	<span class="s2">filePath,</span>
+	<span class="s2">configs,</span>
+	<span class="s2">eslintOptions,</span>
+	<span class="s2">linter,</span>
+	<span class="s2">lintResultCache,</span>
+	<span class="s2">readFileCounter,</span>
+	<span class="s2">retrier,</span>
+	<span class="s2">controller,</span>
+<span class="s2">) {</span>
+	<span class="s4">const </span><span class="s2">config = configs.getConfig(filePath);</span>
+	<span class="s4">const </span><span class="s2">{</span>
+		<span class="s2">allowInlineConfig,</span>
+		<span class="s2">cwd,</span>
+		<span class="s2">fix,</span>
+		<span class="s2">fixTypes,</span>
+		<span class="s2">ruleFilter,</span>
+		<span class="s2">stats,</span>
+		<span class="s2">warnIgnored,</span>
+	<span class="s2">} = eslintOptions;</span>
+	<span class="s4">const </span><span class="s2">fixTypesSet = fixTypes ? </span><span class="s4">new </span><span class="s2">Set(fixTypes) : </span><span class="s4">null</span><span class="s2">;</span>
+
+	<span class="s0">/* 
+     * If a filename was entered that cannot be matched 
+     * to a config, then notify the user. 
+     */</span>
+	<span class="s4">if </span><span class="s2">(!config) {</span>
+		<span class="s4">if </span><span class="s2">(warnIgnored) {</span>
+			<span class="s4">const </span><span class="s2">configStatus = configs.getConfigStatus(filePath);</span>
+
+			<span class="s4">return </span><span class="s2">createIgnoreResult(filePath, cwd, configStatus);</span>
+		<span class="s2">}</span>
+
+		<span class="s4">return void </span><span class="s5">0</span><span class="s2">;</span>
+	<span class="s2">}</span>
+
+	<span class="s0">// Skip if there is cached result.</span>
+	<span class="s4">if </span><span class="s2">(lintResultCache) {</span>
+		<span class="s4">const </span><span class="s2">cachedResult = lintResultCache.getCachedLintResults(</span>
+			<span class="s2">filePath,</span>
+			<span class="s2">config,</span>
+		<span class="s2">);</span>
+
+		<span class="s4">if </span><span class="s2">(cachedResult) {</span>
+			<span class="s4">const </span><span class="s2">hadMessages =</span>
+				<span class="s2">cachedResult.messages &amp;&amp; cachedResult.messages.length &gt; </span><span class="s5">0</span><span class="s2">;</span>
+
+			<span class="s4">if </span><span class="s2">(hadMessages &amp;&amp; fix) {</span>
+				<span class="s2">debug(</span><span class="s3">`Reprocessing cached file to allow autofix: </span><span class="s2">${filePath}</span><span class="s3">`</span><span class="s2">);</span>
+			<span class="s2">} </span><span class="s4">else </span><span class="s2">{</span>
+				<span class="s2">debug(</span><span class="s3">`Skipping file since it hasn't changed: </span><span class="s2">${filePath}</span><span class="s3">`</span><span class="s2">);</span>
+				<span class="s4">return </span><span class="s2">cachedResult;</span>
+			<span class="s2">}</span>
+		<span class="s2">}</span>
+	<span class="s2">}</span>
+
+	<span class="s0">// set up fixer for fixTypes if necessary</span>
+	<span class="s4">const </span><span class="s2">fixer = getFixerForFixTypes(fix, fixTypesSet, config);</span>
+
+	<span class="s0">/**</span>
+	 <span class="s0">* Reads the file and lints its content.</span>
+	 <span class="s0">* </span><span class="s1">@returns </span><span class="s0">{Promise&lt;LintResult&gt;} A lint result.</span>
+	 <span class="s0">*/</span>
+	<span class="s2">async </span><span class="s4">function </span><span class="s2">readAndVerifyFile() {</span>
+		<span class="s4">const </span><span class="s2">readFileEnterTime = hrtimeBigint();</span>
+		<span class="s4">const </span><span class="s2">text = </span><span class="s4">await </span><span class="s2">fsp.readFile(filePath, {</span>
+			<span class="s2">encoding: </span><span class="s3">&quot;utf8&quot;</span><span class="s2">,</span>
+			<span class="s2">signal: controller?.signal,</span>
+		<span class="s2">});</span>
+		<span class="s4">const </span><span class="s2">readFileExitTime = hrtimeBigint();</span>
+		<span class="s4">const </span><span class="s2">readFileDuration = readFileExitTime - readFileEnterTime;</span>
+		<span class="s2">debug(</span><span class="s3">'File &quot;%s&quot; read in %t'</span><span class="s2">, filePath, readFileDuration);</span>
+		<span class="s4">if </span><span class="s2">(readFileCounter) {</span>
+			<span class="s2">readFileCounter.duration += readFileDuration;</span>
+		<span class="s2">}</span>
+
+		<span class="s0">// fail immediately if an error occurred in another file</span>
+		<span class="s2">controller?.signal.throwIfAborted();</span>
+
+		<span class="s0">// do the linting</span>
+		<span class="s4">return </span><span class="s2">verifyText({</span>
+			<span class="s2">text,</span>
+			<span class="s2">filePath,</span>
+			<span class="s2">configs,</span>
+			<span class="s2">cwd,</span>
+			<span class="s2">fix: fixer,</span>
+			<span class="s2">allowInlineConfig,</span>
+			<span class="s2">ruleFilter,</span>
+			<span class="s2">stats,</span>
+			<span class="s2">linter,</span>
+		<span class="s2">});</span>
+	<span class="s2">}</span>
+
+	<span class="s0">// Use the retrier if provided, otherwise just call the function.</span>
+	<span class="s4">const </span><span class="s2">readAndVerifyFilePromise = retrier</span>
+		<span class="s2">? retrier.retry(readAndVerifyFile, { signal: controller?.signal })</span>
+		<span class="s2">: readAndVerifyFile();</span>
+
+	<span class="s4">return </span><span class="s2">readAndVerifyFilePromise.catch(error =&gt; {</span>
+		<span class="s2">controller?.abort(error);</span>
+		<span class="s4">throw </span><span class="s2">error;</span>
+	<span class="s2">});</span>
+<span class="s2">}</span>
+
+<span class="s0">/**</span>
+ <span class="s0">* Retrieves flags from the environment variable ESLINT_FLAGS.</span>
+ <span class="s0">* </span><span class="s1">@param </span><span class="s0">{string[]} flags The flags defined via the API.</span>
+ <span class="s0">* </span><span class="s1">@returns </span><span class="s0">{string[]} The merged flags to use.</span>
+ <span class="s0">*/</span>
+<span class="s4">function </span><span class="s2">mergeEnvironmentFlags(flags) {</span>
+	<span class="s4">if </span><span class="s2">(!process.env.ESLINT_FLAGS) {</span>
+		<span class="s4">return </span><span class="s2">flags;</span>
+	<span class="s2">}</span>
+
+	<span class="s4">const </span><span class="s2">envFlags = process.env.ESLINT_FLAGS.trim().split(</span><span class="s6">/\s*,\s*/gu</span><span class="s2">);</span>
+	<span class="s4">return </span><span class="s2">Array.from(</span><span class="s4">new </span><span class="s2">Set([...envFlags, ...flags]));</span>
+<span class="s2">}</span>
+
+<span class="s0">/**</span>
+ <span class="s0">* Creates a new linter instance.</span>
+ <span class="s0">* </span><span class="s1">@param </span><span class="s0">{ESLintOptions} eslintOptions The processed ESLint options.</span>
+ <span class="s0">* </span><span class="s1">@param </span><span class="s0">{WarningService} warningService The warning service to use.</span>
+ <span class="s0">* </span><span class="s1">@returns </span><span class="s0">{Linter} The linter instance.</span>
+ <span class="s0">*/</span>
+<span class="s4">function </span><span class="s2">createLinter({ cwd, flags }, warningService) {</span>
+	<span class="s4">return new </span><span class="s2">Linter({</span>
+		<span class="s2">configType: </span><span class="s3">&quot;flat&quot;</span><span class="s2">,</span>
+		<span class="s2">cwd,</span>
+		<span class="s2">flags: mergeEnvironmentFlags(flags),</span>
+		<span class="s2">warningService,</span>
+	<span class="s2">});</span>
+<span class="s2">}</span>
+
+<span class="s0">/**</span>
+ <span class="s0">* Creates default configs with the specified plugins.</span>
+ <span class="s0">* </span><span class="s1">@param </span><span class="s0">{Record&lt;string, Plugin&gt; | undefined} optionPlugins The plugins specified in the ESLint options.</span>
+ <span class="s0">* </span><span class="s1">@returns </span><span class="s0">{Config[]} The default configs.</span>
+ <span class="s0">*/</span>
+<span class="s4">function </span><span class="s2">createDefaultConfigs(optionPlugins) {</span>
+	<span class="s4">const </span><span class="s2">defaultConfigs = [];</span>
+
+	<span class="s0">// Add plugins</span>
+	<span class="s4">if </span><span class="s2">(optionPlugins) {</span>
+		<span class="s4">const </span><span class="s2">plugins = {};</span>
+
+		<span class="s4">for </span><span class="s2">(</span><span class="s4">const </span><span class="s2">[pluginName, plugin] of Object.entries(optionPlugins)) {</span>
+			<span class="s2">plugins[getShorthandName(pluginName, </span><span class="s3">&quot;eslint-plugin&quot;</span><span class="s2">)] = plugin;</span>
+		<span class="s2">}</span>
+
+		<span class="s2">defaultConfigs.push({ plugins });</span>
+	<span class="s2">}</span>
+
+	<span class="s4">return </span><span class="s2">defaultConfigs;</span>
+<span class="s2">}</span>
+
+<span class="s0">/**</span>
+ <span class="s0">* Creates a config loader.</span>
+ <span class="s0">* </span><span class="s1">@param </span><span class="s0">{ESLintOptions} eslintOptions The processed ESLint options.</span>
+ <span class="s0">* </span><span class="s1">@param </span><span class="s0">{Config[]} defaultConfigs The default configs.</span>
+ <span class="s0">* </span><span class="s1">@param </span><span class="s0">{Linter} linter The linter instance.</span>
+ <span class="s0">* </span><span class="s1">@param </span><span class="s0">{WarningService} warningService The warning service to use.</span>
+ <span class="s0">* </span><span class="s1">@returns </span><span class="s0">{ConfigLoader} The config loader.</span>
+ <span class="s0">*/</span>
+<span class="s4">function </span><span class="s2">createConfigLoader(</span>
+	<span class="s2">{</span>
+		<span class="s2">cwd,</span>
+		<span class="s2">baseConfig,</span>
+		<span class="s2">overrideConfig,</span>
+		<span class="s2">configFile,</span>
+		<span class="s2">ignore: ignoreEnabled,</span>
+		<span class="s2">ignorePatterns,</span>
+	<span class="s2">},</span>
+	<span class="s2">defaultConfigs,</span>
+	<span class="s2">linter,</span>
+	<span class="s2">warningService,</span>
+<span class="s2">) {</span>
+	<span class="s4">const </span><span class="s2">configLoaderOptions = {</span>
+		<span class="s2">cwd,</span>
+		<span class="s2">baseConfig,</span>
+		<span class="s2">overrideConfig,</span>
+		<span class="s2">configFile,</span>
+		<span class="s2">ignoreEnabled,</span>
+		<span class="s2">ignorePatterns,</span>
+		<span class="s2">defaultConfigs,</span>
+		<span class="s2">hasUnstableNativeNodeJsTSConfigFlag: linter.hasFlag(</span>
+			<span class="s3">&quot;unstable_native_nodejs_ts_config&quot;</span><span class="s2">,</span>
+		<span class="s2">),</span>
+		<span class="s2">warningService,</span>
+	<span class="s2">};</span>
+
+	<span class="s4">return </span><span class="s2">linter.hasFlag(</span><span class="s3">&quot;v10_config_lookup_from_file&quot;</span><span class="s2">)</span>
+		<span class="s2">? </span><span class="s4">new </span><span class="s2">ConfigLoader(configLoaderOptions)</span>
+		<span class="s2">: </span><span class="s4">new </span><span class="s2">LegacyConfigLoader(configLoaderOptions);</span>
+<span class="s2">}</span>
+
+<span class="s0">//-----------------------------------------------------------------------------</span>
+<span class="s0">// Exports</span>
+<span class="s0">//-----------------------------------------------------------------------------</span>
+
+<span class="s2">module.exports = {</span>
+	<span class="s2">findFiles,</span>
+
+	<span class="s2">isNonEmptyString,</span>
+	<span class="s2">isArrayOfNonEmptyString,</span>
+
+	<span class="s2">createIgnoreResult,</span>
+	<span class="s2">isErrorMessage,</span>
+	<span class="s2">calculateStatsPerFile,</span>
+	<span class="s2">getPlaceholderPath,</span>
+
+	<span class="s2">processOptions,</span>
+	<span class="s2">loadOptionsFromModule,</span>
+
+	<span class="s2">getCacheFile,</span>
+	<span class="s2">createLintResultCache,</span>
+
+	<span class="s2">getFixerForFixTypes,</span>
+	<span class="s2">verifyText,</span>
+	<span class="s2">lintFile,</span>
+	<span class="s2">createLinter,</span>
+	<span class="s2">createDefaultConfigs,</span>
+	<span class="s2">createConfigLoader,</span>
+<span class="s2">};</span>
+</pre>
+</body>
+</html>

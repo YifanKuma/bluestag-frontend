@@ -1,0 +1,499 @@
+<html>
+<head>
+<title>retrier.js</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #8c8c8c; font-style: italic;}
+.s1 { color: #080808;}
+.s2 { color: #8c8c8c; font-style: italic;}
+.s3 { color: #0033b3;}
+.s4 { color: #1750eb;}
+.s5 { color: #067d17;}
+</style>
+</head>
+<body bgcolor="#ffffff">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#c0c0c0" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+retrier.js</font>
+</center></td></tr></table>
+<pre><span class="s0">// @ts-self-types=&quot;./retrier.d.ts&quot;</span>
+<span class="s0">/**</span>
+ <span class="s0">* </span><span class="s2">@fileoverview </span><span class="s0">A utility for retrying failed async method calls.</span>
+ <span class="s0">*/</span>
+
+<span class="s0">/* global setTimeout, clearTimeout */</span>
+
+<span class="s0">//-----------------------------------------------------------------------------</span>
+<span class="s0">// Constants</span>
+<span class="s0">//-----------------------------------------------------------------------------</span>
+
+<span class="s3">const </span><span class="s1">MAX_TASK_TIMEOUT = </span><span class="s4">60000</span><span class="s1">;</span>
+<span class="s3">const </span><span class="s1">MAX_TASK_DELAY = </span><span class="s4">100</span><span class="s1">;</span>
+<span class="s3">const </span><span class="s1">MAX_CONCURRENCY = </span><span class="s4">1000</span><span class="s1">;</span>
+
+<span class="s0">//-----------------------------------------------------------------------------</span>
+<span class="s0">// Helpers</span>
+<span class="s0">//-----------------------------------------------------------------------------</span>
+
+<span class="s0">/**</span>
+ <span class="s0">* Logs a message to the console if the DEBUG environment variable is set.</span>
+ <span class="s0">* </span><span class="s2">@param </span><span class="s0">{string} message The message to log.</span>
+ <span class="s0">* </span><span class="s2">@returns </span><span class="s0">{void}</span>
+ <span class="s0">*/</span>
+<span class="s3">function </span><span class="s1">debug(message) {</span>
+    <span class="s3">if </span><span class="s1">(globalThis?.process?.env.DEBUG === </span><span class="s5">&quot;@hwc/retry&quot;</span><span class="s1">) {</span>
+        <span class="s1">console.debug(message);</span>
+    <span class="s1">}</span>
+<span class="s1">}</span>
+
+<span class="s0">/* 
+ * The following logic has been extracted from graceful-fs. 
+ * 
+ * The ISC License 
+ * 
+ * Copyright (c) 2011-2023 Isaac Z. Schlueter, Ben Noordhuis, and Contributors 
+ * 
+ * Permission to use, copy, modify, and/or distribute this software for any 
+ * purpose with or without fee is hereby granted, provided that the above 
+ * copyright notice and this permission notice appear in all copies. 
+ * 
+ * THE SOFTWARE IS PROVIDED &quot;AS IS&quot; AND THE AUTHOR DISCLAIMS ALL WARRANTIES 
+ * WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF 
+ * MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR 
+ * ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES 
+ * WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN 
+ * ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF OR 
+ * IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE. 
+ */</span>
+
+<span class="s0">/**</span>
+ <span class="s0">* Checks if it is time to retry a task based on the timestamp and last attempt time.</span>
+ <span class="s0">* </span><span class="s2">@param </span><span class="s0">{RetryTask} task The task to check.</span>
+ <span class="s0">* </span><span class="s2">@param </span><span class="s0">{number} maxDelay The maximum delay for the queue.</span>
+ <span class="s0">* </span><span class="s2">@returns </span><span class="s0">{boolean} true if it is time to retry, false otherwise.</span>
+ <span class="s0">*/</span>
+<span class="s3">function </span><span class="s1">isTimeToRetry(task, maxDelay) {</span>
+    <span class="s3">const </span><span class="s1">timeSinceLastAttempt = Date.now() - task.lastAttempt;</span>
+    <span class="s3">const </span><span class="s1">timeSinceStart = Math.max(task.lastAttempt - task.timestamp, </span><span class="s4">1</span><span class="s1">);</span>
+    <span class="s3">const </span><span class="s1">desiredDelay = Math.min(timeSinceStart * </span><span class="s4">1.2</span><span class="s1">, maxDelay);</span>
+
+    <span class="s3">return </span><span class="s1">timeSinceLastAttempt &gt;= desiredDelay;</span>
+<span class="s1">}</span>
+
+<span class="s0">/**</span>
+ <span class="s0">* Checks if it is time to bail out based on the given timestamp.</span>
+ <span class="s0">* </span><span class="s2">@param </span><span class="s0">{RetryTask} task The task to check.</span>
+ <span class="s0">* </span><span class="s2">@param </span><span class="s0">{number} timeout The timeout for the queue.</span>
+ <span class="s0">* </span><span class="s2">@returns </span><span class="s0">{boolean} true if it is time to bail, false otherwise.</span>
+ <span class="s0">*/</span>
+<span class="s3">function </span><span class="s1">isTimeToBail(task, timeout) {</span>
+    <span class="s3">return </span><span class="s1">task.age &gt; timeout;</span>
+<span class="s1">}</span>
+
+<span class="s0">/**</span>
+ <span class="s0">* Creates a new promise with resolve and reject functions.</span>
+ <span class="s0">* </span><span class="s2">@returns </span><span class="s0">{{promise:Promise&lt;any&gt;, resolve:(value:any) =&gt; any, reject: (value:any) =&gt; any}} A new promise.</span>
+ <span class="s0">*/</span>
+<span class="s3">function </span><span class="s1">createPromise() {</span>
+    <span class="s3">if </span><span class="s1">(Promise.withResolvers) {</span>
+        <span class="s3">return </span><span class="s1">Promise.withResolvers();</span>
+    <span class="s1">}</span>
+
+    <span class="s3">let </span><span class="s1">resolve, reject;</span>
+
+    <span class="s3">const </span><span class="s1">promise = </span><span class="s3">new </span><span class="s1">Promise((res, rej) =&gt; {</span>
+        <span class="s1">resolve = res;</span>
+        <span class="s1">reject = rej;</span>
+    <span class="s1">});</span>
+
+    <span class="s3">if </span><span class="s1">(resolve === undefined || reject === undefined) {</span>
+        <span class="s3">throw new </span><span class="s1">Error(</span><span class="s5">&quot;Promise executor did not initialize resolve or reject.&quot;</span><span class="s1">);</span>
+    <span class="s1">}</span>
+
+    <span class="s3">return </span><span class="s1">{ promise, resolve, reject };</span>
+<span class="s1">}</span>
+
+
+<span class="s0">/**</span>
+ <span class="s0">* A class to represent a task in the retry queue.</span>
+ <span class="s0">*/</span>
+<span class="s3">class </span><span class="s1">RetryTask {</span>
+
+    <span class="s0">/**</span>
+     <span class="s0">* The unique ID for the task.</span>
+     <span class="s0">* </span><span class="s2">@type </span><span class="s0">{string}</span>
+     <span class="s0">*/</span>
+    <span class="s1">id = Math.random().toString(</span><span class="s4">36</span><span class="s1">).slice(</span><span class="s4">2</span><span class="s1">);</span>
+
+    <span class="s0">/**</span>
+     <span class="s0">* The function to call.</span>
+     <span class="s0">* </span><span class="s2">@type </span><span class="s0">{Function}</span>
+     <span class="s0">*/</span>
+    <span class="s1">fn;</span>
+
+    <span class="s0">/**</span>
+     <span class="s0">* The error that was thrown.</span>
+     <span class="s0">* </span><span class="s2">@type </span><span class="s0">{Error}</span>
+     <span class="s0">*/</span>
+    <span class="s1">error;</span>
+    
+    <span class="s0">/**</span>
+     <span class="s0">* The timestamp of the task.</span>
+     <span class="s0">* </span><span class="s2">@type </span><span class="s0">{number}</span>
+     <span class="s0">*/</span>
+    <span class="s1">timestamp = Date.now();</span>
+
+    <span class="s0">/**</span>
+     <span class="s0">* The timestamp of the last attempt.</span>
+     <span class="s0">* </span><span class="s2">@type </span><span class="s0">{number}</span>
+     <span class="s0">*/</span>
+    <span class="s1">lastAttempt = </span><span class="s3">this</span><span class="s1">.timestamp;</span>
+
+    <span class="s0">/**</span>
+     <span class="s0">* The resolve function for the promise.</span>
+     <span class="s0">* </span><span class="s2">@type </span><span class="s0">{Function}</span>
+     <span class="s0">*/</span>
+    <span class="s1">resolve;</span>
+
+    <span class="s0">/**</span>
+     <span class="s0">* The reject function for the promise.</span>
+     <span class="s0">* </span><span class="s2">@type </span><span class="s0">{Function}</span>
+     <span class="s0">*/</span>
+    <span class="s1">reject;</span>
+
+    <span class="s0">/**</span>
+     <span class="s0">* The AbortSignal to monitor for cancellation.</span>
+     <span class="s0">* </span><span class="s2">@type </span><span class="s0">{AbortSignal|undefined}</span>
+     <span class="s0">*/</span>
+    <span class="s1">signal;</span>
+
+    <span class="s0">/**</span>
+     <span class="s0">* Creates a new instance.</span>
+     <span class="s0">* </span><span class="s2">@param </span><span class="s0">{Function} fn The function to call.</span>
+     <span class="s0">* </span><span class="s2">@param </span><span class="s0">{Error} error The error that was thrown.</span>
+     <span class="s0">* </span><span class="s2">@param </span><span class="s0">{Function} resolve The resolve function for the promise.</span>
+     <span class="s0">* </span><span class="s2">@param </span><span class="s0">{Function} reject The reject function for the promise.</span>
+     <span class="s0">* </span><span class="s2">@param </span><span class="s0">{AbortSignal|undefined} signal The AbortSignal to monitor for cancellation.</span>
+     <span class="s0">*/</span>
+    <span class="s1">constructor(fn, error, resolve, reject, signal) {</span>
+        <span class="s3">this</span><span class="s1">.fn = fn;</span>
+        <span class="s3">this</span><span class="s1">.error = error;</span>
+        <span class="s3">this</span><span class="s1">.timestamp = Date.now();</span>
+        <span class="s3">this</span><span class="s1">.lastAttempt = Date.now();</span>
+        <span class="s3">this</span><span class="s1">.resolve = resolve;</span>
+        <span class="s3">this</span><span class="s1">.reject = reject;</span>
+        <span class="s3">this</span><span class="s1">.signal = signal;</span>
+    <span class="s1">}</span>
+    
+    <span class="s0">/**</span>
+     <span class="s0">* Gets the age of the task.</span>
+     <span class="s0">* </span><span class="s2">@returns </span><span class="s0">{number} The age of the task in milliseconds.</span>
+     <span class="s0">* </span><span class="s2">@readonly</span>
+     <span class="s0">*/</span>
+    <span class="s1">get age() {</span>
+        <span class="s3">return </span><span class="s1">Date.now() - </span><span class="s3">this</span><span class="s1">.timestamp;</span>
+    <span class="s1">}</span>
+<span class="s1">}</span>
+
+<span class="s0">//-----------------------------------------------------------------------------</span>
+<span class="s0">// Exports</span>
+<span class="s0">//-----------------------------------------------------------------------------</span>
+
+<span class="s0">/**</span>
+ <span class="s0">* A class that manages a queue of retry jobs.</span>
+ <span class="s0">*/</span>
+<span class="s3">class </span><span class="s1">Retrier {</span>
+
+    <span class="s0">/**</span>
+     <span class="s0">* Represents the queue for processing tasks.</span>
+     <span class="s0">* </span><span class="s2">@type </span><span class="s0">{Array&lt;RetryTask&gt;}</span>
+     <span class="s0">*/</span>
+    <span class="s1">#retrying = [];</span>
+
+    <span class="s0">/**</span>
+     <span class="s0">* Represents the queue for pending tasks.</span>
+     <span class="s0">* </span><span class="s2">@type </span><span class="s0">{Array&lt;Function&gt;}</span>
+     <span class="s0">*/</span>
+    <span class="s1">#pending = [];</span>
+
+    <span class="s0">/**</span>
+     <span class="s0">* The number of tasks currently being processed.</span>
+     <span class="s0">* </span><span class="s2">@type </span><span class="s0">{number}</span>
+     <span class="s0">*/</span>
+    <span class="s1">#working = </span><span class="s4">0</span><span class="s1">;</span>
+
+    <span class="s0">/**</span>
+     <span class="s0">* The timeout for the queue.</span>
+     <span class="s0">* </span><span class="s2">@type </span><span class="s0">{number}</span>
+     <span class="s0">*/</span>
+    <span class="s1">#timeout;</span>
+
+    <span class="s0">/**</span>
+     <span class="s0">* The maximum delay for the queue.</span>
+     <span class="s0">* </span><span class="s2">@type </span><span class="s0">{number}</span>
+     <span class="s0">*/</span>
+    <span class="s1">#maxDelay;</span>
+
+    <span class="s0">/**</span>
+     <span class="s0">* The setTimeout() timer ID.</span>
+     <span class="s0">* </span><span class="s2">@type </span><span class="s0">{NodeJS.Timeout|undefined}</span>
+     <span class="s0">*/</span>
+    <span class="s1">#timerId;</span>
+
+    <span class="s0">/**</span>
+     <span class="s0">* The function to call.</span>
+     <span class="s0">* </span><span class="s2">@type </span><span class="s0">{Function}</span>
+     <span class="s0">*/</span>
+    <span class="s1">#check;</span>
+
+    <span class="s0">/**</span>
+     <span class="s0">* The maximum number of concurrent tasks.</span>
+     <span class="s0">* </span><span class="s2">@type </span><span class="s0">{number}</span>
+     <span class="s0">*/</span>
+    <span class="s1">#concurrency;</span>
+
+    <span class="s0">/**</span>
+     <span class="s0">* Creates a new instance.</span>
+     <span class="s0">* </span><span class="s2">@param </span><span class="s0">{Function} check The function to call.</span>
+     <span class="s0">* </span><span class="s2">@param </span><span class="s0">{object} [options] The options for the instance.</span>
+     <span class="s0">* </span><span class="s2">@param </span><span class="s0">{number} [options.timeout] The timeout for the queue.</span>
+     <span class="s0">* </span><span class="s2">@param </span><span class="s0">{number} [options.maxDelay] The maximum delay for the queue.</span>
+     <span class="s0">* </span><span class="s2">@param </span><span class="s0">{number} [options.concurrency] The maximum number of concurrent tasks.</span>
+     <span class="s0">*/</span>
+    <span class="s1">constructor(check, { timeout = MAX_TASK_TIMEOUT, maxDelay = MAX_TASK_DELAY, concurrency = MAX_CONCURRENCY } = {}) {</span>
+
+        <span class="s3">if </span><span class="s1">(</span><span class="s3">typeof </span><span class="s1">check !== </span><span class="s5">&quot;function&quot;</span><span class="s1">) {</span>
+            <span class="s3">throw new </span><span class="s1">Error(</span><span class="s5">&quot;Missing function to check errors&quot;</span><span class="s1">);</span>
+        <span class="s1">}</span>
+
+        <span class="s3">this</span><span class="s1">.#check = check;</span>
+        <span class="s3">this</span><span class="s1">.#timeout = timeout;</span>
+        <span class="s3">this</span><span class="s1">.#maxDelay = maxDelay;</span>
+        <span class="s3">this</span><span class="s1">.#concurrency = concurrency;</span>
+    <span class="s1">}</span>
+
+    <span class="s0">/**</span>
+     <span class="s0">* Gets the number of tasks waiting to be retried.</span>
+     <span class="s0">* </span><span class="s2">@returns </span><span class="s0">{number} The number of tasks in the retry queue.</span>
+     <span class="s0">*/</span>
+    <span class="s1">get retrying() {</span>
+        <span class="s3">return this</span><span class="s1">.#retrying.length;</span>
+    <span class="s1">}</span>
+
+    <span class="s0">/**</span>
+     <span class="s0">* Gets the number of tasks waiting to be processed in the pending queue.</span>
+     <span class="s0">* </span><span class="s2">@returns </span><span class="s0">{number} The number of tasks in the pending queue.</span>
+     <span class="s0">*/</span>
+    <span class="s1">get pending() {</span>
+        <span class="s3">return this</span><span class="s1">.#pending.length;</span>
+    <span class="s1">}</span>
+
+    <span class="s0">/**</span>
+     <span class="s0">* Gets the number of tasks currently being processed.</span>
+     <span class="s0">* </span><span class="s2">@returns </span><span class="s0">{number} The number of tasks currently being processed.</span>
+     <span class="s0">*/</span>
+    <span class="s1">get working() {</span>
+        <span class="s3">return this</span><span class="s1">.#working;</span>
+    <span class="s1">}</span>
+
+    <span class="s0">/**</span>
+     <span class="s0">* Calls the function and retries if it fails.</span>
+     <span class="s0">* </span><span class="s2">@param </span><span class="s0">{Function} fn The function to call.</span>
+     <span class="s0">* </span><span class="s2">@param </span><span class="s0">{Object} options The options for the job.</span>
+     <span class="s0">* </span><span class="s2">@param </span><span class="s0">{AbortSignal} [options.signal] The AbortSignal to monitor for cancellation.</span>
+     <span class="s0">* </span><span class="s2">@param </span><span class="s0">{Promise&lt;any&gt;} options.promise The promise to return when the function settles.</span>
+     <span class="s0">* </span><span class="s2">@param </span><span class="s0">{Function} options.resolve The resolve function for the promise.</span>
+     <span class="s0">* </span><span class="s2">@param </span><span class="s0">{Function} options.reject The reject function for the promise.</span>
+     <span class="s0">* </span><span class="s2">@returns </span><span class="s0">{Promise&lt;any&gt;} A promise that resolves when the function is</span>
+     <span class="s0">* called successfully.</span>
+     <span class="s0">*/</span>
+    <span class="s1">#call(fn, { signal, promise, resolve, reject }) {</span>
+
+        <span class="s3">let </span><span class="s1">result;</span>
+
+        <span class="s3">try </span><span class="s1">{</span>
+            <span class="s1">result = fn();</span>
+        <span class="s1">} </span><span class="s3">catch </span><span class="s1">(</span><span class="s0">/** </span><span class="s2">@type </span><span class="s0">{any} */ </span><span class="s1">error) {</span>
+            <span class="s1">reject(</span><span class="s3">new </span><span class="s1">Error(</span><span class="s5">`Synchronous error: </span><span class="s1">${error.message}</span><span class="s5">`</span><span class="s1">, { cause: error }));</span>
+            <span class="s3">return </span><span class="s1">promise;</span>
+        <span class="s1">}</span>
+
+        <span class="s0">// if the result is not a promise then reject an error</span>
+        <span class="s3">if </span><span class="s1">(!result || </span><span class="s3">typeof </span><span class="s1">result.then !== </span><span class="s5">&quot;function&quot;</span><span class="s1">) {</span>
+            <span class="s1">reject(</span><span class="s3">new </span><span class="s1">Error(</span><span class="s5">&quot;Result is not a promise.&quot;</span><span class="s1">));</span>
+            <span class="s3">return </span><span class="s1">promise;</span>
+        <span class="s1">}</span>
+
+        <span class="s3">this</span><span class="s1">.#working++;</span>
+        <span class="s1">promise.finally(() =&gt; {</span>
+            <span class="s3">this</span><span class="s1">.#working--;</span>
+            <span class="s3">this</span><span class="s1">.#processPending();</span>
+        <span class="s1">})</span>
+        <span class="s0">// `promise.finally` creates a new promise that may be rejected, so it must be handled.</span>
+            <span class="s1">.catch(() =&gt; { });</span>
+
+        <span class="s0">// call the original function and catch any ENFILE or EMFILE errors</span>
+        <span class="s1">Promise.resolve(result)</span>
+            <span class="s1">.then(value =&gt; {</span>
+                <span class="s1">debug(</span><span class="s5">&quot;Function called successfully without retry.&quot;</span><span class="s1">);</span>
+                <span class="s1">resolve(value);</span>
+            <span class="s1">})</span>
+            <span class="s1">.catch(error =&gt; {</span>
+                <span class="s3">if </span><span class="s1">(!</span><span class="s3">this</span><span class="s1">.#check(error)) {</span>
+                    <span class="s1">reject(error);</span>
+                    <span class="s3">return</span><span class="s1">;</span>
+                <span class="s1">}</span>
+
+                <span class="s3">const </span><span class="s1">task = </span><span class="s3">new </span><span class="s1">RetryTask(fn, error, resolve, reject, signal);</span>
+                
+                <span class="s1">debug(</span><span class="s5">`Function failed, queuing for retry with task </span><span class="s1">${task.id}</span><span class="s5">.`</span><span class="s1">);</span>
+                <span class="s3">this</span><span class="s1">.#retrying.push(task);</span>
+
+                <span class="s1">signal?.addEventListener(</span><span class="s5">&quot;abort&quot;</span><span class="s1">, () =&gt; {</span>
+                    <span class="s1">debug(</span><span class="s5">`Task </span><span class="s1">${task.id} </span><span class="s5">was aborted due to AbortSignal.`</span><span class="s1">);</span>
+                    <span class="s1">reject(signal.reason);</span>
+                <span class="s1">});</span>
+
+                <span class="s3">this</span><span class="s1">.#processQueue();</span>
+            <span class="s1">});</span>
+        
+        <span class="s3">return </span><span class="s1">promise;</span>
+    <span class="s1">}</span>
+
+    <span class="s0">/**</span>
+     <span class="s0">* Adds a new retry job to the queue.</span>
+     <span class="s0">* </span><span class="s2">@template </span><span class="s0">{(...args: unknown[]) =&gt; Promise&lt;unknown&gt;} Func</span>
+     <span class="s0">* </span><span class="s2">@template </span><span class="s0">{Awaited&lt;ReturnType&lt;Func&gt;&gt;} RetVal</span>
+     <span class="s0">* </span><span class="s2">@param </span><span class="s0">{Func} fn The function to call.</span>
+     <span class="s0">* </span><span class="s2">@param </span><span class="s0">{object} [options] The options for the job.</span>
+     <span class="s0">* </span><span class="s2">@param </span><span class="s0">{AbortSignal} [options.signal] The AbortSignal to monitor for cancellation.</span>
+     <span class="s0">* </span><span class="s2">@returns </span><span class="s0">{Promise&lt;RetVal&gt;} A promise that resolves when the queue is processed.</span>
+     <span class="s0">*/</span>
+    <span class="s1">retry(fn, { signal } = {}) {</span>
+
+        <span class="s1">signal?.throwIfAborted();</span>
+
+        <span class="s3">const </span><span class="s1">{ promise, resolve, reject } = createPromise();</span>
+
+        <span class="s3">this</span><span class="s1">.#pending.push(() =&gt; </span><span class="s3">this</span><span class="s1">.#call(fn, { signal, promise, resolve, reject }));</span>
+        <span class="s3">this</span><span class="s1">.#processPending();</span>
+        
+        <span class="s3">return </span><span class="s1">promise;</span>
+    <span class="s1">}</span>
+
+
+    <span class="s0">/**</span>
+     <span class="s0">* Processes the pending queue and the retry queue.</span>
+     <span class="s0">* </span><span class="s2">@returns </span><span class="s0">{void}</span>
+     <span class="s0">*/</span>
+    <span class="s1">#processAll() {</span>
+        <span class="s3">if </span><span class="s1">(</span><span class="s3">this</span><span class="s1">.pending) {</span>
+            <span class="s3">this</span><span class="s1">.#processPending();</span>
+        <span class="s1">}</span>
+
+        <span class="s3">if </span><span class="s1">(</span><span class="s3">this</span><span class="s1">.retrying) {</span>
+            <span class="s3">this</span><span class="s1">.#processQueue();</span>
+        <span class="s1">}</span>
+    <span class="s1">}</span>
+
+    <span class="s0">/**</span>
+     <span class="s0">* Processes the pending queue to see which tasks can be started.</span>
+     <span class="s0">* </span><span class="s2">@returns </span><span class="s0">{void}</span>
+     <span class="s0">*/</span>
+    <span class="s1">#processPending() {</span>
+
+        <span class="s1">debug(</span><span class="s5">`Processing pending tasks: </span><span class="s1">${</span><span class="s3">this</span><span class="s1">.pending} </span><span class="s5">pending, </span><span class="s1">${</span><span class="s3">this</span><span class="s1">.working} </span><span class="s5">working.`</span><span class="s1">);</span>
+
+        <span class="s3">const </span><span class="s1">available = </span><span class="s3">this</span><span class="s1">.#concurrency - </span><span class="s3">this</span><span class="s1">.working;</span>
+
+        <span class="s3">if </span><span class="s1">(available &lt;= </span><span class="s4">0</span><span class="s1">) {</span>
+            <span class="s3">return</span><span class="s1">;</span>
+        <span class="s1">}</span>
+
+        <span class="s3">const </span><span class="s1">count = Math.min(</span><span class="s3">this</span><span class="s1">.pending, available);</span>
+
+        <span class="s3">for </span><span class="s1">(</span><span class="s3">let </span><span class="s1">i = </span><span class="s4">0</span><span class="s1">; i &lt; count; i++) {</span>
+            <span class="s3">const </span><span class="s1">task = </span><span class="s3">this</span><span class="s1">.#pending.shift();</span>
+            <span class="s1">task?.();</span>
+        <span class="s1">}</span>
+
+        <span class="s1">debug(</span><span class="s5">`Processed pending tasks: </span><span class="s1">${</span><span class="s3">this</span><span class="s1">.pending} </span><span class="s5">pending, </span><span class="s1">${</span><span class="s3">this</span><span class="s1">.working} </span><span class="s5">working.`</span><span class="s1">);</span>
+    <span class="s1">}</span>
+
+    <span class="s0">/**</span>
+     <span class="s0">* Processes the queue.</span>
+     <span class="s0">* </span><span class="s2">@returns </span><span class="s0">{void}</span>
+     <span class="s0">*/</span>
+    <span class="s1">#processQueue() {</span>
+        <span class="s0">// clear any timer because we're going to check right now</span>
+        <span class="s1">clearTimeout(</span><span class="s3">this</span><span class="s1">.#timerId);</span>
+        <span class="s3">this</span><span class="s1">.#timerId = undefined;</span>
+
+        <span class="s1">debug(</span><span class="s5">`Processing retry queue: </span><span class="s1">${</span><span class="s3">this</span><span class="s1">.retrying} </span><span class="s5">retrying, </span><span class="s1">${</span><span class="s3">this</span><span class="s1">.working} </span><span class="s5">working.`</span><span class="s1">);</span>
+
+        <span class="s3">const </span><span class="s1">processAgain = () =&gt; {</span>
+            <span class="s3">this</span><span class="s1">.#timerId = setTimeout(() =&gt; </span><span class="s3">this</span><span class="s1">.#processAll(), </span><span class="s4">0</span><span class="s1">);</span>
+        <span class="s1">};</span>
+
+        <span class="s0">// if there's nothing in the queue, we're done</span>
+        <span class="s3">const </span><span class="s1">task = </span><span class="s3">this</span><span class="s1">.#retrying.shift();</span>
+        <span class="s3">if </span><span class="s1">(!task) {</span>
+            <span class="s1">debug(</span><span class="s5">&quot;Queue is empty, exiting.&quot;</span><span class="s1">);</span>
+
+            <span class="s3">if </span><span class="s1">(</span><span class="s3">this</span><span class="s1">.pending) {</span>
+                <span class="s1">processAgain();</span>
+            <span class="s1">}</span>
+            <span class="s3">return</span><span class="s1">;</span>
+        <span class="s1">}</span>
+
+        <span class="s0">// if it's time to bail, then bail</span>
+        <span class="s3">if </span><span class="s1">(isTimeToBail(task, </span><span class="s3">this</span><span class="s1">.#timeout)) {</span>
+            <span class="s1">debug(</span><span class="s5">`Task </span><span class="s1">${task.id} </span><span class="s5">was abandoned due to timeout.`</span><span class="s1">);</span>
+            <span class="s1">task.reject(task.error);</span>
+            <span class="s1">processAgain();</span>
+            <span class="s3">return</span><span class="s1">;</span>
+        <span class="s1">}</span>
+
+        <span class="s0">// if it's not time to retry, then wait and try again</span>
+        <span class="s3">if </span><span class="s1">(!isTimeToRetry(task, </span><span class="s3">this</span><span class="s1">.#maxDelay)) {</span>
+            <span class="s1">debug(</span><span class="s5">`Task </span><span class="s1">${task.id} </span><span class="s5">is not ready to retry, skipping.`</span><span class="s1">);</span>
+            <span class="s3">this</span><span class="s1">.#retrying.push(task);</span>
+            <span class="s1">processAgain();</span>
+            <span class="s3">return</span><span class="s1">;</span>
+        <span class="s1">}</span>
+
+        <span class="s0">// otherwise, try again</span>
+        <span class="s1">task.lastAttempt = Date.now();</span>
+        
+        <span class="s0">// Promise.resolve needed in case it's a thenable but not a Promise</span>
+        <span class="s1">Promise.resolve(task.fn())</span>
+            <span class="s0">// @ts-ignore because we know it's any</span>
+            <span class="s1">.then(result =&gt; {</span>
+                <span class="s1">debug(</span><span class="s5">`Task </span><span class="s1">${task.id} </span><span class="s5">succeeded after </span><span class="s1">${task.age}</span><span class="s5">ms.`</span><span class="s1">);</span>
+                <span class="s1">task.resolve(result);</span>
+            <span class="s1">})</span>
+
+            <span class="s0">// @ts-ignore because we know it's any</span>
+            <span class="s1">.catch(error =&gt; {</span>
+                <span class="s3">if </span><span class="s1">(!</span><span class="s3">this</span><span class="s1">.#check(error)) {</span>
+                    <span class="s1">debug(</span><span class="s5">`Task </span><span class="s1">${task.id} </span><span class="s5">failed with non-retryable error: </span><span class="s1">${error.message}</span><span class="s5">.`</span><span class="s1">);</span>
+                    <span class="s1">task.reject(error);</span>
+                    <span class="s3">return</span><span class="s1">;</span>
+                <span class="s1">}</span>
+
+                <span class="s0">// update the task timestamp and push to back of queue to try again</span>
+                <span class="s1">task.lastAttempt = Date.now();</span>
+                <span class="s3">this</span><span class="s1">.#retrying.push(task);</span>
+                <span class="s1">debug(</span><span class="s5">`Task </span><span class="s1">${task.id} </span><span class="s5">failed, requeueing to try again.`</span><span class="s1">);</span>
+            <span class="s1">})</span>
+            <span class="s1">.finally(() =&gt; {</span>
+                <span class="s3">this</span><span class="s1">.#processAll();</span>
+            <span class="s1">});</span>
+    <span class="s1">}</span>
+<span class="s1">}</span>
+
+<span class="s3">export </span><span class="s1">{ Retrier };</span>
+</pre>
+</body>
+</html>

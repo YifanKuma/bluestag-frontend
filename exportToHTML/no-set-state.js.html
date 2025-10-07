@@ -1,0 +1,110 @@
+<html>
+<head>
+<title>no-set-state.js</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #8c8c8c; font-style: italic;}
+.s1 { color: #8c8c8c; font-style: italic;}
+.s2 { color: #080808;}
+.s3 { color: #067d17;}
+.s4 { color: #0033b3;}
+.s5 { color: #1750eb;}
+</style>
+</head>
+<body bgcolor="#ffffff">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#c0c0c0" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+no-set-state.js</font>
+</center></td></tr></table>
+<pre><span class="s0">/**</span>
+ <span class="s0">* </span><span class="s1">@fileoverview </span><span class="s0">Prevent usage of setState</span>
+ <span class="s0">* </span><span class="s1">@author </span><span class="s0">Mark Dalgleish</span>
+ <span class="s0">*/</span>
+
+<span class="s3">'use strict'</span><span class="s2">;</span>
+
+<span class="s4">const </span><span class="s2">values = require(</span><span class="s3">'object.values'</span><span class="s2">);</span>
+
+<span class="s4">const </span><span class="s2">Components = require(</span><span class="s3">'../util/Components'</span><span class="s2">);</span>
+<span class="s4">const </span><span class="s2">docsUrl = require(</span><span class="s3">'../util/docsUrl'</span><span class="s2">);</span>
+<span class="s4">const </span><span class="s2">report = require(</span><span class="s3">'../util/report'</span><span class="s2">);</span>
+
+<span class="s0">// ------------------------------------------------------------------------------</span>
+<span class="s0">// Rule Definition</span>
+<span class="s0">// ------------------------------------------------------------------------------</span>
+
+<span class="s4">const </span><span class="s2">messages = {</span>
+  <span class="s2">noSetState: </span><span class="s3">'Do not use setState'</span><span class="s2">,</span>
+<span class="s2">};</span>
+
+<span class="s0">/** </span><span class="s1">@type </span><span class="s0">{import('eslint').Rule.RuleModule} */</span>
+<span class="s2">module.exports = {</span>
+  <span class="s2">meta: {</span>
+    <span class="s2">docs: {</span>
+      <span class="s2">description: </span><span class="s3">'Disallow usage of setState'</span><span class="s2">,</span>
+      <span class="s2">category: </span><span class="s3">'Stylistic Issues'</span><span class="s2">,</span>
+      <span class="s2">recommended: </span><span class="s4">false</span><span class="s2">,</span>
+      <span class="s2">url: docsUrl(</span><span class="s3">'no-set-state'</span><span class="s2">),</span>
+    <span class="s2">},</span>
+
+    <span class="s2">messages,</span>
+
+    <span class="s2">schema: [],</span>
+  <span class="s2">},</span>
+
+  <span class="s2">create: Components.detect((context, components, utils) =&gt; {</span>
+    <span class="s0">/**</span>
+     <span class="s0">* Checks if the component is valid</span>
+     <span class="s0">* </span><span class="s1">@param </span><span class="s0">{Object} component The component to process</span>
+     <span class="s0">* </span><span class="s1">@returns </span><span class="s0">{boolean} True if the component is valid, false if not.</span>
+     <span class="s0">*/</span>
+    <span class="s4">function </span><span class="s2">isValid(component) {</span>
+      <span class="s4">return </span><span class="s2">!!component &amp;&amp; !component.useSetState;</span>
+    <span class="s2">}</span>
+
+    <span class="s0">/**</span>
+     <span class="s0">* Reports usages of setState for a given component</span>
+     <span class="s0">* </span><span class="s1">@param </span><span class="s0">{Object} component The component to process</span>
+     <span class="s0">*/</span>
+    <span class="s4">function </span><span class="s2">reportSetStateUsages(component) {</span>
+      <span class="s4">for </span><span class="s2">(</span><span class="s4">let </span><span class="s2">i = </span><span class="s5">0</span><span class="s2">, j = component.setStateUsages.length; i &lt; j; i++) {</span>
+        <span class="s4">const </span><span class="s2">setStateUsage = component.setStateUsages[i];</span>
+        <span class="s2">report(context, messages.noSetState, </span><span class="s3">'noSetState'</span><span class="s2">, {</span>
+          <span class="s2">node: setStateUsage,</span>
+        <span class="s2">});</span>
+      <span class="s2">}</span>
+    <span class="s2">}</span>
+
+    <span class="s4">return </span><span class="s2">{</span>
+      <span class="s2">CallExpression(node) {</span>
+        <span class="s4">const </span><span class="s2">callee = node.callee;</span>
+        <span class="s4">if </span><span class="s2">(</span>
+          <span class="s2">callee.type !== </span><span class="s3">'MemberExpression'</span>
+          <span class="s2">|| callee.object.type !== </span><span class="s3">'ThisExpression'</span>
+          <span class="s2">|| callee.property.name !== </span><span class="s3">'setState'</span>
+        <span class="s2">) {</span>
+          <span class="s4">return</span><span class="s2">;</span>
+        <span class="s2">}</span>
+        <span class="s4">const </span><span class="s2">component = components.get(utils.getParentComponent(node));</span>
+        <span class="s4">const </span><span class="s2">setStateUsages = (component &amp;&amp; component.setStateUsages) || [];</span>
+        <span class="s2">setStateUsages.push(callee);</span>
+        <span class="s2">components.set(node, {</span>
+          <span class="s2">useSetState: </span><span class="s4">true</span><span class="s2">,</span>
+          <span class="s2">setStateUsages,</span>
+        <span class="s2">});</span>
+      <span class="s2">},</span>
+
+      <span class="s3">'Program:exit'</span><span class="s2">() {</span>
+        <span class="s2">values(components.list())</span>
+          <span class="s2">.filter((component) =&gt; !isValid(component))</span>
+          <span class="s2">.forEach((component) =&gt; {</span>
+            <span class="s2">reportSetStateUsages(component);</span>
+          <span class="s2">});</span>
+      <span class="s2">},</span>
+    <span class="s2">};</span>
+  <span class="s2">}),</span>
+<span class="s2">};</span>
+</pre>
+</body>
+</html>

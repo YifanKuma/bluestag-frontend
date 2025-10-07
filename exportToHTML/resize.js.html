@@ -1,0 +1,617 @@
+<html>
+<head>
+<title>resize.js</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #8c8c8c; font-style: italic;}
+.s1 { color: #080808;}
+.s2 { color: #067d17;}
+.s3 { color: #0033b3;}
+.s4 { color: #8c8c8c; font-style: italic;}
+.s5 { color: #1750eb;}
+</style>
+</head>
+<body bgcolor="#ffffff">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#c0c0c0" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+resize.js</font>
+</center></td></tr></table>
+<pre><span class="s0">// Copyright 2013 Lovell Fuller and others.</span>
+<span class="s0">// SPDX-License-Identifier: Apache-2.0</span>
+
+<span class="s2">'use strict'</span><span class="s1">;</span>
+
+<span class="s3">const </span><span class="s1">is = require(</span><span class="s2">'./is'</span><span class="s1">);</span>
+
+<span class="s0">/**</span>
+ <span class="s0">* Weighting to apply when using contain/cover fit.</span>
+ <span class="s0">* </span><span class="s4">@member</span>
+ <span class="s0">* </span><span class="s4">@private</span>
+ <span class="s0">*/</span>
+<span class="s3">const </span><span class="s1">gravity = {</span>
+  <span class="s1">center: </span><span class="s5">0</span><span class="s1">,</span>
+  <span class="s1">centre: </span><span class="s5">0</span><span class="s1">,</span>
+  <span class="s1">north: </span><span class="s5">1</span><span class="s1">,</span>
+  <span class="s1">east: </span><span class="s5">2</span><span class="s1">,</span>
+  <span class="s1">south: </span><span class="s5">3</span><span class="s1">,</span>
+  <span class="s1">west: </span><span class="s5">4</span><span class="s1">,</span>
+  <span class="s1">northeast: </span><span class="s5">5</span><span class="s1">,</span>
+  <span class="s1">southeast: </span><span class="s5">6</span><span class="s1">,</span>
+  <span class="s1">southwest: </span><span class="s5">7</span><span class="s1">,</span>
+  <span class="s1">northwest: </span><span class="s5">8</span>
+<span class="s1">};</span>
+
+<span class="s0">/**</span>
+ <span class="s0">* Position to apply when using contain/cover fit.</span>
+ <span class="s0">* </span><span class="s4">@member</span>
+ <span class="s0">* </span><span class="s4">@private</span>
+ <span class="s0">*/</span>
+<span class="s3">const </span><span class="s1">position = {</span>
+  <span class="s1">top: </span><span class="s5">1</span><span class="s1">,</span>
+  <span class="s1">right: </span><span class="s5">2</span><span class="s1">,</span>
+  <span class="s1">bottom: </span><span class="s5">3</span><span class="s1">,</span>
+  <span class="s1">left: </span><span class="s5">4</span><span class="s1">,</span>
+  <span class="s2">'right top'</span><span class="s1">: </span><span class="s5">5</span><span class="s1">,</span>
+  <span class="s2">'right bottom'</span><span class="s1">: </span><span class="s5">6</span><span class="s1">,</span>
+  <span class="s2">'left bottom'</span><span class="s1">: </span><span class="s5">7</span><span class="s1">,</span>
+  <span class="s2">'left top'</span><span class="s1">: </span><span class="s5">8</span>
+<span class="s1">};</span>
+
+<span class="s0">/**</span>
+ <span class="s0">* How to extend the image.</span>
+ <span class="s0">* </span><span class="s4">@member</span>
+ <span class="s0">* </span><span class="s4">@private</span>
+ <span class="s0">*/</span>
+<span class="s3">const </span><span class="s1">extendWith = {</span>
+  <span class="s1">background: </span><span class="s2">'background'</span><span class="s1">,</span>
+  <span class="s1">copy: </span><span class="s2">'copy'</span><span class="s1">,</span>
+  <span class="s1">repeat: </span><span class="s2">'repeat'</span><span class="s1">,</span>
+  <span class="s1">mirror: </span><span class="s2">'mirror'</span>
+<span class="s1">};</span>
+
+<span class="s0">/**</span>
+ <span class="s0">* Strategies for automagic cover behaviour.</span>
+ <span class="s0">* </span><span class="s4">@member</span>
+ <span class="s0">* </span><span class="s4">@private</span>
+ <span class="s0">*/</span>
+<span class="s3">const </span><span class="s1">strategy = {</span>
+  <span class="s1">entropy: </span><span class="s5">16</span><span class="s1">,</span>
+  <span class="s1">attention: </span><span class="s5">17</span>
+<span class="s1">};</span>
+
+<span class="s0">/**</span>
+ <span class="s0">* Reduction kernels.</span>
+ <span class="s0">* </span><span class="s4">@member</span>
+ <span class="s0">* </span><span class="s4">@private</span>
+ <span class="s0">*/</span>
+<span class="s3">const </span><span class="s1">kernel = {</span>
+  <span class="s1">nearest: </span><span class="s2">'nearest'</span><span class="s1">,</span>
+  <span class="s1">linear: </span><span class="s2">'linear'</span><span class="s1">,</span>
+  <span class="s1">cubic: </span><span class="s2">'cubic'</span><span class="s1">,</span>
+  <span class="s1">mitchell: </span><span class="s2">'mitchell'</span><span class="s1">,</span>
+  <span class="s1">lanczos2: </span><span class="s2">'lanczos2'</span><span class="s1">,</span>
+  <span class="s1">lanczos3: </span><span class="s2">'lanczos3'</span><span class="s1">,</span>
+  <span class="s1">mks2013: </span><span class="s2">'mks2013'</span><span class="s1">,</span>
+  <span class="s1">mks2021: </span><span class="s2">'mks2021'</span>
+<span class="s1">};</span>
+
+<span class="s0">/**</span>
+ <span class="s0">* Methods by which an image can be resized to fit the provided dimensions.</span>
+ <span class="s0">* </span><span class="s4">@member</span>
+ <span class="s0">* </span><span class="s4">@private</span>
+ <span class="s0">*/</span>
+<span class="s3">const </span><span class="s1">fit = {</span>
+  <span class="s1">contain: </span><span class="s2">'contain'</span><span class="s1">,</span>
+  <span class="s1">cover: </span><span class="s2">'cover'</span><span class="s1">,</span>
+  <span class="s1">fill: </span><span class="s2">'fill'</span><span class="s1">,</span>
+  <span class="s1">inside: </span><span class="s2">'inside'</span><span class="s1">,</span>
+  <span class="s1">outside: </span><span class="s2">'outside'</span>
+<span class="s1">};</span>
+
+<span class="s0">/**</span>
+ <span class="s0">* Map external fit property to internal canvas property.</span>
+ <span class="s0">* </span><span class="s4">@member</span>
+ <span class="s0">* </span><span class="s4">@private</span>
+ <span class="s0">*/</span>
+<span class="s3">const </span><span class="s1">mapFitToCanvas = {</span>
+  <span class="s1">contain: </span><span class="s2">'embed'</span><span class="s1">,</span>
+  <span class="s1">cover: </span><span class="s2">'crop'</span><span class="s1">,</span>
+  <span class="s1">fill: </span><span class="s2">'ignore_aspect'</span><span class="s1">,</span>
+  <span class="s1">inside: </span><span class="s2">'max'</span><span class="s1">,</span>
+  <span class="s1">outside: </span><span class="s2">'min'</span>
+<span class="s1">};</span>
+
+<span class="s0">/**</span>
+ <span class="s0">* </span><span class="s4">@private</span>
+ <span class="s0">*/</span>
+<span class="s3">function </span><span class="s1">isRotationExpected (options) {</span>
+  <span class="s3">return </span><span class="s1">(options.angle % </span><span class="s5">360</span><span class="s1">) !== </span><span class="s5">0 </span><span class="s1">|| options.rotationAngle !== </span><span class="s5">0</span><span class="s1">;</span>
+<span class="s1">}</span>
+
+<span class="s0">/**</span>
+ <span class="s0">* </span><span class="s4">@private</span>
+ <span class="s0">*/</span>
+<span class="s3">function </span><span class="s1">isResizeExpected (options) {</span>
+  <span class="s3">return </span><span class="s1">options.width !== -</span><span class="s5">1 </span><span class="s1">|| options.height !== -</span><span class="s5">1</span><span class="s1">;</span>
+<span class="s1">}</span>
+
+<span class="s0">/**</span>
+ <span class="s0">* Resize image to `width`, `height` or `width x height`.</span>
+ <span class="s0">*</span>
+ <span class="s0">* When both a `width` and `height` are provided, the possible methods by which the image should **fit** these are:</span>
+ <span class="s0">* - `cover`: (default) Preserving aspect ratio, attempt to ensure the image covers both provided dimensions by cropping/clipping to fit.</span>
+ <span class="s0">* - `contain`: Preserving aspect ratio, contain within both provided dimensions using &quot;letterboxing&quot; where necessary.</span>
+ <span class="s0">* - `fill`: Ignore the aspect ratio of the input and stretch to both provided dimensions.</span>
+ <span class="s0">* - `inside`: Preserving aspect ratio, resize the image to be as large as possible while ensuring its dimensions are less than or equal to both those specified.</span>
+ <span class="s0">* - `outside`: Preserving aspect ratio, resize the image to be as small as possible while ensuring its dimensions are greater than or equal to both those specified.</span>
+ <span class="s0">*</span>
+ <span class="s0">* Some of these values are based on the [object-fit](https://developer.mozilla.org/en-US/docs/Web/CSS/object-fit) CSS property.</span>
+ <span class="s0">*</span>
+ <span class="s0">* &lt;img alt=&quot;Examples of various values for the fit property when resizing&quot; width=&quot;100%&quot; style=&quot;aspect-ratio: 998/243&quot; src=&quot;/api-resize-fit.svg&quot;&gt;</span>
+ <span class="s0">*</span>
+ <span class="s0">* When using a **fit** of `cover` or `contain`, the default **position** is `centre`. Other options are:</span>
+ <span class="s0">* - `sharp.position`: `top`, `right top`, `right`, `right bottom`, `bottom`, `left bottom`, `left`, `left top`.</span>
+ <span class="s0">* - `sharp.gravity`: `north`, `northeast`, `east`, `southeast`, `south`, `southwest`, `west`, `northwest`, `center` or `centre`.</span>
+ <span class="s0">* - `sharp.strategy`: `cover` only, dynamically crop using either the `entropy` or `attention` strategy.</span>
+ <span class="s0">*</span>
+ <span class="s0">* Some of these values are based on the [object-position](https://developer.mozilla.org/en-US/docs/Web/CSS/object-position) CSS property.</span>
+ <span class="s0">*</span>
+ <span class="s0">* The strategy-based approach initially resizes so one dimension is at its target length</span>
+ <span class="s0">* then repeatedly ranks edge regions, discarding the edge with the lowest score based on the selected strategy.</span>
+ <span class="s0">* - `entropy`: focus on the region with the highest [Shannon entropy](https://en.wikipedia.org/wiki/Entropy_%28information_theory%29).</span>
+ <span class="s0">* - `attention`: focus on the region with the highest luminance frequency, colour saturation and presence of skin tones.</span>
+ <span class="s0">*</span>
+ <span class="s0">* Possible downsizing kernels are:</span>
+ <span class="s0">* - `nearest`: Use [nearest neighbour interpolation](http://en.wikipedia.org/wiki/Nearest-neighbor_interpolation).</span>
+ <span class="s0">* - `linear`: Use a [triangle filter](https://en.wikipedia.org/wiki/Triangular_function).</span>
+ <span class="s0">* - `cubic`: Use a [Catmull-Rom spline](https://en.wikipedia.org/wiki/Centripetal_Catmull%E2%80%93Rom_spline).</span>
+ <span class="s0">* - `mitchell`: Use a [Mitchell-Netravali spline](https://www.cs.utexas.edu/~fussell/courses/cs384g-fall2013/lectures/mitchell/Mitchell.pdf).</span>
+ <span class="s0">* - `lanczos2`: Use a [Lanczos kernel](https://en.wikipedia.org/wiki/Lanczos_resampling#Lanczos_kernel) with `a=2`.</span>
+ <span class="s0">* - `lanczos3`: Use a Lanczos kernel with `a=3` (the default).</span>
+ <span class="s0">* - `mks2013`: Use a [Magic Kernel Sharp](https://johncostella.com/magic/mks.pdf) 2013 kernel, as adopted by Facebook.</span>
+ <span class="s0">* - `mks2021`: Use a Magic Kernel Sharp 2021 kernel, with more accurate (reduced) sharpening than the 2013 version.</span>
+ <span class="s0">*</span>
+ <span class="s0">* When upsampling, these kernels map to `nearest`, `linear` and `cubic` interpolators.</span>
+ <span class="s0">* Downsampling kernels without a matching upsampling interpolator map to `cubic`.</span>
+ <span class="s0">*</span>
+ <span class="s0">* Only one resize can occur per pipeline.</span>
+ <span class="s0">* Previous calls to `resize` in the same pipeline will be ignored.</span>
+ <span class="s0">*</span>
+ <span class="s0">* </span><span class="s4">@example</span>
+ <span class="s0">* sharp(input)</span>
+ <span class="s0">*   .resize({ width: 100 })</span>
+ <span class="s0">*   .toBuffer()</span>
+ <span class="s0">*   .then(data =&gt; {</span>
+ <span class="s0">*     // 100 pixels wide, auto-scaled height</span>
+ <span class="s0">*   });</span>
+ <span class="s0">*</span>
+ <span class="s0">* </span><span class="s4">@example</span>
+ <span class="s0">* sharp(input)</span>
+ <span class="s0">*   .resize({ height: 100 })</span>
+ <span class="s0">*   .toBuffer()</span>
+ <span class="s0">*   .then(data =&gt; {</span>
+ <span class="s0">*     // 100 pixels high, auto-scaled width</span>
+ <span class="s0">*   });</span>
+ <span class="s0">*</span>
+ <span class="s0">* </span><span class="s4">@example</span>
+ <span class="s0">* sharp(input)</span>
+ <span class="s0">*   .resize(200, 300, {</span>
+ <span class="s0">*     kernel: sharp.kernel.nearest,</span>
+ <span class="s0">*     fit: 'contain',</span>
+ <span class="s0">*     position: 'right top',</span>
+ <span class="s0">*     background: { r: 255, g: 255, b: 255, alpha: 0.5 }</span>
+ <span class="s0">*   })</span>
+ <span class="s0">*   .toFile('output.png')</span>
+ <span class="s0">*   .then(() =&gt; {</span>
+ <span class="s0">*     // output.png is a 200 pixels wide and 300 pixels high image</span>
+ <span class="s0">*     // containing a nearest-neighbour scaled version</span>
+ <span class="s0">*     // contained within the north-east corner of a semi-transparent white canvas</span>
+ <span class="s0">*   });</span>
+ <span class="s0">*</span>
+ <span class="s0">* </span><span class="s4">@example</span>
+ <span class="s0">* const transformer = sharp()</span>
+ <span class="s0">*   .resize({</span>
+ <span class="s0">*     width: 200,</span>
+ <span class="s0">*     height: 200,</span>
+ <span class="s0">*     fit: sharp.fit.cover,</span>
+ <span class="s0">*     position: sharp.strategy.entropy</span>
+ <span class="s0">*   });</span>
+ <span class="s0">* // Read image data from readableStream</span>
+ <span class="s0">* // Write 200px square auto-cropped image data to writableStream</span>
+ <span class="s0">* readableStream</span>
+ <span class="s0">*   .pipe(transformer)</span>
+ <span class="s0">*   .pipe(writableStream);</span>
+ <span class="s0">*</span>
+ <span class="s0">* </span><span class="s4">@example</span>
+ <span class="s0">* sharp(input)</span>
+ <span class="s0">*   .resize(200, 200, {</span>
+ <span class="s0">*     fit: sharp.fit.inside,</span>
+ <span class="s0">*     withoutEnlargement: true</span>
+ <span class="s0">*   })</span>
+ <span class="s0">*   .toFormat('jpeg')</span>
+ <span class="s0">*   .toBuffer()</span>
+ <span class="s0">*   .then(function(outputBuffer) {</span>
+ <span class="s0">*     // outputBuffer contains JPEG image data</span>
+ <span class="s0">*     // no wider and no higher than 200 pixels</span>
+ <span class="s0">*     // and no larger than the input image</span>
+ <span class="s0">*   });</span>
+ <span class="s0">*</span>
+ <span class="s0">* </span><span class="s4">@example</span>
+ <span class="s0">* sharp(input)</span>
+ <span class="s0">*   .resize(200, 200, {</span>
+ <span class="s0">*     fit: sharp.fit.outside,</span>
+ <span class="s0">*     withoutReduction: true</span>
+ <span class="s0">*   })</span>
+ <span class="s0">*   .toFormat('jpeg')</span>
+ <span class="s0">*   .toBuffer()</span>
+ <span class="s0">*   .then(function(outputBuffer) {</span>
+ <span class="s0">*     // outputBuffer contains JPEG image data</span>
+ <span class="s0">*     // of at least 200 pixels wide and 200 pixels high while maintaining aspect ratio</span>
+ <span class="s0">*     // and no smaller than the input image</span>
+ <span class="s0">*   });</span>
+ <span class="s0">*</span>
+ <span class="s0">* </span><span class="s4">@example</span>
+ <span class="s0">* const scaleByHalf = await sharp(input)</span>
+ <span class="s0">*   .metadata()</span>
+ <span class="s0">*   .then(({ width }) =&gt; sharp(input)</span>
+ <span class="s0">*     .resize(Math.round(width * 0.5))</span>
+ <span class="s0">*     .toBuffer()</span>
+ <span class="s0">*   );</span>
+ <span class="s0">*</span>
+ <span class="s0">* </span><span class="s4">@param </span><span class="s0">{number} [width] - How many pixels wide the resultant image should be. Use `null` or `undefined` to auto-scale the width to match the height.</span>
+ <span class="s0">* </span><span class="s4">@param </span><span class="s0">{number} [height] - How many pixels high the resultant image should be. Use `null` or `undefined` to auto-scale the height to match the width.</span>
+ <span class="s0">* </span><span class="s4">@param </span><span class="s0">{Object} [options]</span>
+ <span class="s0">* </span><span class="s4">@param </span><span class="s0">{number} [options.width] - An alternative means of specifying `width`. If both are present this takes priority.</span>
+ <span class="s0">* </span><span class="s4">@param </span><span class="s0">{number} [options.height] - An alternative means of specifying `height`. If both are present this takes priority.</span>
+ <span class="s0">* </span><span class="s4">@param </span><span class="s0">{String} [options.fit='cover'] - How the image should be resized/cropped to fit the target dimension(s), one of `cover`, `contain`, `fill`, `inside` or `outside`.</span>
+ <span class="s0">* </span><span class="s4">@param </span><span class="s0">{String} [options.position='centre'] - A position, gravity or strategy to use when `fit` is `cover` or `contain`.</span>
+ <span class="s0">* </span><span class="s4">@param </span><span class="s0">{String|Object} [options.background={r: 0, g: 0, b: 0, alpha: 1}] - background colour when `fit` is `contain`, parsed by the [color](https://www.npmjs.org/package/color) module, defaults to black without transparency.</span>
+ <span class="s0">* </span><span class="s4">@param </span><span class="s0">{String} [options.kernel='lanczos3'] - The kernel to use for image reduction and the inferred interpolator to use for upsampling. Use the `fastShrinkOnLoad` option to control kernel vs shrink-on-load.</span>
+ <span class="s0">* </span><span class="s4">@param </span><span class="s0">{Boolean} [options.withoutEnlargement=false] - Do not scale up if the width *or* height are already less than the target dimensions, equivalent to GraphicsMagick's `&gt;` geometry option. This may result in output dimensions smaller than the target dimensions.</span>
+ <span class="s0">* </span><span class="s4">@param </span><span class="s0">{Boolean} [options.withoutReduction=false] - Do not scale down if the width *or* height are already greater than the target dimensions, equivalent to GraphicsMagick's `&lt;` geometry option. This may still result in a crop to reach the target dimensions.</span>
+ <span class="s0">* </span><span class="s4">@param </span><span class="s0">{Boolean} [options.fastShrinkOnLoad=true] - Take greater advantage of the JPEG and WebP shrink-on-load feature, which can lead to a slight moiré pattern or round-down of an auto-scaled dimension.</span>
+ <span class="s0">* </span><span class="s4">@returns </span><span class="s0">{Sharp}</span>
+ <span class="s0">* </span><span class="s4">@throws </span><span class="s0">{Error} Invalid parameters</span>
+ <span class="s0">*/</span>
+<span class="s3">function </span><span class="s1">resize (widthOrOptions, height, options) {</span>
+  <span class="s3">if </span><span class="s1">(isResizeExpected(</span><span class="s3">this</span><span class="s1">.options)) {</span>
+    <span class="s3">this</span><span class="s1">.options.debuglog(</span><span class="s2">'ignoring previous resize options'</span><span class="s1">);</span>
+  <span class="s1">}</span>
+  <span class="s3">if </span><span class="s1">(</span><span class="s3">this</span><span class="s1">.options.widthPost !== -</span><span class="s5">1</span><span class="s1">) {</span>
+    <span class="s3">this</span><span class="s1">.options.debuglog(</span><span class="s2">'operation order will be: extract, resize, extract'</span><span class="s1">);</span>
+  <span class="s1">}</span>
+  <span class="s3">if </span><span class="s1">(is.defined(widthOrOptions)) {</span>
+    <span class="s3">if </span><span class="s1">(is.object(widthOrOptions) &amp;&amp; !is.defined(options)) {</span>
+      <span class="s1">options = widthOrOptions;</span>
+    <span class="s1">} </span><span class="s3">else if </span><span class="s1">(is.integer(widthOrOptions) &amp;&amp; widthOrOptions &gt; </span><span class="s5">0</span><span class="s1">) {</span>
+      <span class="s3">this</span><span class="s1">.options.width = widthOrOptions;</span>
+    <span class="s1">} </span><span class="s3">else </span><span class="s1">{</span>
+      <span class="s3">throw </span><span class="s1">is.invalidParameterError(</span><span class="s2">'width'</span><span class="s1">, </span><span class="s2">'positive integer'</span><span class="s1">, widthOrOptions);</span>
+    <span class="s1">}</span>
+  <span class="s1">} </span><span class="s3">else </span><span class="s1">{</span>
+    <span class="s3">this</span><span class="s1">.options.width = -</span><span class="s5">1</span><span class="s1">;</span>
+  <span class="s1">}</span>
+  <span class="s3">if </span><span class="s1">(is.defined(height)) {</span>
+    <span class="s3">if </span><span class="s1">(is.integer(height) &amp;&amp; height &gt; </span><span class="s5">0</span><span class="s1">) {</span>
+      <span class="s3">this</span><span class="s1">.options.height = height;</span>
+    <span class="s1">} </span><span class="s3">else </span><span class="s1">{</span>
+      <span class="s3">throw </span><span class="s1">is.invalidParameterError(</span><span class="s2">'height'</span><span class="s1">, </span><span class="s2">'positive integer'</span><span class="s1">, height);</span>
+    <span class="s1">}</span>
+  <span class="s1">} </span><span class="s3">else </span><span class="s1">{</span>
+    <span class="s3">this</span><span class="s1">.options.height = -</span><span class="s5">1</span><span class="s1">;</span>
+  <span class="s1">}</span>
+  <span class="s3">if </span><span class="s1">(is.object(options)) {</span>
+    <span class="s0">// Width</span>
+    <span class="s3">if </span><span class="s1">(is.defined(options.width)) {</span>
+      <span class="s3">if </span><span class="s1">(is.integer(options.width) &amp;&amp; options.width &gt; </span><span class="s5">0</span><span class="s1">) {</span>
+        <span class="s3">this</span><span class="s1">.options.width = options.width;</span>
+      <span class="s1">} </span><span class="s3">else </span><span class="s1">{</span>
+        <span class="s3">throw </span><span class="s1">is.invalidParameterError(</span><span class="s2">'width'</span><span class="s1">, </span><span class="s2">'positive integer'</span><span class="s1">, options.width);</span>
+      <span class="s1">}</span>
+    <span class="s1">}</span>
+    <span class="s0">// Height</span>
+    <span class="s3">if </span><span class="s1">(is.defined(options.height)) {</span>
+      <span class="s3">if </span><span class="s1">(is.integer(options.height) &amp;&amp; options.height &gt; </span><span class="s5">0</span><span class="s1">) {</span>
+        <span class="s3">this</span><span class="s1">.options.height = options.height;</span>
+      <span class="s1">} </span><span class="s3">else </span><span class="s1">{</span>
+        <span class="s3">throw </span><span class="s1">is.invalidParameterError(</span><span class="s2">'height'</span><span class="s1">, </span><span class="s2">'positive integer'</span><span class="s1">, options.height);</span>
+      <span class="s1">}</span>
+    <span class="s1">}</span>
+    <span class="s0">// Fit</span>
+    <span class="s3">if </span><span class="s1">(is.defined(options.fit)) {</span>
+      <span class="s3">const </span><span class="s1">canvas = mapFitToCanvas[options.fit];</span>
+      <span class="s3">if </span><span class="s1">(is.string(canvas)) {</span>
+        <span class="s3">this</span><span class="s1">.options.canvas = canvas;</span>
+      <span class="s1">} </span><span class="s3">else </span><span class="s1">{</span>
+        <span class="s3">throw </span><span class="s1">is.invalidParameterError(</span><span class="s2">'fit'</span><span class="s1">, </span><span class="s2">'valid fit'</span><span class="s1">, options.fit);</span>
+      <span class="s1">}</span>
+    <span class="s1">}</span>
+    <span class="s0">// Position</span>
+    <span class="s3">if </span><span class="s1">(is.defined(options.position)) {</span>
+      <span class="s3">const </span><span class="s1">pos = is.integer(options.position)</span>
+        <span class="s1">? options.position</span>
+        <span class="s1">: strategy[options.position] || position[options.position] || gravity[options.position];</span>
+      <span class="s3">if </span><span class="s1">(is.integer(pos) &amp;&amp; (is.inRange(pos, </span><span class="s5">0</span><span class="s1">, </span><span class="s5">8</span><span class="s1">) || is.inRange(pos, </span><span class="s5">16</span><span class="s1">, </span><span class="s5">17</span><span class="s1">))) {</span>
+        <span class="s3">this</span><span class="s1">.options.position = pos;</span>
+      <span class="s1">} </span><span class="s3">else </span><span class="s1">{</span>
+        <span class="s3">throw </span><span class="s1">is.invalidParameterError(</span><span class="s2">'position'</span><span class="s1">, </span><span class="s2">'valid position/gravity/strategy'</span><span class="s1">, options.position);</span>
+      <span class="s1">}</span>
+    <span class="s1">}</span>
+    <span class="s0">// Background</span>
+    <span class="s3">this</span><span class="s1">._setBackgroundColourOption(</span><span class="s2">'resizeBackground'</span><span class="s1">, options.background);</span>
+    <span class="s0">// Kernel</span>
+    <span class="s3">if </span><span class="s1">(is.defined(options.kernel)) {</span>
+      <span class="s3">if </span><span class="s1">(is.string(kernel[options.kernel])) {</span>
+        <span class="s3">this</span><span class="s1">.options.kernel = kernel[options.kernel];</span>
+      <span class="s1">} </span><span class="s3">else </span><span class="s1">{</span>
+        <span class="s3">throw </span><span class="s1">is.invalidParameterError(</span><span class="s2">'kernel'</span><span class="s1">, </span><span class="s2">'valid kernel name'</span><span class="s1">, options.kernel);</span>
+      <span class="s1">}</span>
+    <span class="s1">}</span>
+    <span class="s0">// Without enlargement</span>
+    <span class="s3">if </span><span class="s1">(is.defined(options.withoutEnlargement)) {</span>
+      <span class="s3">this</span><span class="s1">._setBooleanOption(</span><span class="s2">'withoutEnlargement'</span><span class="s1">, options.withoutEnlargement);</span>
+    <span class="s1">}</span>
+    <span class="s0">// Without reduction</span>
+    <span class="s3">if </span><span class="s1">(is.defined(options.withoutReduction)) {</span>
+      <span class="s3">this</span><span class="s1">._setBooleanOption(</span><span class="s2">'withoutReduction'</span><span class="s1">, options.withoutReduction);</span>
+    <span class="s1">}</span>
+    <span class="s0">// Shrink on load</span>
+    <span class="s3">if </span><span class="s1">(is.defined(options.fastShrinkOnLoad)) {</span>
+      <span class="s3">this</span><span class="s1">._setBooleanOption(</span><span class="s2">'fastShrinkOnLoad'</span><span class="s1">, options.fastShrinkOnLoad);</span>
+    <span class="s1">}</span>
+  <span class="s1">}</span>
+  <span class="s3">if </span><span class="s1">(isRotationExpected(</span><span class="s3">this</span><span class="s1">.options) &amp;&amp; isResizeExpected(</span><span class="s3">this</span><span class="s1">.options)) {</span>
+    <span class="s3">this</span><span class="s1">.options.rotateBefore = </span><span class="s3">true</span><span class="s1">;</span>
+  <span class="s1">}</span>
+  <span class="s3">return this</span><span class="s1">;</span>
+<span class="s1">}</span>
+
+<span class="s0">/**</span>
+ <span class="s0">* Extend / pad / extrude one or more edges of the image with either</span>
+ <span class="s0">* the provided background colour or pixels derived from the image.</span>
+ <span class="s0">* This operation will always occur after resizing and extraction, if any.</span>
+ <span class="s0">*</span>
+ <span class="s0">* </span><span class="s4">@example</span>
+ <span class="s0">* // Resize to 140 pixels wide, then add 10 transparent pixels</span>
+ <span class="s0">* // to the top, left and right edges and 20 to the bottom edge</span>
+ <span class="s0">* sharp(input)</span>
+ <span class="s0">*   .resize(140)</span>
+ <span class="s0">*   .extend({</span>
+ <span class="s0">*     top: 10,</span>
+ <span class="s0">*     bottom: 20,</span>
+ <span class="s0">*     left: 10,</span>
+ <span class="s0">*     right: 10,</span>
+ <span class="s0">*     background: { r: 0, g: 0, b: 0, alpha: 0 }</span>
+ <span class="s0">*   })</span>
+ <span class="s0">*   ...</span>
+ <span class="s0">*</span>
+<span class="s0">* </span><span class="s4">@example</span>
+ <span class="s0">* // Add a row of 10 red pixels to the bottom</span>
+ <span class="s0">* sharp(input)</span>
+ <span class="s0">*   .extend({</span>
+ <span class="s0">*     bottom: 10,</span>
+ <span class="s0">*     background: 'red'</span>
+ <span class="s0">*   })</span>
+ <span class="s0">*   ...</span>
+ <span class="s0">*</span>
+ <span class="s0">* </span><span class="s4">@example</span>
+ <span class="s0">* // Extrude image by 8 pixels to the right, mirroring existing right hand edge</span>
+ <span class="s0">* sharp(input)</span>
+ <span class="s0">*   .extend({</span>
+ <span class="s0">*     right: 8,</span>
+ <span class="s0">*     background: 'mirror'</span>
+ <span class="s0">*   })</span>
+ <span class="s0">*   ...</span>
+ <span class="s0">*</span>
+ <span class="s0">* </span><span class="s4">@param </span><span class="s0">{(number|Object)} extend - single pixel count to add to all edges or an Object with per-edge counts</span>
+ <span class="s0">* </span><span class="s4">@param </span><span class="s0">{number} [extend.top=0]</span>
+ <span class="s0">* </span><span class="s4">@param </span><span class="s0">{number} [extend.left=0]</span>
+ <span class="s0">* </span><span class="s4">@param </span><span class="s0">{number} [extend.bottom=0]</span>
+ <span class="s0">* </span><span class="s4">@param </span><span class="s0">{number} [extend.right=0]</span>
+ <span class="s0">* </span><span class="s4">@param </span><span class="s0">{String} [extend.extendWith='background'] - populate new pixels using this method, one of: background, copy, repeat, mirror.</span>
+ <span class="s0">* </span><span class="s4">@param </span><span class="s0">{String|Object} [extend.background={r: 0, g: 0, b: 0, alpha: 1}] - background colour, parsed by the [color](https://www.npmjs.org/package/color) module, defaults to black without transparency.</span>
+ <span class="s0">* </span><span class="s4">@returns </span><span class="s0">{Sharp}</span>
+ <span class="s0">* </span><span class="s4">@throws </span><span class="s0">{Error} Invalid parameters</span>
+<span class="s0">*/</span>
+<span class="s3">function </span><span class="s1">extend (extend) {</span>
+  <span class="s3">if </span><span class="s1">(is.integer(extend) &amp;&amp; extend &gt; </span><span class="s5">0</span><span class="s1">) {</span>
+    <span class="s3">this</span><span class="s1">.options.extendTop = extend;</span>
+    <span class="s3">this</span><span class="s1">.options.extendBottom = extend;</span>
+    <span class="s3">this</span><span class="s1">.options.extendLeft = extend;</span>
+    <span class="s3">this</span><span class="s1">.options.extendRight = extend;</span>
+  <span class="s1">} </span><span class="s3">else if </span><span class="s1">(is.object(extend)) {</span>
+    <span class="s3">if </span><span class="s1">(is.defined(extend.top)) {</span>
+      <span class="s3">if </span><span class="s1">(is.integer(extend.top) &amp;&amp; extend.top &gt;= </span><span class="s5">0</span><span class="s1">) {</span>
+        <span class="s3">this</span><span class="s1">.options.extendTop = extend.top;</span>
+      <span class="s1">} </span><span class="s3">else </span><span class="s1">{</span>
+        <span class="s3">throw </span><span class="s1">is.invalidParameterError(</span><span class="s2">'top'</span><span class="s1">, </span><span class="s2">'positive integer'</span><span class="s1">, extend.top);</span>
+      <span class="s1">}</span>
+    <span class="s1">}</span>
+    <span class="s3">if </span><span class="s1">(is.defined(extend.bottom)) {</span>
+      <span class="s3">if </span><span class="s1">(is.integer(extend.bottom) &amp;&amp; extend.bottom &gt;= </span><span class="s5">0</span><span class="s1">) {</span>
+        <span class="s3">this</span><span class="s1">.options.extendBottom = extend.bottom;</span>
+      <span class="s1">} </span><span class="s3">else </span><span class="s1">{</span>
+        <span class="s3">throw </span><span class="s1">is.invalidParameterError(</span><span class="s2">'bottom'</span><span class="s1">, </span><span class="s2">'positive integer'</span><span class="s1">, extend.bottom);</span>
+      <span class="s1">}</span>
+    <span class="s1">}</span>
+    <span class="s3">if </span><span class="s1">(is.defined(extend.left)) {</span>
+      <span class="s3">if </span><span class="s1">(is.integer(extend.left) &amp;&amp; extend.left &gt;= </span><span class="s5">0</span><span class="s1">) {</span>
+        <span class="s3">this</span><span class="s1">.options.extendLeft = extend.left;</span>
+      <span class="s1">} </span><span class="s3">else </span><span class="s1">{</span>
+        <span class="s3">throw </span><span class="s1">is.invalidParameterError(</span><span class="s2">'left'</span><span class="s1">, </span><span class="s2">'positive integer'</span><span class="s1">, extend.left);</span>
+      <span class="s1">}</span>
+    <span class="s1">}</span>
+    <span class="s3">if </span><span class="s1">(is.defined(extend.right)) {</span>
+      <span class="s3">if </span><span class="s1">(is.integer(extend.right) &amp;&amp; extend.right &gt;= </span><span class="s5">0</span><span class="s1">) {</span>
+        <span class="s3">this</span><span class="s1">.options.extendRight = extend.right;</span>
+      <span class="s1">} </span><span class="s3">else </span><span class="s1">{</span>
+        <span class="s3">throw </span><span class="s1">is.invalidParameterError(</span><span class="s2">'right'</span><span class="s1">, </span><span class="s2">'positive integer'</span><span class="s1">, extend.right);</span>
+      <span class="s1">}</span>
+    <span class="s1">}</span>
+    <span class="s3">this</span><span class="s1">._setBackgroundColourOption(</span><span class="s2">'extendBackground'</span><span class="s1">, extend.background);</span>
+    <span class="s3">if </span><span class="s1">(is.defined(extend.extendWith)) {</span>
+      <span class="s3">if </span><span class="s1">(is.string(extendWith[extend.extendWith])) {</span>
+        <span class="s3">this</span><span class="s1">.options.extendWith = extendWith[extend.extendWith];</span>
+      <span class="s1">} </span><span class="s3">else </span><span class="s1">{</span>
+        <span class="s3">throw </span><span class="s1">is.invalidParameterError(</span><span class="s2">'extendWith'</span><span class="s1">, </span><span class="s2">'one of: background, copy, repeat, mirror'</span><span class="s1">, extend.extendWith);</span>
+      <span class="s1">}</span>
+    <span class="s1">}</span>
+  <span class="s1">} </span><span class="s3">else </span><span class="s1">{</span>
+    <span class="s3">throw </span><span class="s1">is.invalidParameterError(</span><span class="s2">'extend'</span><span class="s1">, </span><span class="s2">'integer or object'</span><span class="s1">, extend);</span>
+  <span class="s1">}</span>
+  <span class="s3">return this</span><span class="s1">;</span>
+<span class="s1">}</span>
+
+<span class="s0">/**</span>
+ <span class="s0">* Extract/crop a region of the image.</span>
+ <span class="s0">*</span>
+ <span class="s0">* - Use `extract` before `resize` for pre-resize extraction.</span>
+ <span class="s0">* - Use `extract` after `resize` for post-resize extraction.</span>
+ <span class="s0">* - Use `extract` twice and `resize` once for extract-then-resize-then-extract in a fixed operation order.</span>
+ <span class="s0">*</span>
+ <span class="s0">* </span><span class="s4">@example</span>
+ <span class="s0">* sharp(input)</span>
+ <span class="s0">*   .extract({ left: left, top: top, width: width, height: height })</span>
+ <span class="s0">*   .toFile(output, function(err) {</span>
+ <span class="s0">*     // Extract a region of the input image, saving in the same format.</span>
+ <span class="s0">*   });</span>
+ <span class="s0">* </span><span class="s4">@example</span>
+ <span class="s0">* sharp(input)</span>
+ <span class="s0">*   .extract({ left: leftOffsetPre, top: topOffsetPre, width: widthPre, height: heightPre })</span>
+ <span class="s0">*   .resize(width, height)</span>
+ <span class="s0">*   .extract({ left: leftOffsetPost, top: topOffsetPost, width: widthPost, height: heightPost })</span>
+ <span class="s0">*   .toFile(output, function(err) {</span>
+ <span class="s0">*     // Extract a region, resize, then extract from the resized image</span>
+ <span class="s0">*   });</span>
+ <span class="s0">*</span>
+ <span class="s0">* </span><span class="s4">@param </span><span class="s0">{Object} options - describes the region to extract using integral pixel values</span>
+ <span class="s0">* </span><span class="s4">@param </span><span class="s0">{number} options.left - zero-indexed offset from left edge</span>
+ <span class="s0">* </span><span class="s4">@param </span><span class="s0">{number} options.top - zero-indexed offset from top edge</span>
+ <span class="s0">* </span><span class="s4">@param </span><span class="s0">{number} options.width - width of region to extract</span>
+ <span class="s0">* </span><span class="s4">@param </span><span class="s0">{number} options.height - height of region to extract</span>
+ <span class="s0">* </span><span class="s4">@returns </span><span class="s0">{Sharp}</span>
+ <span class="s0">* </span><span class="s4">@throws </span><span class="s0">{Error} Invalid parameters</span>
+ <span class="s0">*/</span>
+<span class="s3">function </span><span class="s1">extract (options) {</span>
+  <span class="s3">const </span><span class="s1">suffix = isResizeExpected(</span><span class="s3">this</span><span class="s1">.options) || </span><span class="s3">this</span><span class="s1">.options.widthPre !== -</span><span class="s5">1 </span><span class="s1">? </span><span class="s2">'Post' </span><span class="s1">: </span><span class="s2">'Pre'</span><span class="s1">;</span>
+  <span class="s3">if </span><span class="s1">(</span><span class="s3">this</span><span class="s1">.options[</span><span class="s2">`width</span><span class="s1">${suffix}</span><span class="s2">`</span><span class="s1">] !== -</span><span class="s5">1</span><span class="s1">) {</span>
+    <span class="s3">this</span><span class="s1">.options.debuglog(</span><span class="s2">'ignoring previous extract options'</span><span class="s1">);</span>
+  <span class="s1">}</span>
+  <span class="s1">[</span><span class="s2">'left'</span><span class="s1">, </span><span class="s2">'top'</span><span class="s1">, </span><span class="s2">'width'</span><span class="s1">, </span><span class="s2">'height'</span><span class="s1">].forEach(</span><span class="s3">function </span><span class="s1">(name) {</span>
+    <span class="s3">const </span><span class="s1">value = options[name];</span>
+    <span class="s3">if </span><span class="s1">(is.integer(value) &amp;&amp; value &gt;= </span><span class="s5">0</span><span class="s1">) {</span>
+      <span class="s3">this</span><span class="s1">.options[name + (name === </span><span class="s2">'left' </span><span class="s1">|| name === </span><span class="s2">'top' </span><span class="s1">? </span><span class="s2">'Offset' </span><span class="s1">: </span><span class="s2">''</span><span class="s1">) + suffix] = value;</span>
+    <span class="s1">} </span><span class="s3">else </span><span class="s1">{</span>
+      <span class="s3">throw </span><span class="s1">is.invalidParameterError(name, </span><span class="s2">'integer'</span><span class="s1">, value);</span>
+    <span class="s1">}</span>
+  <span class="s1">}, </span><span class="s3">this</span><span class="s1">);</span>
+  <span class="s0">// Ensure existing rotation occurs before pre-resize extraction</span>
+  <span class="s3">if </span><span class="s1">(isRotationExpected(</span><span class="s3">this</span><span class="s1">.options) &amp;&amp; !isResizeExpected(</span><span class="s3">this</span><span class="s1">.options)) {</span>
+    <span class="s3">if </span><span class="s1">(</span><span class="s3">this</span><span class="s1">.options.widthPre === -</span><span class="s5">1 </span><span class="s1">|| </span><span class="s3">this</span><span class="s1">.options.widthPost === -</span><span class="s5">1</span><span class="s1">) {</span>
+      <span class="s3">this</span><span class="s1">.options.rotateBefore = </span><span class="s3">true</span><span class="s1">;</span>
+    <span class="s1">}</span>
+  <span class="s1">}</span>
+  <span class="s3">if </span><span class="s1">(</span><span class="s3">this</span><span class="s1">.options.input.autoOrient) {</span>
+    <span class="s3">this</span><span class="s1">.options.orientBefore = </span><span class="s3">true</span><span class="s1">;</span>
+  <span class="s1">}</span>
+  <span class="s3">return this</span><span class="s1">;</span>
+<span class="s1">}</span>
+
+<span class="s0">/**</span>
+ <span class="s0">* Trim pixels from all edges that contain values similar to the given background colour, which defaults to that of the top-left pixel.</span>
+ <span class="s0">*</span>
+ <span class="s0">* Images with an alpha channel will use the combined bounding box of alpha and non-alpha channels.</span>
+ <span class="s0">*</span>
+ <span class="s0">* If the result of this operation would trim an image to nothing then no change is made.</span>
+ <span class="s0">*</span>
+ <span class="s0">* The `info` response Object will contain `trimOffsetLeft` and `trimOffsetTop` properties.</span>
+ <span class="s0">*</span>
+ <span class="s0">* </span><span class="s4">@example</span>
+ <span class="s0">* // Trim pixels with a colour similar to that of the top-left pixel.</span>
+ <span class="s0">* await sharp(input)</span>
+ <span class="s0">*   .trim()</span>
+ <span class="s0">*   .toFile(output);</span>
+ <span class="s0">*</span>
+ <span class="s0">* </span><span class="s4">@example</span>
+ <span class="s0">* // Trim pixels with the exact same colour as that of the top-left pixel.</span>
+ <span class="s0">* await sharp(input)</span>
+ <span class="s0">*   .trim({</span>
+ <span class="s0">*     threshold: 0</span>
+ <span class="s0">*   })</span>
+ <span class="s0">*   .toFile(output);</span>
+ <span class="s0">*</span>
+ <span class="s0">* </span><span class="s4">@example</span>
+ <span class="s0">* // Assume input is line art and trim only pixels with a similar colour to red.</span>
+ <span class="s0">* const output = await sharp(input)</span>
+ <span class="s0">*   .trim({</span>
+ <span class="s0">*     background: &quot;#FF0000&quot;,</span>
+ <span class="s0">*     lineArt: true</span>
+ <span class="s0">*   })</span>
+ <span class="s0">*   .toBuffer();</span>
+ <span class="s0">*</span>
+ <span class="s0">* </span><span class="s4">@example</span>
+ <span class="s0">* // Trim all &quot;yellow-ish&quot; pixels, being more lenient with the higher threshold.</span>
+ <span class="s0">* const output = await sharp(input)</span>
+ <span class="s0">*   .trim({</span>
+ <span class="s0">*     background: &quot;yellow&quot;,</span>
+ <span class="s0">*     threshold: 42,</span>
+ <span class="s0">*   })</span>
+ <span class="s0">*   .toBuffer();</span>
+ <span class="s0">*</span>
+ <span class="s0">* </span><span class="s4">@param </span><span class="s0">{Object} [options]</span>
+ <span class="s0">* </span><span class="s4">@param </span><span class="s0">{string|Object} [options.background='top-left pixel'] - Background colour, parsed by the [color](https://www.npmjs.org/package/color) module, defaults to that of the top-left pixel.</span>
+ <span class="s0">* </span><span class="s4">@param </span><span class="s0">{number} [options.threshold=10] - Allowed difference from the above colour, a positive number.</span>
+ <span class="s0">* </span><span class="s4">@param </span><span class="s0">{boolean} [options.lineArt=false] - Does the input more closely resemble line art (e.g. vector) rather than being photographic?</span>
+ <span class="s0">* </span><span class="s4">@returns </span><span class="s0">{Sharp}</span>
+ <span class="s0">* </span><span class="s4">@throws </span><span class="s0">{Error} Invalid parameters</span>
+ <span class="s0">*/</span>
+<span class="s3">function </span><span class="s1">trim (options) {</span>
+  <span class="s3">this</span><span class="s1">.options.trimThreshold = </span><span class="s5">10</span><span class="s1">;</span>
+  <span class="s3">if </span><span class="s1">(is.defined(options)) {</span>
+    <span class="s3">if </span><span class="s1">(is.object(options)) {</span>
+      <span class="s3">if </span><span class="s1">(is.defined(options.background)) {</span>
+        <span class="s3">this</span><span class="s1">._setBackgroundColourOption(</span><span class="s2">'trimBackground'</span><span class="s1">, options.background);</span>
+      <span class="s1">}</span>
+      <span class="s3">if </span><span class="s1">(is.defined(options.threshold)) {</span>
+        <span class="s3">if </span><span class="s1">(is.number(options.threshold) &amp;&amp; options.threshold &gt;= </span><span class="s5">0</span><span class="s1">) {</span>
+          <span class="s3">this</span><span class="s1">.options.trimThreshold = options.threshold;</span>
+        <span class="s1">} </span><span class="s3">else </span><span class="s1">{</span>
+          <span class="s3">throw </span><span class="s1">is.invalidParameterError(</span><span class="s2">'threshold'</span><span class="s1">, </span><span class="s2">'positive number'</span><span class="s1">, options.threshold);</span>
+        <span class="s1">}</span>
+      <span class="s1">}</span>
+      <span class="s3">if </span><span class="s1">(is.defined(options.lineArt)) {</span>
+        <span class="s3">this</span><span class="s1">._setBooleanOption(</span><span class="s2">'trimLineArt'</span><span class="s1">, options.lineArt);</span>
+      <span class="s1">}</span>
+    <span class="s1">} </span><span class="s3">else </span><span class="s1">{</span>
+      <span class="s3">throw </span><span class="s1">is.invalidParameterError(</span><span class="s2">'trim'</span><span class="s1">, </span><span class="s2">'object'</span><span class="s1">, options);</span>
+    <span class="s1">}</span>
+  <span class="s1">}</span>
+  <span class="s3">if </span><span class="s1">(isRotationExpected(</span><span class="s3">this</span><span class="s1">.options)) {</span>
+    <span class="s3">this</span><span class="s1">.options.rotateBefore = </span><span class="s3">true</span><span class="s1">;</span>
+  <span class="s1">}</span>
+  <span class="s3">return this</span><span class="s1">;</span>
+<span class="s1">}</span>
+
+<span class="s0">/**</span>
+ <span class="s0">* Decorate the Sharp prototype with resize-related functions.</span>
+ <span class="s0">* </span><span class="s4">@module </span><span class="s0">Sharp</span>
+ <span class="s0">* </span><span class="s4">@private</span>
+ <span class="s0">*/</span>
+<span class="s1">module.exports = </span><span class="s3">function </span><span class="s1">(Sharp) {</span>
+  <span class="s1">Object.assign(Sharp.prototype, {</span>
+    <span class="s1">resize,</span>
+    <span class="s1">extend,</span>
+    <span class="s1">extract,</span>
+    <span class="s1">trim</span>
+  <span class="s1">});</span>
+  <span class="s0">// Class attributes</span>
+  <span class="s1">Sharp.gravity = gravity;</span>
+  <span class="s1">Sharp.strategy = strategy;</span>
+  <span class="s1">Sharp.kernel = kernel;</span>
+  <span class="s1">Sharp.fit = fit;</span>
+  <span class="s1">Sharp.position = position;</span>
+<span class="s1">};</span>
+</pre>
+</body>
+</html>

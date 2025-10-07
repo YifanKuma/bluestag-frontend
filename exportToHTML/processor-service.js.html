@@ -1,0 +1,124 @@
+<html>
+<head>
+<title>processor-service.js</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #8c8c8c; font-style: italic;}
+.s1 { color: #8c8c8c; font-style: italic;}
+.s2 { color: #080808;}
+.s3 { color: #067d17;}
+.s4 { color: #0033b3;}
+.s5 { color: #264eff;}
+.s6 { color: #1750eb;}
+</style>
+</head>
+<body bgcolor="#ffffff">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#c0c0c0" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+processor-service.js</font>
+</center></td></tr></table>
+<pre><span class="s0">/**</span>
+ <span class="s0">* </span><span class="s1">@fileoverview </span><span class="s0">ESLint Processor Service</span>
+ <span class="s0">* </span><span class="s1">@author </span><span class="s0">Nicholas C. Zakas</span>
+ <span class="s0">*/</span>
+<span class="s0">/* eslint class-methods-use-this: off -- Anticipate future constructor arguments. */</span>
+
+<span class="s3">&quot;use strict&quot;</span><span class="s2">;</span>
+
+<span class="s0">//-----------------------------------------------------------------------------</span>
+<span class="s0">// Requirements</span>
+<span class="s0">//-----------------------------------------------------------------------------</span>
+
+<span class="s4">const </span><span class="s2">path = require(</span><span class="s3">&quot;node:path&quot;</span><span class="s2">);</span>
+<span class="s4">const </span><span class="s2">{ VFile } = require(</span><span class="s3">&quot;../linter/vfile.js&quot;</span><span class="s2">);</span>
+
+<span class="s0">//-----------------------------------------------------------------------------</span>
+<span class="s0">// Types</span>
+<span class="s0">//-----------------------------------------------------------------------------</span>
+
+<span class="s0">/** </span><span class="s1">@typedef </span><span class="s0">{import(&quot;../types&quot;).Linter.LintMessage} LintMessage */</span>
+<span class="s0">/** </span><span class="s1">@typedef </span><span class="s0">{import(&quot;../linter/vfile.js&quot;).VFile} VFile */</span>
+<span class="s0">/** </span><span class="s1">@typedef </span><span class="s0">{import(&quot;@eslint/core&quot;).Language} Language */</span>
+<span class="s0">/** </span><span class="s1">@typedef </span><span class="s0">{import(&quot;eslint&quot;).Linter.Processor} Processor */</span>
+
+<span class="s0">//-----------------------------------------------------------------------------</span>
+<span class="s0">// Exports</span>
+<span class="s0">//-----------------------------------------------------------------------------</span>
+
+<span class="s0">/**</span>
+ <span class="s0">* The service that applies processors to files.</span>
+ <span class="s0">*/</span>
+<span class="s4">class </span><span class="s2">ProcessorService {</span>
+	<span class="s0">/**</span>
+	 <span class="s0">* Preprocesses the given file synchronously.</span>
+	 <span class="s0">* </span><span class="s1">@param </span><span class="s0">{VFile} file The file to preprocess.</span>
+	 <span class="s0">* </span><span class="s1">@param </span><span class="s0">{{processor:Processor}} config The configuration to use.</span>
+	 <span class="s0">* </span><span class="s1">@returns </span><span class="s0">{{ok:boolean, files?: Array&lt;VFile&gt;, errors?: Array&lt;LintMessage&gt;}} An array of preprocessed files or errors.</span>
+	 <span class="s0">* </span><span class="s1">@throws </span><span class="s0">{Error} If the preprocessor returns a promise.</span>
+	 <span class="s0">*/</span>
+	<span class="s2">preprocessSync(file, config) {</span>
+		<span class="s4">const </span><span class="s2">{ processor } = config;</span>
+		<span class="s4">let </span><span class="s2">blocks;</span>
+
+		<span class="s4">try </span><span class="s2">{</span>
+			<span class="s2">blocks = processor.preprocess(file.rawBody, file.path);</span>
+		<span class="s2">} </span><span class="s4">catch </span><span class="s2">(ex) {</span>
+			<span class="s0">// If the message includes a leading line number, strip it:</span>
+			<span class="s4">const </span><span class="s2">message = </span><span class="s3">`Preprocessing error: </span><span class="s2">${ex.message.replace(</span><span class="s5">/^line \d+:/iu</span><span class="s2">, </span><span class="s3">&quot;&quot;</span><span class="s2">).trim()}</span><span class="s3">`</span><span class="s2">;</span>
+
+			<span class="s4">return </span><span class="s2">{</span>
+				<span class="s2">ok: </span><span class="s4">false</span><span class="s2">,</span>
+				<span class="s2">errors: [</span>
+					<span class="s2">{</span>
+						<span class="s2">ruleId: </span><span class="s4">null</span><span class="s2">,</span>
+						<span class="s2">fatal: </span><span class="s4">true</span><span class="s2">,</span>
+						<span class="s2">severity: </span><span class="s6">2</span><span class="s2">,</span>
+						<span class="s2">message,</span>
+						<span class="s2">line: ex.lineNumber,</span>
+						<span class="s2">column: ex.column,</span>
+						<span class="s2">nodeType: </span><span class="s4">null</span><span class="s2">,</span>
+					<span class="s2">},</span>
+				<span class="s2">],</span>
+			<span class="s2">};</span>
+		<span class="s2">}</span>
+
+		<span class="s4">if </span><span class="s2">(</span><span class="s4">typeof </span><span class="s2">blocks.then === </span><span class="s3">&quot;function&quot;</span><span class="s2">) {</span>
+			<span class="s4">throw new </span><span class="s2">Error(</span><span class="s3">&quot;Unsupported: Preprocessor returned a promise.&quot;</span><span class="s2">);</span>
+		<span class="s2">}</span>
+
+		<span class="s4">return </span><span class="s2">{</span>
+			<span class="s2">ok: </span><span class="s4">true</span><span class="s2">,</span>
+			<span class="s2">files: blocks.map((block, i) =&gt; {</span>
+				<span class="s0">// Legacy behavior: return the block as a string</span>
+				<span class="s4">if </span><span class="s2">(</span><span class="s4">typeof </span><span class="s2">block === </span><span class="s3">&quot;string&quot;</span><span class="s2">) {</span>
+					<span class="s4">return </span><span class="s2">block;</span>
+				<span class="s2">}</span>
+
+				<span class="s4">const </span><span class="s2">filePath = path.join(file.path, </span><span class="s3">`</span><span class="s2">${i}</span><span class="s3">_</span><span class="s2">${block.filename}</span><span class="s3">`</span><span class="s2">);</span>
+
+				<span class="s4">return new </span><span class="s2">VFile(filePath, block.text, {</span>
+					<span class="s2">physicalPath: file.physicalPath,</span>
+				<span class="s2">});</span>
+			<span class="s2">}),</span>
+		<span class="s2">};</span>
+	<span class="s2">}</span>
+
+	<span class="s0">/**</span>
+	 <span class="s0">* Postprocesses the given messages synchronously.</span>
+	 <span class="s0">* </span><span class="s1">@param </span><span class="s0">{VFile} file The file to postprocess.</span>
+	 <span class="s0">* </span><span class="s1">@param </span><span class="s0">{LintMessage[][]} messages The messages to postprocess.</span>
+	 <span class="s0">* </span><span class="s1">@param </span><span class="s0">{{processor:Processor}} config The configuration to use.</span>
+	 <span class="s0">* </span><span class="s1">@returns </span><span class="s0">{LintMessage[]} The postprocessed messages.</span>
+	 <span class="s0">*/</span>
+	<span class="s2">postprocessSync(file, messages, config) {</span>
+		<span class="s4">const </span><span class="s2">{ processor } = config;</span>
+
+		<span class="s4">return </span><span class="s2">processor.postprocess(messages, file.path);</span>
+	<span class="s2">}</span>
+<span class="s2">}</span>
+
+<span class="s2">module.exports = { ProcessorService };</span>
+</pre>
+</body>
+</html>

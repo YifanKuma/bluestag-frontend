@@ -1,0 +1,194 @@
+<html>
+<head>
+<title>no-unused-prop-types.js</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #8c8c8c; font-style: italic;}
+.s1 { color: #8c8c8c; font-style: italic;}
+.s2 { color: #080808;}
+.s3 { color: #067d17;}
+.s4 { color: #0033b3;}
+.s5 { color: #0037a6;}
+.s6 { color: #1750eb;}
+</style>
+</head>
+<body bgcolor="#ffffff">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#c0c0c0" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+no-unused-prop-types.js</font>
+</center></td></tr></table>
+<pre><span class="s0">/**</span>
+ <span class="s0">* </span><span class="s1">@fileoverview </span><span class="s0">Prevent definitions of unused prop types</span>
+ <span class="s0">* </span><span class="s1">@author </span><span class="s0">Evgueni Naverniouk</span>
+ <span class="s0">*/</span>
+
+<span class="s3">'use strict'</span><span class="s2">;</span>
+
+<span class="s4">const </span><span class="s2">values = require(</span><span class="s3">'object.values'</span><span class="s2">);</span>
+
+<span class="s0">// As for exceptions for props.children or props.className (and alike) look at</span>
+<span class="s0">// https://github.com/jsx-eslint/eslint-plugin-react/issues/7</span>
+
+<span class="s4">const </span><span class="s2">Components = require(</span><span class="s3">'../util/Components'</span><span class="s2">);</span>
+<span class="s4">const </span><span class="s2">docsUrl = require(</span><span class="s3">'../util/docsUrl'</span><span class="s2">);</span>
+<span class="s4">const </span><span class="s2">report = require(</span><span class="s3">'../util/report'</span><span class="s2">);</span>
+
+<span class="s0">/**</span>
+ <span class="s0">* Checks if the component must be validated</span>
+ <span class="s0">* </span><span class="s1">@param </span><span class="s0">{Object} component The component to process</span>
+ <span class="s0">* </span><span class="s1">@returns </span><span class="s0">{boolean} True if the component must be validated, false if not.</span>
+ <span class="s0">*/</span>
+<span class="s4">function </span><span class="s2">mustBeValidated(component) {</span>
+  <span class="s4">return </span><span class="s2">!!component &amp;&amp; !component.ignoreUnusedPropTypesValidation;</span>
+<span class="s2">}</span>
+
+<span class="s0">// ------------------------------------------------------------------------------</span>
+<span class="s0">// Rule Definition</span>
+<span class="s0">// ------------------------------------------------------------------------------</span>
+
+<span class="s4">const </span><span class="s2">messages = {</span>
+  <span class="s2">unusedPropType: </span><span class="s3">'</span><span class="s5">\'</span><span class="s3">{{name}}</span><span class="s5">\' </span><span class="s3">PropType is defined but prop is never used'</span><span class="s2">,</span>
+<span class="s2">};</span>
+
+<span class="s0">/** </span><span class="s1">@type </span><span class="s0">{import('eslint').Rule.RuleModule} */</span>
+<span class="s2">module.exports = {</span>
+  <span class="s2">meta: {</span>
+    <span class="s2">docs: {</span>
+      <span class="s2">description: </span><span class="s3">'Disallow definitions of unused propTypes'</span><span class="s2">,</span>
+      <span class="s2">category: </span><span class="s3">'Best Practices'</span><span class="s2">,</span>
+      <span class="s2">recommended: </span><span class="s4">false</span><span class="s2">,</span>
+      <span class="s2">url: docsUrl(</span><span class="s3">'no-unused-prop-types'</span><span class="s2">),</span>
+    <span class="s2">},</span>
+
+    <span class="s2">messages,</span>
+
+    <span class="s2">schema: [{</span>
+      <span class="s2">type: </span><span class="s3">'object'</span><span class="s2">,</span>
+      <span class="s2">properties: {</span>
+        <span class="s2">ignore: {</span>
+          <span class="s2">type: </span><span class="s3">'array'</span><span class="s2">,</span>
+          <span class="s2">items: {</span>
+            <span class="s2">type: </span><span class="s3">'string'</span><span class="s2">,</span>
+          <span class="s2">},</span>
+          <span class="s2">uniqueItems: </span><span class="s4">true</span><span class="s2">,</span>
+        <span class="s2">},</span>
+        <span class="s2">customValidators: {</span>
+          <span class="s2">type: </span><span class="s3">'array'</span><span class="s2">,</span>
+          <span class="s2">items: {</span>
+            <span class="s2">type: </span><span class="s3">'string'</span><span class="s2">,</span>
+          <span class="s2">},</span>
+        <span class="s2">},</span>
+        <span class="s2">skipShapeProps: {</span>
+          <span class="s2">type: </span><span class="s3">'boolean'</span><span class="s2">,</span>
+        <span class="s2">},</span>
+      <span class="s2">},</span>
+      <span class="s2">additionalProperties: </span><span class="s4">false</span><span class="s2">,</span>
+    <span class="s2">}],</span>
+  <span class="s2">},</span>
+
+  <span class="s2">create: Components.detect((context, components) =&gt; {</span>
+    <span class="s4">const </span><span class="s2">defaults = { skipShapeProps: </span><span class="s4">true</span><span class="s2">, customValidators: [], ignore: [] };</span>
+    <span class="s4">const </span><span class="s2">configuration = Object.assign({}, defaults, context.options[</span><span class="s6">0</span><span class="s2">] || {});</span>
+
+    <span class="s0">/**</span>
+     <span class="s0">* Checks if the prop is ignored</span>
+     <span class="s0">* </span><span class="s1">@param </span><span class="s0">{string} name Name of the prop to check.</span>
+     <span class="s0">* </span><span class="s1">@returns </span><span class="s0">{boolean} True if the prop is ignored, false if not.</span>
+     <span class="s0">*/</span>
+    <span class="s4">function </span><span class="s2">isIgnored(name) {</span>
+      <span class="s4">return </span><span class="s2">configuration.ignore.indexOf(name) !== -</span><span class="s6">1</span><span class="s2">;</span>
+    <span class="s2">}</span>
+
+    <span class="s0">/**</span>
+     <span class="s0">* Checks if a prop is used</span>
+     <span class="s0">* </span><span class="s1">@param </span><span class="s0">{ASTNode} node The AST node being checked.</span>
+     <span class="s0">* </span><span class="s1">@param </span><span class="s0">{Object} prop Declared prop object</span>
+     <span class="s0">* </span><span class="s1">@returns </span><span class="s0">{boolean} True if the prop is used, false if not.</span>
+     <span class="s0">*/</span>
+    <span class="s4">function </span><span class="s2">isPropUsed(node, prop) {</span>
+      <span class="s4">const </span><span class="s2">usedPropTypes = node.usedPropTypes || [];</span>
+      <span class="s4">for </span><span class="s2">(</span><span class="s4">let </span><span class="s2">i = </span><span class="s6">0</span><span class="s2">, l = usedPropTypes.length; i &lt; l; i++) {</span>
+        <span class="s4">const </span><span class="s2">usedProp = usedPropTypes[i];</span>
+        <span class="s4">if </span><span class="s2">(</span>
+          <span class="s2">prop.type === </span><span class="s3">'shape'</span>
+          <span class="s2">|| prop.type === </span><span class="s3">'exact'</span>
+          <span class="s2">|| prop.name === </span><span class="s3">'__ANY_KEY__'</span>
+          <span class="s2">|| usedProp.name === prop.name</span>
+        <span class="s2">) {</span>
+          <span class="s4">return true</span><span class="s2">;</span>
+        <span class="s2">}</span>
+      <span class="s2">}</span>
+
+      <span class="s4">return false</span><span class="s2">;</span>
+    <span class="s2">}</span>
+
+    <span class="s0">/**</span>
+     <span class="s0">* Used to recursively loop through each declared prop type</span>
+     <span class="s0">* </span><span class="s1">@param </span><span class="s0">{Object} component The component to process</span>
+     <span class="s0">* </span><span class="s1">@param </span><span class="s0">{ASTNode[]|true} props List of props to validate</span>
+     <span class="s0">*/</span>
+    <span class="s4">function </span><span class="s2">reportUnusedPropType(component, props) {</span>
+      <span class="s0">// Skip props that check instances</span>
+      <span class="s4">if </span><span class="s2">(props === </span><span class="s4">true</span><span class="s2">) {</span>
+        <span class="s4">return</span><span class="s2">;</span>
+      <span class="s2">}</span>
+
+      <span class="s2">Object.keys(props || {}).forEach((key) =&gt; {</span>
+        <span class="s4">const </span><span class="s2">prop = props[key];</span>
+        <span class="s0">// Skip props that check instances</span>
+        <span class="s4">if </span><span class="s2">(prop === </span><span class="s4">true</span><span class="s2">) {</span>
+          <span class="s4">return</span><span class="s2">;</span>
+        <span class="s2">}</span>
+
+        <span class="s4">if </span><span class="s2">((prop.type === </span><span class="s3">'shape' </span><span class="s2">|| prop.type === </span><span class="s3">'exact'</span><span class="s2">) &amp;&amp; configuration.skipShapeProps) {</span>
+          <span class="s4">return</span><span class="s2">;</span>
+        <span class="s2">}</span>
+
+        <span class="s4">if </span><span class="s2">(prop.node &amp;&amp; prop.node.typeAnnotation &amp;&amp; prop.node.typeAnnotation.typeAnnotation</span>
+          <span class="s2">&amp;&amp; prop.node.typeAnnotation.typeAnnotation.type === </span><span class="s3">'TSNeverKeyword'</span><span class="s2">) {</span>
+          <span class="s4">return</span><span class="s2">;</span>
+        <span class="s2">}</span>
+
+        <span class="s4">if </span><span class="s2">(prop.node &amp;&amp; !isIgnored(prop.fullName) &amp;&amp; !isPropUsed(component, prop)) {</span>
+          <span class="s2">report(context, messages.unusedPropType, </span><span class="s3">'unusedPropType'</span><span class="s2">, {</span>
+            <span class="s2">node: prop.node.key || prop.node,</span>
+            <span class="s2">data: {</span>
+              <span class="s2">name: prop.fullName,</span>
+            <span class="s2">},</span>
+          <span class="s2">});</span>
+        <span class="s2">}</span>
+
+        <span class="s4">if </span><span class="s2">(prop.children) {</span>
+          <span class="s2">reportUnusedPropType(component, prop.children);</span>
+        <span class="s2">}</span>
+      <span class="s2">});</span>
+    <span class="s2">}</span>
+
+    <span class="s0">/**</span>
+     <span class="s0">* Reports unused proptypes for a given component</span>
+     <span class="s0">* </span><span class="s1">@param </span><span class="s0">{Object} component The component to process</span>
+     <span class="s0">*/</span>
+    <span class="s4">function </span><span class="s2">reportUnusedPropTypes(component) {</span>
+      <span class="s2">reportUnusedPropType(component, component.declaredPropTypes);</span>
+    <span class="s2">}</span>
+
+    <span class="s0">// --------------------------------------------------------------------------</span>
+    <span class="s0">// Public</span>
+    <span class="s0">// --------------------------------------------------------------------------</span>
+
+    <span class="s4">return </span><span class="s2">{</span>
+      <span class="s3">'Program:exit'</span><span class="s2">() {</span>
+        <span class="s0">// Report undeclared proptypes for all classes</span>
+        <span class="s2">values(components.list())</span>
+          <span class="s2">.filter((component) =&gt; mustBeValidated(component))</span>
+          <span class="s2">.forEach((component) =&gt; {</span>
+            <span class="s2">reportUnusedPropTypes(component);</span>
+          <span class="s2">});</span>
+      <span class="s2">},</span>
+    <span class="s2">};</span>
+  <span class="s2">}),</span>
+<span class="s2">};</span>
+</pre>
+</body>
+</html>

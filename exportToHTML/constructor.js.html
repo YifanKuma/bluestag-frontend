@@ -1,0 +1,517 @@
+<html>
+<head>
+<title>constructor.js</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #8c8c8c; font-style: italic;}
+.s1 { color: #080808;}
+.s2 { color: #067d17;}
+.s3 { color: #0033b3;}
+.s4 { color: #8c8c8c; font-style: italic;}
+.s5 { color: #1750eb;}
+</style>
+</head>
+<body bgcolor="#ffffff">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#c0c0c0" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+constructor.js</font>
+</center></td></tr></table>
+<pre><span class="s0">// Copyright 2013 Lovell Fuller and others.</span>
+<span class="s0">// SPDX-License-Identifier: Apache-2.0</span>
+
+<span class="s2">'use strict'</span><span class="s1">;</span>
+
+<span class="s3">const </span><span class="s1">util = require(</span><span class="s2">'node:util'</span><span class="s1">);</span>
+<span class="s3">const </span><span class="s1">stream = require(</span><span class="s2">'node:stream'</span><span class="s1">);</span>
+<span class="s3">const </span><span class="s1">is = require(</span><span class="s2">'./is'</span><span class="s1">);</span>
+
+<span class="s1">require(</span><span class="s2">'./sharp'</span><span class="s1">);</span>
+
+<span class="s0">// Use NODE_DEBUG=sharp to enable libvips warnings</span>
+<span class="s3">const </span><span class="s1">debuglog = util.debuglog(</span><span class="s2">'sharp'</span><span class="s1">);</span>
+
+<span class="s0">/**</span>
+ <span class="s0">* Constructor factory to create an instance of `sharp`, to which further methods are chained.</span>
+ <span class="s0">*</span>
+ <span class="s0">* JPEG, PNG, WebP, GIF, AVIF or TIFF format image data can be streamed out from this object.</span>
+ <span class="s0">* When using Stream based output, derived attributes are available from the `info` event.</span>
+ <span class="s0">*</span>
+ <span class="s0">* Non-critical problems encountered during processing are emitted as `warning` events.</span>
+ <span class="s0">*</span>
+ <span class="s0">* Implements the [stream.Duplex](http://nodejs.org/api/stream.html#stream_class_stream_duplex) class.</span>
+ <span class="s0">*</span>
+ <span class="s0">* When loading more than one page/frame of an animated image,</span>
+ <span class="s0">* these are combined as a vertically-stacked &quot;toilet roll&quot; image</span>
+ <span class="s0">* where the overall height is the `pageHeight` multiplied by the number of `pages`.</span>
+ <span class="s0">*</span>
+ <span class="s0">* </span><span class="s4">@constructs </span><span class="s0">Sharp</span>
+ <span class="s0">*</span>
+ <span class="s0">* </span><span class="s4">@emits </span><span class="s0">Sharp#info</span>
+ <span class="s0">* </span><span class="s4">@emits </span><span class="s0">Sharp#warning</span>
+ <span class="s0">*</span>
+ <span class="s0">* </span><span class="s4">@example</span>
+ <span class="s0">* sharp('input.jpg')</span>
+ <span class="s0">*   .resize(300, 200)</span>
+ <span class="s0">*   .toFile('output.jpg', function(err) {</span>
+ <span class="s0">*     // output.jpg is a 300 pixels wide and 200 pixels high image</span>
+ <span class="s0">*     // containing a scaled and cropped version of input.jpg</span>
+ <span class="s0">*   });</span>
+ <span class="s0">*</span>
+ <span class="s0">* </span><span class="s4">@example</span>
+ <span class="s0">* // Read image data from remote URL,</span>
+ <span class="s0">* // resize to 300 pixels wide,</span>
+ <span class="s0">* // emit an 'info' event with calculated dimensions</span>
+ <span class="s0">* // and finally write image data to writableStream</span>
+ <span class="s0">* const { body } = fetch('https://...');</span>
+ <span class="s0">* const readableStream = Readable.fromWeb(body);</span>
+ <span class="s0">* const transformer = sharp()</span>
+ <span class="s0">*   .resize(300)</span>
+ <span class="s0">*   .on('info', ({ height }) =&gt; {</span>
+ <span class="s0">*     console.log(`Image height is ${height}`);</span>
+ <span class="s0">*   });</span>
+ <span class="s0">* readableStream.pipe(transformer).pipe(writableStream);</span>
+ <span class="s0">*</span>
+ <span class="s0">* </span><span class="s4">@example</span>
+ <span class="s0">* // Create a blank 300x200 PNG image of semi-translucent red pixels</span>
+ <span class="s0">* sharp({</span>
+ <span class="s0">*   create: {</span>
+ <span class="s0">*     width: 300,</span>
+ <span class="s0">*     height: 200,</span>
+ <span class="s0">*     channels: 4,</span>
+ <span class="s0">*     background: { r: 255, g: 0, b: 0, alpha: 0.5 }</span>
+ <span class="s0">*   }</span>
+ <span class="s0">* })</span>
+ <span class="s0">* .png()</span>
+ <span class="s0">* .toBuffer()</span>
+ <span class="s0">* .then( ... );</span>
+ <span class="s0">*</span>
+ <span class="s0">* </span><span class="s4">@example</span>
+ <span class="s0">* // Convert an animated GIF to an animated WebP</span>
+ <span class="s0">* await sharp('in.gif', { animated: true }).toFile('out.webp');</span>
+ <span class="s0">*</span>
+ <span class="s0">* </span><span class="s4">@example</span>
+ <span class="s0">* // Read a raw array of pixels and save it to a png</span>
+ <span class="s0">* const input = Uint8Array.from([255, 255, 255, 0, 0, 0]); // or Uint8ClampedArray</span>
+ <span class="s0">* const image = sharp(input, {</span>
+ <span class="s0">*   // because the input does not contain its dimensions or how many channels it has</span>
+ <span class="s0">*   // we need to specify it in the constructor options</span>
+ <span class="s0">*   raw: {</span>
+ <span class="s0">*     width: 2,</span>
+ <span class="s0">*     height: 1,</span>
+ <span class="s0">*     channels: 3</span>
+ <span class="s0">*   }</span>
+ <span class="s0">* });</span>
+ <span class="s0">* await image.toFile('my-two-pixels.png');</span>
+ <span class="s0">*</span>
+ <span class="s0">* </span><span class="s4">@example</span>
+ <span class="s0">* // Generate RGB Gaussian noise</span>
+ <span class="s0">* await sharp({</span>
+ <span class="s0">*   create: {</span>
+ <span class="s0">*     width: 300,</span>
+ <span class="s0">*     height: 200,</span>
+ <span class="s0">*     channels: 3,</span>
+ <span class="s0">*     noise: {</span>
+ <span class="s0">*       type: 'gaussian',</span>
+ <span class="s0">*       mean: 128,</span>
+ <span class="s0">*       sigma: 30</span>
+ <span class="s0">*     }</span>
+ <span class="s0">*  }</span>
+ <span class="s0">* }).toFile('noise.png');</span>
+ <span class="s0">*</span>
+ <span class="s0">* </span><span class="s4">@example</span>
+ <span class="s0">* // Generate an image from text</span>
+ <span class="s0">* await sharp({</span>
+ <span class="s0">*   text: {</span>
+ <span class="s0">*     text: 'Hello, world!',</span>
+ <span class="s0">*     width: 400, // max width</span>
+ <span class="s0">*     height: 300 // max height</span>
+ <span class="s0">*   }</span>
+ <span class="s0">* }).toFile('text_bw.png');</span>
+ <span class="s0">*</span>
+ <span class="s0">* </span><span class="s4">@example</span>
+ <span class="s0">* // Generate an rgba image from text using pango markup and font</span>
+ <span class="s0">* await sharp({</span>
+ <span class="s0">*   text: {</span>
+ <span class="s0">*     text: '&lt;span foreground=&quot;red&quot;&gt;Red!&lt;/span&gt;&lt;span background=&quot;cyan&quot;&gt;blue&lt;/span&gt;',</span>
+ <span class="s0">*     font: 'sans',</span>
+ <span class="s0">*     rgba: true,</span>
+ <span class="s0">*     dpi: 300</span>
+ <span class="s0">*   }</span>
+ <span class="s0">* }).toFile('text_rgba.png');</span>
+ <span class="s0">*</span>
+ <span class="s0">* </span><span class="s4">@example</span>
+ <span class="s0">* // Join four input images as a 2x2 grid with a 4 pixel gutter</span>
+ <span class="s0">* const data = await sharp(</span>
+ <span class="s0">*  [image1, image2, image3, image4],</span>
+ <span class="s0">*  { join: { across: 2, shim: 4 } }</span>
+ <span class="s0">* ).toBuffer();</span>
+ <span class="s0">*</span>
+ <span class="s0">* </span><span class="s4">@example</span>
+ <span class="s0">* // Generate a two-frame animated image from emoji</span>
+ <span class="s0">* const images = ['😀', '😛'].map(text =&gt; ({</span>
+ <span class="s0">*   text: { text, width: 64, height: 64, channels: 4, rgba: true }</span>
+ <span class="s0">* }));</span>
+ <span class="s0">* await sharp(images, { join: { animated: true } }).toFile('out.gif');</span>
+ <span class="s0">*</span>
+ <span class="s0">* </span><span class="s4">@param </span><span class="s0">{(Buffer|ArrayBuffer|Uint8Array|Uint8ClampedArray|Int8Array|Uint16Array|Int16Array|Uint32Array|Int32Array|Float32Array|Float64Array|string|Array)} [input] - if present, can be</span>
+ <span class="s0">*  a Buffer / ArrayBuffer / Uint8Array / Uint8ClampedArray containing JPEG, PNG, WebP, AVIF, GIF, SVG or TIFF image data, or</span>
+ <span class="s0">*  a TypedArray containing raw pixel image data, or</span>
+ <span class="s0">*  a String containing the filesystem path to an JPEG, PNG, WebP, AVIF, GIF, SVG or TIFF image file.</span>
+ <span class="s0">*  An array of inputs can be provided, and these will be joined together.</span>
+ <span class="s0">*  JPEG, PNG, WebP, AVIF, GIF, SVG, TIFF or raw pixel image data can be streamed into the object when not present.</span>
+ <span class="s0">* </span><span class="s4">@param </span><span class="s0">{Object} [options] - if present, is an Object with optional attributes.</span>
+ <span class="s0">* </span><span class="s4">@param </span><span class="s0">{string} [options.failOn='warning'] - When to abort processing of invalid pixel data, one of (in order of sensitivity, least to most): 'none', 'truncated', 'error', 'warning'. Higher levels imply lower levels. Invalid metadata will always abort.</span>
+ <span class="s0">* </span><span class="s4">@param </span><span class="s0">{number|boolean} [options.limitInputPixels=268402689] - Do not process input images where the number of pixels</span>
+ <span class="s0">*  (width x height) exceeds this limit. Assumes image dimensions contained in the input metadata can be trusted.</span>
+ <span class="s0">*  An integral Number of pixels, zero or false to remove limit, true to use default limit of 268402689 (0x3FFF x 0x3FFF).</span>
+ <span class="s0">* </span><span class="s4">@param </span><span class="s0">{boolean} [options.unlimited=false] - Set this to `true` to remove safety features that help prevent memory exhaustion (JPEG, PNG, SVG, HEIF).</span>
+ <span class="s0">* </span><span class="s4">@param </span><span class="s0">{boolean} [options.autoOrient=false] - Set this to `true` to rotate/flip the image to match EXIF `Orientation`, if any.</span>
+ <span class="s0">* </span><span class="s4">@param </span><span class="s0">{boolean} [options.sequentialRead=true] - Set this to `false` to use random access rather than sequential read. Some operations will do this automatically.</span>
+ <span class="s0">* </span><span class="s4">@param </span><span class="s0">{number} [options.density=72] - number representing the DPI for vector images in the range 1 to 100000.</span>
+ <span class="s0">* </span><span class="s4">@param </span><span class="s0">{number} [options.ignoreIcc=false] - should the embedded ICC profile, if any, be ignored.</span>
+ <span class="s0">* </span><span class="s4">@param </span><span class="s0">{number} [options.pages=1] - Number of pages to extract for multi-page input (GIF, WebP, TIFF), use -1 for all pages.</span>
+ <span class="s0">* </span><span class="s4">@param </span><span class="s0">{number} [options.page=0] - Page number to start extracting from for multi-page input (GIF, WebP, TIFF), zero based.</span>
+ <span class="s0">* </span><span class="s4">@param </span><span class="s0">{boolean} [options.animated=false] - Set to `true` to read all frames/pages of an animated image (GIF, WebP, TIFF), equivalent of setting `pages` to `-1`.</span>
+ <span class="s0">* </span><span class="s4">@param </span><span class="s0">{Object} [options.raw] - describes raw pixel input image data. See `raw()` for pixel ordering.</span>
+ <span class="s0">* </span><span class="s4">@param </span><span class="s0">{number} [options.raw.width] - integral number of pixels wide.</span>
+ <span class="s0">* </span><span class="s4">@param </span><span class="s0">{number} [options.raw.height] - integral number of pixels high.</span>
+ <span class="s0">* </span><span class="s4">@param </span><span class="s0">{number} [options.raw.channels] - integral number of channels, between 1 and 4.</span>
+ <span class="s0">* </span><span class="s4">@param </span><span class="s0">{boolean} [options.raw.premultiplied] - specifies that the raw input has already been premultiplied, set to `true`</span>
+ <span class="s0">*  to avoid sharp premultiplying the image. (optional, default `false`)</span>
+ <span class="s0">* </span><span class="s4">@param </span><span class="s0">{number} [options.raw.pageHeight] - The pixel height of each page/frame for animated images, must be an integral factor of `raw.height`.</span>
+ <span class="s0">* </span><span class="s4">@param </span><span class="s0">{Object} [options.create] - describes a new image to be created.</span>
+ <span class="s0">* </span><span class="s4">@param </span><span class="s0">{number} [options.create.width] - integral number of pixels wide.</span>
+ <span class="s0">* </span><span class="s4">@param </span><span class="s0">{number} [options.create.height] - integral number of pixels high.</span>
+ <span class="s0">* </span><span class="s4">@param </span><span class="s0">{number} [options.create.channels] - integral number of channels, either 3 (RGB) or 4 (RGBA).</span>
+ <span class="s0">* </span><span class="s4">@param </span><span class="s0">{string|Object} [options.create.background] - parsed by the [color](https://www.npmjs.org/package/color) module to extract values for red, green, blue and alpha.</span>
+ <span class="s0">* </span><span class="s4">@param </span><span class="s0">{number} [options.create.pageHeight] - The pixel height of each page/frame for animated images, must be an integral factor of `create.height`.</span>
+ <span class="s0">* </span><span class="s4">@param </span><span class="s0">{Object} [options.create.noise] - describes a noise to be created.</span>
+ <span class="s0">* </span><span class="s4">@param </span><span class="s0">{string} [options.create.noise.type] - type of generated noise, currently only `gaussian` is supported.</span>
+ <span class="s0">* </span><span class="s4">@param </span><span class="s0">{number} [options.create.noise.mean=128] - Mean value of pixels in the generated noise.</span>
+ <span class="s0">* </span><span class="s4">@param </span><span class="s0">{number} [options.create.noise.sigma=30] - Standard deviation of pixel values in the generated noise.</span>
+ <span class="s0">* </span><span class="s4">@param </span><span class="s0">{Object} [options.text] - describes a new text image to be created.</span>
+ <span class="s0">* </span><span class="s4">@param </span><span class="s0">{string} [options.text.text] - text to render as a UTF-8 string. It can contain Pango markup, for example `&lt;i&gt;Le&lt;/i&gt;Monde`.</span>
+ <span class="s0">* </span><span class="s4">@param </span><span class="s0">{string} [options.text.font] - font name to render with.</span>
+ <span class="s0">* </span><span class="s4">@param </span><span class="s0">{string} [options.text.fontfile] - absolute filesystem path to a font file that can be used by `font`.</span>
+ <span class="s0">* </span><span class="s4">@param </span><span class="s0">{number} [options.text.width=0] - Integral number of pixels to word-wrap at. Lines of text wider than this will be broken at word boundaries.</span>
+ <span class="s0">* </span><span class="s4">@param </span><span class="s0">{number} [options.text.height=0] - Maximum integral number of pixels high. When defined, `dpi` will be ignored and the text will automatically fit the pixel resolution defined by `width` and `height`. Will be ignored if `width` is not specified or set to 0.</span>
+ <span class="s0">* </span><span class="s4">@param </span><span class="s0">{string} [options.text.align='left'] - Alignment style for multi-line text (`'left'`, `'centre'`, `'center'`, `'right'`).</span>
+ <span class="s0">* </span><span class="s4">@param </span><span class="s0">{boolean} [options.text.justify=false] - set this to true to apply justification to the text.</span>
+ <span class="s0">* </span><span class="s4">@param </span><span class="s0">{number} [options.text.dpi=72] - the resolution (size) at which to render the text. Does not take effect if `height` is specified.</span>
+ <span class="s0">* </span><span class="s4">@param </span><span class="s0">{boolean} [options.text.rgba=false] - set this to true to enable RGBA output. This is useful for colour emoji rendering, or support for pango markup features like `&lt;span foreground=&quot;red&quot;&gt;Red!&lt;/span&gt;`.</span>
+ <span class="s0">* </span><span class="s4">@param </span><span class="s0">{number} [options.text.spacing=0] - text line height in points. Will use the font line height if none is specified.</span>
+ <span class="s0">* </span><span class="s4">@param </span><span class="s0">{string} [options.text.wrap='word'] - word wrapping style when width is provided, one of: 'word', 'char', 'word-char' (prefer word, fallback to char) or 'none'.</span>
+ <span class="s0">* </span><span class="s4">@param </span><span class="s0">{Object} [options.join] - describes how an array of input images should be joined.</span>
+ <span class="s0">* </span><span class="s4">@param </span><span class="s0">{number} [options.join.across=1] - number of images to join horizontally.</span>
+ <span class="s0">* </span><span class="s4">@param </span><span class="s0">{boolean} [options.join.animated=false] - set this to `true` to join the images as an animated image.</span>
+ <span class="s0">* </span><span class="s4">@param </span><span class="s0">{number} [options.join.shim=0] - number of pixels to insert between joined images.</span>
+ <span class="s0">* </span><span class="s4">@param </span><span class="s0">{string|Object} [options.join.background] - parsed by the [color](https://www.npmjs.org/package/color) module to extract values for red, green, blue and alpha.</span>
+ <span class="s0">* </span><span class="s4">@param </span><span class="s0">{string} [options.join.halign='left'] - horizontal alignment style for images joined horizontally (`'left'`, `'centre'`, `'center'`, `'right'`).</span>
+ <span class="s0">* </span><span class="s4">@param </span><span class="s0">{string} [options.join.valign='top'] - vertical alignment style for images joined vertically (`'top'`, `'centre'`, `'center'`, `'bottom'`).</span>
+ <span class="s0">* </span><span class="s4">@param </span><span class="s0">{Object} [options.tiff] - Describes TIFF specific options.</span>
+ <span class="s0">* </span><span class="s4">@param </span><span class="s0">{number} [options.tiff.subifd=-1] - Sub Image File Directory to extract for OME-TIFF, defaults to main image.</span>
+ <span class="s0">* </span><span class="s4">@param </span><span class="s0">{Object} [options.svg] - Describes SVG specific options.</span>
+ <span class="s0">* </span><span class="s4">@param </span><span class="s0">{string} [options.svg.stylesheet] - Custom CSS for SVG input, applied with a User Origin during the CSS cascade.</span>
+ <span class="s0">* </span><span class="s4">@param </span><span class="s0">{boolean} [options.svg.highBitdepth=false] - Set to `true` to render SVG input at 32-bits per channel (128-bit) instead of 8-bits per channel (32-bit) RGBA.</span>
+ <span class="s0">* </span><span class="s4">@param </span><span class="s0">{Object} [options.pdf] - Describes PDF specific options. Requires the use of a globally-installed libvips compiled with support for PDFium, Poppler, ImageMagick or GraphicsMagick.</span>
+ <span class="s0">* </span><span class="s4">@param </span><span class="s0">{string|Object} [options.pdf.background] - Background colour to use when PDF is partially transparent. Parsed by the [color](https://www.npmjs.org/package/color) module to extract values for red, green, blue and alpha.</span>
+ <span class="s0">* </span><span class="s4">@param </span><span class="s0">{Object} [options.openSlide] - Describes OpenSlide specific options. Requires the use of a globally-installed libvips compiled with support for OpenSlide.</span>
+ <span class="s0">* </span><span class="s4">@param </span><span class="s0">{number} [options.openSlide.level=0] - Level to extract from a multi-level input, zero based.</span>
+ <span class="s0">* </span><span class="s4">@param </span><span class="s0">{Object} [options.jp2] - Describes JPEG 2000 specific options. Requires the use of a globally-installed libvips compiled with support for OpenJPEG.</span>
+ <span class="s0">* </span><span class="s4">@param </span><span class="s0">{boolean} [options.jp2.oneshot=false] - Set to `true` to decode tiled JPEG 2000 images in a single operation, improving compatibility.</span>
+ <span class="s0">* </span><span class="s4">@returns </span><span class="s0">{Sharp}</span>
+ <span class="s0">* </span><span class="s4">@throws </span><span class="s0">{Error} Invalid parameters</span>
+ <span class="s0">*/</span>
+<span class="s3">const </span><span class="s1">Sharp = </span><span class="s3">function </span><span class="s1">(input, options) {</span>
+  <span class="s3">if </span><span class="s1">(arguments.length === </span><span class="s5">1 </span><span class="s1">&amp;&amp; !is.defined(input)) {</span>
+    <span class="s3">throw new </span><span class="s1">Error(</span><span class="s2">'Invalid input'</span><span class="s1">);</span>
+  <span class="s1">}</span>
+  <span class="s3">if </span><span class="s1">(!(</span><span class="s3">this instanceof </span><span class="s1">Sharp)) {</span>
+    <span class="s3">return new </span><span class="s1">Sharp(input, options);</span>
+  <span class="s1">}</span>
+  <span class="s1">stream.Duplex.call(</span><span class="s3">this</span><span class="s1">);</span>
+  <span class="s3">this</span><span class="s1">.options = {</span>
+    <span class="s0">// resize options</span>
+    <span class="s1">topOffsetPre: -</span><span class="s5">1</span><span class="s1">,</span>
+    <span class="s1">leftOffsetPre: -</span><span class="s5">1</span><span class="s1">,</span>
+    <span class="s1">widthPre: -</span><span class="s5">1</span><span class="s1">,</span>
+    <span class="s1">heightPre: -</span><span class="s5">1</span><span class="s1">,</span>
+    <span class="s1">topOffsetPost: -</span><span class="s5">1</span><span class="s1">,</span>
+    <span class="s1">leftOffsetPost: -</span><span class="s5">1</span><span class="s1">,</span>
+    <span class="s1">widthPost: -</span><span class="s5">1</span><span class="s1">,</span>
+    <span class="s1">heightPost: -</span><span class="s5">1</span><span class="s1">,</span>
+    <span class="s1">width: -</span><span class="s5">1</span><span class="s1">,</span>
+    <span class="s1">height: -</span><span class="s5">1</span><span class="s1">,</span>
+    <span class="s1">canvas: </span><span class="s2">'crop'</span><span class="s1">,</span>
+    <span class="s1">position: </span><span class="s5">0</span><span class="s1">,</span>
+    <span class="s1">resizeBackground: [</span><span class="s5">0</span><span class="s1">, </span><span class="s5">0</span><span class="s1">, </span><span class="s5">0</span><span class="s1">, </span><span class="s5">255</span><span class="s1">],</span>
+    <span class="s1">angle: </span><span class="s5">0</span><span class="s1">,</span>
+    <span class="s1">rotationAngle: </span><span class="s5">0</span><span class="s1">,</span>
+    <span class="s1">rotationBackground: [</span><span class="s5">0</span><span class="s1">, </span><span class="s5">0</span><span class="s1">, </span><span class="s5">0</span><span class="s1">, </span><span class="s5">255</span><span class="s1">],</span>
+    <span class="s1">rotateBefore: </span><span class="s3">false</span><span class="s1">,</span>
+    <span class="s1">orientBefore: </span><span class="s3">false</span><span class="s1">,</span>
+    <span class="s1">flip: </span><span class="s3">false</span><span class="s1">,</span>
+    <span class="s1">flop: </span><span class="s3">false</span><span class="s1">,</span>
+    <span class="s1">extendTop: </span><span class="s5">0</span><span class="s1">,</span>
+    <span class="s1">extendBottom: </span><span class="s5">0</span><span class="s1">,</span>
+    <span class="s1">extendLeft: </span><span class="s5">0</span><span class="s1">,</span>
+    <span class="s1">extendRight: </span><span class="s5">0</span><span class="s1">,</span>
+    <span class="s1">extendBackground: [</span><span class="s5">0</span><span class="s1">, </span><span class="s5">0</span><span class="s1">, </span><span class="s5">0</span><span class="s1">, </span><span class="s5">255</span><span class="s1">],</span>
+    <span class="s1">extendWith: </span><span class="s2">'background'</span><span class="s1">,</span>
+    <span class="s1">withoutEnlargement: </span><span class="s3">false</span><span class="s1">,</span>
+    <span class="s1">withoutReduction: </span><span class="s3">false</span><span class="s1">,</span>
+    <span class="s1">affineMatrix: [],</span>
+    <span class="s1">affineBackground: [</span><span class="s5">0</span><span class="s1">, </span><span class="s5">0</span><span class="s1">, </span><span class="s5">0</span><span class="s1">, </span><span class="s5">255</span><span class="s1">],</span>
+    <span class="s1">affineIdx: </span><span class="s5">0</span><span class="s1">,</span>
+    <span class="s1">affineIdy: </span><span class="s5">0</span><span class="s1">,</span>
+    <span class="s1">affineOdx: </span><span class="s5">0</span><span class="s1">,</span>
+    <span class="s1">affineOdy: </span><span class="s5">0</span><span class="s1">,</span>
+    <span class="s1">affineInterpolator: </span><span class="s3">this</span><span class="s1">.constructor.interpolators.bilinear,</span>
+    <span class="s1">kernel: </span><span class="s2">'lanczos3'</span><span class="s1">,</span>
+    <span class="s1">fastShrinkOnLoad: </span><span class="s3">true</span><span class="s1">,</span>
+    <span class="s0">// operations</span>
+    <span class="s1">tint: [-</span><span class="s5">1</span><span class="s1">, </span><span class="s5">0</span><span class="s1">, </span><span class="s5">0</span><span class="s1">, </span><span class="s5">0</span><span class="s1">],</span>
+    <span class="s1">flatten: </span><span class="s3">false</span><span class="s1">,</span>
+    <span class="s1">flattenBackground: [</span><span class="s5">0</span><span class="s1">, </span><span class="s5">0</span><span class="s1">, </span><span class="s5">0</span><span class="s1">],</span>
+    <span class="s1">unflatten: </span><span class="s3">false</span><span class="s1">,</span>
+    <span class="s1">negate: </span><span class="s3">false</span><span class="s1">,</span>
+    <span class="s1">negateAlpha: </span><span class="s3">true</span><span class="s1">,</span>
+    <span class="s1">medianSize: </span><span class="s5">0</span><span class="s1">,</span>
+    <span class="s1">blurSigma: </span><span class="s5">0</span><span class="s1">,</span>
+    <span class="s1">precision: </span><span class="s2">'integer'</span><span class="s1">,</span>
+    <span class="s1">minAmpl: </span><span class="s5">0.2</span><span class="s1">,</span>
+    <span class="s1">sharpenSigma: </span><span class="s5">0</span><span class="s1">,</span>
+    <span class="s1">sharpenM1: </span><span class="s5">1</span><span class="s1">,</span>
+    <span class="s1">sharpenM2: </span><span class="s5">2</span><span class="s1">,</span>
+    <span class="s1">sharpenX1: </span><span class="s5">2</span><span class="s1">,</span>
+    <span class="s1">sharpenY2: </span><span class="s5">10</span><span class="s1">,</span>
+    <span class="s1">sharpenY3: </span><span class="s5">20</span><span class="s1">,</span>
+    <span class="s1">threshold: </span><span class="s5">0</span><span class="s1">,</span>
+    <span class="s1">thresholdGrayscale: </span><span class="s3">true</span><span class="s1">,</span>
+    <span class="s1">trimBackground: [],</span>
+    <span class="s1">trimThreshold: -</span><span class="s5">1</span><span class="s1">,</span>
+    <span class="s1">trimLineArt: </span><span class="s3">false</span><span class="s1">,</span>
+    <span class="s1">dilateWidth: </span><span class="s5">0</span><span class="s1">,</span>
+    <span class="s1">erodeWidth: </span><span class="s5">0</span><span class="s1">,</span>
+    <span class="s1">gamma: </span><span class="s5">0</span><span class="s1">,</span>
+    <span class="s1">gammaOut: </span><span class="s5">0</span><span class="s1">,</span>
+    <span class="s1">greyscale: </span><span class="s3">false</span><span class="s1">,</span>
+    <span class="s1">normalise: </span><span class="s3">false</span><span class="s1">,</span>
+    <span class="s1">normaliseLower: </span><span class="s5">1</span><span class="s1">,</span>
+    <span class="s1">normaliseUpper: </span><span class="s5">99</span><span class="s1">,</span>
+    <span class="s1">claheWidth: </span><span class="s5">0</span><span class="s1">,</span>
+    <span class="s1">claheHeight: </span><span class="s5">0</span><span class="s1">,</span>
+    <span class="s1">claheMaxSlope: </span><span class="s5">3</span><span class="s1">,</span>
+    <span class="s1">brightness: </span><span class="s5">1</span><span class="s1">,</span>
+    <span class="s1">saturation: </span><span class="s5">1</span><span class="s1">,</span>
+    <span class="s1">hue: </span><span class="s5">0</span><span class="s1">,</span>
+    <span class="s1">lightness: </span><span class="s5">0</span><span class="s1">,</span>
+    <span class="s1">booleanBufferIn: </span><span class="s3">null</span><span class="s1">,</span>
+    <span class="s1">booleanFileIn: </span><span class="s2">''</span><span class="s1">,</span>
+    <span class="s1">joinChannelIn: [],</span>
+    <span class="s1">extractChannel: -</span><span class="s5">1</span><span class="s1">,</span>
+    <span class="s1">removeAlpha: </span><span class="s3">false</span><span class="s1">,</span>
+    <span class="s1">ensureAlpha: -</span><span class="s5">1</span><span class="s1">,</span>
+    <span class="s1">colourspace: </span><span class="s2">'srgb'</span><span class="s1">,</span>
+    <span class="s1">colourspacePipeline: </span><span class="s2">'last'</span><span class="s1">,</span>
+    <span class="s1">composite: [],</span>
+    <span class="s0">// output</span>
+    <span class="s1">fileOut: </span><span class="s2">''</span><span class="s1">,</span>
+    <span class="s1">formatOut: </span><span class="s2">'input'</span><span class="s1">,</span>
+    <span class="s1">streamOut: </span><span class="s3">false</span><span class="s1">,</span>
+    <span class="s1">keepMetadata: </span><span class="s5">0</span><span class="s1">,</span>
+    <span class="s1">withMetadataOrientation: -</span><span class="s5">1</span><span class="s1">,</span>
+    <span class="s1">withMetadataDensity: </span><span class="s5">0</span><span class="s1">,</span>
+    <span class="s1">withIccProfile: </span><span class="s2">''</span><span class="s1">,</span>
+    <span class="s1">withExif: {},</span>
+    <span class="s1">withExifMerge: </span><span class="s3">true</span><span class="s1">,</span>
+    <span class="s1">withXmp: </span><span class="s2">''</span><span class="s1">,</span>
+    <span class="s1">resolveWithObject: </span><span class="s3">false</span><span class="s1">,</span>
+    <span class="s1">loop: -</span><span class="s5">1</span><span class="s1">,</span>
+    <span class="s1">delay: [],</span>
+    <span class="s0">// output format</span>
+    <span class="s1">jpegQuality: </span><span class="s5">80</span><span class="s1">,</span>
+    <span class="s1">jpegProgressive: </span><span class="s3">false</span><span class="s1">,</span>
+    <span class="s1">jpegChromaSubsampling: </span><span class="s2">'4:2:0'</span><span class="s1">,</span>
+    <span class="s1">jpegTrellisQuantisation: </span><span class="s3">false</span><span class="s1">,</span>
+    <span class="s1">jpegOvershootDeringing: </span><span class="s3">false</span><span class="s1">,</span>
+    <span class="s1">jpegOptimiseScans: </span><span class="s3">false</span><span class="s1">,</span>
+    <span class="s1">jpegOptimiseCoding: </span><span class="s3">true</span><span class="s1">,</span>
+    <span class="s1">jpegQuantisationTable: </span><span class="s5">0</span><span class="s1">,</span>
+    <span class="s1">pngProgressive: </span><span class="s3">false</span><span class="s1">,</span>
+    <span class="s1">pngCompressionLevel: </span><span class="s5">6</span><span class="s1">,</span>
+    <span class="s1">pngAdaptiveFiltering: </span><span class="s3">false</span><span class="s1">,</span>
+    <span class="s1">pngPalette: </span><span class="s3">false</span><span class="s1">,</span>
+    <span class="s1">pngQuality: </span><span class="s5">100</span><span class="s1">,</span>
+    <span class="s1">pngEffort: </span><span class="s5">7</span><span class="s1">,</span>
+    <span class="s1">pngBitdepth: </span><span class="s5">8</span><span class="s1">,</span>
+    <span class="s1">pngDither: </span><span class="s5">1</span><span class="s1">,</span>
+    <span class="s1">jp2Quality: </span><span class="s5">80</span><span class="s1">,</span>
+    <span class="s1">jp2TileHeight: </span><span class="s5">512</span><span class="s1">,</span>
+    <span class="s1">jp2TileWidth: </span><span class="s5">512</span><span class="s1">,</span>
+    <span class="s1">jp2Lossless: </span><span class="s3">false</span><span class="s1">,</span>
+    <span class="s1">jp2ChromaSubsampling: </span><span class="s2">'4:4:4'</span><span class="s1">,</span>
+    <span class="s1">webpQuality: </span><span class="s5">80</span><span class="s1">,</span>
+    <span class="s1">webpAlphaQuality: </span><span class="s5">100</span><span class="s1">,</span>
+    <span class="s1">webpLossless: </span><span class="s3">false</span><span class="s1">,</span>
+    <span class="s1">webpNearLossless: </span><span class="s3">false</span><span class="s1">,</span>
+    <span class="s1">webpSmartSubsample: </span><span class="s3">false</span><span class="s1">,</span>
+    <span class="s1">webpSmartDeblock: </span><span class="s3">false</span><span class="s1">,</span>
+    <span class="s1">webpPreset: </span><span class="s2">'default'</span><span class="s1">,</span>
+    <span class="s1">webpEffort: </span><span class="s5">4</span><span class="s1">,</span>
+    <span class="s1">webpMinSize: </span><span class="s3">false</span><span class="s1">,</span>
+    <span class="s1">webpMixed: </span><span class="s3">false</span><span class="s1">,</span>
+    <span class="s1">gifBitdepth: </span><span class="s5">8</span><span class="s1">,</span>
+    <span class="s1">gifEffort: </span><span class="s5">7</span><span class="s1">,</span>
+    <span class="s1">gifDither: </span><span class="s5">1</span><span class="s1">,</span>
+    <span class="s1">gifInterFrameMaxError: </span><span class="s5">0</span><span class="s1">,</span>
+    <span class="s1">gifInterPaletteMaxError: </span><span class="s5">3</span><span class="s1">,</span>
+    <span class="s1">gifKeepDuplicateFrames: </span><span class="s3">false</span><span class="s1">,</span>
+    <span class="s1">gifReuse: </span><span class="s3">true</span><span class="s1">,</span>
+    <span class="s1">gifProgressive: </span><span class="s3">false</span><span class="s1">,</span>
+    <span class="s1">tiffQuality: </span><span class="s5">80</span><span class="s1">,</span>
+    <span class="s1">tiffCompression: </span><span class="s2">'jpeg'</span><span class="s1">,</span>
+    <span class="s1">tiffPredictor: </span><span class="s2">'horizontal'</span><span class="s1">,</span>
+    <span class="s1">tiffPyramid: </span><span class="s3">false</span><span class="s1">,</span>
+    <span class="s1">tiffMiniswhite: </span><span class="s3">false</span><span class="s1">,</span>
+    <span class="s1">tiffBitdepth: </span><span class="s5">8</span><span class="s1">,</span>
+    <span class="s1">tiffTile: </span><span class="s3">false</span><span class="s1">,</span>
+    <span class="s1">tiffTileHeight: </span><span class="s5">256</span><span class="s1">,</span>
+    <span class="s1">tiffTileWidth: </span><span class="s5">256</span><span class="s1">,</span>
+    <span class="s1">tiffXres: </span><span class="s5">1.0</span><span class="s1">,</span>
+    <span class="s1">tiffYres: </span><span class="s5">1.0</span><span class="s1">,</span>
+    <span class="s1">tiffResolutionUnit: </span><span class="s2">'inch'</span><span class="s1">,</span>
+    <span class="s1">heifQuality: </span><span class="s5">50</span><span class="s1">,</span>
+    <span class="s1">heifLossless: </span><span class="s3">false</span><span class="s1">,</span>
+    <span class="s1">heifCompression: </span><span class="s2">'av1'</span><span class="s1">,</span>
+    <span class="s1">heifEffort: </span><span class="s5">4</span><span class="s1">,</span>
+    <span class="s1">heifChromaSubsampling: </span><span class="s2">'4:4:4'</span><span class="s1">,</span>
+    <span class="s1">heifBitdepth: </span><span class="s5">8</span><span class="s1">,</span>
+    <span class="s1">jxlDistance: </span><span class="s5">1</span><span class="s1">,</span>
+    <span class="s1">jxlDecodingTier: </span><span class="s5">0</span><span class="s1">,</span>
+    <span class="s1">jxlEffort: </span><span class="s5">7</span><span class="s1">,</span>
+    <span class="s1">jxlLossless: </span><span class="s3">false</span><span class="s1">,</span>
+    <span class="s1">rawDepth: </span><span class="s2">'uchar'</span><span class="s1">,</span>
+    <span class="s1">tileSize: </span><span class="s5">256</span><span class="s1">,</span>
+    <span class="s1">tileOverlap: </span><span class="s5">0</span><span class="s1">,</span>
+    <span class="s1">tileContainer: </span><span class="s2">'fs'</span><span class="s1">,</span>
+    <span class="s1">tileLayout: </span><span class="s2">'dz'</span><span class="s1">,</span>
+    <span class="s1">tileFormat: </span><span class="s2">'last'</span><span class="s1">,</span>
+    <span class="s1">tileDepth: </span><span class="s2">'last'</span><span class="s1">,</span>
+    <span class="s1">tileAngle: </span><span class="s5">0</span><span class="s1">,</span>
+    <span class="s1">tileSkipBlanks: -</span><span class="s5">1</span><span class="s1">,</span>
+    <span class="s1">tileBackground: [</span><span class="s5">255</span><span class="s1">, </span><span class="s5">255</span><span class="s1">, </span><span class="s5">255</span><span class="s1">, </span><span class="s5">255</span><span class="s1">],</span>
+    <span class="s1">tileCentre: </span><span class="s3">false</span><span class="s1">,</span>
+    <span class="s1">tileId: </span><span class="s2">'https://example.com/iiif'</span><span class="s1">,</span>
+    <span class="s1">tileBasename: </span><span class="s2">''</span><span class="s1">,</span>
+    <span class="s1">timeoutSeconds: </span><span class="s5">0</span><span class="s1">,</span>
+    <span class="s1">linearA: [],</span>
+    <span class="s1">linearB: [],</span>
+    <span class="s1">pdfBackground: [</span><span class="s5">255</span><span class="s1">, </span><span class="s5">255</span><span class="s1">, </span><span class="s5">255</span><span class="s1">, </span><span class="s5">255</span><span class="s1">],</span>
+    <span class="s0">// Function to notify of libvips warnings</span>
+    <span class="s1">debuglog: warning =&gt; {</span>
+      <span class="s3">this</span><span class="s1">.emit(</span><span class="s2">'warning'</span><span class="s1">, warning);</span>
+      <span class="s1">debuglog(warning);</span>
+    <span class="s1">},</span>
+    <span class="s0">// Function to notify of queue length changes</span>
+    <span class="s1">queueListener: </span><span class="s3">function </span><span class="s1">(queueLength) {</span>
+      <span class="s1">Sharp.queue.emit(</span><span class="s2">'change'</span><span class="s1">, queueLength);</span>
+    <span class="s1">}</span>
+  <span class="s1">};</span>
+  <span class="s3">this</span><span class="s1">.options.input = </span><span class="s3">this</span><span class="s1">._createInputDescriptor(input, options, { allowStream: </span><span class="s3">true </span><span class="s1">});</span>
+  <span class="s3">return this</span><span class="s1">;</span>
+<span class="s1">};</span>
+<span class="s1">Object.setPrototypeOf(Sharp.prototype, stream.Duplex.prototype);</span>
+<span class="s1">Object.setPrototypeOf(Sharp, stream.Duplex);</span>
+
+<span class="s0">/**</span>
+ <span class="s0">* Take a &quot;snapshot&quot; of the Sharp instance, returning a new instance.</span>
+ <span class="s0">* Cloned instances inherit the input of their parent instance.</span>
+ <span class="s0">* This allows multiple output Streams and therefore multiple processing pipelines to share a single input Stream.</span>
+ <span class="s0">*</span>
+ <span class="s0">* </span><span class="s4">@example</span>
+ <span class="s0">* const pipeline = sharp().rotate();</span>
+ <span class="s0">* pipeline.clone().resize(800, 600).pipe(firstWritableStream);</span>
+ <span class="s0">* pipeline.clone().extract({ left: 20, top: 20, width: 100, height: 100 }).pipe(secondWritableStream);</span>
+ <span class="s0">* readableStream.pipe(pipeline);</span>
+ <span class="s0">* // firstWritableStream receives auto-rotated, resized readableStream</span>
+ <span class="s0">* // secondWritableStream receives auto-rotated, extracted region of readableStream</span>
+ <span class="s0">*</span>
+ <span class="s0">* </span><span class="s4">@example</span>
+ <span class="s0">* // Create a pipeline that will download an image, resize it and format it to different files</span>
+ <span class="s0">* // Using Promises to know when the pipeline is complete</span>
+ <span class="s0">* const fs = require(&quot;fs&quot;);</span>
+ <span class="s0">* const got = require(&quot;got&quot;);</span>
+ <span class="s0">* const sharpStream = sharp({ failOn: 'none' });</span>
+ <span class="s0">*</span>
+ <span class="s0">* const promises = [];</span>
+ <span class="s0">*</span>
+ <span class="s0">* promises.push(</span>
+ <span class="s0">*   sharpStream</span>
+ <span class="s0">*     .clone()</span>
+ <span class="s0">*     .jpeg({ quality: 100 })</span>
+ <span class="s0">*     .toFile(&quot;originalFile.jpg&quot;)</span>
+ <span class="s0">* );</span>
+ <span class="s0">*</span>
+ <span class="s0">* promises.push(</span>
+ <span class="s0">*   sharpStream</span>
+ <span class="s0">*     .clone()</span>
+ <span class="s0">*     .resize({ width: 500 })</span>
+ <span class="s0">*     .jpeg({ quality: 80 })</span>
+ <span class="s0">*     .toFile(&quot;optimized-500.jpg&quot;)</span>
+ <span class="s0">* );</span>
+ <span class="s0">*</span>
+ <span class="s0">* promises.push(</span>
+ <span class="s0">*   sharpStream</span>
+ <span class="s0">*     .clone()</span>
+ <span class="s0">*     .resize({ width: 500 })</span>
+ <span class="s0">*     .webp({ quality: 80 })</span>
+ <span class="s0">*     .toFile(&quot;optimized-500.webp&quot;)</span>
+ <span class="s0">* );</span>
+ <span class="s0">*</span>
+ <span class="s0">* // https://github.com/sindresorhus/got/blob/main/documentation/3-streams.md</span>
+ <span class="s0">* got.stream(&quot;https://www.example.com/some-file.jpg&quot;).pipe(sharpStream);</span>
+ <span class="s0">*</span>
+ <span class="s0">* Promise.all(promises)</span>
+ <span class="s0">*   .then(res =&gt; { console.log(&quot;Done!&quot;, res); })</span>
+ <span class="s0">*   .catch(err =&gt; {</span>
+ <span class="s0">*     console.error(&quot;Error processing files, let's clean it up&quot;, err);</span>
+ <span class="s0">*     try {</span>
+ <span class="s0">*       fs.unlinkSync(&quot;originalFile.jpg&quot;);</span>
+ <span class="s0">*       fs.unlinkSync(&quot;optimized-500.jpg&quot;);</span>
+ <span class="s0">*       fs.unlinkSync(&quot;optimized-500.webp&quot;);</span>
+ <span class="s0">*     } catch (e) {}</span>
+ <span class="s0">*   });</span>
+ <span class="s0">*</span>
+ <span class="s0">* </span><span class="s4">@returns </span><span class="s0">{Sharp}</span>
+ <span class="s0">*/</span>
+<span class="s3">function </span><span class="s1">clone () {</span>
+  <span class="s0">// Clone existing options</span>
+  <span class="s3">const </span><span class="s1">clone = </span><span class="s3">this</span><span class="s1">.constructor.call();</span>
+  <span class="s3">const </span><span class="s1">{ debuglog, queueListener, ...options } = </span><span class="s3">this</span><span class="s1">.options;</span>
+  <span class="s1">clone.options = structuredClone(options);</span>
+  <span class="s1">clone.options.debuglog = debuglog;</span>
+  <span class="s1">clone.options.queueListener = queueListener;</span>
+  <span class="s0">// Pass 'finish' event to clone for Stream-based input</span>
+  <span class="s3">if </span><span class="s1">(</span><span class="s3">this</span><span class="s1">._isStreamInput()) {</span>
+    <span class="s3">this</span><span class="s1">.on(</span><span class="s2">'finish'</span><span class="s1">, () =&gt; {</span>
+      <span class="s0">// Clone inherits input data</span>
+      <span class="s3">this</span><span class="s1">._flattenBufferIn();</span>
+      <span class="s1">clone.options.input.buffer = </span><span class="s3">this</span><span class="s1">.options.input.buffer;</span>
+      <span class="s1">clone.emit(</span><span class="s2">'finish'</span><span class="s1">);</span>
+    <span class="s1">});</span>
+  <span class="s1">}</span>
+  <span class="s3">return </span><span class="s1">clone;</span>
+<span class="s1">}</span>
+<span class="s1">Object.assign(Sharp.prototype, { clone });</span>
+
+<span class="s0">/**</span>
+ <span class="s0">* Export constructor.</span>
+ <span class="s0">* </span><span class="s4">@module </span><span class="s0">Sharp</span>
+ <span class="s0">* </span><span class="s4">@private</span>
+ <span class="s0">*/</span>
+<span class="s1">module.exports = Sharp;</span>
+</pre>
+</body>
+</html>

@@ -1,0 +1,95 @@
+<html>
+<head>
+<title>extractFormattedPhoneNumberFromPossibleRfc3966NumberUri.js</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #0033b3;}
+.s1 { color: #080808;}
+.s2 { color: #067d17;}
+.s3 { color: #8c8c8c; font-style: italic;}
+.s4 { color: #8c8c8c; font-style: italic;}
+.s5 { color: #1750eb;}
+</style>
+</head>
+<body bgcolor="#ffffff">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#c0c0c0" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+extractFormattedPhoneNumberFromPossibleRfc3966NumberUri.js</font>
+</center></td></tr></table>
+<pre><span class="s0">import </span><span class="s1">extractPhoneContext, {</span>
+	<span class="s1">isPhoneContextValid,</span>
+	<span class="s1">PLUS_SIGN,</span>
+	<span class="s1">RFC3966_PREFIX_,</span>
+	<span class="s1">RFC3966_PHONE_CONTEXT_,</span>
+	<span class="s1">RFC3966_ISDN_SUBADDRESS_</span>
+<span class="s1">} from </span><span class="s2">'./extractPhoneContext.js'</span>
+
+<span class="s0">import </span><span class="s1">ParseError from </span><span class="s2">'../ParseError.js'</span>
+
+<span class="s3">/**</span>
+ <span class="s3">* </span><span class="s4">@param  </span><span class="s3">{string} numberToParse</span>
+ <span class="s3">* </span><span class="s4">@param  </span><span class="s3">{string} nationalNumber</span>
+ <span class="s3">* </span><span class="s4">@return </span><span class="s3">{}</span>
+ <span class="s3">*/</span>
+<span class="s0">export default function </span><span class="s1">extractFormattedPhoneNumberFromPossibleRfc3966NumberUri(numberToParse, {</span>
+	<span class="s1">extractFormattedPhoneNumber</span>
+<span class="s1">}) {</span>
+	<span class="s0">const </span><span class="s1">phoneContext = extractPhoneContext(numberToParse)</span>
+	<span class="s0">if </span><span class="s1">(!isPhoneContextValid(phoneContext)) {</span>
+		<span class="s0">throw new </span><span class="s1">ParseError(</span><span class="s2">'NOT_A_NUMBER'</span><span class="s1">)</span>
+	<span class="s1">}</span>
+
+	<span class="s0">let </span><span class="s1">phoneNumberString</span>
+
+	<span class="s0">if </span><span class="s1">(phoneContext === </span><span class="s0">null</span><span class="s1">) {</span>
+		<span class="s3">// Extract a possible number from the string passed in.</span>
+		<span class="s3">// (this strips leading characters that could not be the start of a phone number)</span>
+		<span class="s1">phoneNumberString = extractFormattedPhoneNumber(numberToParse) || </span><span class="s2">''</span>
+	<span class="s1">} </span><span class="s0">else </span><span class="s1">{</span>
+		<span class="s1">phoneNumberString = </span><span class="s2">''</span>
+
+		<span class="s3">// If the phone context contains a phone number prefix, we need to capture</span>
+		<span class="s3">// it, whereas domains will be ignored.</span>
+		<span class="s0">if </span><span class="s1">(phoneContext.charAt(</span><span class="s5">0</span><span class="s1">) === PLUS_SIGN) {</span>
+			<span class="s1">phoneNumberString += phoneContext</span>
+		<span class="s1">}</span>
+
+		<span class="s3">// Now append everything between the &quot;tel:&quot; prefix and the phone-context.</span>
+		<span class="s3">// This should include the national number, an optional extension or</span>
+		<span class="s3">// isdn-subaddress component. Note we also handle the case when &quot;tel:&quot; is</span>
+		<span class="s3">// missing, as we have seen in some of the phone number inputs.</span>
+		<span class="s3">// In that case, we append everything from the beginning.</span>
+		<span class="s0">const </span><span class="s1">indexOfRfc3966Prefix = numberToParse.indexOf(RFC3966_PREFIX_)</span>
+		<span class="s0">let </span><span class="s1">indexOfNationalNumber</span>
+		<span class="s3">// RFC 3966 &quot;tel:&quot; prefix is preset at this stage because</span>
+		<span class="s3">// `isPhoneContextValid()` requires it to be present.</span>
+		<span class="s3">/* istanbul ignore else */</span>
+		<span class="s0">if </span><span class="s1">(indexOfRfc3966Prefix &gt;= </span><span class="s5">0</span><span class="s1">) {</span>
+			<span class="s1">indexOfNationalNumber = indexOfRfc3966Prefix + RFC3966_PREFIX_.length</span>
+		<span class="s1">} </span><span class="s0">else </span><span class="s1">{</span>
+			<span class="s1">indexOfNationalNumber = </span><span class="s5">0</span>
+		<span class="s1">}</span>
+		<span class="s0">const </span><span class="s1">indexOfPhoneContext = numberToParse.indexOf(RFC3966_PHONE_CONTEXT_)</span>
+		<span class="s1">phoneNumberString += numberToParse.substring(indexOfNationalNumber, indexOfPhoneContext)</span>
+	<span class="s1">}</span>
+
+	<span class="s3">// Delete the isdn-subaddress and everything after it if it is present.</span>
+	<span class="s3">// Note extension won't appear at the same time with isdn-subaddress</span>
+	<span class="s3">// according to paragraph 5.3 of the RFC3966 spec.</span>
+	<span class="s0">const </span><span class="s1">indexOfIsdn = phoneNumberString.indexOf(RFC3966_ISDN_SUBADDRESS_)</span>
+	<span class="s0">if </span><span class="s1">(indexOfIsdn &gt; </span><span class="s5">0</span><span class="s1">) {</span>
+		<span class="s1">phoneNumberString = phoneNumberString.substring(</span><span class="s5">0</span><span class="s1">, indexOfIsdn)</span>
+	<span class="s1">}</span>
+	<span class="s3">// If both phone context and isdn-subaddress are absent but other</span>
+	<span class="s3">// parameters are present, the parameters are left in nationalNumber.</span>
+	<span class="s3">// This is because we are concerned about deleting content from a potential</span>
+	<span class="s3">// number string when there is no strong evidence that the number is</span>
+	<span class="s3">// actually written in RFC3966.</span>
+
+	<span class="s0">if </span><span class="s1">(phoneNumberString !== </span><span class="s2">''</span><span class="s1">) {</span>
+		<span class="s0">return </span><span class="s1">phoneNumberString</span>
+	<span class="s1">}</span>
+<span class="s1">}</span></pre>
+</body>
+</html>

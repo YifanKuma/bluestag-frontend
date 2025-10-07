@@ -1,0 +1,210 @@
+<html>
+<head>
+<title>max-statements.js</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #8c8c8c; font-style: italic;}
+.s1 { color: #8c8c8c; font-style: italic;}
+.s2 { color: #080808;}
+.s3 { color: #067d17;}
+.s4 { color: #0033b3;}
+.s5 { color: #1750eb;}
+</style>
+</head>
+<body bgcolor="#ffffff">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#c0c0c0" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+max-statements.js</font>
+</center></td></tr></table>
+<pre><span class="s0">/**</span>
+ <span class="s0">* </span><span class="s1">@fileoverview </span><span class="s0">A rule to set the maximum number of statements in a function.</span>
+ <span class="s0">* </span><span class="s1">@author </span><span class="s0">Ian Christian Myers</span>
+ <span class="s0">*/</span>
+
+<span class="s3">&quot;use strict&quot;</span><span class="s2">;</span>
+
+<span class="s0">//------------------------------------------------------------------------------</span>
+<span class="s0">// Requirements</span>
+<span class="s0">//------------------------------------------------------------------------------</span>
+
+<span class="s4">const </span><span class="s2">astUtils = require(</span><span class="s3">&quot;./utils/ast-utils&quot;</span><span class="s2">);</span>
+<span class="s4">const </span><span class="s2">{ upperCaseFirst } = require(</span><span class="s3">&quot;../shared/string-utils&quot;</span><span class="s2">);</span>
+
+<span class="s0">//------------------------------------------------------------------------------</span>
+<span class="s0">// Rule Definition</span>
+<span class="s0">//------------------------------------------------------------------------------</span>
+
+<span class="s0">/** </span><span class="s1">@type </span><span class="s0">{import('../types').Rule.RuleModule} */</span>
+<span class="s2">module.exports = {</span>
+	<span class="s2">meta: {</span>
+		<span class="s2">type: </span><span class="s3">&quot;suggestion&quot;</span><span class="s2">,</span>
+
+		<span class="s2">docs: {</span>
+			<span class="s2">description:</span>
+				<span class="s3">&quot;Enforce a maximum number of statements allowed in function blocks&quot;</span><span class="s2">,</span>
+			<span class="s2">recommended: </span><span class="s4">false</span><span class="s2">,</span>
+			<span class="s2">url: </span><span class="s3">&quot;https://eslint.org/docs/latest/rules/max-statements&quot;</span><span class="s2">,</span>
+		<span class="s2">},</span>
+
+		<span class="s2">schema: [</span>
+			<span class="s2">{</span>
+				<span class="s2">oneOf: [</span>
+					<span class="s2">{</span>
+						<span class="s2">type: </span><span class="s3">&quot;integer&quot;</span><span class="s2">,</span>
+						<span class="s2">minimum: </span><span class="s5">0</span><span class="s2">,</span>
+					<span class="s2">},</span>
+					<span class="s2">{</span>
+						<span class="s2">type: </span><span class="s3">&quot;object&quot;</span><span class="s2">,</span>
+						<span class="s2">properties: {</span>
+							<span class="s2">maximum: {</span>
+								<span class="s2">type: </span><span class="s3">&quot;integer&quot;</span><span class="s2">,</span>
+								<span class="s2">minimum: </span><span class="s5">0</span><span class="s2">,</span>
+							<span class="s2">},</span>
+							<span class="s2">max: {</span>
+								<span class="s2">type: </span><span class="s3">&quot;integer&quot;</span><span class="s2">,</span>
+								<span class="s2">minimum: </span><span class="s5">0</span><span class="s2">,</span>
+							<span class="s2">},</span>
+						<span class="s2">},</span>
+						<span class="s2">additionalProperties: </span><span class="s4">false</span><span class="s2">,</span>
+					<span class="s2">},</span>
+				<span class="s2">],</span>
+			<span class="s2">},</span>
+			<span class="s2">{</span>
+				<span class="s2">type: </span><span class="s3">&quot;object&quot;</span><span class="s2">,</span>
+				<span class="s2">properties: {</span>
+					<span class="s2">ignoreTopLevelFunctions: {</span>
+						<span class="s2">type: </span><span class="s3">&quot;boolean&quot;</span><span class="s2">,</span>
+					<span class="s2">},</span>
+				<span class="s2">},</span>
+				<span class="s2">additionalProperties: </span><span class="s4">false</span><span class="s2">,</span>
+			<span class="s2">},</span>
+		<span class="s2">],</span>
+		<span class="s2">messages: {</span>
+			<span class="s2">exceed: </span><span class="s3">&quot;{{name}} has too many statements ({{count}}). Maximum allowed is {{max}}.&quot;</span><span class="s2">,</span>
+		<span class="s2">},</span>
+	<span class="s2">},</span>
+
+	<span class="s2">create(context) {</span>
+		<span class="s0">//--------------------------------------------------------------------------</span>
+		<span class="s0">// Helpers</span>
+		<span class="s0">//--------------------------------------------------------------------------</span>
+
+		<span class="s4">const </span><span class="s2">functionStack = [],</span>
+			<span class="s2">option = context.options[</span><span class="s5">0</span><span class="s2">],</span>
+			<span class="s2">ignoreTopLevelFunctions =</span>
+				<span class="s2">(context.options[</span><span class="s5">1</span><span class="s2">] &amp;&amp;</span>
+					<span class="s2">context.options[</span><span class="s5">1</span><span class="s2">].ignoreTopLevelFunctions) ||</span>
+				<span class="s4">false</span><span class="s2">,</span>
+			<span class="s2">topLevelFunctions = [];</span>
+		<span class="s4">let </span><span class="s2">maxStatements = </span><span class="s5">10</span><span class="s2">;</span>
+
+		<span class="s4">if </span><span class="s2">(</span>
+			<span class="s4">typeof </span><span class="s2">option === </span><span class="s3">&quot;object&quot; </span><span class="s2">&amp;&amp;</span>
+			<span class="s2">(Object.hasOwn(option, </span><span class="s3">&quot;maximum&quot;</span><span class="s2">) || Object.hasOwn(option, </span><span class="s3">&quot;max&quot;</span><span class="s2">))</span>
+		<span class="s2">) {</span>
+			<span class="s2">maxStatements = option.maximum || option.max;</span>
+		<span class="s2">} </span><span class="s4">else if </span><span class="s2">(</span><span class="s4">typeof </span><span class="s2">option === </span><span class="s3">&quot;number&quot;</span><span class="s2">) {</span>
+			<span class="s2">maxStatements = option;</span>
+		<span class="s2">}</span>
+
+		<span class="s0">/**</span>
+		 <span class="s0">* Reports a node if it has too many statements</span>
+		 <span class="s0">* </span><span class="s1">@param </span><span class="s0">{ASTNode} node node to evaluate</span>
+		 <span class="s0">* </span><span class="s1">@param </span><span class="s0">{number} count Number of statements in node</span>
+		 <span class="s0">* </span><span class="s1">@param </span><span class="s0">{number} max Maximum number of statements allowed</span>
+		 <span class="s0">* </span><span class="s1">@returns </span><span class="s0">{void}</span>
+		 <span class="s0">* </span><span class="s1">@private</span>
+		 <span class="s0">*/</span>
+		<span class="s4">function </span><span class="s2">reportIfTooManyStatements(node, count, max) {</span>
+			<span class="s4">if </span><span class="s2">(count &gt; max) {</span>
+				<span class="s4">const </span><span class="s2">name = upperCaseFirst(</span>
+					<span class="s2">astUtils.getFunctionNameWithKind(node),</span>
+				<span class="s2">);</span>
+
+				<span class="s2">context.report({</span>
+					<span class="s2">node,</span>
+					<span class="s2">messageId: </span><span class="s3">&quot;exceed&quot;</span><span class="s2">,</span>
+					<span class="s2">data: { name, count, max },</span>
+				<span class="s2">});</span>
+			<span class="s2">}</span>
+		<span class="s2">}</span>
+
+		<span class="s0">/**</span>
+		 <span class="s0">* When parsing a new function, store it in our function stack</span>
+		 <span class="s0">* </span><span class="s1">@returns </span><span class="s0">{void}</span>
+		 <span class="s0">* </span><span class="s1">@private</span>
+		 <span class="s0">*/</span>
+		<span class="s4">function </span><span class="s2">startFunction() {</span>
+			<span class="s2">functionStack.push(</span><span class="s5">0</span><span class="s2">);</span>
+		<span class="s2">}</span>
+
+		<span class="s0">/**</span>
+		 <span class="s0">* Evaluate the node at the end of function</span>
+		 <span class="s0">* </span><span class="s1">@param </span><span class="s0">{ASTNode} node node to evaluate</span>
+		 <span class="s0">* </span><span class="s1">@returns </span><span class="s0">{void}</span>
+		 <span class="s0">* </span><span class="s1">@private</span>
+		 <span class="s0">*/</span>
+		<span class="s4">function </span><span class="s2">endFunction(node) {</span>
+			<span class="s4">const </span><span class="s2">count = functionStack.pop();</span>
+
+			<span class="s0">/* 
+             * This rule does not apply to class static blocks, but we have to track them so 
+             * that statements in them do not count as statements in the enclosing function. 
+             */</span>
+			<span class="s4">if </span><span class="s2">(node.type === </span><span class="s3">&quot;StaticBlock&quot;</span><span class="s2">) {</span>
+				<span class="s4">return</span><span class="s2">;</span>
+			<span class="s2">}</span>
+
+			<span class="s4">if </span><span class="s2">(ignoreTopLevelFunctions &amp;&amp; functionStack.length === </span><span class="s5">0</span><span class="s2">) {</span>
+				<span class="s2">topLevelFunctions.push({ node, count });</span>
+			<span class="s2">} </span><span class="s4">else </span><span class="s2">{</span>
+				<span class="s2">reportIfTooManyStatements(node, count, maxStatements);</span>
+			<span class="s2">}</span>
+		<span class="s2">}</span>
+
+		<span class="s0">/**</span>
+		 <span class="s0">* Increment the count of the functions</span>
+		 <span class="s0">* </span><span class="s1">@param </span><span class="s0">{ASTNode} node node to evaluate</span>
+		 <span class="s0">* </span><span class="s1">@returns </span><span class="s0">{void}</span>
+		 <span class="s0">* </span><span class="s1">@private</span>
+		 <span class="s0">*/</span>
+		<span class="s4">function </span><span class="s2">countStatements(node) {</span>
+			<span class="s2">functionStack[functionStack.length - </span><span class="s5">1</span><span class="s2">] += node.body.length;</span>
+		<span class="s2">}</span>
+
+		<span class="s0">//--------------------------------------------------------------------------</span>
+		<span class="s0">// Public API</span>
+		<span class="s0">//--------------------------------------------------------------------------</span>
+
+		<span class="s4">return </span><span class="s2">{</span>
+			<span class="s2">FunctionDeclaration: startFunction,</span>
+			<span class="s2">FunctionExpression: startFunction,</span>
+			<span class="s2">ArrowFunctionExpression: startFunction,</span>
+			<span class="s2">StaticBlock: startFunction,</span>
+
+			<span class="s2">BlockStatement: countStatements,</span>
+
+			<span class="s3">&quot;FunctionDeclaration:exit&quot;</span><span class="s2">: endFunction,</span>
+			<span class="s3">&quot;FunctionExpression:exit&quot;</span><span class="s2">: endFunction,</span>
+			<span class="s3">&quot;ArrowFunctionExpression:exit&quot;</span><span class="s2">: endFunction,</span>
+			<span class="s3">&quot;StaticBlock:exit&quot;</span><span class="s2">: endFunction,</span>
+
+			<span class="s3">&quot;Program:exit&quot;</span><span class="s2">() {</span>
+				<span class="s4">if </span><span class="s2">(topLevelFunctions.length === </span><span class="s5">1</span><span class="s2">) {</span>
+					<span class="s4">return</span><span class="s2">;</span>
+				<span class="s2">}</span>
+
+				<span class="s2">topLevelFunctions.forEach(element =&gt; {</span>
+					<span class="s4">const </span><span class="s2">count = element.count;</span>
+					<span class="s4">const </span><span class="s2">node = element.node;</span>
+
+					<span class="s2">reportIfTooManyStatements(node, count, maxStatements);</span>
+				<span class="s2">});</span>
+			<span class="s2">},</span>
+		<span class="s2">};</span>
+	<span class="s2">},</span>
+<span class="s2">};</span>
+</pre>
+</body>
+</html>

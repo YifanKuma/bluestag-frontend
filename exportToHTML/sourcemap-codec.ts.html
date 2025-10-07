@@ -1,0 +1,131 @@
+<html>
+<head>
+<title>sourcemap-codec.ts</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #0033b3;}
+.s1 { color: #080808;}
+.s2 { color: #067d17;}
+.s3 { color: #1750eb;}
+</style>
+</head>
+<body bgcolor="#ffffff">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#c0c0c0" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+sourcemap-codec.ts</font>
+</center></td></tr></table>
+<pre><span class="s0">import </span><span class="s1">{ comma, decodeInteger, encodeInteger, hasMoreVlq, semicolon } from </span><span class="s2">'./vlq'</span><span class="s1">;</span>
+<span class="s0">import </span><span class="s1">{ StringWriter, StringReader } from </span><span class="s2">'./strings'</span><span class="s1">;</span>
+
+<span class="s0">export </span><span class="s1">{</span>
+  <span class="s1">decodeOriginalScopes,</span>
+  <span class="s1">encodeOriginalScopes,</span>
+  <span class="s1">decodeGeneratedRanges,</span>
+  <span class="s1">encodeGeneratedRanges,</span>
+<span class="s1">} from </span><span class="s2">'./scopes'</span><span class="s1">;</span>
+<span class="s0">export </span><span class="s1">type { OriginalScope, GeneratedRange, CallSite, BindingExpressionRange } from </span><span class="s2">'./scopes'</span><span class="s1">;</span>
+
+<span class="s0">export </span><span class="s1">type SourceMapSegment =</span>
+  <span class="s1">| [number]</span>
+  <span class="s1">| [number, number, number, number]</span>
+  <span class="s1">| [number, number, number, number, number];</span>
+<span class="s0">export </span><span class="s1">type SourceMapLine = SourceMapSegment[];</span>
+<span class="s0">export </span><span class="s1">type SourceMapMappings = SourceMapLine[];</span>
+
+<span class="s0">export function </span><span class="s1">decode(mappings: string): SourceMapMappings {</span>
+  <span class="s0">const </span><span class="s1">{ length } = mappings;</span>
+  <span class="s0">const </span><span class="s1">reader = </span><span class="s0">new </span><span class="s1">StringReader(mappings);</span>
+  <span class="s0">const </span><span class="s1">decoded: SourceMapMappings = [];</span>
+  <span class="s0">let </span><span class="s1">genColumn = </span><span class="s3">0</span><span class="s1">;</span>
+  <span class="s0">let </span><span class="s1">sourcesIndex = </span><span class="s3">0</span><span class="s1">;</span>
+  <span class="s0">let </span><span class="s1">sourceLine = </span><span class="s3">0</span><span class="s1">;</span>
+  <span class="s0">let </span><span class="s1">sourceColumn = </span><span class="s3">0</span><span class="s1">;</span>
+  <span class="s0">let </span><span class="s1">namesIndex = </span><span class="s3">0</span><span class="s1">;</span>
+
+  <span class="s0">do </span><span class="s1">{</span>
+    <span class="s0">const </span><span class="s1">semi = reader.indexOf(</span><span class="s2">';'</span><span class="s1">);</span>
+    <span class="s0">const </span><span class="s1">line: SourceMapLine = [];</span>
+    <span class="s0">let </span><span class="s1">sorted = </span><span class="s0">true</span><span class="s1">;</span>
+    <span class="s0">let </span><span class="s1">lastCol = </span><span class="s3">0</span><span class="s1">;</span>
+    <span class="s1">genColumn = </span><span class="s3">0</span><span class="s1">;</span>
+
+    <span class="s0">while </span><span class="s1">(reader.pos &lt; semi) {</span>
+      <span class="s0">let </span><span class="s1">seg: SourceMapSegment;</span>
+
+      <span class="s1">genColumn = decodeInteger(reader, genColumn);</span>
+      <span class="s0">if </span><span class="s1">(genColumn &lt; lastCol) sorted = </span><span class="s0">false</span><span class="s1">;</span>
+      <span class="s1">lastCol = genColumn;</span>
+
+      <span class="s0">if </span><span class="s1">(hasMoreVlq(reader, semi)) {</span>
+        <span class="s1">sourcesIndex = decodeInteger(reader, sourcesIndex);</span>
+        <span class="s1">sourceLine = decodeInteger(reader, sourceLine);</span>
+        <span class="s1">sourceColumn = decodeInteger(reader, sourceColumn);</span>
+
+        <span class="s0">if </span><span class="s1">(hasMoreVlq(reader, semi)) {</span>
+          <span class="s1">namesIndex = decodeInteger(reader, namesIndex);</span>
+          <span class="s1">seg = [genColumn, sourcesIndex, sourceLine, sourceColumn, namesIndex];</span>
+        <span class="s1">} </span><span class="s0">else </span><span class="s1">{</span>
+          <span class="s1">seg = [genColumn, sourcesIndex, sourceLine, sourceColumn];</span>
+        <span class="s1">}</span>
+      <span class="s1">} </span><span class="s0">else </span><span class="s1">{</span>
+        <span class="s1">seg = [genColumn];</span>
+      <span class="s1">}</span>
+
+      <span class="s1">line.push(seg);</span>
+      <span class="s1">reader.pos++;</span>
+    <span class="s1">}</span>
+
+    <span class="s0">if </span><span class="s1">(!sorted) sort(line);</span>
+    <span class="s1">decoded.push(line);</span>
+    <span class="s1">reader.pos = semi + </span><span class="s3">1</span><span class="s1">;</span>
+  <span class="s1">} </span><span class="s0">while </span><span class="s1">(reader.pos &lt;= length);</span>
+
+  <span class="s0">return </span><span class="s1">decoded;</span>
+<span class="s1">}</span>
+
+<span class="s0">function </span><span class="s1">sort(line: SourceMapSegment[]) {</span>
+  <span class="s1">line.sort(sortComparator);</span>
+<span class="s1">}</span>
+
+<span class="s0">function </span><span class="s1">sortComparator(a: SourceMapSegment, b: SourceMapSegment): number {</span>
+  <span class="s0">return </span><span class="s1">a[</span><span class="s3">0</span><span class="s1">] - b[</span><span class="s3">0</span><span class="s1">];</span>
+<span class="s1">}</span>
+
+<span class="s0">export function </span><span class="s1">encode(decoded: SourceMapMappings): string;</span>
+<span class="s0">export function </span><span class="s1">encode(decoded: Readonly&lt;SourceMapMappings&gt;): string;</span>
+<span class="s0">export function </span><span class="s1">encode(decoded: Readonly&lt;SourceMapMappings&gt;): string {</span>
+  <span class="s0">const </span><span class="s1">writer = </span><span class="s0">new </span><span class="s1">StringWriter();</span>
+  <span class="s0">let </span><span class="s1">sourcesIndex = </span><span class="s3">0</span><span class="s1">;</span>
+  <span class="s0">let </span><span class="s1">sourceLine = </span><span class="s3">0</span><span class="s1">;</span>
+  <span class="s0">let </span><span class="s1">sourceColumn = </span><span class="s3">0</span><span class="s1">;</span>
+  <span class="s0">let </span><span class="s1">namesIndex = </span><span class="s3">0</span><span class="s1">;</span>
+
+  <span class="s0">for </span><span class="s1">(</span><span class="s0">let </span><span class="s1">i = </span><span class="s3">0</span><span class="s1">; i &lt; decoded.length; i++) {</span>
+    <span class="s0">const </span><span class="s1">line = decoded[i];</span>
+    <span class="s0">if </span><span class="s1">(i &gt; </span><span class="s3">0</span><span class="s1">) writer.write(semicolon);</span>
+    <span class="s0">if </span><span class="s1">(line.length === </span><span class="s3">0</span><span class="s1">) </span><span class="s0">continue</span><span class="s1">;</span>
+
+    <span class="s0">let </span><span class="s1">genColumn = </span><span class="s3">0</span><span class="s1">;</span>
+
+    <span class="s0">for </span><span class="s1">(</span><span class="s0">let </span><span class="s1">j = </span><span class="s3">0</span><span class="s1">; j &lt; line.length; j++) {</span>
+      <span class="s0">const </span><span class="s1">segment = line[j];</span>
+      <span class="s0">if </span><span class="s1">(j &gt; </span><span class="s3">0</span><span class="s1">) writer.write(comma);</span>
+
+      <span class="s1">genColumn = encodeInteger(writer, segment[</span><span class="s3">0</span><span class="s1">], genColumn);</span>
+
+      <span class="s0">if </span><span class="s1">(segment.length === </span><span class="s3">1</span><span class="s1">) </span><span class="s0">continue</span><span class="s1">;</span>
+      <span class="s1">sourcesIndex = encodeInteger(writer, segment[</span><span class="s3">1</span><span class="s1">], sourcesIndex);</span>
+      <span class="s1">sourceLine = encodeInteger(writer, segment[</span><span class="s3">2</span><span class="s1">], sourceLine);</span>
+      <span class="s1">sourceColumn = encodeInteger(writer, segment[</span><span class="s3">3</span><span class="s1">], sourceColumn);</span>
+
+      <span class="s0">if </span><span class="s1">(segment.length === </span><span class="s3">4</span><span class="s1">) </span><span class="s0">continue</span><span class="s1">;</span>
+      <span class="s1">namesIndex = encodeInteger(writer, segment[</span><span class="s3">4</span><span class="s1">], namesIndex);</span>
+    <span class="s1">}</span>
+  <span class="s1">}</span>
+
+  <span class="s0">return </span><span class="s1">writer.flush();</span>
+<span class="s1">}</span>
+</pre>
+</body>
+</html>

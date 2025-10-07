@@ -1,0 +1,119 @@
+<html>
+<head>
+<title>resolution.js</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #0033b3;}
+.s1 { color: #080808;}
+.s2 { color: #067d17;}
+.s3 { color: #264eff;}
+.s4 { color: #8c8c8c; font-style: italic;}
+.s5 { color: #1750eb;}
+</style>
+</head>
+<body bgcolor="#ffffff">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#c0c0c0" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+resolution.js</font>
+</center></td></tr></table>
+<pre><span class="s0">let </span><span class="s1">FractionJs = require(</span><span class="s2">'fraction.js'</span><span class="s1">)</span>
+
+<span class="s0">let </span><span class="s1">Prefixer = require(</span><span class="s2">'./prefixer'</span><span class="s1">)</span>
+<span class="s0">let </span><span class="s1">utils = require(</span><span class="s2">'./utils'</span><span class="s1">)</span>
+
+<span class="s0">const </span><span class="s1">REGEXP = </span><span class="s3">/(min|max)-resolution\s*:\s*\d*\.?\d+(dppx|dpcm|dpi|x)/gi</span>
+<span class="s0">const </span><span class="s1">SPLIT = </span><span class="s3">/(min|max)-resolution(\s*:\s*)(\d*\.?\d+)(dppx|dpcm|dpi|x)/i</span>
+
+<span class="s0">class </span><span class="s1">Resolution </span><span class="s0">extends </span><span class="s1">Prefixer {</span>
+  <span class="s4">/**</span>
+   <span class="s4">* Remove prefixed queries</span>
+   <span class="s4">*/</span>
+  <span class="s1">clean(rule) {</span>
+    <span class="s0">if </span><span class="s1">(!</span><span class="s0">this</span><span class="s1">.bad) {</span>
+      <span class="s0">this</span><span class="s1">.bad = []</span>
+      <span class="s0">for </span><span class="s1">(</span><span class="s0">let </span><span class="s1">prefix of </span><span class="s0">this</span><span class="s1">.prefixes) {</span>
+        <span class="s0">this</span><span class="s1">.bad.push(</span><span class="s0">this</span><span class="s1">.prefixName(prefix, </span><span class="s2">'min'</span><span class="s1">))</span>
+        <span class="s0">this</span><span class="s1">.bad.push(</span><span class="s0">this</span><span class="s1">.prefixName(prefix, </span><span class="s2">'max'</span><span class="s1">))</span>
+      <span class="s1">}</span>
+    <span class="s1">}</span>
+
+    <span class="s1">rule.params = utils.editList(rule.params, queries =&gt; {</span>
+      <span class="s0">return </span><span class="s1">queries.filter(query =&gt; </span><span class="s0">this</span><span class="s1">.bad.every(i =&gt; !query.includes(i)))</span>
+    <span class="s1">})</span>
+  <span class="s1">}</span>
+
+  <span class="s4">/**</span>
+   <span class="s4">* Return prefixed query name</span>
+   <span class="s4">*/</span>
+  <span class="s1">prefixName(prefix, name) {</span>
+    <span class="s0">if </span><span class="s1">(prefix === </span><span class="s2">'-moz-'</span><span class="s1">) {</span>
+      <span class="s0">return </span><span class="s1">name + </span><span class="s2">'--moz-device-pixel-ratio'</span>
+    <span class="s1">} </span><span class="s0">else </span><span class="s1">{</span>
+      <span class="s0">return </span><span class="s1">prefix + name + </span><span class="s2">'-device-pixel-ratio'</span>
+    <span class="s1">}</span>
+  <span class="s1">}</span>
+
+  <span class="s4">/**</span>
+   <span class="s4">* Return prefixed query</span>
+   <span class="s4">*/</span>
+  <span class="s1">prefixQuery(prefix, name, colon, value, units) {</span>
+    <span class="s1">value = </span><span class="s0">new </span><span class="s1">FractionJs(value)</span>
+
+    <span class="s4">// 1dpcm = 2.54dpi</span>
+    <span class="s4">// 1dppx = 96dpi</span>
+    <span class="s0">if </span><span class="s1">(units === </span><span class="s2">'dpi'</span><span class="s1">) {</span>
+      <span class="s1">value = value.div(</span><span class="s5">96</span><span class="s1">)</span>
+    <span class="s1">} </span><span class="s0">else if </span><span class="s1">(units === </span><span class="s2">'dpcm'</span><span class="s1">) {</span>
+      <span class="s1">value = value.mul(</span><span class="s5">2.54</span><span class="s1">).div(</span><span class="s5">96</span><span class="s1">)</span>
+    <span class="s1">}</span>
+    <span class="s1">value = value.simplify()</span>
+
+    <span class="s0">if </span><span class="s1">(prefix === </span><span class="s2">'-o-'</span><span class="s1">) {</span>
+      <span class="s1">value = value.n + </span><span class="s2">'/' </span><span class="s1">+ value.d</span>
+    <span class="s1">}</span>
+    <span class="s0">return this</span><span class="s1">.prefixName(prefix, name) + colon + value</span>
+  <span class="s1">}</span>
+
+  <span class="s4">/**</span>
+   <span class="s4">* Add prefixed queries</span>
+   <span class="s4">*/</span>
+  <span class="s1">process(rule) {</span>
+    <span class="s0">let </span><span class="s1">parent = </span><span class="s0">this</span><span class="s1">.parentPrefix(rule)</span>
+    <span class="s0">let </span><span class="s1">prefixes = parent ? [parent] : </span><span class="s0">this</span><span class="s1">.prefixes</span>
+
+    <span class="s1">rule.params = utils.editList(rule.params, (origin, prefixed) =&gt; {</span>
+      <span class="s0">for </span><span class="s1">(</span><span class="s0">let </span><span class="s1">query of origin) {</span>
+        <span class="s0">if </span><span class="s1">(</span>
+          <span class="s1">!query.includes(</span><span class="s2">'min-resolution'</span><span class="s1">) &amp;&amp;</span>
+          <span class="s1">!query.includes(</span><span class="s2">'max-resolution'</span><span class="s1">)</span>
+        <span class="s1">) {</span>
+          <span class="s1">prefixed.push(query)</span>
+          <span class="s0">continue</span>
+        <span class="s1">}</span>
+
+        <span class="s0">for </span><span class="s1">(</span><span class="s0">let </span><span class="s1">prefix of prefixes) {</span>
+          <span class="s0">let </span><span class="s1">processed = query.replace(REGEXP, str =&gt; {</span>
+            <span class="s0">let </span><span class="s1">parts = str.match(SPLIT)</span>
+            <span class="s0">return this</span><span class="s1">.prefixQuery(</span>
+              <span class="s1">prefix,</span>
+              <span class="s1">parts[</span><span class="s5">1</span><span class="s1">],</span>
+              <span class="s1">parts[</span><span class="s5">2</span><span class="s1">],</span>
+              <span class="s1">parts[</span><span class="s5">3</span><span class="s1">],</span>
+              <span class="s1">parts[</span><span class="s5">4</span><span class="s1">]</span>
+            <span class="s1">)</span>
+          <span class="s1">})</span>
+          <span class="s1">prefixed.push(processed)</span>
+        <span class="s1">}</span>
+        <span class="s1">prefixed.push(query)</span>
+      <span class="s1">}</span>
+
+      <span class="s0">return </span><span class="s1">utils.uniq(prefixed)</span>
+    <span class="s1">})</span>
+  <span class="s1">}</span>
+<span class="s1">}</span>
+
+<span class="s1">module.exports = Resolution</span>
+</pre>
+</body>
+</html>

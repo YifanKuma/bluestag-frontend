@@ -1,0 +1,208 @@
+<html>
+<head>
+<title>mkdir.js</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #067d17;}
+.s1 { color: #080808;}
+.s2 { color: #0033b3;}
+.s3 { color: #1750eb;}
+.s4 { color: #8c8c8c; font-style: italic;}
+</style>
+</head>
+<body bgcolor="#ffffff">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#c0c0c0" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+mkdir.js</font>
+</center></td></tr></table>
+<pre><span class="s0">&quot;use strict&quot;</span><span class="s1">;</span>
+<span class="s2">var </span><span class="s1">__importDefault = (</span><span class="s2">this </span><span class="s1">&amp;&amp; </span><span class="s2">this</span><span class="s1">.__importDefault) || </span><span class="s2">function </span><span class="s1">(mod) {</span>
+    <span class="s2">return </span><span class="s1">(mod &amp;&amp; mod.__esModule) ? mod : { </span><span class="s0">&quot;default&quot;</span><span class="s1">: mod };</span>
+<span class="s1">};</span>
+<span class="s1">Object.defineProperty(exports, </span><span class="s0">&quot;__esModule&quot;</span><span class="s1">, { value: </span><span class="s2">true </span><span class="s1">});</span>
+<span class="s1">exports.mkdirSync = exports.mkdir = </span><span class="s2">void </span><span class="s3">0</span><span class="s1">;</span>
+<span class="s2">const </span><span class="s1">chownr_1 = require(</span><span class="s0">&quot;chownr&quot;</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">node_fs_1 = __importDefault(require(</span><span class="s0">&quot;node:fs&quot;</span><span class="s1">));</span>
+<span class="s2">const </span><span class="s1">promises_1 = __importDefault(require(</span><span class="s0">&quot;node:fs/promises&quot;</span><span class="s1">));</span>
+<span class="s2">const </span><span class="s1">node_path_1 = __importDefault(require(</span><span class="s0">&quot;node:path&quot;</span><span class="s1">));</span>
+<span class="s2">const </span><span class="s1">cwd_error_js_1 = require(</span><span class="s0">&quot;./cwd-error.js&quot;</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">normalize_windows_path_js_1 = require(</span><span class="s0">&quot;./normalize-windows-path.js&quot;</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">symlink_error_js_1 = require(</span><span class="s0">&quot;./symlink-error.js&quot;</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">checkCwd = (dir, cb) =&gt; {</span>
+    <span class="s1">node_fs_1.default.stat(dir, (er, st) =&gt; {</span>
+        <span class="s2">if </span><span class="s1">(er || !st.isDirectory()) {</span>
+            <span class="s1">er = </span><span class="s2">new </span><span class="s1">cwd_error_js_1.CwdError(dir, er?.code || </span><span class="s0">'ENOTDIR'</span><span class="s1">);</span>
+        <span class="s1">}</span>
+        <span class="s1">cb(er);</span>
+    <span class="s1">});</span>
+<span class="s1">};</span>
+<span class="s4">/**</span>
+ <span class="s4">* Wrapper around fs/promises.mkdir for tar's needs.</span>
+ <span class="s4">*</span>
+ <span class="s4">* The main purpose is to avoid creating directories if we know that</span>
+ <span class="s4">* they already exist (and track which ones exist for this purpose),</span>
+ <span class="s4">* and prevent entries from being extracted into symlinked folders,</span>
+ <span class="s4">* if `preservePaths` is not set.</span>
+ <span class="s4">*/</span>
+<span class="s2">const </span><span class="s1">mkdir = (dir, opt, cb) =&gt; {</span>
+    <span class="s1">dir = (</span><span class="s3">0</span><span class="s1">, normalize_windows_path_js_1.normalizeWindowsPath)(dir);</span>
+    <span class="s4">// if there's any overlap between mask and mode,</span>
+    <span class="s4">// then we'll need an explicit chmod</span>
+    <span class="s4">/* c8 ignore next */</span>
+    <span class="s2">const </span><span class="s1">umask = opt.umask ?? </span><span class="s3">0o22</span><span class="s1">;</span>
+    <span class="s2">const </span><span class="s1">mode = opt.mode | </span><span class="s3">0o0700</span><span class="s1">;</span>
+    <span class="s2">const </span><span class="s1">needChmod = (mode &amp; umask) !== </span><span class="s3">0</span><span class="s1">;</span>
+    <span class="s2">const </span><span class="s1">uid = opt.uid;</span>
+    <span class="s2">const </span><span class="s1">gid = opt.gid;</span>
+    <span class="s2">const </span><span class="s1">doChown = </span><span class="s2">typeof </span><span class="s1">uid === </span><span class="s0">'number' </span><span class="s1">&amp;&amp;</span>
+        <span class="s2">typeof </span><span class="s1">gid === </span><span class="s0">'number' </span><span class="s1">&amp;&amp;</span>
+        <span class="s1">(uid !== opt.processUid || gid !== opt.processGid);</span>
+    <span class="s2">const </span><span class="s1">preserve = opt.preserve;</span>
+    <span class="s2">const </span><span class="s1">unlink = opt.unlink;</span>
+    <span class="s2">const </span><span class="s1">cwd = (</span><span class="s3">0</span><span class="s1">, normalize_windows_path_js_1.normalizeWindowsPath)(opt.cwd);</span>
+    <span class="s2">const </span><span class="s1">done = (er, created) =&gt; {</span>
+        <span class="s2">if </span><span class="s1">(er) {</span>
+            <span class="s1">cb(er);</span>
+        <span class="s1">}</span>
+        <span class="s2">else </span><span class="s1">{</span>
+            <span class="s2">if </span><span class="s1">(created &amp;&amp; doChown) {</span>
+                <span class="s1">(</span><span class="s3">0</span><span class="s1">, chownr_1.chownr)(created, uid, gid, er =&gt; done(er));</span>
+            <span class="s1">}</span>
+            <span class="s2">else if </span><span class="s1">(needChmod) {</span>
+                <span class="s1">node_fs_1.default.chmod(dir, mode, cb);</span>
+            <span class="s1">}</span>
+            <span class="s2">else </span><span class="s1">{</span>
+                <span class="s1">cb();</span>
+            <span class="s1">}</span>
+        <span class="s1">}</span>
+    <span class="s1">};</span>
+    <span class="s2">if </span><span class="s1">(dir === cwd) {</span>
+        <span class="s2">return </span><span class="s1">checkCwd(dir, done);</span>
+    <span class="s1">}</span>
+    <span class="s2">if </span><span class="s1">(preserve) {</span>
+        <span class="s2">return </span><span class="s1">promises_1.default.mkdir(dir, { mode, recursive: </span><span class="s2">true </span><span class="s1">}).then(made =&gt; done(</span><span class="s2">null</span><span class="s1">, made ?? undefined), </span><span class="s4">// oh, ts</span>
+        <span class="s1">done);</span>
+    <span class="s1">}</span>
+    <span class="s2">const </span><span class="s1">sub = (</span><span class="s3">0</span><span class="s1">, normalize_windows_path_js_1.normalizeWindowsPath)(node_path_1.default.relative(cwd, dir));</span>
+    <span class="s2">const </span><span class="s1">parts = sub.split(</span><span class="s0">'/'</span><span class="s1">);</span>
+    <span class="s1">mkdir_(cwd, parts, mode, unlink, cwd, undefined, done);</span>
+<span class="s1">};</span>
+<span class="s1">exports.mkdir = mkdir;</span>
+<span class="s2">const </span><span class="s1">mkdir_ = (base, parts, mode, unlink, cwd, created, cb) =&gt; {</span>
+    <span class="s2">if </span><span class="s1">(!parts.length) {</span>
+        <span class="s2">return </span><span class="s1">cb(</span><span class="s2">null</span><span class="s1">, created);</span>
+    <span class="s1">}</span>
+    <span class="s2">const </span><span class="s1">p = parts.shift();</span>
+    <span class="s2">const </span><span class="s1">part = (</span><span class="s3">0</span><span class="s1">, normalize_windows_path_js_1.normalizeWindowsPath)(node_path_1.default.resolve(base + </span><span class="s0">'/' </span><span class="s1">+ p));</span>
+    <span class="s1">node_fs_1.default.mkdir(part, mode, onmkdir(part, parts, mode, unlink, cwd, created, cb));</span>
+<span class="s1">};</span>
+<span class="s2">const </span><span class="s1">onmkdir = (part, parts, mode, unlink, cwd, created, cb) =&gt; (er) =&gt; {</span>
+    <span class="s2">if </span><span class="s1">(er) {</span>
+        <span class="s1">node_fs_1.default.lstat(part, (statEr, st) =&gt; {</span>
+            <span class="s2">if </span><span class="s1">(statEr) {</span>
+                <span class="s1">statEr.path =</span>
+                    <span class="s1">statEr.path &amp;&amp; (</span><span class="s3">0</span><span class="s1">, normalize_windows_path_js_1.normalizeWindowsPath)(statEr.path);</span>
+                <span class="s1">cb(statEr);</span>
+            <span class="s1">}</span>
+            <span class="s2">else if </span><span class="s1">(st.isDirectory()) {</span>
+                <span class="s1">mkdir_(part, parts, mode, unlink, cwd, created, cb);</span>
+            <span class="s1">}</span>
+            <span class="s2">else if </span><span class="s1">(unlink) {</span>
+                <span class="s1">node_fs_1.default.unlink(part, er =&gt; {</span>
+                    <span class="s2">if </span><span class="s1">(er) {</span>
+                        <span class="s2">return </span><span class="s1">cb(er);</span>
+                    <span class="s1">}</span>
+                    <span class="s1">node_fs_1.default.mkdir(part, mode, onmkdir(part, parts, mode, unlink, cwd, created, cb));</span>
+                <span class="s1">});</span>
+            <span class="s1">}</span>
+            <span class="s2">else if </span><span class="s1">(st.isSymbolicLink()) {</span>
+                <span class="s2">return </span><span class="s1">cb(</span><span class="s2">new </span><span class="s1">symlink_error_js_1.SymlinkError(part, part + </span><span class="s0">'/' </span><span class="s1">+ parts.join(</span><span class="s0">'/'</span><span class="s1">)));</span>
+            <span class="s1">}</span>
+            <span class="s2">else </span><span class="s1">{</span>
+                <span class="s1">cb(er);</span>
+            <span class="s1">}</span>
+        <span class="s1">});</span>
+    <span class="s1">}</span>
+    <span class="s2">else </span><span class="s1">{</span>
+        <span class="s1">created = created || part;</span>
+        <span class="s1">mkdir_(part, parts, mode, unlink, cwd, created, cb);</span>
+    <span class="s1">}</span>
+<span class="s1">};</span>
+<span class="s2">const </span><span class="s1">checkCwdSync = (dir) =&gt; {</span>
+    <span class="s2">let </span><span class="s1">ok = </span><span class="s2">false</span><span class="s1">;</span>
+    <span class="s2">let </span><span class="s1">code = undefined;</span>
+    <span class="s2">try </span><span class="s1">{</span>
+        <span class="s1">ok = node_fs_1.default.statSync(dir).isDirectory();</span>
+    <span class="s1">}</span>
+    <span class="s2">catch </span><span class="s1">(er) {</span>
+        <span class="s1">code = er?.code;</span>
+    <span class="s1">}</span>
+    <span class="s2">finally </span><span class="s1">{</span>
+        <span class="s2">if </span><span class="s1">(!ok) {</span>
+            <span class="s2">throw new </span><span class="s1">cwd_error_js_1.CwdError(dir, code ?? </span><span class="s0">'ENOTDIR'</span><span class="s1">);</span>
+        <span class="s1">}</span>
+    <span class="s1">}</span>
+<span class="s1">};</span>
+<span class="s2">const </span><span class="s1">mkdirSync = (dir, opt) =&gt; {</span>
+    <span class="s1">dir = (</span><span class="s3">0</span><span class="s1">, normalize_windows_path_js_1.normalizeWindowsPath)(dir);</span>
+    <span class="s4">// if there's any overlap between mask and mode,</span>
+    <span class="s4">// then we'll need an explicit chmod</span>
+    <span class="s4">/* c8 ignore next */</span>
+    <span class="s2">const </span><span class="s1">umask = opt.umask ?? </span><span class="s3">0o22</span><span class="s1">;</span>
+    <span class="s2">const </span><span class="s1">mode = opt.mode | </span><span class="s3">0o700</span><span class="s1">;</span>
+    <span class="s2">const </span><span class="s1">needChmod = (mode &amp; umask) !== </span><span class="s3">0</span><span class="s1">;</span>
+    <span class="s2">const </span><span class="s1">uid = opt.uid;</span>
+    <span class="s2">const </span><span class="s1">gid = opt.gid;</span>
+    <span class="s2">const </span><span class="s1">doChown = </span><span class="s2">typeof </span><span class="s1">uid === </span><span class="s0">'number' </span><span class="s1">&amp;&amp;</span>
+        <span class="s2">typeof </span><span class="s1">gid === </span><span class="s0">'number' </span><span class="s1">&amp;&amp;</span>
+        <span class="s1">(uid !== opt.processUid || gid !== opt.processGid);</span>
+    <span class="s2">const </span><span class="s1">preserve = opt.preserve;</span>
+    <span class="s2">const </span><span class="s1">unlink = opt.unlink;</span>
+    <span class="s2">const </span><span class="s1">cwd = (</span><span class="s3">0</span><span class="s1">, normalize_windows_path_js_1.normalizeWindowsPath)(opt.cwd);</span>
+    <span class="s2">const </span><span class="s1">done = (created) =&gt; {</span>
+        <span class="s2">if </span><span class="s1">(created &amp;&amp; doChown) {</span>
+            <span class="s1">(</span><span class="s3">0</span><span class="s1">, chownr_1.chownrSync)(created, uid, gid);</span>
+        <span class="s1">}</span>
+        <span class="s2">if </span><span class="s1">(needChmod) {</span>
+            <span class="s1">node_fs_1.default.chmodSync(dir, mode);</span>
+        <span class="s1">}</span>
+    <span class="s1">};</span>
+    <span class="s2">if </span><span class="s1">(dir === cwd) {</span>
+        <span class="s1">checkCwdSync(cwd);</span>
+        <span class="s2">return </span><span class="s1">done();</span>
+    <span class="s1">}</span>
+    <span class="s2">if </span><span class="s1">(preserve) {</span>
+        <span class="s2">return </span><span class="s1">done(node_fs_1.default.mkdirSync(dir, { mode, recursive: </span><span class="s2">true </span><span class="s1">}) ?? undefined);</span>
+    <span class="s1">}</span>
+    <span class="s2">const </span><span class="s1">sub = (</span><span class="s3">0</span><span class="s1">, normalize_windows_path_js_1.normalizeWindowsPath)(node_path_1.default.relative(cwd, dir));</span>
+    <span class="s2">const </span><span class="s1">parts = sub.split(</span><span class="s0">'/'</span><span class="s1">);</span>
+    <span class="s2">let </span><span class="s1">created = undefined;</span>
+    <span class="s2">for </span><span class="s1">(</span><span class="s2">let </span><span class="s1">p = parts.shift(), part = cwd; p &amp;&amp; (part += </span><span class="s0">'/' </span><span class="s1">+ p); p = parts.shift()) {</span>
+        <span class="s1">part = (</span><span class="s3">0</span><span class="s1">, normalize_windows_path_js_1.normalizeWindowsPath)(node_path_1.default.resolve(part));</span>
+        <span class="s2">try </span><span class="s1">{</span>
+            <span class="s1">node_fs_1.default.mkdirSync(part, mode);</span>
+            <span class="s1">created = created || part;</span>
+        <span class="s1">}</span>
+        <span class="s2">catch </span><span class="s1">(er) {</span>
+            <span class="s2">const </span><span class="s1">st = node_fs_1.default.lstatSync(part);</span>
+            <span class="s2">if </span><span class="s1">(st.isDirectory()) {</span>
+                <span class="s2">continue</span><span class="s1">;</span>
+            <span class="s1">}</span>
+            <span class="s2">else if </span><span class="s1">(unlink) {</span>
+                <span class="s1">node_fs_1.default.unlinkSync(part);</span>
+                <span class="s1">node_fs_1.default.mkdirSync(part, mode);</span>
+                <span class="s1">created = created || part;</span>
+                <span class="s2">continue</span><span class="s1">;</span>
+            <span class="s1">}</span>
+            <span class="s2">else if </span><span class="s1">(st.isSymbolicLink()) {</span>
+                <span class="s2">return new </span><span class="s1">symlink_error_js_1.SymlinkError(part, part + </span><span class="s0">'/' </span><span class="s1">+ parts.join(</span><span class="s0">'/'</span><span class="s1">));</span>
+            <span class="s1">}</span>
+        <span class="s1">}</span>
+    <span class="s1">}</span>
+    <span class="s2">return </span><span class="s1">done(created);</span>
+<span class="s1">};</span>
+<span class="s1">exports.mkdirSync = mkdirSync;</span>
+<span class="s4">//# sourceMappingURL=mkdir.js.map</span></pre>
+</body>
+</html>

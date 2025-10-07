@@ -1,0 +1,97 @@
+<html>
+<head>
+<title>block-cross-site.js</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #067d17;}
+.s1 { color: #080808;}
+.s2 { color: #0033b3;}
+.s3 { color: #1750eb;}
+.s4 { color: #0037a6;}
+.s5 { color: #8c8c8c; font-style: italic;}
+</style>
+</head>
+<body bgcolor="#ffffff">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#c0c0c0" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+block-cross-site.js</font>
+</center></td></tr></table>
+<pre><span class="s0">&quot;use strict&quot;</span><span class="s1">;</span>
+<span class="s1">Object.defineProperty(exports, </span><span class="s0">&quot;__esModule&quot;</span><span class="s1">, {</span>
+    <span class="s1">value: </span><span class="s2">true</span>
+<span class="s1">});</span>
+<span class="s1">Object.defineProperty(exports, </span><span class="s0">&quot;blockCrossSite&quot;</span><span class="s1">, {</span>
+    <span class="s1">enumerable: </span><span class="s2">true</span><span class="s1">,</span>
+    <span class="s1">get: </span><span class="s2">function</span><span class="s1">() {</span>
+        <span class="s2">return </span><span class="s1">blockCrossSite;</span>
+    <span class="s1">}</span>
+<span class="s1">});</span>
+<span class="s2">const </span><span class="s1">_url = require(</span><span class="s0">&quot;../../../lib/url&quot;</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">_log = require(</span><span class="s0">&quot;../../../build/output/log&quot;</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">_csrfprotection = require(</span><span class="s0">&quot;../../app-render/csrf-protection&quot;</span><span class="s1">);</span>
+<span class="s2">function </span><span class="s1">warnOrBlockRequest(res, origin, mode) {</span>
+    <span class="s2">const </span><span class="s1">originString = origin ? </span><span class="s0">`from </span><span class="s1">${origin}</span><span class="s0">` </span><span class="s1">: </span><span class="s0">''</span><span class="s1">;</span>
+    <span class="s2">if </span><span class="s1">(mode === </span><span class="s0">'warn'</span><span class="s1">) {</span>
+        <span class="s1">(</span><span class="s3">0</span><span class="s1">, _log.warnOnce)(</span><span class="s0">`Cross origin request detected </span><span class="s1">${originString} </span><span class="s0">to /_next/* resource. In a future major version of Next.js, you will need to explicitly configure &quot;allowedDevOrigins&quot; in next.config to allow this.</span><span class="s4">\n</span><span class="s0">Read more: https://nextjs.org/docs/app/api-reference/config/next-config-js/allowedDevOrigins`</span><span class="s1">);</span>
+        <span class="s2">return false</span><span class="s1">;</span>
+    <span class="s1">}</span>
+    <span class="s1">(</span><span class="s3">0</span><span class="s1">, _log.warnOnce)(</span><span class="s0">`Blocked cross-origin request </span><span class="s1">${originString} </span><span class="s0">to /_next/* resource. To allow this, configure &quot;allowedDevOrigins&quot; in next.config</span><span class="s4">\n</span><span class="s0">Read more: https://nextjs.org/docs/app/api-reference/config/next-config-js/allowedDevOrigins`</span><span class="s1">);</span>
+    <span class="s2">if </span><span class="s1">(</span><span class="s0">'statusCode' </span><span class="s2">in </span><span class="s1">res) {</span>
+        <span class="s1">res.statusCode = </span><span class="s3">403</span><span class="s1">;</span>
+    <span class="s1">}</span>
+    <span class="s1">res.end(</span><span class="s0">'Unauthorized'</span><span class="s1">);</span>
+    <span class="s2">return true</span><span class="s1">;</span>
+<span class="s1">}</span>
+<span class="s2">function </span><span class="s1">isInternalDevEndpoint(req) {</span>
+    <span class="s2">if </span><span class="s1">(!req.url) </span><span class="s2">return false</span><span class="s1">;</span>
+    <span class="s2">try </span><span class="s1">{</span>
+        <span class="s5">// TODO: We should standardize on a single prefix for this</span>
+        <span class="s2">const </span><span class="s1">isMiddlewareRequest = req.url.includes(</span><span class="s0">'/__nextjs'</span><span class="s1">);</span>
+        <span class="s2">const </span><span class="s1">isInternalAsset = req.url.includes(</span><span class="s0">'/_next'</span><span class="s1">);</span>
+        <span class="s5">// Static media requests are excluded, as they might be loaded via CSS and would fail</span>
+        <span class="s5">// CORS checks.</span>
+        <span class="s2">const </span><span class="s1">isIgnoredRequest = req.url.includes(</span><span class="s0">'/_next/image'</span><span class="s1">) || req.url.includes(</span><span class="s0">'/_next/static/media'</span><span class="s1">);</span>
+        <span class="s2">return </span><span class="s1">!isIgnoredRequest &amp;&amp; (isInternalAsset || isMiddlewareRequest);</span>
+    <span class="s1">} </span><span class="s2">catch </span><span class="s1">(err) {</span>
+        <span class="s2">return false</span><span class="s1">;</span>
+    <span class="s1">}</span>
+<span class="s1">}</span>
+<span class="s2">const </span><span class="s1">blockCrossSite = (req, res, allowedDevOrigins, hostname)=&gt;{</span>
+    <span class="s5">// in the future, these will be blocked by default when allowed origins aren't configured.</span>
+    <span class="s5">// for now, we warn when allowed origins aren't configured</span>
+    <span class="s2">const </span><span class="s1">mode = </span><span class="s2">typeof </span><span class="s1">allowedDevOrigins === </span><span class="s0">'undefined' </span><span class="s1">? </span><span class="s0">'warn' </span><span class="s1">: </span><span class="s0">'block'</span><span class="s1">;</span>
+    <span class="s2">const </span><span class="s1">allowedOrigins = [</span>
+        <span class="s0">'*.localhost'</span><span class="s1">,</span>
+        <span class="s0">'localhost'</span><span class="s1">,</span>
+        <span class="s1">...allowedDevOrigins || []</span>
+    <span class="s1">];</span>
+    <span class="s2">if </span><span class="s1">(hostname) {</span>
+        <span class="s1">allowedOrigins.push(hostname);</span>
+    <span class="s1">}</span>
+    <span class="s5">// only process internal URLs/middleware</span>
+    <span class="s2">if </span><span class="s1">(!isInternalDevEndpoint(req)) {</span>
+        <span class="s2">return false</span><span class="s1">;</span>
+    <span class="s1">}</span>
+    <span class="s5">// block non-cors request from cross-site e.g. script tag on</span>
+    <span class="s5">// different host</span>
+    <span class="s2">if </span><span class="s1">(req.headers[</span><span class="s0">'sec-fetch-mode'</span><span class="s1">] === </span><span class="s0">'no-cors' </span><span class="s1">&amp;&amp; req.headers[</span><span class="s0">'sec-fetch-site'</span><span class="s1">] === </span><span class="s0">'cross-site'</span><span class="s1">) {</span>
+        <span class="s2">return </span><span class="s1">warnOrBlockRequest(res, undefined, mode);</span>
+    <span class="s1">}</span>
+    <span class="s5">// ensure websocket requests from allowed origin</span>
+    <span class="s2">const </span><span class="s1">rawOrigin = req.headers[</span><span class="s0">'origin'</span><span class="s1">];</span>
+    <span class="s2">if </span><span class="s1">(rawOrigin) {</span>
+        <span class="s2">const </span><span class="s1">parsedOrigin = (</span><span class="s3">0</span><span class="s1">, _url.parseUrl)(rawOrigin);</span>
+        <span class="s2">if </span><span class="s1">(parsedOrigin) {</span>
+            <span class="s2">const </span><span class="s1">originLowerCase = parsedOrigin.hostname.toLowerCase();</span>
+            <span class="s2">if </span><span class="s1">(!(</span><span class="s3">0</span><span class="s1">, _csrfprotection.isCsrfOriginAllowed)(originLowerCase, allowedOrigins)) {</span>
+                <span class="s2">return </span><span class="s1">warnOrBlockRequest(res, originLowerCase, mode);</span>
+            <span class="s1">}</span>
+        <span class="s1">}</span>
+    <span class="s1">}</span>
+    <span class="s2">return false</span><span class="s1">;</span>
+<span class="s1">};</span>
+
+<span class="s5">//# sourceMappingURL=block-cross-site.js.map</span></pre>
+</body>
+</html>

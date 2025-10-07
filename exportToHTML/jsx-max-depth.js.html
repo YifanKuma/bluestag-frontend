@@ -1,0 +1,184 @@
+<html>
+<head>
+<title>jsx-max-depth.js</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #8c8c8c; font-style: italic;}
+.s1 { color: #8c8c8c; font-style: italic;}
+.s2 { color: #080808;}
+.s3 { color: #067d17;}
+.s4 { color: #0033b3;}
+.s5 { color: #1750eb;}
+</style>
+</head>
+<body bgcolor="#ffffff">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#c0c0c0" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+jsx-max-depth.js</font>
+</center></td></tr></table>
+<pre><span class="s0">/**</span>
+ <span class="s0">* </span><span class="s1">@fileoverview </span><span class="s0">Validate JSX maximum depth</span>
+ <span class="s0">* </span><span class="s1">@author </span><span class="s0">Chris&lt;wfsr@foxmail.com&gt;</span>
+ <span class="s0">*/</span>
+
+<span class="s3">'use strict'</span><span class="s2">;</span>
+
+<span class="s4">const </span><span class="s2">has = require(</span><span class="s3">'hasown'</span><span class="s2">);</span>
+<span class="s4">const </span><span class="s2">includes = require(</span><span class="s3">'array-includes'</span><span class="s2">);</span>
+<span class="s4">const </span><span class="s2">variableUtil = require(</span><span class="s3">'../util/variable'</span><span class="s2">);</span>
+<span class="s4">const </span><span class="s2">jsxUtil = require(</span><span class="s3">'../util/jsx'</span><span class="s2">);</span>
+<span class="s4">const </span><span class="s2">docsUrl = require(</span><span class="s3">'../util/docsUrl'</span><span class="s2">);</span>
+<span class="s4">const </span><span class="s2">reportC = require(</span><span class="s3">'../util/report'</span><span class="s2">);</span>
+
+<span class="s0">// ------------------------------------------------------------------------------</span>
+<span class="s0">// Rule Definition</span>
+<span class="s0">// ------------------------------------------------------------------------------</span>
+
+<span class="s4">const </span><span class="s2">messages = {</span>
+  <span class="s2">wrongDepth: </span><span class="s3">'Expected the depth of nested jsx elements to be &lt;= {{needed}}, but found {{found}}.'</span><span class="s2">,</span>
+<span class="s2">};</span>
+
+<span class="s0">/** </span><span class="s1">@type </span><span class="s0">{import('eslint').Rule.RuleModule} */</span>
+<span class="s2">module.exports = {</span>
+  <span class="s2">meta: {</span>
+    <span class="s2">docs: {</span>
+      <span class="s2">description: </span><span class="s3">'Enforce JSX maximum depth'</span><span class="s2">,</span>
+      <span class="s2">category: </span><span class="s3">'Stylistic Issues'</span><span class="s2">,</span>
+      <span class="s2">recommended: </span><span class="s4">false</span><span class="s2">,</span>
+      <span class="s2">url: docsUrl(</span><span class="s3">'jsx-max-depth'</span><span class="s2">),</span>
+    <span class="s2">},</span>
+
+    <span class="s2">messages,</span>
+
+    <span class="s2">schema: [</span>
+      <span class="s2">{</span>
+        <span class="s2">type: </span><span class="s3">'object'</span><span class="s2">,</span>
+        <span class="s2">properties: {</span>
+          <span class="s2">max: {</span>
+            <span class="s2">type: </span><span class="s3">'integer'</span><span class="s2">,</span>
+            <span class="s2">minimum: </span><span class="s5">0</span><span class="s2">,</span>
+          <span class="s2">},</span>
+        <span class="s2">},</span>
+        <span class="s2">additionalProperties: </span><span class="s4">false</span><span class="s2">,</span>
+      <span class="s2">},</span>
+    <span class="s2">],</span>
+  <span class="s2">},</span>
+  <span class="s2">create(context) {</span>
+    <span class="s4">const </span><span class="s2">DEFAULT_DEPTH = </span><span class="s5">2</span><span class="s2">;</span>
+
+    <span class="s4">const </span><span class="s2">option = context.options[</span><span class="s5">0</span><span class="s2">] || {};</span>
+    <span class="s4">const </span><span class="s2">maxDepth = has(option, </span><span class="s3">'max'</span><span class="s2">) ? option.max : DEFAULT_DEPTH;</span>
+
+    <span class="s4">function </span><span class="s2">isExpression(node) {</span>
+      <span class="s4">return </span><span class="s2">node.type === </span><span class="s3">'JSXExpressionContainer'</span><span class="s2">;</span>
+    <span class="s2">}</span>
+
+    <span class="s4">function </span><span class="s2">hasJSX(node) {</span>
+      <span class="s4">return </span><span class="s2">jsxUtil.isJSX(node) || (isExpression(node) &amp;&amp; jsxUtil.isJSX(node.expression));</span>
+    <span class="s2">}</span>
+
+    <span class="s4">function </span><span class="s2">isLeaf(node) {</span>
+      <span class="s4">const </span><span class="s2">children = node.children;</span>
+
+      <span class="s4">return </span><span class="s2">!children || children.length === </span><span class="s5">0 </span><span class="s2">|| !children.some(hasJSX);</span>
+    <span class="s2">}</span>
+
+    <span class="s4">function </span><span class="s2">getDepth(node) {</span>
+      <span class="s4">let </span><span class="s2">count = </span><span class="s5">0</span><span class="s2">;</span>
+
+      <span class="s4">while </span><span class="s2">(jsxUtil.isJSX(node.parent) || isExpression(node.parent)) {</span>
+        <span class="s2">node = node.parent;</span>
+        <span class="s4">if </span><span class="s2">(jsxUtil.isJSX(node)) {</span>
+          <span class="s2">count += </span><span class="s5">1</span><span class="s2">;</span>
+        <span class="s2">}</span>
+      <span class="s2">}</span>
+
+      <span class="s4">return </span><span class="s2">count;</span>
+    <span class="s2">}</span>
+
+    <span class="s4">function </span><span class="s2">report(node, depth) {</span>
+      <span class="s2">reportC(context, messages.wrongDepth, </span><span class="s3">'wrongDepth'</span><span class="s2">, {</span>
+        <span class="s2">node,</span>
+        <span class="s2">data: {</span>
+          <span class="s2">found: depth,</span>
+          <span class="s2">needed: maxDepth,</span>
+        <span class="s2">},</span>
+      <span class="s2">});</span>
+    <span class="s2">}</span>
+
+    <span class="s4">function </span><span class="s2">findJSXElementOrFragment(startNode, name, previousReferences) {</span>
+      <span class="s4">function </span><span class="s2">find(refs, prevRefs) {</span>
+        <span class="s4">for </span><span class="s2">(</span><span class="s4">let </span><span class="s2">i = refs.length - </span><span class="s5">1</span><span class="s2">; i &gt;= </span><span class="s5">0</span><span class="s2">; i--) {</span>
+          <span class="s4">if </span><span class="s2">(</span><span class="s4">typeof </span><span class="s2">refs[i].writeExpr !== </span><span class="s3">'undefined'</span><span class="s2">) {</span>
+            <span class="s4">const </span><span class="s2">writeExpr = refs[i].writeExpr;</span>
+
+            <span class="s4">return </span><span class="s2">(jsxUtil.isJSX(writeExpr)</span>
+              <span class="s2">&amp;&amp; writeExpr)</span>
+              <span class="s2">|| ((writeExpr &amp;&amp; writeExpr.type === </span><span class="s3">'Identifier'</span><span class="s2">)</span>
+              <span class="s2">&amp;&amp; findJSXElementOrFragment(startNode, writeExpr.name, prevRefs));</span>
+          <span class="s2">}</span>
+        <span class="s2">}</span>
+
+        <span class="s4">return null</span><span class="s2">;</span>
+      <span class="s2">}</span>
+
+      <span class="s4">const </span><span class="s2">variable = variableUtil.getVariableFromContext(context, startNode, name);</span>
+      <span class="s4">if </span><span class="s2">(variable &amp;&amp; variable.references) {</span>
+        <span class="s4">const </span><span class="s2">containDuplicates = previousReferences.some((ref) =&gt; includes(variable.references, ref));</span>
+
+        <span class="s0">// Prevent getting stuck in circular references</span>
+        <span class="s4">if </span><span class="s2">(containDuplicates) {</span>
+          <span class="s4">return false</span><span class="s2">;</span>
+        <span class="s2">}</span>
+
+        <span class="s4">return </span><span class="s2">find(variable.references, previousReferences.concat(variable.references));</span>
+      <span class="s2">}</span>
+
+      <span class="s4">return false</span><span class="s2">;</span>
+    <span class="s2">}</span>
+
+    <span class="s4">function </span><span class="s2">checkDescendant(baseDepth, children) {</span>
+      <span class="s2">baseDepth += </span><span class="s5">1</span><span class="s2">;</span>
+      <span class="s2">(children || []).filter((node) =&gt; hasJSX(node)).forEach((node) =&gt; {</span>
+        <span class="s4">if </span><span class="s2">(baseDepth &gt; maxDepth) {</span>
+          <span class="s2">report(node, baseDepth);</span>
+        <span class="s2">} </span><span class="s4">else if </span><span class="s2">(!isLeaf(node)) {</span>
+          <span class="s2">checkDescendant(baseDepth, node.children);</span>
+        <span class="s2">}</span>
+      <span class="s2">});</span>
+    <span class="s2">}</span>
+
+    <span class="s4">function </span><span class="s2">handleJSX(node) {</span>
+      <span class="s4">if </span><span class="s2">(!isLeaf(node)) {</span>
+        <span class="s4">return</span><span class="s2">;</span>
+      <span class="s2">}</span>
+
+      <span class="s4">const </span><span class="s2">depth = getDepth(node);</span>
+      <span class="s4">if </span><span class="s2">(depth &gt; maxDepth) {</span>
+        <span class="s2">report(node, depth);</span>
+      <span class="s2">}</span>
+    <span class="s2">}</span>
+
+    <span class="s4">return </span><span class="s2">{</span>
+      <span class="s2">JSXElement: handleJSX,</span>
+      <span class="s2">JSXFragment: handleJSX,</span>
+
+      <span class="s2">JSXExpressionContainer(node) {</span>
+        <span class="s4">if </span><span class="s2">(node.expression.type !== </span><span class="s3">'Identifier'</span><span class="s2">) {</span>
+          <span class="s4">return</span><span class="s2">;</span>
+        <span class="s2">}</span>
+
+        <span class="s4">const </span><span class="s2">element = findJSXElementOrFragment(node, node.expression.name, []);</span>
+
+        <span class="s4">if </span><span class="s2">(element) {</span>
+          <span class="s4">const </span><span class="s2">baseDepth = getDepth(node);</span>
+          <span class="s2">checkDescendant(baseDepth, element.children);</span>
+        <span class="s2">}</span>
+      <span class="s2">},</span>
+    <span class="s2">};</span>
+  <span class="s2">},</span>
+<span class="s2">};</span>
+</pre>
+</body>
+</html>

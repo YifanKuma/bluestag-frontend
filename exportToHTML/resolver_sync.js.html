@@ -1,0 +1,750 @@
+<html>
+<head>
+<title>resolver_sync.js</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #0033b3;}
+.s1 { color: #080808;}
+.s2 { color: #067d17;}
+.s3 { color: #1750eb;}
+.s4 { color: #264eff;}
+.s5 { color: #8c8c8c; font-style: italic;}
+.s6 { color: #0037a6;}
+</style>
+</head>
+<body bgcolor="#ffffff">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#c0c0c0" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+resolver_sync.js</font>
+</center></td></tr></table>
+<pre><span class="s0">var </span><span class="s1">path = require(</span><span class="s2">'path'</span><span class="s1">);</span>
+<span class="s0">var </span><span class="s1">fs = require(</span><span class="s2">'fs'</span><span class="s1">);</span>
+<span class="s0">var </span><span class="s1">test = require(</span><span class="s2">'tape'</span><span class="s1">);</span>
+
+<span class="s0">var </span><span class="s1">resolve = require(</span><span class="s2">'../'</span><span class="s1">);</span>
+<span class="s0">var </span><span class="s1">sync = require(</span><span class="s2">'../sync'</span><span class="s1">);</span>
+
+<span class="s0">var </span><span class="s1">requireResolveSupportsPaths = require.resolve.length &gt; </span><span class="s3">1</span>
+    <span class="s1">&amp;&amp; !(</span><span class="s4">/^v12\.[012]\./</span><span class="s1">).test(process.version); </span><span class="s5">// broken in v12.0-12.2, see https://github.com/nodejs/node/issues/27794</span>
+
+<span class="s0">var </span><span class="s1">requireResolveDefaultPathsBroken = (</span><span class="s4">/^v8\.9\.|^v9\.[01]\.0|^v9\.2\./</span><span class="s1">).test(process.version);</span>
+<span class="s5">// broken in node v8.9.x, v9.0, v9.1, v9.2.x. see https://github.com/nodejs/node/pull/17113</span>
+
+<span class="s1">test(</span><span class="s2">'`./sync` entry point'</span><span class="s1">, </span><span class="s0">function </span><span class="s1">(t) {</span>
+    <span class="s1">t.equal(resolve.sync, sync, </span><span class="s2">'`./sync` entry point is the same as `.sync` on `main`'</span><span class="s1">);</span>
+    <span class="s1">t.end();</span>
+<span class="s1">});</span>
+
+<span class="s1">test(</span><span class="s2">'foo'</span><span class="s1">, </span><span class="s0">function </span><span class="s1">(t) {</span>
+    <span class="s0">var </span><span class="s1">dir = path.join(__dirname, </span><span class="s2">'resolver'</span><span class="s1">);</span>
+
+    <span class="s1">t.equal(</span>
+        <span class="s1">resolve.sync(</span><span class="s2">'./foo'</span><span class="s1">, { basedir: dir }),</span>
+        <span class="s1">path.join(dir, </span><span class="s2">'foo.js'</span><span class="s1">),</span>
+        <span class="s2">'./foo'</span>
+    <span class="s1">);</span>
+    <span class="s0">if </span><span class="s1">(requireResolveSupportsPaths) {</span>
+        <span class="s1">t.equal(</span>
+            <span class="s1">resolve.sync(</span><span class="s2">'./foo'</span><span class="s1">, { basedir: dir }),</span>
+            <span class="s1">require.resolve(</span><span class="s2">'./foo'</span><span class="s1">, { paths: [dir] }),</span>
+            <span class="s2">'./foo: resolve.sync === require.resolve'</span>
+        <span class="s1">);</span>
+    <span class="s1">}</span>
+
+    <span class="s1">t.equal(</span>
+        <span class="s1">resolve.sync(</span><span class="s2">'./foo.js'</span><span class="s1">, { basedir: dir }),</span>
+        <span class="s1">path.join(dir, </span><span class="s2">'foo.js'</span><span class="s1">),</span>
+        <span class="s2">'./foo.js'</span>
+    <span class="s1">);</span>
+    <span class="s0">if </span><span class="s1">(requireResolveSupportsPaths) {</span>
+        <span class="s1">t.equal(</span>
+            <span class="s1">resolve.sync(</span><span class="s2">'./foo.js'</span><span class="s1">, { basedir: dir }),</span>
+            <span class="s1">require.resolve(</span><span class="s2">'./foo.js'</span><span class="s1">, { paths: [dir] }),</span>
+            <span class="s2">'./foo.js: resolve.sync === require.resolve'</span>
+        <span class="s1">);</span>
+    <span class="s1">}</span>
+
+    <span class="s1">t.equal(</span>
+        <span class="s1">resolve.sync(</span><span class="s2">'./foo.js'</span><span class="s1">, { basedir: dir, filename: path.join(dir, </span><span class="s2">'bar.js'</span><span class="s1">) }),</span>
+        <span class="s1">path.join(dir, </span><span class="s2">'foo.js'</span><span class="s1">)</span>
+    <span class="s1">);</span>
+
+    <span class="s1">t.throws(</span><span class="s0">function </span><span class="s1">() {</span>
+        <span class="s1">resolve.sync(</span><span class="s2">'foo'</span><span class="s1">, { basedir: dir });</span>
+    <span class="s1">});</span>
+
+    <span class="s5">// Test that filename is reported as the &quot;from&quot; value when passed.</span>
+    <span class="s1">t.throws(</span>
+        <span class="s0">function </span><span class="s1">() {</span>
+            <span class="s1">resolve.sync(</span><span class="s2">'foo'</span><span class="s1">, { basedir: dir, filename: path.join(dir, </span><span class="s2">'bar.js'</span><span class="s1">) });</span>
+        <span class="s1">},</span>
+        <span class="s1">{</span>
+            <span class="s1">name: </span><span class="s2">'Error'</span><span class="s1">,</span>
+            <span class="s1">message: </span><span class="s2">&quot;Cannot find module 'foo' from '&quot; </span><span class="s1">+ path.join(dir, </span><span class="s2">'bar.js'</span><span class="s1">) + </span><span class="s2">&quot;'&quot;</span>
+        <span class="s1">}</span>
+    <span class="s1">);</span>
+
+    <span class="s1">t.end();</span>
+<span class="s1">});</span>
+
+<span class="s1">test(</span><span class="s2">'bar'</span><span class="s1">, </span><span class="s0">function </span><span class="s1">(t) {</span>
+    <span class="s0">var </span><span class="s1">dir = path.join(__dirname, </span><span class="s2">'resolver'</span><span class="s1">);</span>
+
+    <span class="s0">var </span><span class="s1">basedir = path.join(dir, </span><span class="s2">'bar'</span><span class="s1">);</span>
+
+    <span class="s1">t.equal(</span>
+        <span class="s1">resolve.sync(</span><span class="s2">'foo'</span><span class="s1">, { basedir: basedir }),</span>
+        <span class="s1">path.join(dir, </span><span class="s2">'bar/node_modules/foo/index.js'</span><span class="s1">),</span>
+        <span class="s2">'foo in bar'</span>
+    <span class="s1">);</span>
+    <span class="s0">if </span><span class="s1">(!requireResolveDefaultPathsBroken &amp;&amp; requireResolveSupportsPaths) {</span>
+        <span class="s1">t.equal(</span>
+            <span class="s1">resolve.sync(</span><span class="s2">'foo'</span><span class="s1">, { basedir: basedir }),</span>
+            <span class="s1">require.resolve(</span><span class="s2">'foo'</span><span class="s1">, { paths: [basedir] }),</span>
+            <span class="s2">'foo in bar: resolve.sync === require.resolve'</span>
+        <span class="s1">);</span>
+    <span class="s1">}</span>
+
+    <span class="s1">t.end();</span>
+<span class="s1">});</span>
+
+<span class="s1">test(</span><span class="s2">'baz'</span><span class="s1">, </span><span class="s0">function </span><span class="s1">(t) {</span>
+    <span class="s0">var </span><span class="s1">dir = path.join(__dirname, </span><span class="s2">'resolver'</span><span class="s1">);</span>
+
+    <span class="s1">t.equal(</span>
+        <span class="s1">resolve.sync(</span><span class="s2">'./baz'</span><span class="s1">, { basedir: dir }),</span>
+        <span class="s1">path.join(dir, </span><span class="s2">'baz/quux.js'</span><span class="s1">),</span>
+        <span class="s2">'./baz'</span>
+    <span class="s1">);</span>
+    <span class="s0">if </span><span class="s1">(requireResolveSupportsPaths) {</span>
+        <span class="s1">t.equal(</span>
+            <span class="s1">resolve.sync(</span><span class="s2">'./baz'</span><span class="s1">, { basedir: dir }),</span>
+            <span class="s1">require.resolve(</span><span class="s2">'./baz'</span><span class="s1">, { paths: [dir] }),</span>
+            <span class="s2">'./baz: resolve.sync === require.resolve'</span>
+        <span class="s1">);</span>
+    <span class="s1">}</span>
+
+    <span class="s1">t.end();</span>
+<span class="s1">});</span>
+
+<span class="s1">test(</span><span class="s2">'biz'</span><span class="s1">, </span><span class="s0">function </span><span class="s1">(t) {</span>
+    <span class="s0">var </span><span class="s1">dir = path.join(__dirname, </span><span class="s2">'resolver/biz/node_modules'</span><span class="s1">);</span>
+
+    <span class="s1">t.equal(</span>
+        <span class="s1">resolve.sync(</span><span class="s2">'./grux'</span><span class="s1">, { basedir: dir }),</span>
+        <span class="s1">path.join(dir, </span><span class="s2">'grux/index.js'</span><span class="s1">)</span>
+    <span class="s1">);</span>
+    <span class="s0">if </span><span class="s1">(requireResolveSupportsPaths) {</span>
+        <span class="s1">t.equal(</span>
+            <span class="s1">resolve.sync(</span><span class="s2">'./grux'</span><span class="s1">, { basedir: dir }),</span>
+            <span class="s1">require.resolve(</span><span class="s2">'./grux'</span><span class="s1">, { paths: [dir] }),</span>
+            <span class="s2">'./grux: resolve.sync === require.resolve'</span>
+        <span class="s1">);</span>
+    <span class="s1">}</span>
+
+    <span class="s0">var </span><span class="s1">tivDir = path.join(dir, </span><span class="s2">'grux'</span><span class="s1">);</span>
+    <span class="s1">t.equal(</span>
+        <span class="s1">resolve.sync(</span><span class="s2">'tiv'</span><span class="s1">, { basedir: tivDir }),</span>
+        <span class="s1">path.join(dir, </span><span class="s2">'tiv/index.js'</span><span class="s1">)</span>
+    <span class="s1">);</span>
+    <span class="s0">if </span><span class="s1">(!requireResolveDefaultPathsBroken &amp;&amp; requireResolveSupportsPaths) {</span>
+        <span class="s1">t.equal(</span>
+            <span class="s1">resolve.sync(</span><span class="s2">'tiv'</span><span class="s1">, { basedir: tivDir }),</span>
+            <span class="s1">require.resolve(</span><span class="s2">'tiv'</span><span class="s1">, { paths: [tivDir] }),</span>
+            <span class="s2">'tiv: resolve.sync === require.resolve'</span>
+        <span class="s1">);</span>
+    <span class="s1">}</span>
+
+    <span class="s0">var </span><span class="s1">gruxDir = path.join(dir, </span><span class="s2">'tiv'</span><span class="s1">);</span>
+    <span class="s1">t.equal(</span>
+        <span class="s1">resolve.sync(</span><span class="s2">'grux'</span><span class="s1">, { basedir: gruxDir }),</span>
+        <span class="s1">path.join(dir, </span><span class="s2">'grux/index.js'</span><span class="s1">)</span>
+    <span class="s1">);</span>
+    <span class="s0">if </span><span class="s1">(!requireResolveDefaultPathsBroken &amp;&amp; requireResolveSupportsPaths) {</span>
+        <span class="s1">t.equal(</span>
+            <span class="s1">resolve.sync(</span><span class="s2">'grux'</span><span class="s1">, { basedir: gruxDir }),</span>
+            <span class="s1">require.resolve(</span><span class="s2">'grux'</span><span class="s1">, { paths: [gruxDir] }),</span>
+            <span class="s2">'grux: resolve.sync === require.resolve'</span>
+        <span class="s1">);</span>
+    <span class="s1">}</span>
+
+    <span class="s1">t.end();</span>
+<span class="s1">});</span>
+
+<span class="s1">test(</span><span class="s2">'normalize'</span><span class="s1">, </span><span class="s0">function </span><span class="s1">(t) {</span>
+    <span class="s0">var </span><span class="s1">dir = path.join(__dirname, </span><span class="s2">'resolver/biz/node_modules/grux'</span><span class="s1">);</span>
+
+    <span class="s1">t.equal(</span>
+        <span class="s1">resolve.sync(</span><span class="s2">'../grux'</span><span class="s1">, { basedir: dir }),</span>
+        <span class="s1">path.join(dir, </span><span class="s2">'index.js'</span><span class="s1">)</span>
+    <span class="s1">);</span>
+    <span class="s0">if </span><span class="s1">(requireResolveSupportsPaths) {</span>
+        <span class="s1">t.equal(</span>
+            <span class="s1">resolve.sync(</span><span class="s2">'../grux'</span><span class="s1">, { basedir: dir }),</span>
+            <span class="s1">require.resolve(</span><span class="s2">'../grux'</span><span class="s1">, { paths: [dir] }),</span>
+            <span class="s2">'../grux: resolve.sync === require.resolve'</span>
+        <span class="s1">);</span>
+    <span class="s1">}</span>
+
+    <span class="s1">t.end();</span>
+<span class="s1">});</span>
+
+<span class="s1">test(</span><span class="s2">'cup'</span><span class="s1">, </span><span class="s0">function </span><span class="s1">(t) {</span>
+    <span class="s0">var </span><span class="s1">dir = path.join(__dirname, </span><span class="s2">'resolver'</span><span class="s1">);</span>
+
+    <span class="s1">t.equal(</span>
+        <span class="s1">resolve.sync(</span><span class="s2">'./cup'</span><span class="s1">, {</span>
+            <span class="s1">basedir: dir,</span>
+            <span class="s1">extensions: [</span><span class="s2">'.js'</span><span class="s1">, </span><span class="s2">'.coffee'</span><span class="s1">]</span>
+        <span class="s1">}),</span>
+        <span class="s1">path.join(dir, </span><span class="s2">'cup.coffee'</span><span class="s1">),</span>
+        <span class="s2">'./cup -&gt; ./cup.coffee'</span>
+    <span class="s1">);</span>
+
+    <span class="s1">t.equal(</span>
+        <span class="s1">resolve.sync(</span><span class="s2">'./cup.coffee'</span><span class="s1">, { basedir: dir }),</span>
+        <span class="s1">path.join(dir, </span><span class="s2">'cup.coffee'</span><span class="s1">),</span>
+        <span class="s2">'./cup.coffee'</span>
+    <span class="s1">);</span>
+
+    <span class="s1">t.throws(</span><span class="s0">function </span><span class="s1">() {</span>
+        <span class="s1">resolve.sync(</span><span class="s2">'./cup'</span><span class="s1">, {</span>
+            <span class="s1">basedir: dir,</span>
+            <span class="s1">extensions: [</span><span class="s2">'.js'</span><span class="s1">]</span>
+        <span class="s1">});</span>
+    <span class="s1">});</span>
+
+    <span class="s0">if </span><span class="s1">(requireResolveSupportsPaths) {</span>
+        <span class="s1">t.equal(</span>
+            <span class="s1">resolve.sync(</span><span class="s2">'./cup.coffee'</span><span class="s1">, { basedir: dir, extensions: [</span><span class="s2">'.js'</span><span class="s1">, </span><span class="s2">'.coffee'</span><span class="s1">] }),</span>
+            <span class="s1">require.resolve(</span><span class="s2">'./cup.coffee'</span><span class="s1">, { paths: [dir] }),</span>
+            <span class="s2">'./cup.coffee: resolve.sync === require.resolve'</span>
+        <span class="s1">);</span>
+    <span class="s1">}</span>
+
+    <span class="s1">t.end();</span>
+<span class="s1">});</span>
+
+<span class="s1">test(</span><span class="s2">'mug'</span><span class="s1">, </span><span class="s0">function </span><span class="s1">(t) {</span>
+    <span class="s0">var </span><span class="s1">dir = path.join(__dirname, </span><span class="s2">'resolver'</span><span class="s1">);</span>
+
+    <span class="s1">t.equal(</span>
+        <span class="s1">resolve.sync(</span><span class="s2">'./mug'</span><span class="s1">, { basedir: dir }),</span>
+        <span class="s1">path.join(dir, </span><span class="s2">'mug.js'</span><span class="s1">),</span>
+        <span class="s2">'./mug -&gt; ./mug.js'</span>
+    <span class="s1">);</span>
+    <span class="s0">if </span><span class="s1">(requireResolveSupportsPaths) {</span>
+        <span class="s1">t.equal(</span>
+            <span class="s1">resolve.sync(</span><span class="s2">'./mug'</span><span class="s1">, { basedir: dir }),</span>
+            <span class="s1">require.resolve(</span><span class="s2">'./mug'</span><span class="s1">, { paths: [dir] }),</span>
+            <span class="s2">'./mug: resolve.sync === require.resolve'</span>
+        <span class="s1">);</span>
+    <span class="s1">}</span>
+
+    <span class="s1">t.equal(</span>
+        <span class="s1">resolve.sync(</span><span class="s2">'./mug'</span><span class="s1">, {</span>
+            <span class="s1">basedir: dir,</span>
+            <span class="s1">extensions: [</span><span class="s2">'.coffee'</span><span class="s1">, </span><span class="s2">'.js'</span><span class="s1">]</span>
+        <span class="s1">}),</span>
+        <span class="s1">path.join(dir, </span><span class="s2">'mug.coffee'</span><span class="s1">),</span>
+        <span class="s2">'./mug -&gt; ./mug.coffee'</span>
+    <span class="s1">);</span>
+
+    <span class="s1">t.equal(</span>
+        <span class="s1">resolve.sync(</span><span class="s2">'./mug'</span><span class="s1">, {</span>
+            <span class="s1">basedir: dir,</span>
+            <span class="s1">extensions: [</span><span class="s2">'.js'</span><span class="s1">, </span><span class="s2">'.coffee'</span><span class="s1">]</span>
+        <span class="s1">}),</span>
+        <span class="s1">path.join(dir, </span><span class="s2">'mug.js'</span><span class="s1">),</span>
+        <span class="s2">'./mug -&gt; ./mug.js'</span>
+    <span class="s1">);</span>
+
+    <span class="s1">t.end();</span>
+<span class="s1">});</span>
+
+<span class="s1">test(</span><span class="s2">'other path'</span><span class="s1">, </span><span class="s0">function </span><span class="s1">(t) {</span>
+    <span class="s0">var </span><span class="s1">resolverDir = path.join(__dirname, </span><span class="s2">'resolver'</span><span class="s1">);</span>
+    <span class="s0">var </span><span class="s1">dir = path.join(resolverDir, </span><span class="s2">'bar'</span><span class="s1">);</span>
+    <span class="s0">var </span><span class="s1">otherDir = path.join(resolverDir, </span><span class="s2">'other_path'</span><span class="s1">);</span>
+
+    <span class="s1">t.equal(</span>
+        <span class="s1">resolve.sync(</span><span class="s2">'root'</span><span class="s1">, {</span>
+            <span class="s1">basedir: dir,</span>
+            <span class="s1">paths: [otherDir]</span>
+        <span class="s1">}),</span>
+        <span class="s1">path.join(resolverDir, </span><span class="s2">'other_path/root.js'</span><span class="s1">)</span>
+    <span class="s1">);</span>
+
+    <span class="s1">t.equal(</span>
+        <span class="s1">resolve.sync(</span><span class="s2">'lib/other-lib'</span><span class="s1">, {</span>
+            <span class="s1">basedir: dir,</span>
+            <span class="s1">paths: [otherDir]</span>
+        <span class="s1">}),</span>
+        <span class="s1">path.join(resolverDir, </span><span class="s2">'other_path/lib/other-lib.js'</span><span class="s1">)</span>
+    <span class="s1">);</span>
+
+    <span class="s1">t.throws(</span><span class="s0">function </span><span class="s1">() {</span>
+        <span class="s1">resolve.sync(</span><span class="s2">'root'</span><span class="s1">, { basedir: dir });</span>
+    <span class="s1">});</span>
+
+    <span class="s1">t.throws(</span><span class="s0">function </span><span class="s1">() {</span>
+        <span class="s1">resolve.sync(</span><span class="s2">'zzz'</span><span class="s1">, {</span>
+            <span class="s1">basedir: dir,</span>
+            <span class="s1">paths: [otherDir]</span>
+        <span class="s1">});</span>
+    <span class="s1">});</span>
+
+    <span class="s1">t.end();</span>
+<span class="s1">});</span>
+
+<span class="s1">test(</span><span class="s2">'path iterator'</span><span class="s1">, </span><span class="s0">function </span><span class="s1">(t) {</span>
+    <span class="s0">var </span><span class="s1">resolverDir = path.join(__dirname, </span><span class="s2">'resolver'</span><span class="s1">);</span>
+
+    <span class="s0">var </span><span class="s1">exactIterator = </span><span class="s0">function </span><span class="s1">(x, start, getPackageCandidates, opts) {</span>
+        <span class="s0">return </span><span class="s1">[path.join(resolverDir, x)];</span>
+    <span class="s1">};</span>
+
+    <span class="s1">t.equal(</span>
+        <span class="s1">resolve.sync(</span><span class="s2">'baz'</span><span class="s1">, { packageIterator: exactIterator }),</span>
+        <span class="s1">path.join(resolverDir, </span><span class="s2">'baz/quux.js'</span><span class="s1">)</span>
+    <span class="s1">);</span>
+
+    <span class="s1">t.end();</span>
+<span class="s1">});</span>
+
+<span class="s1">test(</span><span class="s2">'incorrect main'</span><span class="s1">, </span><span class="s0">function </span><span class="s1">(t) {</span>
+    <span class="s0">var </span><span class="s1">resolverDir = path.join(__dirname, </span><span class="s2">'resolver'</span><span class="s1">);</span>
+    <span class="s0">var </span><span class="s1">dir = path.join(resolverDir, </span><span class="s2">'incorrect_main'</span><span class="s1">);</span>
+
+    <span class="s1">t.equal(</span>
+        <span class="s1">resolve.sync(</span><span class="s2">'./incorrect_main'</span><span class="s1">, { basedir: resolverDir }),</span>
+        <span class="s1">path.join(dir, </span><span class="s2">'index.js'</span><span class="s1">)</span>
+    <span class="s1">);</span>
+    <span class="s0">if </span><span class="s1">(requireResolveSupportsPaths) {</span>
+        <span class="s1">t.equal(</span>
+            <span class="s1">resolve.sync(</span><span class="s2">'./incorrect_main'</span><span class="s1">, { basedir: resolverDir }),</span>
+            <span class="s1">require.resolve(</span><span class="s2">'./incorrect_main'</span><span class="s1">, { paths: [resolverDir] }),</span>
+            <span class="s2">'./incorrect_main: resolve.sync === require.resolve'</span>
+        <span class="s1">);</span>
+    <span class="s1">}</span>
+
+    <span class="s1">t.end();</span>
+<span class="s1">});</span>
+
+<span class="s1">test(</span><span class="s2">'missing index'</span><span class="s1">, </span><span class="s0">function </span><span class="s1">(t) {</span>
+    <span class="s1">t.plan(requireResolveSupportsPaths ? </span><span class="s3">2 </span><span class="s1">: </span><span class="s3">1</span><span class="s1">);</span>
+
+    <span class="s0">var </span><span class="s1">resolverDir = path.join(__dirname, </span><span class="s2">'resolver'</span><span class="s1">);</span>
+    <span class="s0">try </span><span class="s1">{</span>
+        <span class="s1">resolve.sync(</span><span class="s2">'./missing_index'</span><span class="s1">, { basedir: resolverDir });</span>
+        <span class="s1">t.fail(</span><span class="s2">'did not fail'</span><span class="s1">);</span>
+    <span class="s1">} </span><span class="s0">catch </span><span class="s1">(err) {</span>
+        <span class="s1">t.equal(err &amp;&amp; err.code, </span><span class="s2">'INCORRECT_PACKAGE_MAIN'</span><span class="s1">, </span><span class="s2">'error has correct error code'</span><span class="s1">);</span>
+    <span class="s1">}</span>
+    <span class="s0">if </span><span class="s1">(requireResolveSupportsPaths) {</span>
+        <span class="s0">try </span><span class="s1">{</span>
+            <span class="s1">require.resolve(</span><span class="s2">'./missing_index'</span><span class="s1">, { basedir: resolverDir });</span>
+            <span class="s1">t.fail(</span><span class="s2">'require.resolve did not fail'</span><span class="s1">);</span>
+        <span class="s1">} </span><span class="s0">catch </span><span class="s1">(err) {</span>
+            <span class="s1">t.equal(err &amp;&amp; err.code, </span><span class="s2">'MODULE_NOT_FOUND'</span><span class="s1">, </span><span class="s2">'error has correct error code'</span><span class="s1">);</span>
+        <span class="s1">}</span>
+    <span class="s1">}</span>
+<span class="s1">});</span>
+
+<span class="s1">test(</span><span class="s2">'missing main'</span><span class="s1">, </span><span class="s0">function </span><span class="s1">(t) {</span>
+    <span class="s0">var </span><span class="s1">resolverDir = path.join(__dirname, </span><span class="s2">'resolver'</span><span class="s1">);</span>
+    <span class="s0">var </span><span class="s1">dir = path.join(resolverDir, </span><span class="s2">'missing_main'</span><span class="s1">);</span>
+
+    <span class="s1">t.equal(</span>
+        <span class="s1">resolve.sync(</span><span class="s2">'./missing_main'</span><span class="s1">, { basedir: resolverDir }),</span>
+        <span class="s1">path.join(dir, </span><span class="s2">'index.js'</span><span class="s1">)</span>
+    <span class="s1">);</span>
+    <span class="s0">if </span><span class="s1">(requireResolveSupportsPaths) {</span>
+        <span class="s1">t.equal(</span>
+            <span class="s1">resolve.sync(</span><span class="s2">'./missing_main'</span><span class="s1">, { basedir: resolverDir }),</span>
+            <span class="s1">require.resolve(</span><span class="s2">'./missing_main'</span><span class="s1">, { paths: [resolverDir] }),</span>
+            <span class="s2">'&quot;main&quot; missing: resolve.sync === require.resolve'</span>
+        <span class="s1">);</span>
+    <span class="s1">}</span>
+
+    <span class="s1">t.end();</span>
+<span class="s1">});</span>
+
+<span class="s1">test(</span><span class="s2">'null main'</span><span class="s1">, </span><span class="s0">function </span><span class="s1">(t) {</span>
+    <span class="s0">var </span><span class="s1">resolverDir = path.join(__dirname, </span><span class="s2">'resolver'</span><span class="s1">);</span>
+    <span class="s0">var </span><span class="s1">dir = path.join(resolverDir, </span><span class="s2">'null_main'</span><span class="s1">);</span>
+
+    <span class="s1">t.equal(</span>
+        <span class="s1">resolve.sync(</span><span class="s2">'./null_main'</span><span class="s1">, { basedir: resolverDir }),</span>
+        <span class="s1">path.join(dir, </span><span class="s2">'index.js'</span><span class="s1">)</span>
+    <span class="s1">);</span>
+    <span class="s0">if </span><span class="s1">(requireResolveSupportsPaths) {</span>
+        <span class="s1">t.equal(</span>
+            <span class="s1">resolve.sync(</span><span class="s2">'./null_main'</span><span class="s1">, { basedir: resolverDir }),</span>
+            <span class="s1">require.resolve(</span><span class="s2">'./null_main'</span><span class="s1">, { paths: [resolverDir] }),</span>
+            <span class="s2">'`&quot;main&quot;: null`: resolve.sync === require.resolve'</span>
+        <span class="s1">);</span>
+    <span class="s1">}</span>
+
+    <span class="s1">t.end();</span>
+<span class="s1">});</span>
+
+<span class="s1">test(</span><span class="s2">'main: false'</span><span class="s1">, </span><span class="s0">function </span><span class="s1">(t) {</span>
+    <span class="s0">var </span><span class="s1">basedir = path.join(__dirname, </span><span class="s2">'resolver'</span><span class="s1">);</span>
+    <span class="s0">var </span><span class="s1">dir = path.join(basedir, </span><span class="s2">'false_main'</span><span class="s1">);</span>
+    <span class="s1">t.equal(</span>
+        <span class="s1">resolve.sync(</span><span class="s2">'./false_main'</span><span class="s1">, { basedir: basedir }),</span>
+        <span class="s1">path.join(dir, </span><span class="s2">'index.js'</span><span class="s1">),</span>
+        <span class="s2">'`&quot;main&quot;: false`: resolves to `index.js`'</span>
+    <span class="s1">);</span>
+    <span class="s0">if </span><span class="s1">(requireResolveSupportsPaths) {</span>
+        <span class="s1">t.equal(</span>
+            <span class="s1">resolve.sync(</span><span class="s2">'./false_main'</span><span class="s1">, { basedir: basedir }),</span>
+            <span class="s1">require.resolve(</span><span class="s2">'./false_main'</span><span class="s1">, { paths: [basedir] }),</span>
+            <span class="s2">'`&quot;main&quot;: false`: resolve.sync === require.resolve'</span>
+        <span class="s1">);</span>
+    <span class="s1">}</span>
+
+    <span class="s1">t.end();</span>
+<span class="s1">});</span>
+
+<span class="s0">var </span><span class="s1">stubStatSync = </span><span class="s0">function </span><span class="s1">stubStatSync(fn) {</span>
+    <span class="s0">var </span><span class="s1">statSync = fs.statSync;</span>
+    <span class="s0">try </span><span class="s1">{</span>
+        <span class="s1">fs.statSync = </span><span class="s0">function </span><span class="s1">() {</span>
+            <span class="s0">throw new </span><span class="s1">EvalError(</span><span class="s2">'Unknown Error'</span><span class="s1">);</span>
+        <span class="s1">};</span>
+        <span class="s0">return </span><span class="s1">fn();</span>
+    <span class="s1">} </span><span class="s0">finally </span><span class="s1">{</span>
+        <span class="s1">fs.statSync = statSync;</span>
+    <span class="s1">}</span>
+<span class="s1">};</span>
+
+<span class="s1">test(</span><span class="s2">'#79 - re-throw non ENOENT errors from stat'</span><span class="s1">, </span><span class="s0">function </span><span class="s1">(t) {</span>
+    <span class="s0">var </span><span class="s1">dir = path.join(__dirname, </span><span class="s2">'resolver'</span><span class="s1">);</span>
+
+    <span class="s1">stubStatSync(</span><span class="s0">function </span><span class="s1">() {</span>
+        <span class="s1">t.throws(</span><span class="s0">function </span><span class="s1">() {</span>
+            <span class="s1">resolve.sync(</span><span class="s2">'foo'</span><span class="s1">, { basedir: dir });</span>
+        <span class="s1">}, </span><span class="s4">/Unknown Error/</span><span class="s1">);</span>
+    <span class="s1">});</span>
+
+    <span class="s1">t.end();</span>
+<span class="s1">});</span>
+
+<span class="s1">test(</span><span class="s2">'#52 - incorrectly resolves module-paths like &quot;./someFolder/&quot; when there is a file of the same name'</span><span class="s1">, </span><span class="s0">function </span><span class="s1">(t) {</span>
+    <span class="s0">var </span><span class="s1">dir = path.join(__dirname, </span><span class="s2">'resolver'</span><span class="s1">);</span>
+    <span class="s0">var </span><span class="s1">basedir = path.join(dir, </span><span class="s2">'same_names'</span><span class="s1">);</span>
+
+    <span class="s1">t.equal(</span>
+        <span class="s1">resolve.sync(</span><span class="s2">'./foo'</span><span class="s1">, { basedir: basedir }),</span>
+        <span class="s1">path.join(dir, </span><span class="s2">'same_names/foo.js'</span><span class="s1">)</span>
+    <span class="s1">);</span>
+    <span class="s0">if </span><span class="s1">(requireResolveSupportsPaths) {</span>
+        <span class="s1">t.equal(</span>
+            <span class="s1">resolve.sync(</span><span class="s2">'./foo'</span><span class="s1">, { basedir: basedir }),</span>
+            <span class="s1">require.resolve(</span><span class="s2">'./foo'</span><span class="s1">, { paths: [basedir] }),</span>
+            <span class="s2">'./foo: resolve.sync === require.resolve'</span>
+        <span class="s1">);</span>
+    <span class="s1">}</span>
+
+    <span class="s1">t.equal(</span>
+        <span class="s1">resolve.sync(</span><span class="s2">'./foo/'</span><span class="s1">, { basedir: basedir }),</span>
+        <span class="s1">path.join(dir, </span><span class="s2">'same_names/foo/index.js'</span><span class="s1">)</span>
+    <span class="s1">);</span>
+    <span class="s0">if </span><span class="s1">(requireResolveSupportsPaths) {</span>
+        <span class="s1">t.equal(</span>
+            <span class="s1">resolve.sync(</span><span class="s2">'./foo/'</span><span class="s1">, { basedir: basedir }),</span>
+            <span class="s1">require.resolve(</span><span class="s2">'./foo/'</span><span class="s1">, { paths: [basedir] }),</span>
+            <span class="s2">'./foo/: resolve.sync === require.resolve'</span>
+        <span class="s1">);</span>
+    <span class="s1">}</span>
+
+    <span class="s1">t.end();</span>
+<span class="s1">});</span>
+
+<span class="s1">test(</span><span class="s2">'#211 - incorrectly resolves module-paths like &quot;.&quot; when from inside a folder with a sibling file of the same name'</span><span class="s1">, </span><span class="s0">function </span><span class="s1">(t) {</span>
+    <span class="s0">var </span><span class="s1">dir = path.join(__dirname, </span><span class="s2">'resolver'</span><span class="s1">);</span>
+    <span class="s0">var </span><span class="s1">basedir = path.join(dir, </span><span class="s2">'same_names/foo'</span><span class="s1">);</span>
+
+    <span class="s1">t.equal(</span>
+        <span class="s1">resolve.sync(</span><span class="s2">'./'</span><span class="s1">, { basedir: basedir }),</span>
+        <span class="s1">path.join(dir, </span><span class="s2">'same_names/foo/index.js'</span><span class="s1">),</span>
+        <span class="s2">'./'</span>
+    <span class="s1">);</span>
+    <span class="s0">if </span><span class="s1">(requireResolveSupportsPaths) {</span>
+        <span class="s1">t.equal(</span>
+            <span class="s1">resolve.sync(</span><span class="s2">'./'</span><span class="s1">, { basedir: basedir }),</span>
+            <span class="s1">require.resolve(</span><span class="s2">'./'</span><span class="s1">, { paths: [basedir] }),</span>
+            <span class="s2">'./: resolve.sync === require.resolve'</span>
+        <span class="s1">);</span>
+    <span class="s1">}</span>
+
+    <span class="s1">t.equal(</span>
+        <span class="s1">resolve.sync(</span><span class="s2">'.'</span><span class="s1">, { basedir: basedir }),</span>
+        <span class="s1">path.join(dir, </span><span class="s2">'same_names/foo/index.js'</span><span class="s1">),</span>
+        <span class="s2">'.'</span>
+    <span class="s1">);</span>
+    <span class="s0">if </span><span class="s1">(requireResolveSupportsPaths) {</span>
+        <span class="s1">t.equal(</span>
+            <span class="s1">resolve.sync(</span><span class="s2">'.'</span><span class="s1">, { basedir: basedir }),</span>
+            <span class="s1">require.resolve(</span><span class="s2">'.'</span><span class="s1">, { paths: [basedir] }),</span>
+            <span class="s2">'.: resolve.sync === require.resolve'</span><span class="s1">,</span>
+            <span class="s1">{ todo: </span><span class="s0">true </span><span class="s1">}</span>
+        <span class="s1">);</span>
+    <span class="s1">}</span>
+
+    <span class="s1">t.end();</span>
+<span class="s1">});</span>
+
+<span class="s1">test(</span><span class="s2">'sync: #121 - treating an existing file as a dir when no basedir'</span><span class="s1">, </span><span class="s0">function </span><span class="s1">(t) {</span>
+    <span class="s0">var </span><span class="s1">testFile = path.basename(__filename);</span>
+
+    <span class="s1">t.test(</span><span class="s2">'sanity check'</span><span class="s1">, </span><span class="s0">function </span><span class="s1">(st) {</span>
+        <span class="s1">st.equal(</span>
+            <span class="s1">resolve.sync(</span><span class="s2">'./' </span><span class="s1">+ testFile),</span>
+            <span class="s1">__filename,</span>
+            <span class="s2">'sanity check'</span>
+        <span class="s1">);</span>
+        <span class="s1">st.equal(</span>
+            <span class="s1">resolve.sync(</span><span class="s2">'./' </span><span class="s1">+ testFile),</span>
+            <span class="s1">require.resolve(</span><span class="s2">'./' </span><span class="s1">+ testFile),</span>
+            <span class="s2">'sanity check: resolve.sync === require.resolve'</span>
+        <span class="s1">);</span>
+
+        <span class="s1">st.end();</span>
+    <span class="s1">});</span>
+
+    <span class="s1">t.test(</span><span class="s2">'with a fake directory'</span><span class="s1">, </span><span class="s0">function </span><span class="s1">(st) {</span>
+        <span class="s0">function </span><span class="s1">run() { </span><span class="s0">return </span><span class="s1">resolve.sync(</span><span class="s2">'./' </span><span class="s1">+ testFile + </span><span class="s2">'/blah'</span><span class="s1">); }</span>
+
+        <span class="s1">st.throws(run, </span><span class="s2">'throws an error'</span><span class="s1">);</span>
+
+        <span class="s0">try </span><span class="s1">{</span>
+            <span class="s1">run();</span>
+        <span class="s1">} </span><span class="s0">catch </span><span class="s1">(e) {</span>
+            <span class="s1">st.equal(e.code, </span><span class="s2">'MODULE_NOT_FOUND'</span><span class="s1">, </span><span class="s2">'error code matches require.resolve'</span><span class="s1">);</span>
+            <span class="s1">st.equal(</span>
+                <span class="s1">e.message,</span>
+                <span class="s2">'Cannot find module </span><span class="s6">\'</span><span class="s2">./' </span><span class="s1">+ testFile + </span><span class="s2">'/blah</span><span class="s6">\' </span><span class="s2">from </span><span class="s6">\'</span><span class="s2">' </span><span class="s1">+ __dirname + </span><span class="s2">'</span><span class="s6">\'</span><span class="s2">'</span><span class="s1">,</span>
+                <span class="s2">'can not find nonexistent module'</span>
+            <span class="s1">);</span>
+        <span class="s1">}</span>
+
+        <span class="s1">st.end();</span>
+    <span class="s1">});</span>
+
+    <span class="s1">t.end();</span>
+<span class="s1">});</span>
+
+<span class="s1">test(</span><span class="s2">'sync dot main'</span><span class="s1">, </span><span class="s0">function </span><span class="s1">(t) {</span>
+    <span class="s0">var </span><span class="s1">start = </span><span class="s0">new </span><span class="s1">Date();</span>
+
+    <span class="s1">t.equal(</span>
+        <span class="s1">resolve.sync(</span><span class="s2">'./resolver/dot_main'</span><span class="s1">),</span>
+        <span class="s1">path.join(__dirname, </span><span class="s2">'resolver/dot_main/index.js'</span><span class="s1">),</span>
+        <span class="s2">'./resolver/dot_main'</span>
+    <span class="s1">);</span>
+    <span class="s1">t.equal(</span>
+        <span class="s1">resolve.sync(</span><span class="s2">'./resolver/dot_main'</span><span class="s1">),</span>
+        <span class="s1">require.resolve(</span><span class="s2">'./resolver/dot_main'</span><span class="s1">),</span>
+        <span class="s2">'./resolver/dot_main: resolve.sync === require.resolve'</span>
+    <span class="s1">);</span>
+
+    <span class="s1">t.ok(</span><span class="s0">new </span><span class="s1">Date() - start &lt; </span><span class="s3">50</span><span class="s1">, </span><span class="s2">'resolve.sync timedout'</span><span class="s1">);</span>
+
+    <span class="s1">t.end();</span>
+<span class="s1">});</span>
+
+<span class="s1">test(</span><span class="s2">'sync dot slash main'</span><span class="s1">, </span><span class="s0">function </span><span class="s1">(t) {</span>
+    <span class="s0">var </span><span class="s1">start = </span><span class="s0">new </span><span class="s1">Date();</span>
+
+    <span class="s1">t.equal(</span>
+        <span class="s1">resolve.sync(</span><span class="s2">'./resolver/dot_slash_main'</span><span class="s1">),</span>
+        <span class="s1">path.join(__dirname, </span><span class="s2">'resolver/dot_slash_main/index.js'</span><span class="s1">)</span>
+    <span class="s1">);</span>
+    <span class="s1">t.equal(</span>
+        <span class="s1">resolve.sync(</span><span class="s2">'./resolver/dot_slash_main'</span><span class="s1">),</span>
+        <span class="s1">require.resolve(</span><span class="s2">'./resolver/dot_slash_main'</span><span class="s1">),</span>
+        <span class="s2">'./resolver/dot_slash_main: resolve.sync === require.resolve'</span>
+    <span class="s1">);</span>
+
+    <span class="s1">t.ok(</span><span class="s0">new </span><span class="s1">Date() - start &lt; </span><span class="s3">50</span><span class="s1">, </span><span class="s2">'resolve.sync timedout'</span><span class="s1">);</span>
+
+    <span class="s1">t.end();</span>
+<span class="s1">});</span>
+
+<span class="s1">test(</span><span class="s2">'not a directory'</span><span class="s1">, </span><span class="s0">function </span><span class="s1">(t) {</span>
+    <span class="s0">var </span><span class="s1">path = </span><span class="s2">'./foo'</span><span class="s1">;</span>
+    <span class="s0">try </span><span class="s1">{</span>
+        <span class="s1">resolve.sync(path, { basedir: __filename });</span>
+        <span class="s1">t.fail();</span>
+    <span class="s1">} </span><span class="s0">catch </span><span class="s1">(err) {</span>
+        <span class="s1">t.ok(err, </span><span class="s2">'a non-directory errors'</span><span class="s1">);</span>
+        <span class="s1">t.equal(err &amp;&amp; err.message, </span><span class="s2">'Provided basedir &quot;' </span><span class="s1">+ __filename + </span><span class="s2">'&quot; is not a directory, or a symlink to a directory'</span><span class="s1">);</span>
+        <span class="s1">t.equal(err &amp;&amp; err.code, </span><span class="s2">'INVALID_BASEDIR'</span><span class="s1">);</span>
+    <span class="s1">}</span>
+    <span class="s1">t.end();</span>
+<span class="s1">});</span>
+
+<span class="s1">test(</span><span class="s2">'non-string &quot;main&quot; field in package.json'</span><span class="s1">, </span><span class="s0">function </span><span class="s1">(t) {</span>
+    <span class="s0">var </span><span class="s1">dir = path.join(__dirname, </span><span class="s2">'resolver'</span><span class="s1">);</span>
+    <span class="s0">try </span><span class="s1">{</span>
+        <span class="s0">var </span><span class="s1">result = resolve.sync(</span><span class="s2">'./invalid_main'</span><span class="s1">, { basedir: dir });</span>
+        <span class="s1">t.equal(result, undefined, </span><span class="s2">'result should not exist'</span><span class="s1">);</span>
+        <span class="s1">t.fail(</span><span class="s2">'should not get here'</span><span class="s1">);</span>
+    <span class="s1">} </span><span class="s0">catch </span><span class="s1">(err) {</span>
+        <span class="s1">t.ok(err, </span><span class="s2">'errors on non-string main'</span><span class="s1">);</span>
+        <span class="s1">t.equal(err.message, </span><span class="s2">'package “invalid_main” `main` must be a string'</span><span class="s1">);</span>
+        <span class="s1">t.equal(err.code, </span><span class="s2">'INVALID_PACKAGE_MAIN'</span><span class="s1">);</span>
+    <span class="s1">}</span>
+    <span class="s1">t.end();</span>
+<span class="s1">});</span>
+
+<span class="s1">test(</span><span class="s2">'non-string &quot;main&quot; field in package.json'</span><span class="s1">, </span><span class="s0">function </span><span class="s1">(t) {</span>
+    <span class="s0">var </span><span class="s1">dir = path.join(__dirname, </span><span class="s2">'resolver'</span><span class="s1">);</span>
+    <span class="s0">try </span><span class="s1">{</span>
+        <span class="s0">var </span><span class="s1">result = resolve.sync(</span><span class="s2">'./invalid_main'</span><span class="s1">, { basedir: dir });</span>
+        <span class="s1">t.equal(result, undefined, </span><span class="s2">'result should not exist'</span><span class="s1">);</span>
+        <span class="s1">t.fail(</span><span class="s2">'should not get here'</span><span class="s1">);</span>
+    <span class="s1">} </span><span class="s0">catch </span><span class="s1">(err) {</span>
+        <span class="s1">t.ok(err, </span><span class="s2">'errors on non-string main'</span><span class="s1">);</span>
+        <span class="s1">t.equal(err.message, </span><span class="s2">'package “invalid_main” `main` must be a string'</span><span class="s1">);</span>
+        <span class="s1">t.equal(err.code, </span><span class="s2">'INVALID_PACKAGE_MAIN'</span><span class="s1">);</span>
+    <span class="s1">}</span>
+    <span class="s1">t.end();</span>
+<span class="s1">});</span>
+
+<span class="s1">test(</span><span class="s2">'browser field in package.json'</span><span class="s1">, </span><span class="s0">function </span><span class="s1">(t) {</span>
+    <span class="s0">var </span><span class="s1">dir = path.join(__dirname, </span><span class="s2">'resolver'</span><span class="s1">);</span>
+    <span class="s0">var </span><span class="s1">res = resolve.sync(</span><span class="s2">'./browser_field'</span><span class="s1">, {</span>
+        <span class="s1">basedir: dir,</span>
+        <span class="s1">packageFilter: </span><span class="s0">function </span><span class="s1">packageFilter(pkg) {</span>
+            <span class="s0">if </span><span class="s1">(pkg.browser) {</span>
+                <span class="s1">pkg.main = pkg.browser; </span><span class="s5">// eslint-disable-line no-param-reassign</span>
+                <span class="s0">delete </span><span class="s1">pkg.browser; </span><span class="s5">// eslint-disable-line no-param-reassign</span>
+            <span class="s1">}</span>
+            <span class="s0">return </span><span class="s1">pkg;</span>
+        <span class="s1">}</span>
+    <span class="s1">});</span>
+    <span class="s1">t.equal(res, path.join(dir, </span><span class="s2">'browser_field'</span><span class="s1">, </span><span class="s2">'b.js'</span><span class="s1">));</span>
+    <span class="s1">t.end();</span>
+<span class="s1">});</span>
+
+<span class="s1">test(</span><span class="s2">'absolute paths'</span><span class="s1">, </span><span class="s0">function </span><span class="s1">(t) {</span>
+    <span class="s0">var </span><span class="s1">extensionless = __filename.slice(</span><span class="s3">0</span><span class="s1">, -path.extname(__filename).length);</span>
+
+    <span class="s1">t.equal(</span>
+        <span class="s1">resolve.sync(__filename),</span>
+        <span class="s1">__filename,</span>
+        <span class="s2">'absolute path to this file resolves'</span>
+    <span class="s1">);</span>
+    <span class="s1">t.equal(</span>
+        <span class="s1">resolve.sync(__filename),</span>
+        <span class="s1">require.resolve(__filename),</span>
+        <span class="s2">'absolute path to this file: resolve.sync === require.resolve'</span>
+    <span class="s1">);</span>
+
+    <span class="s1">t.equal(</span>
+        <span class="s1">resolve.sync(extensionless),</span>
+        <span class="s1">__filename,</span>
+        <span class="s2">'extensionless absolute path to this file resolves'</span>
+    <span class="s1">);</span>
+    <span class="s1">t.equal(</span>
+        <span class="s1">resolve.sync(__filename),</span>
+        <span class="s1">require.resolve(__filename),</span>
+        <span class="s2">'absolute path to this file: resolve.sync === require.resolve'</span>
+    <span class="s1">);</span>
+
+    <span class="s1">t.equal(</span>
+        <span class="s1">resolve.sync(__filename, { basedir: process.cwd() }),</span>
+        <span class="s1">__filename,</span>
+        <span class="s2">'absolute path to this file with a basedir resolves'</span>
+    <span class="s1">);</span>
+    <span class="s0">if </span><span class="s1">(requireResolveSupportsPaths) {</span>
+        <span class="s1">t.equal(</span>
+            <span class="s1">resolve.sync(__filename, { basedir: process.cwd() }),</span>
+            <span class="s1">require.resolve(__filename, { paths: [process.cwd()] }),</span>
+            <span class="s2">'absolute path to this file + basedir: resolve.sync === require.resolve'</span>
+        <span class="s1">);</span>
+    <span class="s1">}</span>
+
+    <span class="s1">t.equal(</span>
+        <span class="s1">resolve.sync(extensionless, { basedir: process.cwd() }),</span>
+        <span class="s1">__filename,</span>
+        <span class="s2">'extensionless absolute path to this file with a basedir resolves'</span>
+    <span class="s1">);</span>
+    <span class="s0">if </span><span class="s1">(requireResolveSupportsPaths) {</span>
+        <span class="s1">t.equal(</span>
+            <span class="s1">resolve.sync(extensionless, { basedir: process.cwd() }),</span>
+            <span class="s1">require.resolve(extensionless, { paths: [process.cwd()] }),</span>
+            <span class="s2">'extensionless absolute path to this file + basedir: resolve.sync === require.resolve'</span>
+        <span class="s1">);</span>
+    <span class="s1">}</span>
+
+    <span class="s1">t.end();</span>
+<span class="s1">});</span>
+
+<span class="s0">var </span><span class="s1">malformedDir = path.join(__dirname, </span><span class="s2">'resolver/malformed_package_json'</span><span class="s1">);</span>
+<span class="s1">test(</span><span class="s2">'malformed package.json'</span><span class="s1">, { skip: !fs.existsSync(malformedDir) }, </span><span class="s0">function </span><span class="s1">(t) {</span>
+    <span class="s1">t.plan(</span><span class="s3">5 </span><span class="s1">+ (requireResolveSupportsPaths ? </span><span class="s3">1 </span><span class="s1">: </span><span class="s3">0</span><span class="s1">));</span>
+
+    <span class="s0">var </span><span class="s1">basedir = malformedDir;</span>
+    <span class="s0">var </span><span class="s1">expected = path.join(basedir, </span><span class="s2">'index.js'</span><span class="s1">);</span>
+
+    <span class="s1">t.equal(</span>
+        <span class="s1">resolve.sync(</span><span class="s2">'./index.js'</span><span class="s1">, { basedir: basedir }),</span>
+        <span class="s1">expected,</span>
+        <span class="s2">'malformed package.json is silently ignored'</span>
+    <span class="s1">);</span>
+    <span class="s0">if </span><span class="s1">(requireResolveSupportsPaths) {</span>
+        <span class="s1">t.equal(</span>
+            <span class="s1">resolve.sync(</span><span class="s2">'./index.js'</span><span class="s1">, { basedir: basedir }),</span>
+            <span class="s1">require.resolve(</span><span class="s2">'./index.js'</span><span class="s1">, { paths: [basedir] }),</span>
+            <span class="s2">'malformed package.json: resolve.sync === require.resolve'</span>
+        <span class="s1">);</span>
+    <span class="s1">}</span>
+
+    <span class="s0">var </span><span class="s1">res1 = resolve.sync(</span>
+        <span class="s2">'./index.js'</span><span class="s1">,</span>
+        <span class="s1">{</span>
+            <span class="s1">basedir: basedir,</span>
+            <span class="s1">packageFilter: </span><span class="s0">function </span><span class="s1">(pkg, pkgfile, dir) {</span>
+                <span class="s1">t.fail(</span><span class="s2">'should not reach here'</span><span class="s1">);</span>
+            <span class="s1">}</span>
+        <span class="s1">}</span>
+    <span class="s1">);</span>
+
+    <span class="s1">t.equal(</span>
+        <span class="s1">res1,</span>
+        <span class="s1">expected,</span>
+        <span class="s2">'with packageFilter: malformed package.json is silently ignored'</span>
+    <span class="s1">);</span>
+
+    <span class="s0">var </span><span class="s1">res2 = resolve.sync(</span>
+        <span class="s2">'./index.js'</span><span class="s1">,</span>
+        <span class="s1">{</span>
+            <span class="s1">basedir: basedir,</span>
+            <span class="s1">readPackageSync: </span><span class="s0">function </span><span class="s1">(readFileSync, pkgfile) {</span>
+                <span class="s1">t.equal(pkgfile, path.join(basedir, </span><span class="s2">'package.json'</span><span class="s1">), </span><span class="s2">'readPackageSync: `pkgfile` is package.json path'</span><span class="s1">);</span>
+                <span class="s0">var </span><span class="s1">result = String(readFileSync(pkgfile));</span>
+                <span class="s0">try </span><span class="s1">{</span>
+                    <span class="s0">return </span><span class="s1">JSON.parse(result);</span>
+                <span class="s1">} </span><span class="s0">catch </span><span class="s1">(e) {</span>
+                    <span class="s1">t.ok(e </span><span class="s0">instanceof </span><span class="s1">SyntaxError, </span><span class="s2">'readPackageSync: malformed package.json parses as a syntax error'</span><span class="s1">);</span>
+                    <span class="s0">throw </span><span class="s1">e;</span>
+                <span class="s1">}</span>
+            <span class="s1">}</span>
+        <span class="s1">}</span>
+    <span class="s1">);</span>
+
+    <span class="s1">t.equal(</span>
+        <span class="s1">res2,</span>
+        <span class="s1">expected,</span>
+        <span class="s2">'with readPackageSync: malformed package.json is silently ignored'</span>
+    <span class="s1">);</span>
+<span class="s1">});</span>
+</pre>
+</body>
+</html>

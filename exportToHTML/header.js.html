@@ -1,0 +1,328 @@
+<html>
+<head>
+<title>header.js</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #067d17;}
+.s1 { color: #080808;}
+.s2 { color: #8c8c8c; font-style: italic;}
+.s3 { color: #0033b3;}
+.s4 { color: #1750eb;}
+.s5 { color: #0037a6;}
+.s6 { color: #264eff;}
+</style>
+</head>
+<body bgcolor="#ffffff">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#c0c0c0" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+header.js</font>
+</center></td></tr></table>
+<pre><span class="s0">&quot;use strict&quot;</span><span class="s1">;</span>
+<span class="s2">// parse a 512-byte header block to a data object, or vice-versa</span>
+<span class="s2">// encode returns `true` if a pax extended header is needed, because</span>
+<span class="s2">// the data could not be faithfully encoded in a simple header.</span>
+<span class="s2">// (Also, check header.needPax to see if it needs a pax header.)</span>
+<span class="s3">var </span><span class="s1">__createBinding = (</span><span class="s3">this </span><span class="s1">&amp;&amp; </span><span class="s3">this</span><span class="s1">.__createBinding) || (Object.create ? (</span><span class="s3">function</span><span class="s1">(o, m, k, k2) {</span>
+    <span class="s3">if </span><span class="s1">(k2 === undefined) k2 = k;</span>
+    <span class="s3">var </span><span class="s1">desc = Object.getOwnPropertyDescriptor(m, k);</span>
+    <span class="s3">if </span><span class="s1">(!desc || (</span><span class="s0">&quot;get&quot; </span><span class="s3">in </span><span class="s1">desc ? !m.__esModule : desc.writable || desc.configurable)) {</span>
+      <span class="s1">desc = { enumerable: </span><span class="s3">true</span><span class="s1">, get: </span><span class="s3">function</span><span class="s1">() { </span><span class="s3">return </span><span class="s1">m[k]; } };</span>
+    <span class="s1">}</span>
+    <span class="s1">Object.defineProperty(o, k2, desc);</span>
+<span class="s1">}) : (</span><span class="s3">function</span><span class="s1">(o, m, k, k2) {</span>
+    <span class="s3">if </span><span class="s1">(k2 === undefined) k2 = k;</span>
+    <span class="s1">o[k2] = m[k];</span>
+<span class="s1">}));</span>
+<span class="s3">var </span><span class="s1">__setModuleDefault = (</span><span class="s3">this </span><span class="s1">&amp;&amp; </span><span class="s3">this</span><span class="s1">.__setModuleDefault) || (Object.create ? (</span><span class="s3">function</span><span class="s1">(o, v) {</span>
+    <span class="s1">Object.defineProperty(o, </span><span class="s0">&quot;default&quot;</span><span class="s1">, { enumerable: </span><span class="s3">true</span><span class="s1">, value: v });</span>
+<span class="s1">}) : </span><span class="s3">function</span><span class="s1">(o, v) {</span>
+    <span class="s1">o[</span><span class="s0">&quot;default&quot;</span><span class="s1">] = v;</span>
+<span class="s1">});</span>
+<span class="s3">var </span><span class="s1">__importStar = (</span><span class="s3">this </span><span class="s1">&amp;&amp; </span><span class="s3">this</span><span class="s1">.__importStar) || </span><span class="s3">function </span><span class="s1">(mod) {</span>
+    <span class="s3">if </span><span class="s1">(mod &amp;&amp; mod.__esModule) </span><span class="s3">return </span><span class="s1">mod;</span>
+    <span class="s3">var </span><span class="s1">result = {};</span>
+    <span class="s3">if </span><span class="s1">(mod != </span><span class="s3">null</span><span class="s1">) </span><span class="s3">for </span><span class="s1">(</span><span class="s3">var </span><span class="s1">k </span><span class="s3">in </span><span class="s1">mod) </span><span class="s3">if </span><span class="s1">(k !== </span><span class="s0">&quot;default&quot; </span><span class="s1">&amp;&amp; Object.prototype.hasOwnProperty.call(mod, k)) __createBinding(result, mod, k);</span>
+    <span class="s1">__setModuleDefault(result, mod);</span>
+    <span class="s3">return </span><span class="s1">result;</span>
+<span class="s1">};</span>
+<span class="s1">Object.defineProperty(exports, </span><span class="s0">&quot;__esModule&quot;</span><span class="s1">, { value: </span><span class="s3">true </span><span class="s1">});</span>
+<span class="s1">exports.Header = </span><span class="s3">void </span><span class="s4">0</span><span class="s1">;</span>
+<span class="s3">const </span><span class="s1">node_path_1 = require(</span><span class="s0">&quot;node:path&quot;</span><span class="s1">);</span>
+<span class="s3">const </span><span class="s1">large = __importStar(require(</span><span class="s0">&quot;./large-numbers.js&quot;</span><span class="s1">));</span>
+<span class="s3">const </span><span class="s1">types = __importStar(require(</span><span class="s0">&quot;./types.js&quot;</span><span class="s1">));</span>
+<span class="s3">class </span><span class="s1">Header {</span>
+    <span class="s1">cksumValid = </span><span class="s3">false</span><span class="s1">;</span>
+    <span class="s1">needPax = </span><span class="s3">false</span><span class="s1">;</span>
+    <span class="s1">nullBlock = </span><span class="s3">false</span><span class="s1">;</span>
+    <span class="s1">block;</span>
+    <span class="s1">path;</span>
+    <span class="s1">mode;</span>
+    <span class="s1">uid;</span>
+    <span class="s1">gid;</span>
+    <span class="s1">size;</span>
+    <span class="s1">cksum;</span>
+    <span class="s1">#type = </span><span class="s0">'Unsupported'</span><span class="s1">;</span>
+    <span class="s1">linkpath;</span>
+    <span class="s1">uname;</span>
+    <span class="s1">gname;</span>
+    <span class="s1">devmaj = </span><span class="s4">0</span><span class="s1">;</span>
+    <span class="s1">devmin = </span><span class="s4">0</span><span class="s1">;</span>
+    <span class="s1">atime;</span>
+    <span class="s1">ctime;</span>
+    <span class="s1">mtime;</span>
+    <span class="s1">charset;</span>
+    <span class="s1">comment;</span>
+    <span class="s1">constructor(data, off = </span><span class="s4">0</span><span class="s1">, ex, gex) {</span>
+        <span class="s3">if </span><span class="s1">(Buffer.isBuffer(data)) {</span>
+            <span class="s3">this</span><span class="s1">.decode(data, off || </span><span class="s4">0</span><span class="s1">, ex, gex);</span>
+        <span class="s1">}</span>
+        <span class="s3">else if </span><span class="s1">(data) {</span>
+            <span class="s3">this</span><span class="s1">.#slurp(data);</span>
+        <span class="s1">}</span>
+    <span class="s1">}</span>
+    <span class="s1">decode(buf, off, ex, gex) {</span>
+        <span class="s3">if </span><span class="s1">(!off) {</span>
+            <span class="s1">off = </span><span class="s4">0</span><span class="s1">;</span>
+        <span class="s1">}</span>
+        <span class="s3">if </span><span class="s1">(!buf || !(buf.length &gt;= off + </span><span class="s4">512</span><span class="s1">)) {</span>
+            <span class="s3">throw new </span><span class="s1">Error(</span><span class="s0">'need 512 bytes for header'</span><span class="s1">);</span>
+        <span class="s1">}</span>
+        <span class="s3">this</span><span class="s1">.path = decString(buf, off, </span><span class="s4">100</span><span class="s1">);</span>
+        <span class="s3">this</span><span class="s1">.mode = decNumber(buf, off + </span><span class="s4">100</span><span class="s1">, </span><span class="s4">8</span><span class="s1">);</span>
+        <span class="s3">this</span><span class="s1">.uid = decNumber(buf, off + </span><span class="s4">108</span><span class="s1">, </span><span class="s4">8</span><span class="s1">);</span>
+        <span class="s3">this</span><span class="s1">.gid = decNumber(buf, off + </span><span class="s4">116</span><span class="s1">, </span><span class="s4">8</span><span class="s1">);</span>
+        <span class="s3">this</span><span class="s1">.size = decNumber(buf, off + </span><span class="s4">124</span><span class="s1">, </span><span class="s4">12</span><span class="s1">);</span>
+        <span class="s3">this</span><span class="s1">.mtime = decDate(buf, off + </span><span class="s4">136</span><span class="s1">, </span><span class="s4">12</span><span class="s1">);</span>
+        <span class="s3">this</span><span class="s1">.cksum = decNumber(buf, off + </span><span class="s4">148</span><span class="s1">, </span><span class="s4">12</span><span class="s1">);</span>
+        <span class="s2">// if we have extended or global extended headers, apply them now</span>
+        <span class="s2">// See https://github.com/npm/node-tar/pull/187</span>
+        <span class="s2">// Apply global before local, so it overrides</span>
+        <span class="s3">if </span><span class="s1">(gex)</span>
+            <span class="s3">this</span><span class="s1">.#slurp(gex, </span><span class="s3">true</span><span class="s1">);</span>
+        <span class="s3">if </span><span class="s1">(ex)</span>
+            <span class="s3">this</span><span class="s1">.#slurp(ex);</span>
+        <span class="s2">// old tar versions marked dirs as a file with a trailing /</span>
+        <span class="s3">const </span><span class="s1">t = decString(buf, off + </span><span class="s4">156</span><span class="s1">, </span><span class="s4">1</span><span class="s1">);</span>
+        <span class="s3">if </span><span class="s1">(types.isCode(t)) {</span>
+            <span class="s3">this</span><span class="s1">.#type = t || </span><span class="s0">'0'</span><span class="s1">;</span>
+        <span class="s1">}</span>
+        <span class="s3">if </span><span class="s1">(</span><span class="s3">this</span><span class="s1">.#type === </span><span class="s0">'0' </span><span class="s1">&amp;&amp; </span><span class="s3">this</span><span class="s1">.path.slice(-</span><span class="s4">1</span><span class="s1">) === </span><span class="s0">'/'</span><span class="s1">) {</span>
+            <span class="s3">this</span><span class="s1">.#type = </span><span class="s0">'5'</span><span class="s1">;</span>
+        <span class="s1">}</span>
+        <span class="s2">// tar implementations sometimes incorrectly put the stat(dir).size</span>
+        <span class="s2">// as the size in the tarball, even though Directory entries are</span>
+        <span class="s2">// not able to have any body at all.  In the very rare chance that</span>
+        <span class="s2">// it actually DOES have a body, we weren't going to do anything with</span>
+        <span class="s2">// it anyway, and it'll just be a warning about an invalid header.</span>
+        <span class="s3">if </span><span class="s1">(</span><span class="s3">this</span><span class="s1">.#type === </span><span class="s0">'5'</span><span class="s1">) {</span>
+            <span class="s3">this</span><span class="s1">.size = </span><span class="s4">0</span><span class="s1">;</span>
+        <span class="s1">}</span>
+        <span class="s3">this</span><span class="s1">.linkpath = decString(buf, off + </span><span class="s4">157</span><span class="s1">, </span><span class="s4">100</span><span class="s1">);</span>
+        <span class="s3">if </span><span class="s1">(buf.subarray(off + </span><span class="s4">257</span><span class="s1">, off + </span><span class="s4">265</span><span class="s1">).toString() ===</span>
+            <span class="s0">'ustar</span><span class="s5">\u0000</span><span class="s0">00'</span><span class="s1">) {</span>
+            <span class="s3">this</span><span class="s1">.uname = decString(buf, off + </span><span class="s4">265</span><span class="s1">, </span><span class="s4">32</span><span class="s1">);</span>
+            <span class="s3">this</span><span class="s1">.gname = decString(buf, off + </span><span class="s4">297</span><span class="s1">, </span><span class="s4">32</span><span class="s1">);</span>
+            <span class="s2">/* c8 ignore start */</span>
+            <span class="s3">this</span><span class="s1">.devmaj = decNumber(buf, off + </span><span class="s4">329</span><span class="s1">, </span><span class="s4">8</span><span class="s1">) ?? </span><span class="s4">0</span><span class="s1">;</span>
+            <span class="s3">this</span><span class="s1">.devmin = decNumber(buf, off + </span><span class="s4">337</span><span class="s1">, </span><span class="s4">8</span><span class="s1">) ?? </span><span class="s4">0</span><span class="s1">;</span>
+            <span class="s2">/* c8 ignore stop */</span>
+            <span class="s3">if </span><span class="s1">(buf[off + </span><span class="s4">475</span><span class="s1">] !== </span><span class="s4">0</span><span class="s1">) {</span>
+                <span class="s2">// definitely a prefix, definitely &gt;130 chars.</span>
+                <span class="s3">const </span><span class="s1">prefix = decString(buf, off + </span><span class="s4">345</span><span class="s1">, </span><span class="s4">155</span><span class="s1">);</span>
+                <span class="s3">this</span><span class="s1">.path = prefix + </span><span class="s0">'/' </span><span class="s1">+ </span><span class="s3">this</span><span class="s1">.path;</span>
+            <span class="s1">}</span>
+            <span class="s3">else </span><span class="s1">{</span>
+                <span class="s3">const </span><span class="s1">prefix = decString(buf, off + </span><span class="s4">345</span><span class="s1">, </span><span class="s4">130</span><span class="s1">);</span>
+                <span class="s3">if </span><span class="s1">(prefix) {</span>
+                    <span class="s3">this</span><span class="s1">.path = prefix + </span><span class="s0">'/' </span><span class="s1">+ </span><span class="s3">this</span><span class="s1">.path;</span>
+                <span class="s1">}</span>
+                <span class="s3">this</span><span class="s1">.atime = decDate(buf, off + </span><span class="s4">476</span><span class="s1">, </span><span class="s4">12</span><span class="s1">);</span>
+                <span class="s3">this</span><span class="s1">.ctime = decDate(buf, off + </span><span class="s4">488</span><span class="s1">, </span><span class="s4">12</span><span class="s1">);</span>
+            <span class="s1">}</span>
+        <span class="s1">}</span>
+        <span class="s3">let </span><span class="s1">sum = </span><span class="s4">8 </span><span class="s1">* </span><span class="s4">0x20</span><span class="s1">;</span>
+        <span class="s3">for </span><span class="s1">(</span><span class="s3">let </span><span class="s1">i = off; i &lt; off + </span><span class="s4">148</span><span class="s1">; i++) {</span>
+            <span class="s1">sum += buf[i];</span>
+        <span class="s1">}</span>
+        <span class="s3">for </span><span class="s1">(</span><span class="s3">let </span><span class="s1">i = off + </span><span class="s4">156</span><span class="s1">; i &lt; off + </span><span class="s4">512</span><span class="s1">; i++) {</span>
+            <span class="s1">sum += buf[i];</span>
+        <span class="s1">}</span>
+        <span class="s3">this</span><span class="s1">.cksumValid = sum === </span><span class="s3">this</span><span class="s1">.cksum;</span>
+        <span class="s3">if </span><span class="s1">(</span><span class="s3">this</span><span class="s1">.cksum === undefined &amp;&amp; sum === </span><span class="s4">8 </span><span class="s1">* </span><span class="s4">0x20</span><span class="s1">) {</span>
+            <span class="s3">this</span><span class="s1">.nullBlock = </span><span class="s3">true</span><span class="s1">;</span>
+        <span class="s1">}</span>
+    <span class="s1">}</span>
+    <span class="s1">#slurp(ex, gex = </span><span class="s3">false</span><span class="s1">) {</span>
+        <span class="s1">Object.assign(</span><span class="s3">this</span><span class="s1">, Object.fromEntries(Object.entries(ex).filter(([k, v]) =&gt; {</span>
+            <span class="s2">// we slurp in everything except for the path attribute in</span>
+            <span class="s2">// a global extended header, because that's weird. Also, any</span>
+            <span class="s2">// null/undefined values are ignored.</span>
+            <span class="s3">return </span><span class="s1">!(v === </span><span class="s3">null </span><span class="s1">||</span>
+                <span class="s1">v === undefined ||</span>
+                <span class="s1">(k === </span><span class="s0">'path' </span><span class="s1">&amp;&amp; gex) ||</span>
+                <span class="s1">(k === </span><span class="s0">'linkpath' </span><span class="s1">&amp;&amp; gex) ||</span>
+                <span class="s1">k === </span><span class="s0">'global'</span><span class="s1">);</span>
+        <span class="s1">})));</span>
+    <span class="s1">}</span>
+    <span class="s1">encode(buf, off = </span><span class="s4">0</span><span class="s1">) {</span>
+        <span class="s3">if </span><span class="s1">(!buf) {</span>
+            <span class="s1">buf = </span><span class="s3">this</span><span class="s1">.block = Buffer.alloc(</span><span class="s4">512</span><span class="s1">);</span>
+        <span class="s1">}</span>
+        <span class="s3">if </span><span class="s1">(</span><span class="s3">this</span><span class="s1">.#type === </span><span class="s0">'Unsupported'</span><span class="s1">) {</span>
+            <span class="s3">this</span><span class="s1">.#type = </span><span class="s0">'0'</span><span class="s1">;</span>
+        <span class="s1">}</span>
+        <span class="s3">if </span><span class="s1">(!(buf.length &gt;= off + </span><span class="s4">512</span><span class="s1">)) {</span>
+            <span class="s3">throw new </span><span class="s1">Error(</span><span class="s0">'need 512 bytes for header'</span><span class="s1">);</span>
+        <span class="s1">}</span>
+        <span class="s3">const </span><span class="s1">prefixSize = </span><span class="s3">this</span><span class="s1">.ctime || </span><span class="s3">this</span><span class="s1">.atime ? </span><span class="s4">130 </span><span class="s1">: </span><span class="s4">155</span><span class="s1">;</span>
+        <span class="s3">const </span><span class="s1">split = splitPrefix(</span><span class="s3">this</span><span class="s1">.path || </span><span class="s0">''</span><span class="s1">, prefixSize);</span>
+        <span class="s3">const </span><span class="s1">path = split[</span><span class="s4">0</span><span class="s1">];</span>
+        <span class="s3">const </span><span class="s1">prefix = split[</span><span class="s4">1</span><span class="s1">];</span>
+        <span class="s3">this</span><span class="s1">.needPax = !!split[</span><span class="s4">2</span><span class="s1">];</span>
+        <span class="s3">this</span><span class="s1">.needPax = encString(buf, off, </span><span class="s4">100</span><span class="s1">, path) || </span><span class="s3">this</span><span class="s1">.needPax;</span>
+        <span class="s3">this</span><span class="s1">.needPax =</span>
+            <span class="s1">encNumber(buf, off + </span><span class="s4">100</span><span class="s1">, </span><span class="s4">8</span><span class="s1">, </span><span class="s3">this</span><span class="s1">.mode) || </span><span class="s3">this</span><span class="s1">.needPax;</span>
+        <span class="s3">this</span><span class="s1">.needPax =</span>
+            <span class="s1">encNumber(buf, off + </span><span class="s4">108</span><span class="s1">, </span><span class="s4">8</span><span class="s1">, </span><span class="s3">this</span><span class="s1">.uid) || </span><span class="s3">this</span><span class="s1">.needPax;</span>
+        <span class="s3">this</span><span class="s1">.needPax =</span>
+            <span class="s1">encNumber(buf, off + </span><span class="s4">116</span><span class="s1">, </span><span class="s4">8</span><span class="s1">, </span><span class="s3">this</span><span class="s1">.gid) || </span><span class="s3">this</span><span class="s1">.needPax;</span>
+        <span class="s3">this</span><span class="s1">.needPax =</span>
+            <span class="s1">encNumber(buf, off + </span><span class="s4">124</span><span class="s1">, </span><span class="s4">12</span><span class="s1">, </span><span class="s3">this</span><span class="s1">.size) || </span><span class="s3">this</span><span class="s1">.needPax;</span>
+        <span class="s3">this</span><span class="s1">.needPax =</span>
+            <span class="s1">encDate(buf, off + </span><span class="s4">136</span><span class="s1">, </span><span class="s4">12</span><span class="s1">, </span><span class="s3">this</span><span class="s1">.mtime) || </span><span class="s3">this</span><span class="s1">.needPax;</span>
+        <span class="s1">buf[off + </span><span class="s4">156</span><span class="s1">] = </span><span class="s3">this</span><span class="s1">.#type.charCodeAt(</span><span class="s4">0</span><span class="s1">);</span>
+        <span class="s3">this</span><span class="s1">.needPax =</span>
+            <span class="s1">encString(buf, off + </span><span class="s4">157</span><span class="s1">, </span><span class="s4">100</span><span class="s1">, </span><span class="s3">this</span><span class="s1">.linkpath) || </span><span class="s3">this</span><span class="s1">.needPax;</span>
+        <span class="s1">buf.write(</span><span class="s0">'ustar</span><span class="s5">\u0000</span><span class="s0">00'</span><span class="s1">, off + </span><span class="s4">257</span><span class="s1">, </span><span class="s4">8</span><span class="s1">);</span>
+        <span class="s3">this</span><span class="s1">.needPax =</span>
+            <span class="s1">encString(buf, off + </span><span class="s4">265</span><span class="s1">, </span><span class="s4">32</span><span class="s1">, </span><span class="s3">this</span><span class="s1">.uname) || </span><span class="s3">this</span><span class="s1">.needPax;</span>
+        <span class="s3">this</span><span class="s1">.needPax =</span>
+            <span class="s1">encString(buf, off + </span><span class="s4">297</span><span class="s1">, </span><span class="s4">32</span><span class="s1">, </span><span class="s3">this</span><span class="s1">.gname) || </span><span class="s3">this</span><span class="s1">.needPax;</span>
+        <span class="s3">this</span><span class="s1">.needPax =</span>
+            <span class="s1">encNumber(buf, off + </span><span class="s4">329</span><span class="s1">, </span><span class="s4">8</span><span class="s1">, </span><span class="s3">this</span><span class="s1">.devmaj) || </span><span class="s3">this</span><span class="s1">.needPax;</span>
+        <span class="s3">this</span><span class="s1">.needPax =</span>
+            <span class="s1">encNumber(buf, off + </span><span class="s4">337</span><span class="s1">, </span><span class="s4">8</span><span class="s1">, </span><span class="s3">this</span><span class="s1">.devmin) || </span><span class="s3">this</span><span class="s1">.needPax;</span>
+        <span class="s3">this</span><span class="s1">.needPax =</span>
+            <span class="s1">encString(buf, off + </span><span class="s4">345</span><span class="s1">, prefixSize, prefix) || </span><span class="s3">this</span><span class="s1">.needPax;</span>
+        <span class="s3">if </span><span class="s1">(buf[off + </span><span class="s4">475</span><span class="s1">] !== </span><span class="s4">0</span><span class="s1">) {</span>
+            <span class="s3">this</span><span class="s1">.needPax =</span>
+                <span class="s1">encString(buf, off + </span><span class="s4">345</span><span class="s1">, </span><span class="s4">155</span><span class="s1">, prefix) || </span><span class="s3">this</span><span class="s1">.needPax;</span>
+        <span class="s1">}</span>
+        <span class="s3">else </span><span class="s1">{</span>
+            <span class="s3">this</span><span class="s1">.needPax =</span>
+                <span class="s1">encString(buf, off + </span><span class="s4">345</span><span class="s1">, </span><span class="s4">130</span><span class="s1">, prefix) || </span><span class="s3">this</span><span class="s1">.needPax;</span>
+            <span class="s3">this</span><span class="s1">.needPax =</span>
+                <span class="s1">encDate(buf, off + </span><span class="s4">476</span><span class="s1">, </span><span class="s4">12</span><span class="s1">, </span><span class="s3">this</span><span class="s1">.atime) || </span><span class="s3">this</span><span class="s1">.needPax;</span>
+            <span class="s3">this</span><span class="s1">.needPax =</span>
+                <span class="s1">encDate(buf, off + </span><span class="s4">488</span><span class="s1">, </span><span class="s4">12</span><span class="s1">, </span><span class="s3">this</span><span class="s1">.ctime) || </span><span class="s3">this</span><span class="s1">.needPax;</span>
+        <span class="s1">}</span>
+        <span class="s3">let </span><span class="s1">sum = </span><span class="s4">8 </span><span class="s1">* </span><span class="s4">0x20</span><span class="s1">;</span>
+        <span class="s3">for </span><span class="s1">(</span><span class="s3">let </span><span class="s1">i = off; i &lt; off + </span><span class="s4">148</span><span class="s1">; i++) {</span>
+            <span class="s1">sum += buf[i];</span>
+        <span class="s1">}</span>
+        <span class="s3">for </span><span class="s1">(</span><span class="s3">let </span><span class="s1">i = off + </span><span class="s4">156</span><span class="s1">; i &lt; off + </span><span class="s4">512</span><span class="s1">; i++) {</span>
+            <span class="s1">sum += buf[i];</span>
+        <span class="s1">}</span>
+        <span class="s3">this</span><span class="s1">.cksum = sum;</span>
+        <span class="s1">encNumber(buf, off + </span><span class="s4">148</span><span class="s1">, </span><span class="s4">8</span><span class="s1">, </span><span class="s3">this</span><span class="s1">.cksum);</span>
+        <span class="s3">this</span><span class="s1">.cksumValid = </span><span class="s3">true</span><span class="s1">;</span>
+        <span class="s3">return this</span><span class="s1">.needPax;</span>
+    <span class="s1">}</span>
+    <span class="s1">get type() {</span>
+        <span class="s3">return </span><span class="s1">(</span><span class="s3">this</span><span class="s1">.#type === </span><span class="s0">'Unsupported' </span><span class="s1">?</span>
+            <span class="s3">this</span><span class="s1">.#type</span>
+            <span class="s1">: types.name.get(</span><span class="s3">this</span><span class="s1">.#type));</span>
+    <span class="s1">}</span>
+    <span class="s1">get typeKey() {</span>
+        <span class="s3">return this</span><span class="s1">.#type;</span>
+    <span class="s1">}</span>
+    <span class="s1">set type(type) {</span>
+        <span class="s3">const </span><span class="s1">c = String(types.code.get(type));</span>
+        <span class="s3">if </span><span class="s1">(types.isCode(c) || c === </span><span class="s0">'Unsupported'</span><span class="s1">) {</span>
+            <span class="s3">this</span><span class="s1">.#type = c;</span>
+        <span class="s1">}</span>
+        <span class="s3">else if </span><span class="s1">(types.isCode(type)) {</span>
+            <span class="s3">this</span><span class="s1">.#type = type;</span>
+        <span class="s1">}</span>
+        <span class="s3">else </span><span class="s1">{</span>
+            <span class="s3">throw new </span><span class="s1">TypeError(</span><span class="s0">'invalid entry type: ' </span><span class="s1">+ type);</span>
+        <span class="s1">}</span>
+    <span class="s1">}</span>
+<span class="s1">}</span>
+<span class="s1">exports.Header = Header;</span>
+<span class="s3">const </span><span class="s1">splitPrefix = (p, prefixSize) =&gt; {</span>
+    <span class="s3">const </span><span class="s1">pathSize = </span><span class="s4">100</span><span class="s1">;</span>
+    <span class="s3">let </span><span class="s1">pp = p;</span>
+    <span class="s3">let </span><span class="s1">prefix = </span><span class="s0">''</span><span class="s1">;</span>
+    <span class="s3">let </span><span class="s1">ret = undefined;</span>
+    <span class="s3">const </span><span class="s1">root = node_path_1.posix.parse(p).root || </span><span class="s0">'.'</span><span class="s1">;</span>
+    <span class="s3">if </span><span class="s1">(Buffer.byteLength(pp) &lt; pathSize) {</span>
+        <span class="s1">ret = [pp, prefix, </span><span class="s3">false</span><span class="s1">];</span>
+    <span class="s1">}</span>
+    <span class="s3">else </span><span class="s1">{</span>
+        <span class="s2">// first set prefix to the dir, and path to the base</span>
+        <span class="s1">prefix = node_path_1.posix.dirname(pp);</span>
+        <span class="s1">pp = node_path_1.posix.basename(pp);</span>
+        <span class="s3">do </span><span class="s1">{</span>
+            <span class="s3">if </span><span class="s1">(Buffer.byteLength(pp) &lt;= pathSize &amp;&amp;</span>
+                <span class="s1">Buffer.byteLength(prefix) &lt;= prefixSize) {</span>
+                <span class="s2">// both fit!</span>
+                <span class="s1">ret = [pp, prefix, </span><span class="s3">false</span><span class="s1">];</span>
+            <span class="s1">}</span>
+            <span class="s3">else if </span><span class="s1">(Buffer.byteLength(pp) &gt; pathSize &amp;&amp;</span>
+                <span class="s1">Buffer.byteLength(prefix) &lt;= prefixSize) {</span>
+                <span class="s2">// prefix fits in prefix, but path doesn't fit in path</span>
+                <span class="s1">ret = [pp.slice(</span><span class="s4">0</span><span class="s1">, pathSize - </span><span class="s4">1</span><span class="s1">), prefix, </span><span class="s3">true</span><span class="s1">];</span>
+            <span class="s1">}</span>
+            <span class="s3">else </span><span class="s1">{</span>
+                <span class="s2">// make path take a bit from prefix</span>
+                <span class="s1">pp = node_path_1.posix.join(node_path_1.posix.basename(prefix), pp);</span>
+                <span class="s1">prefix = node_path_1.posix.dirname(prefix);</span>
+            <span class="s1">}</span>
+        <span class="s1">} </span><span class="s3">while </span><span class="s1">(prefix !== root &amp;&amp; ret === undefined);</span>
+        <span class="s2">// at this point, found no resolution, just truncate</span>
+        <span class="s3">if </span><span class="s1">(!ret) {</span>
+            <span class="s1">ret = [p.slice(</span><span class="s4">0</span><span class="s1">, pathSize - </span><span class="s4">1</span><span class="s1">), </span><span class="s0">''</span><span class="s1">, </span><span class="s3">true</span><span class="s1">];</span>
+        <span class="s1">}</span>
+    <span class="s1">}</span>
+    <span class="s3">return </span><span class="s1">ret;</span>
+<span class="s1">};</span>
+<span class="s3">const </span><span class="s1">decString = (buf, off, size) =&gt; buf</span>
+    <span class="s1">.subarray(off, off + size)</span>
+    <span class="s1">.toString(</span><span class="s0">'utf8'</span><span class="s1">)</span>
+    <span class="s1">.replace(</span><span class="s6">/\0.*/</span><span class="s1">, </span><span class="s0">''</span><span class="s1">);</span>
+<span class="s3">const </span><span class="s1">decDate = (buf, off, size) =&gt; numToDate(decNumber(buf, off, size));</span>
+<span class="s3">const </span><span class="s1">numToDate = (num) =&gt; num === undefined ? undefined : </span><span class="s3">new </span><span class="s1">Date(num * </span><span class="s4">1000</span><span class="s1">);</span>
+<span class="s3">const </span><span class="s1">decNumber = (buf, off, size) =&gt; Number(buf[off]) &amp; </span><span class="s4">0x80 </span><span class="s1">?</span>
+    <span class="s1">large.parse(buf.subarray(off, off + size))</span>
+    <span class="s1">: decSmallNumber(buf, off, size);</span>
+<span class="s3">const </span><span class="s1">nanUndef = (value) =&gt; (isNaN(value) ? undefined : value);</span>
+<span class="s3">const </span><span class="s1">decSmallNumber = (buf, off, size) =&gt; nanUndef(parseInt(buf</span>
+    <span class="s1">.subarray(off, off + size)</span>
+    <span class="s1">.toString(</span><span class="s0">'utf8'</span><span class="s1">)</span>
+    <span class="s1">.replace(</span><span class="s6">/\0.*$/</span><span class="s1">, </span><span class="s0">''</span><span class="s1">)</span>
+    <span class="s1">.trim(), </span><span class="s4">8</span><span class="s1">));</span>
+<span class="s2">// the maximum encodable as a null-terminated octal, by field size</span>
+<span class="s3">const </span><span class="s1">MAXNUM = {</span>
+    <span class="s4">12</span><span class="s1">: </span><span class="s4">0o77777777777</span><span class="s1">,</span>
+    <span class="s4">8</span><span class="s1">: </span><span class="s4">0o7777777</span><span class="s1">,</span>
+<span class="s1">};</span>
+<span class="s3">const </span><span class="s1">encNumber = (buf, off, size, num) =&gt; num === undefined ? </span><span class="s3">false</span>
+    <span class="s1">: num &gt; MAXNUM[size] || num &lt; </span><span class="s4">0 </span><span class="s1">?</span>
+        <span class="s1">(large.encode(num, buf.subarray(off, off + size)), </span><span class="s3">true</span><span class="s1">)</span>
+        <span class="s1">: (encSmallNumber(buf, off, size, num), </span><span class="s3">false</span><span class="s1">);</span>
+<span class="s3">const </span><span class="s1">encSmallNumber = (buf, off, size, num) =&gt; buf.write(octalString(num, size), off, size, </span><span class="s0">'ascii'</span><span class="s1">);</span>
+<span class="s3">const </span><span class="s1">octalString = (num, size) =&gt; padOctal(Math.floor(num).toString(</span><span class="s4">8</span><span class="s1">), size);</span>
+<span class="s3">const </span><span class="s1">padOctal = (str, size) =&gt; (str.length === size - </span><span class="s4">1 </span><span class="s1">?</span>
+    <span class="s1">str</span>
+    <span class="s1">: </span><span class="s3">new </span><span class="s1">Array(size - str.length - </span><span class="s4">1</span><span class="s1">).join(</span><span class="s0">'0'</span><span class="s1">) + str + </span><span class="s0">' '</span><span class="s1">) + </span><span class="s0">'</span><span class="s5">\0</span><span class="s0">'</span><span class="s1">;</span>
+<span class="s3">const </span><span class="s1">encDate = (buf, off, size, date) =&gt; date === undefined ? </span><span class="s3">false </span><span class="s1">: (encNumber(buf, off, size, date.getTime() / </span><span class="s4">1000</span><span class="s1">));</span>
+<span class="s2">// enough to fill the longest string we've got</span>
+<span class="s3">const </span><span class="s1">NULLS = </span><span class="s3">new </span><span class="s1">Array(</span><span class="s4">156</span><span class="s1">).join(</span><span class="s0">'</span><span class="s5">\0</span><span class="s0">'</span><span class="s1">);</span>
+<span class="s2">// pad with nulls, return true if it's longer or non-ascii</span>
+<span class="s3">const </span><span class="s1">encString = (buf, off, size, str) =&gt; str === undefined ? </span><span class="s3">false </span><span class="s1">: ((buf.write(str + NULLS, off, size, </span><span class="s0">'utf8'</span><span class="s1">),</span>
+    <span class="s1">str.length !== Buffer.byteLength(str) || str.length &gt; size));</span>
+<span class="s2">//# sourceMappingURL=header.js.map</span></pre>
+</body>
+</html>

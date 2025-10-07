@@ -1,0 +1,563 @@
+<html>
+<head>
+<title>next-trace-entrypoints-plugin.js</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #067d17;}
+.s1 { color: #080808;}
+.s2 { color: #0033b3;}
+.s3 { color: #1750eb;}
+.s4 { color: #8c8c8c; font-style: italic;}
+.s5 { color: #264eff;}
+</style>
+</head>
+<body bgcolor="#ffffff">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#c0c0c0" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+next-trace-entrypoints-plugin.js</font>
+</center></td></tr></table>
+<pre><span class="s0">&quot;use strict&quot;</span><span class="s1">;</span>
+<span class="s1">Object.defineProperty(exports, </span><span class="s0">&quot;__esModule&quot;</span><span class="s1">, {</span>
+    <span class="s1">value: </span><span class="s2">true</span>
+<span class="s1">});</span>
+<span class="s3">0 </span><span class="s1">&amp;&amp; (module.exports = {</span>
+    <span class="s1">TRACE_IGNORES: </span><span class="s2">null</span><span class="s1">,</span>
+    <span class="s1">TraceEntryPointsPlugin: </span><span class="s2">null</span><span class="s1">,</span>
+    <span class="s1">getFilesMapFromReasons: </span><span class="s2">null</span>
+<span class="s1">});</span>
+<span class="s2">function </span><span class="s1">_export(target, all) {</span>
+    <span class="s2">for</span><span class="s1">(</span><span class="s2">var </span><span class="s1">name </span><span class="s2">in </span><span class="s1">all)Object.defineProperty(target, name, {</span>
+        <span class="s1">enumerable: </span><span class="s2">true</span><span class="s1">,</span>
+        <span class="s1">get: all[name]</span>
+    <span class="s1">});</span>
+<span class="s1">}</span>
+<span class="s1">_export(exports, {</span>
+    <span class="s1">TRACE_IGNORES: </span><span class="s2">function</span><span class="s1">() {</span>
+        <span class="s2">return </span><span class="s1">TRACE_IGNORES;</span>
+    <span class="s1">},</span>
+    <span class="s1">TraceEntryPointsPlugin: </span><span class="s2">function</span><span class="s1">() {</span>
+        <span class="s2">return </span><span class="s1">TraceEntryPointsPlugin;</span>
+    <span class="s1">},</span>
+    <span class="s1">getFilesMapFromReasons: </span><span class="s2">function</span><span class="s1">() {</span>
+        <span class="s2">return </span><span class="s1">getFilesMapFromReasons;</span>
+    <span class="s1">}</span>
+<span class="s1">});</span>
+<span class="s2">const </span><span class="s1">_path = </span><span class="s4">/*#__PURE__*/ </span><span class="s1">_interop_require_default(require(</span><span class="s0">&quot;path&quot;</span><span class="s1">));</span>
+<span class="s2">const </span><span class="s1">_iserror = </span><span class="s4">/*#__PURE__*/ </span><span class="s1">_interop_require_default(require(</span><span class="s0">&quot;../../../lib/is-error&quot;</span><span class="s1">));</span>
+<span class="s2">const </span><span class="s1">_nft = require(</span><span class="s0">&quot;next/dist/compiled/@vercel/nft&quot;</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">_constants = require(</span><span class="s0">&quot;../../../shared/lib/constants&quot;</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">_webpack = require(</span><span class="s0">&quot;next/dist/compiled/webpack/webpack&quot;</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">_webpackconfig = require(</span><span class="s0">&quot;../../webpack-config&quot;</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">_picomatch = </span><span class="s4">/*#__PURE__*/ </span><span class="s1">_interop_require_default(require(</span><span class="s0">&quot;next/dist/compiled/picomatch&quot;</span><span class="s1">));</span>
+<span class="s2">const </span><span class="s1">_getmodulebuildinfo = require(</span><span class="s0">&quot;../loaders/get-module-build-info&quot;</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">_entries = require(</span><span class="s0">&quot;../../entries&quot;</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">_handleexternals = require(</span><span class="s0">&quot;../../handle-externals&quot;</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">_ismetadataroute = require(</span><span class="s0">&quot;../../../lib/metadata/is-metadata-route&quot;</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">_utils = require(</span><span class="s0">&quot;../utils&quot;</span><span class="s1">);</span>
+<span class="s2">function </span><span class="s1">_interop_require_default(obj) {</span>
+    <span class="s2">return </span><span class="s1">obj &amp;&amp; obj.__esModule ? obj : {</span>
+        <span class="s2">default</span><span class="s1">: obj</span>
+    <span class="s1">};</span>
+<span class="s1">}</span>
+<span class="s2">const </span><span class="s1">PLUGIN_NAME = </span><span class="s0">'TraceEntryPointsPlugin'</span><span class="s1">;</span>
+<span class="s2">const </span><span class="s1">TRACE_IGNORES = [</span>
+    <span class="s0">'**/*/next/dist/server/next.js'</span><span class="s1">,</span>
+    <span class="s0">'**/*/next/dist/bin/next'</span>
+<span class="s1">];</span>
+<span class="s2">const </span><span class="s1">NOT_TRACEABLE = [</span>
+    <span class="s0">'.wasm'</span><span class="s1">,</span>
+    <span class="s0">'.png'</span><span class="s1">,</span>
+    <span class="s0">'.jpg'</span><span class="s1">,</span>
+    <span class="s0">'.jpeg'</span><span class="s1">,</span>
+    <span class="s0">'.gif'</span><span class="s1">,</span>
+    <span class="s0">'.webp'</span><span class="s1">,</span>
+    <span class="s0">'.avif'</span><span class="s1">,</span>
+    <span class="s0">'.ico'</span><span class="s1">,</span>
+    <span class="s0">'.bmp'</span><span class="s1">,</span>
+    <span class="s0">'.svg'</span>
+<span class="s1">];</span>
+<span class="s2">function </span><span class="s1">getModuleFromDependency(compilation, dep) {</span>
+    <span class="s2">return </span><span class="s1">compilation.moduleGraph.getModule(dep);</span>
+<span class="s1">}</span>
+<span class="s2">function </span><span class="s1">getFilesMapFromReasons(fileList, reasons, ignoreFn) {</span>
+    <span class="s4">// this uses the reasons tree to collect files specific to a</span>
+    <span class="s4">// certain parent allowing us to not have to trace each parent</span>
+    <span class="s4">// separately</span>
+    <span class="s2">const </span><span class="s1">parentFilesMap = </span><span class="s2">new </span><span class="s1">Map();</span>
+    <span class="s2">function </span><span class="s1">propagateToParents(parents, file, seen = </span><span class="s2">new </span><span class="s1">Set()) {</span>
+        <span class="s2">for </span><span class="s1">(</span><span class="s2">const </span><span class="s1">parent of parents || []){</span>
+            <span class="s2">if </span><span class="s1">(!seen.has(parent)) {</span>
+                <span class="s1">seen.add(parent);</span>
+                <span class="s2">let </span><span class="s1">parentFiles = parentFilesMap.get(parent);</span>
+                <span class="s2">if </span><span class="s1">(!parentFiles) {</span>
+                    <span class="s1">parentFiles = </span><span class="s2">new </span><span class="s1">Map();</span>
+                    <span class="s1">parentFilesMap.set(parent, parentFiles);</span>
+                <span class="s1">}</span>
+                <span class="s2">const </span><span class="s1">ignored = Boolean(ignoreFn == </span><span class="s2">null </span><span class="s1">? </span><span class="s2">void </span><span class="s3">0 </span><span class="s1">: ignoreFn(file, parent));</span>
+                <span class="s1">parentFiles.set(file, {</span>
+                    <span class="s1">ignored</span>
+                <span class="s1">});</span>
+                <span class="s2">const </span><span class="s1">parentReason = reasons.get(parent);</span>
+                <span class="s2">if </span><span class="s1">(parentReason == </span><span class="s2">null </span><span class="s1">? </span><span class="s2">void </span><span class="s3">0 </span><span class="s1">: parentReason.parents) {</span>
+                    <span class="s1">propagateToParents(parentReason.parents, file, seen);</span>
+                <span class="s1">}</span>
+            <span class="s1">}</span>
+        <span class="s1">}</span>
+    <span class="s1">}</span>
+    <span class="s2">for </span><span class="s1">(</span><span class="s2">const </span><span class="s1">file of fileList){</span>
+        <span class="s2">const </span><span class="s1">reason = reasons.get(file);</span>
+        <span class="s2">const </span><span class="s1">isInitial = (reason == </span><span class="s2">null </span><span class="s1">? </span><span class="s2">void </span><span class="s3">0 </span><span class="s1">: reason.type.length) === </span><span class="s3">1 </span><span class="s1">&amp;&amp; reason.type.includes(</span><span class="s0">'initial'</span><span class="s1">);</span>
+        <span class="s2">if </span><span class="s1">(!reason || !reason.parents || isInitial &amp;&amp; reason.parents.size === </span><span class="s3">0</span><span class="s1">) {</span>
+            <span class="s2">continue</span><span class="s1">;</span>
+        <span class="s1">}</span>
+        <span class="s1">propagateToParents(reason.parents, file);</span>
+    <span class="s1">}</span>
+    <span class="s2">return </span><span class="s1">parentFilesMap;</span>
+<span class="s1">}</span>
+<span class="s2">class </span><span class="s1">TraceEntryPointsPlugin {</span>
+    <span class="s1">constructor({ rootDir, appDir, pagesDir, compilerType, appDirEnabled, traceIgnores, esmExternals, outputFileTracingRoot }){</span>
+        <span class="s2">this</span><span class="s1">.buildTraceContext = {};</span>
+        <span class="s2">this</span><span class="s1">.rootDir = rootDir;</span>
+        <span class="s2">this</span><span class="s1">.appDir = appDir;</span>
+        <span class="s2">this</span><span class="s1">.pagesDir = pagesDir;</span>
+        <span class="s2">this</span><span class="s1">.entryTraces = </span><span class="s2">new </span><span class="s1">Map();</span>
+        <span class="s2">this</span><span class="s1">.esmExternals = esmExternals;</span>
+        <span class="s2">this</span><span class="s1">.appDirEnabled = appDirEnabled;</span>
+        <span class="s2">this</span><span class="s1">.traceIgnores = traceIgnores || [];</span>
+        <span class="s2">this</span><span class="s1">.tracingRoot = outputFileTracingRoot || rootDir;</span>
+        <span class="s2">this</span><span class="s1">.compilerType = compilerType;</span>
+    <span class="s1">}</span>
+    <span class="s4">// Here we output all traced assets and webpack chunks to a</span>
+    <span class="s4">// ${page}.js.nft.json file</span>
+    <span class="s1">async createTraceAssets(compilation, span) {</span>
+        <span class="s2">const </span><span class="s1">outputPath = compilation.outputOptions.path || </span><span class="s0">''</span><span class="s1">;</span>
+        <span class="s2">await </span><span class="s1">span.traceChild(</span><span class="s0">'create-trace-assets'</span><span class="s1">).traceAsyncFn(async ()=&gt;{</span>
+            <span class="s2">const </span><span class="s1">entryFilesMap = </span><span class="s2">new </span><span class="s1">Map();</span>
+            <span class="s2">const </span><span class="s1">chunksToTrace = </span><span class="s2">new </span><span class="s1">Set();</span>
+            <span class="s2">const </span><span class="s1">entryNameFilesMap = </span><span class="s2">new </span><span class="s1">Map();</span>
+            <span class="s2">const </span><span class="s1">isTraceable = (file)=&gt;!NOT_TRACEABLE.some((suffix)=&gt;{</span>
+                    <span class="s2">return </span><span class="s1">file.endsWith(suffix);</span>
+                <span class="s1">});</span>
+            <span class="s2">for </span><span class="s1">(</span><span class="s2">const </span><span class="s1">entrypoint of compilation.entrypoints.values()){</span>
+                <span class="s2">const </span><span class="s1">entryFiles = </span><span class="s2">new </span><span class="s1">Set();</span>
+                <span class="s2">for </span><span class="s1">(</span><span class="s2">const </span><span class="s1">chunk of entrypoint.getEntrypointChunk().getAllReferencedChunks()){</span>
+                    <span class="s2">for </span><span class="s1">(</span><span class="s2">const </span><span class="s1">file of chunk.files){</span>
+                        <span class="s2">if </span><span class="s1">(isTraceable(file)) {</span>
+                            <span class="s2">const </span><span class="s1">filePath = _path.default.join(outputPath, file);</span>
+                            <span class="s1">chunksToTrace.add(filePath);</span>
+                            <span class="s1">entryFiles.add(filePath);</span>
+                        <span class="s1">}</span>
+                    <span class="s1">}</span>
+                    <span class="s2">for </span><span class="s1">(</span><span class="s2">const </span><span class="s1">file of chunk.auxiliaryFiles){</span>
+                        <span class="s2">if </span><span class="s1">(isTraceable(file)) {</span>
+                            <span class="s2">const </span><span class="s1">filePath = _path.default.join(outputPath, file);</span>
+                            <span class="s1">chunksToTrace.add(filePath);</span>
+                            <span class="s1">entryFiles.add(filePath);</span>
+                        <span class="s1">}</span>
+                    <span class="s1">}</span>
+                <span class="s1">}</span>
+                <span class="s1">entryFilesMap.set(entrypoint, entryFiles);</span>
+                <span class="s1">entryNameFilesMap.set(entrypoint.name || </span><span class="s0">''</span><span class="s1">, [</span>
+                    <span class="s1">...entryFiles</span>
+                <span class="s1">]);</span>
+            <span class="s1">}</span>
+            <span class="s4">// startTrace existed and callable</span>
+            <span class="s2">this</span><span class="s1">.buildTraceContext.chunksTrace = {</span>
+                <span class="s1">action: {</span>
+                    <span class="s1">action: </span><span class="s0">'annotate'</span><span class="s1">,</span>
+                    <span class="s1">input: [</span>
+                        <span class="s1">...chunksToTrace</span>
+                    <span class="s1">],</span>
+                    <span class="s1">contextDirectory: </span><span class="s2">this</span><span class="s1">.tracingRoot,</span>
+                    <span class="s1">processCwd: </span><span class="s2">this</span><span class="s1">.rootDir</span>
+                <span class="s1">},</span>
+                <span class="s1">outputPath,</span>
+                <span class="s1">entryNameFilesMap: Object.fromEntries(entryNameFilesMap)</span>
+            <span class="s1">};</span>
+            <span class="s4">// server compiler outputs to `server/chunks` so we traverse up</span>
+            <span class="s4">// one, but edge-server does not so don't for that one</span>
+            <span class="s2">const </span><span class="s1">outputPrefix = </span><span class="s2">this</span><span class="s1">.compilerType === </span><span class="s0">'server' </span><span class="s1">? </span><span class="s0">'../' </span><span class="s1">: </span><span class="s0">''</span><span class="s1">;</span>
+            <span class="s2">for </span><span class="s1">(</span><span class="s2">const </span><span class="s1">[entrypoint, entryFiles] of entryFilesMap){</span>
+                <span class="s2">var </span><span class="s1">_this_entryTraces_get;</span>
+                <span class="s2">const </span><span class="s1">traceOutputName = </span><span class="s0">`</span><span class="s1">${outputPrefix}${entrypoint.name}</span><span class="s0">.js.nft.json`</span><span class="s1">;</span>
+                <span class="s2">const </span><span class="s1">traceOutputPath = _path.default.dirname(_path.default.join(outputPath, traceOutputName));</span>
+                <span class="s4">// don't include the entry itself in the trace</span>
+                <span class="s1">entryFiles.delete(_path.default.join(outputPath, </span><span class="s0">`</span><span class="s1">${outputPrefix}${entrypoint.name}</span><span class="s0">.js`</span><span class="s1">));</span>
+                <span class="s2">if </span><span class="s1">(entrypoint.name.startsWith(</span><span class="s0">'app/'</span><span class="s1">) &amp;&amp; </span><span class="s2">this</span><span class="s1">.appDir) {</span>
+                    <span class="s2">var </span><span class="s1">_this_buildTraceContext_entriesTrace_absolutePathByEntryName_entrypoint_name, _this_buildTraceContext_entriesTrace;</span>
+                    <span class="s2">const </span><span class="s1">appDirRelativeEntryPath = (_this_buildTraceContext_entriesTrace = </span><span class="s2">this</span><span class="s1">.buildTraceContext.entriesTrace) == </span><span class="s2">null </span><span class="s1">? </span><span class="s2">void </span><span class="s3">0 </span><span class="s1">: (_this_buildTraceContext_entriesTrace_absolutePathByEntryName_entrypoint_name = _this_buildTraceContext_entriesTrace.absolutePathByEntryName[entrypoint.name]) == </span><span class="s2">null </span><span class="s1">? </span><span class="s2">void </span><span class="s3">0 </span><span class="s1">: _this_buildTraceContext_entriesTrace_absolutePathByEntryName_entrypoint_name.replace(</span><span class="s2">this</span><span class="s1">.appDir, </span><span class="s0">''</span><span class="s1">);</span>
+                    <span class="s2">const </span><span class="s1">entryIsStaticMetadataRoute = appDirRelativeEntryPath &amp;&amp; (</span><span class="s3">0</span><span class="s1">, _ismetadataroute.isMetadataRouteFile)(appDirRelativeEntryPath, [], </span><span class="s2">true</span><span class="s1">);</span>
+                    <span class="s4">// Include the client reference manifest in the trace, but not for</span>
+                    <span class="s4">// static metadata routes, for which we don't generate those.</span>
+                    <span class="s2">if </span><span class="s1">(!entryIsStaticMetadataRoute) {</span>
+                        <span class="s1">entryFiles.add(_path.default.join(outputPath, outputPrefix, entrypoint.name.replace(</span><span class="s5">/%5F/g</span><span class="s1">, </span><span class="s0">'_'</span><span class="s1">) + </span><span class="s0">'_' </span><span class="s1">+ _constants.CLIENT_REFERENCE_MANIFEST + </span><span class="s0">'.js'</span><span class="s1">));</span>
+                    <span class="s1">}</span>
+                <span class="s1">}</span>
+                <span class="s2">const </span><span class="s1">finalFiles = [];</span>
+                <span class="s2">await </span><span class="s1">Promise.all([</span>
+                    <span class="s1">...</span><span class="s2">new </span><span class="s1">Set([</span>
+                        <span class="s1">...entryFiles,</span>
+                        <span class="s1">...((_this_entryTraces_get = </span><span class="s2">this</span><span class="s1">.entryTraces.get(entrypoint.name)) == </span><span class="s2">null </span><span class="s1">? </span><span class="s2">void </span><span class="s3">0 </span><span class="s1">: _this_entryTraces_get.keys()) || []</span>
+                    <span class="s1">])</span>
+                <span class="s1">].map(async (file)=&gt;{</span>
+                    <span class="s2">var </span><span class="s1">_this_entryTraces_get;</span>
+                    <span class="s2">const </span><span class="s1">fileInfo = (_this_entryTraces_get = </span><span class="s2">this</span><span class="s1">.entryTraces.get(entrypoint.name)) == </span><span class="s2">null </span><span class="s1">? </span><span class="s2">void </span><span class="s3">0 </span><span class="s1">: _this_entryTraces_get.get(file);</span>
+                    <span class="s2">const </span><span class="s1">relativeFile = _path.default.relative(traceOutputPath, file).replace(</span><span class="s5">/\\/g</span><span class="s1">, </span><span class="s0">'/'</span><span class="s1">);</span>
+                    <span class="s2">if </span><span class="s1">(file) {</span>
+                        <span class="s2">if </span><span class="s1">(!(fileInfo == </span><span class="s2">null </span><span class="s1">? </span><span class="s2">void </span><span class="s3">0 </span><span class="s1">: fileInfo.bundled)) {</span>
+                            <span class="s1">finalFiles.push(relativeFile);</span>
+                        <span class="s1">}</span>
+                    <span class="s1">}</span>
+                <span class="s1">}));</span>
+                <span class="s1">compilation.emitAsset(traceOutputName, </span><span class="s2">new </span><span class="s1">_webpack.sources.RawSource(JSON.stringify({</span>
+                    <span class="s1">version: _constants.TRACE_OUTPUT_VERSION,</span>
+                    <span class="s1">files: finalFiles</span>
+                <span class="s1">})));</span>
+            <span class="s1">}</span>
+        <span class="s1">});</span>
+    <span class="s1">}</span>
+    <span class="s1">tapfinishModules(compilation, traceEntrypointsPluginSpan, doResolve, readlink, stat) {</span>
+        <span class="s1">compilation.hooks.finishModules.tapAsync(PLUGIN_NAME, async (_stats, callback)=&gt;{</span>
+            <span class="s2">const </span><span class="s1">finishModulesSpan = traceEntrypointsPluginSpan.traceChild(</span><span class="s0">'finish-modules'</span><span class="s1">);</span>
+            <span class="s2">await </span><span class="s1">finishModulesSpan.traceAsyncFn(async ()=&gt;{</span>
+                <span class="s4">// we create entry -&gt; module maps so that we can</span>
+                <span class="s4">// look them up faster instead of having to iterate</span>
+                <span class="s4">// over the compilation modules list</span>
+                <span class="s2">const </span><span class="s1">entryNameMap = </span><span class="s2">new </span><span class="s1">Map();</span>
+                <span class="s2">const </span><span class="s1">entryModMap = </span><span class="s2">new </span><span class="s1">Map();</span>
+                <span class="s2">const </span><span class="s1">additionalEntries = </span><span class="s2">new </span><span class="s1">Map();</span>
+                <span class="s2">const </span><span class="s1">absolutePathByEntryName = </span><span class="s2">new </span><span class="s1">Map();</span>
+                <span class="s2">const </span><span class="s1">depModMap = </span><span class="s2">new </span><span class="s1">Map();</span>
+                <span class="s2">await </span><span class="s1">finishModulesSpan.traceChild(</span><span class="s0">'get-entries'</span><span class="s1">).traceAsyncFn(async ()=&gt;{</span>
+                    <span class="s2">for </span><span class="s1">(</span><span class="s2">const </span><span class="s1">[name, entry] of compilation.entries.entries()){</span>
+                        <span class="s2">const </span><span class="s1">normalizedName = name == </span><span class="s2">null </span><span class="s1">? </span><span class="s2">void </span><span class="s3">0 </span><span class="s1">: name.replace(</span><span class="s5">/\\/g</span><span class="s1">, </span><span class="s0">'/'</span><span class="s1">);</span>
+                        <span class="s2">const </span><span class="s1">isPage = normalizedName.startsWith(</span><span class="s0">'pages/'</span><span class="s1">);</span>
+                        <span class="s2">const </span><span class="s1">isApp = </span><span class="s2">this</span><span class="s1">.appDirEnabled &amp;&amp; normalizedName.startsWith(</span><span class="s0">'app/'</span><span class="s1">);</span>
+                        <span class="s2">if </span><span class="s1">(isApp || isPage) {</span>
+                            <span class="s2">for </span><span class="s1">(</span><span class="s2">const </span><span class="s1">dep of entry.dependencies){</span>
+                                <span class="s2">if </span><span class="s1">(!dep) </span><span class="s2">continue</span><span class="s1">;</span>
+                                <span class="s2">const </span><span class="s1">entryMod = getModuleFromDependency(compilation, dep);</span>
+                                <span class="s4">// Handle case where entry is a loader coming from Next.js.</span>
+                                <span class="s4">// For example edge-loader or app-loader.</span>
+                                <span class="s2">if </span><span class="s1">(entryMod &amp;&amp; entryMod.resource === </span><span class="s0">''</span><span class="s1">) {</span>
+                                    <span class="s2">const </span><span class="s1">moduleBuildInfo = (</span><span class="s3">0</span><span class="s1">, _getmodulebuildinfo.getModuleBuildInfo)(entryMod);</span>
+                                    <span class="s4">// All loaders that are used to create entries have a `route` property on the buildInfo.</span>
+                                    <span class="s2">if </span><span class="s1">(moduleBuildInfo.route) {</span>
+                                        <span class="s2">const </span><span class="s1">absolutePath = (</span><span class="s3">0</span><span class="s1">, _entries.getPageFilePath)({</span>
+                                            <span class="s1">absolutePagePath: moduleBuildInfo.route.absolutePagePath,</span>
+                                            <span class="s1">rootDir: </span><span class="s2">this</span><span class="s1">.rootDir,</span>
+                                            <span class="s1">appDir: </span><span class="s2">this</span><span class="s1">.appDir,</span>
+                                            <span class="s1">pagesDir: </span><span class="s2">this</span><span class="s1">.pagesDir</span>
+                                        <span class="s1">});</span>
+                                        <span class="s4">// Ensures we don't handle non-pages.</span>
+                                        <span class="s2">if </span><span class="s1">(</span><span class="s2">this</span><span class="s1">.pagesDir &amp;&amp; absolutePath.startsWith(</span><span class="s2">this</span><span class="s1">.pagesDir) || </span><span class="s2">this</span><span class="s1">.appDir &amp;&amp; absolutePath.startsWith(</span><span class="s2">this</span><span class="s1">.appDir)) {</span>
+                                            <span class="s1">entryModMap.set(absolutePath, entryMod);</span>
+                                            <span class="s1">entryNameMap.set(absolutePath, name);</span>
+                                            <span class="s1">absolutePathByEntryName.set(name, absolutePath);</span>
+                                        <span class="s1">}</span>
+                                    <span class="s1">}</span>
+                                    <span class="s4">// If there was no `route` property, we can assume that it was something custom instead.</span>
+                                    <span class="s4">// In order to trace these we add them to the additionalEntries map.</span>
+                                    <span class="s2">if </span><span class="s1">(entryMod.request) {</span>
+                                        <span class="s2">let </span><span class="s1">curMap = additionalEntries.get(name);</span>
+                                        <span class="s2">if </span><span class="s1">(!curMap) {</span>
+                                            <span class="s1">curMap = </span><span class="s2">new </span><span class="s1">Map();</span>
+                                            <span class="s1">additionalEntries.set(name, curMap);</span>
+                                        <span class="s1">}</span>
+                                        <span class="s1">depModMap.set(entryMod.request, entryMod);</span>
+                                        <span class="s1">curMap.set(entryMod.resource, entryMod);</span>
+                                    <span class="s1">}</span>
+                                <span class="s1">}</span>
+                                <span class="s2">if </span><span class="s1">(entryMod &amp;&amp; entryMod.resource) {</span>
+                                    <span class="s1">entryNameMap.set(entryMod.resource, name);</span>
+                                    <span class="s1">entryModMap.set(entryMod.resource, entryMod);</span>
+                                    <span class="s2">let </span><span class="s1">curMap = additionalEntries.get(name);</span>
+                                    <span class="s2">if </span><span class="s1">(!curMap) {</span>
+                                        <span class="s1">curMap = </span><span class="s2">new </span><span class="s1">Map();</span>
+                                        <span class="s1">additionalEntries.set(name, curMap);</span>
+                                    <span class="s1">}</span>
+                                    <span class="s1">depModMap.set(entryMod.resource, entryMod);</span>
+                                    <span class="s1">curMap.set(entryMod.resource, entryMod);</span>
+                                <span class="s1">}</span>
+                            <span class="s1">}</span>
+                        <span class="s1">}</span>
+                    <span class="s1">}</span>
+                <span class="s1">});</span>
+                <span class="s2">const </span><span class="s1">readFile = async (path)=&gt;{</span>
+                    <span class="s2">var </span><span class="s1">_mod_originalSource, _mod_originalSource1;</span>
+                    <span class="s2">const </span><span class="s1">mod = depModMap.get(path) || entryModMap.get(path);</span>
+                    <span class="s4">// map the transpiled source when available to avoid</span>
+                    <span class="s4">// parse errors in node-file-trace</span>
+                    <span class="s2">let </span><span class="s1">source = mod == </span><span class="s2">null </span><span class="s1">? </span><span class="s2">void </span><span class="s3">0 </span><span class="s1">: (_mod_originalSource1 = mod.originalSource) == </span><span class="s2">null </span><span class="s1">? </span><span class="s2">void </span><span class="s3">0 </span><span class="s1">: (_mod_originalSource = _mod_originalSource1.call(mod)) == </span><span class="s2">null </span><span class="s1">? </span><span class="s2">void </span><span class="s3">0 </span><span class="s1">: _mod_originalSource.buffer();</span>
+                    <span class="s2">return </span><span class="s1">source || </span><span class="s0">''</span><span class="s1">;</span>
+                <span class="s1">};</span>
+                <span class="s2">const </span><span class="s1">entryPaths = Array.from(entryModMap.keys());</span>
+                <span class="s2">const </span><span class="s1">collectDependencies = async (mod, parent)=&gt;{</span>
+                    <span class="s2">if </span><span class="s1">(!mod || !mod.dependencies) </span><span class="s2">return</span><span class="s1">;</span>
+                    <span class="s2">for </span><span class="s1">(</span><span class="s2">const </span><span class="s1">dep of mod.dependencies){</span>
+                        <span class="s2">const </span><span class="s1">depMod = getModuleFromDependency(compilation, dep);</span>
+                        <span class="s2">if </span><span class="s1">((depMod == </span><span class="s2">null </span><span class="s1">? </span><span class="s2">void </span><span class="s3">0 </span><span class="s1">: depMod.resource) &amp;&amp; !depModMap.get(depMod.resource)) {</span>
+                            <span class="s1">depModMap.set(depMod.resource, depMod);</span>
+                            <span class="s2">await </span><span class="s1">collectDependencies(depMod, parent);</span>
+                        <span class="s1">}</span>
+                    <span class="s1">}</span>
+                <span class="s1">};</span>
+                <span class="s2">const </span><span class="s1">entriesToTrace = [</span>
+                    <span class="s1">...entryPaths</span>
+                <span class="s1">];</span>
+                <span class="s2">for </span><span class="s1">(</span><span class="s2">const </span><span class="s1">entry of entryPaths){</span>
+                    <span class="s2">await </span><span class="s1">collectDependencies(entryModMap.get(entry), entry);</span>
+                    <span class="s2">const </span><span class="s1">entryName = entryNameMap.get(entry);</span>
+                    <span class="s2">const </span><span class="s1">curExtraEntries = additionalEntries.get(entryName);</span>
+                    <span class="s2">if </span><span class="s1">(curExtraEntries) {</span>
+                        <span class="s1">entriesToTrace.push(...curExtraEntries.keys());</span>
+                    <span class="s1">}</span>
+                <span class="s1">}</span>
+                <span class="s2">const </span><span class="s1">contextDirectory = </span><span class="s2">this</span><span class="s1">.tracingRoot;</span>
+                <span class="s2">const </span><span class="s1">chunks = [</span>
+                    <span class="s1">...entriesToTrace</span>
+                <span class="s1">];</span>
+                <span class="s2">this</span><span class="s1">.buildTraceContext.entriesTrace = {</span>
+                    <span class="s1">action: {</span>
+                        <span class="s1">action: </span><span class="s0">'print'</span><span class="s1">,</span>
+                        <span class="s1">input: chunks,</span>
+                        <span class="s1">contextDirectory,</span>
+                        <span class="s1">processCwd: </span><span class="s2">this</span><span class="s1">.rootDir</span>
+                    <span class="s1">},</span>
+                    <span class="s1">appDir: </span><span class="s2">this</span><span class="s1">.rootDir,</span>
+                    <span class="s1">depModArray: Array.from(depModMap.keys()),</span>
+                    <span class="s1">entryNameMap: Object.fromEntries(entryNameMap),</span>
+                    <span class="s1">absolutePathByEntryName: Object.fromEntries(absolutePathByEntryName),</span>
+                    <span class="s1">outputPath: compilation.outputOptions.path</span>
+                <span class="s1">};</span>
+                <span class="s2">let </span><span class="s1">fileList;</span>
+                <span class="s2">let </span><span class="s1">reasons;</span>
+                <span class="s2">const </span><span class="s1">ignores = [</span>
+                    <span class="s1">...TRACE_IGNORES,</span>
+                    <span class="s1">...</span><span class="s2">this</span><span class="s1">.traceIgnores,</span>
+                    <span class="s0">'**/node_modules/**'</span>
+                <span class="s1">];</span>
+                <span class="s4">// pre-compile the ignore matcher to avoid repeating on every ignoreFn call</span>
+                <span class="s2">const </span><span class="s1">isIgnoreMatcher = (</span><span class="s3">0</span><span class="s1">, _picomatch.default)(ignores, {</span>
+                    <span class="s1">contains: </span><span class="s2">true</span><span class="s1">,</span>
+                    <span class="s1">dot: </span><span class="s2">true</span>
+                <span class="s1">});</span>
+                <span class="s2">const </span><span class="s1">ignoreFn = (path)=&gt;{</span>
+                    <span class="s2">return </span><span class="s1">isIgnoreMatcher(path);</span>
+                <span class="s1">};</span>
+                <span class="s2">await </span><span class="s1">finishModulesSpan.traceChild(</span><span class="s0">'node-file-trace-plugin'</span><span class="s1">, {</span>
+                    <span class="s1">traceEntryCount: entriesToTrace.length + </span><span class="s0">''</span>
+                <span class="s1">}).traceAsyncFn(async ()=&gt;{</span>
+                    <span class="s2">const </span><span class="s1">result = </span><span class="s2">await </span><span class="s1">(</span><span class="s3">0</span><span class="s1">, _nft.nodeFileTrace)(entriesToTrace, {</span>
+                        <span class="s1">base: </span><span class="s2">this</span><span class="s1">.tracingRoot,</span>
+                        <span class="s1">processCwd: </span><span class="s2">this</span><span class="s1">.rootDir,</span>
+                        <span class="s1">readFile,</span>
+                        <span class="s1">readlink,</span>
+                        <span class="s1">stat,</span>
+                        <span class="s1">resolve: doResolve ? async (id, parent, job, isCjs)=&gt;{</span>
+                            <span class="s2">return </span><span class="s1">doResolve(id, parent, job, !isCjs);</span>
+                        <span class="s1">} : undefined,</span>
+                        <span class="s1">ignore: ignoreFn,</span>
+                        <span class="s1">mixedModules: </span><span class="s2">true</span>
+                    <span class="s1">});</span>
+                    <span class="s4">// @ts-ignore</span>
+                    <span class="s1">fileList = result.fileList;</span>
+                    <span class="s1">result.esmFileList.forEach((file)=&gt;fileList.add(file));</span>
+                    <span class="s1">reasons = result.reasons;</span>
+                <span class="s1">});</span>
+                <span class="s2">await </span><span class="s1">finishModulesSpan.traceChild(</span><span class="s0">'collect-traced-files'</span><span class="s1">).traceAsyncFn(()=&gt;{</span>
+                    <span class="s2">const </span><span class="s1">parentFilesMap = getFilesMapFromReasons(fileList, reasons, (file)=&gt;{</span>
+                        <span class="s2">var </span><span class="s1">_reasons_get;</span>
+                        <span class="s4">// if a file was imported and a loader handled it</span>
+                        <span class="s4">// we don't include it in the trace e.g.</span>
+                        <span class="s4">// static image imports, CSS imports</span>
+                        <span class="s1">file = _path.default.join(</span><span class="s2">this</span><span class="s1">.tracingRoot, file);</span>
+                        <span class="s2">const </span><span class="s1">depMod = depModMap.get(file);</span>
+                        <span class="s2">const </span><span class="s1">isAsset = (_reasons_get = reasons.get(_path.default.relative(</span><span class="s2">this</span><span class="s1">.tracingRoot, file))) == </span><span class="s2">null </span><span class="s1">? </span><span class="s2">void </span><span class="s3">0 </span><span class="s1">: _reasons_get.type.includes(</span><span class="s0">'asset'</span><span class="s1">);</span>
+                        <span class="s2">return </span><span class="s1">!isAsset &amp;&amp; Array.isArray(depMod == </span><span class="s2">null </span><span class="s1">? </span><span class="s2">void </span><span class="s3">0 </span><span class="s1">: depMod.loaders) &amp;&amp; depMod.loaders.length &gt; </span><span class="s3">0</span><span class="s1">;</span>
+                    <span class="s1">});</span>
+                    <span class="s2">for </span><span class="s1">(</span><span class="s2">const </span><span class="s1">entry of entryPaths){</span>
+                        <span class="s2">var </span><span class="s1">_parentFilesMap_get;</span>
+                        <span class="s2">const </span><span class="s1">entryName = entryNameMap.get(entry);</span>
+                        <span class="s2">const </span><span class="s1">normalizedEntry = _path.default.relative(</span><span class="s2">this</span><span class="s1">.tracingRoot, entry);</span>
+                        <span class="s2">const </span><span class="s1">curExtraEntries = additionalEntries.get(entryName);</span>
+                        <span class="s2">const </span><span class="s1">finalDeps = </span><span class="s2">new </span><span class="s1">Map();</span>
+                        <span class="s4">// ensure we include entry source file as well for</span>
+                        <span class="s4">// hash comparison</span>
+                        <span class="s1">finalDeps.set(entry, {</span>
+                            <span class="s1">bundled: </span><span class="s2">true</span>
+                        <span class="s1">});</span>
+                        <span class="s2">for </span><span class="s1">(</span><span class="s2">const </span><span class="s1">[dep, info] of ((_parentFilesMap_get = parentFilesMap.get(normalizedEntry)) == </span><span class="s2">null </span><span class="s1">? </span><span class="s2">void </span><span class="s3">0 </span><span class="s1">: _parentFilesMap_get.entries()) || []){</span>
+                            <span class="s1">finalDeps.set(_path.default.join(</span><span class="s2">this</span><span class="s1">.tracingRoot, dep), {</span>
+                                <span class="s1">bundled: info.ignored</span>
+                            <span class="s1">});</span>
+                        <span class="s1">}</span>
+                        <span class="s2">if </span><span class="s1">(curExtraEntries) {</span>
+                            <span class="s2">for </span><span class="s1">(</span><span class="s2">const </span><span class="s1">extraEntry of curExtraEntries.keys()){</span>
+                                <span class="s2">var </span><span class="s1">_parentFilesMap_get1;</span>
+                                <span class="s2">const </span><span class="s1">normalizedExtraEntry = _path.default.relative(</span><span class="s2">this</span><span class="s1">.tracingRoot, extraEntry);</span>
+                                <span class="s1">finalDeps.set(extraEntry, {</span>
+                                    <span class="s1">bundled: </span><span class="s2">false</span>
+                                <span class="s1">});</span>
+                                <span class="s2">for </span><span class="s1">(</span><span class="s2">const </span><span class="s1">[dep, info] of ((_parentFilesMap_get1 = parentFilesMap.get(normalizedExtraEntry)) == </span><span class="s2">null </span><span class="s1">? </span><span class="s2">void </span><span class="s3">0 </span><span class="s1">: _parentFilesMap_get1.entries()) || []){</span>
+                                    <span class="s1">finalDeps.set(_path.default.join(</span><span class="s2">this</span><span class="s1">.tracingRoot, dep), {</span>
+                                        <span class="s1">bundled: info.ignored</span>
+                                    <span class="s1">});</span>
+                                <span class="s1">}</span>
+                            <span class="s1">}</span>
+                        <span class="s1">}</span>
+                        <span class="s2">this</span><span class="s1">.entryTraces.set(entryName, finalDeps);</span>
+                    <span class="s1">}</span>
+                <span class="s1">});</span>
+            <span class="s1">}).then(()=&gt;callback(), (err)=&gt;callback(err));</span>
+        <span class="s1">});</span>
+    <span class="s1">}</span>
+    <span class="s1">apply(compiler) {</span>
+        <span class="s1">compiler.hooks.compilation.tap(PLUGIN_NAME, (compilation)=&gt;{</span>
+            <span class="s2">const </span><span class="s1">compilationSpan = (</span><span class="s3">0</span><span class="s1">, _utils.getCompilationSpan)(compilation) || (</span><span class="s3">0</span><span class="s1">, _utils.getCompilationSpan)(compiler);</span>
+            <span class="s2">const </span><span class="s1">traceEntrypointsPluginSpan = compilationSpan.traceChild(</span><span class="s0">'next-trace-entrypoint-plugin'</span><span class="s1">);</span>
+            <span class="s2">const </span><span class="s1">readlink = async (path)=&gt;{</span>
+                <span class="s2">try </span><span class="s1">{</span>
+                    <span class="s2">return await new </span><span class="s1">Promise((resolve, reject)=&gt;{</span>
+                        <span class="s1">;</span>
+                        <span class="s1">compilation.inputFileSystem.readlink(path, (err, link)=&gt;{</span>
+                            <span class="s2">if </span><span class="s1">(err) </span><span class="s2">return </span><span class="s1">reject(err);</span>
+                            <span class="s1">resolve(link);</span>
+                        <span class="s1">});</span>
+                    <span class="s1">});</span>
+                <span class="s1">} </span><span class="s2">catch </span><span class="s1">(e) {</span>
+                    <span class="s2">if </span><span class="s1">((</span><span class="s3">0</span><span class="s1">, _iserror.default)(e) &amp;&amp; (e.code === </span><span class="s0">'EINVAL' </span><span class="s1">|| e.code === </span><span class="s0">'ENOENT' </span><span class="s1">|| e.code === </span><span class="s0">'UNKNOWN'</span><span class="s1">)) {</span>
+                        <span class="s2">return null</span><span class="s1">;</span>
+                    <span class="s1">}</span>
+                    <span class="s2">throw </span><span class="s1">e;</span>
+                <span class="s1">}</span>
+            <span class="s1">};</span>
+            <span class="s2">const </span><span class="s1">stat = async (path)=&gt;{</span>
+                <span class="s2">try </span><span class="s1">{</span>
+                    <span class="s2">return await new </span><span class="s1">Promise((resolve, reject)=&gt;{</span>
+                        <span class="s1">;</span>
+                        <span class="s1">compilation.inputFileSystem.stat(path, (err, stats)=&gt;{</span>
+                            <span class="s2">if </span><span class="s1">(err) </span><span class="s2">return </span><span class="s1">reject(err);</span>
+                            <span class="s1">resolve(stats);</span>
+                        <span class="s1">});</span>
+                    <span class="s1">});</span>
+                <span class="s1">} </span><span class="s2">catch </span><span class="s1">(e) {</span>
+                    <span class="s2">if </span><span class="s1">((</span><span class="s3">0</span><span class="s1">, _iserror.default)(e) &amp;&amp; (e.code === </span><span class="s0">'ENOENT' </span><span class="s1">|| e.code === </span><span class="s0">'ENOTDIR'</span><span class="s1">)) {</span>
+                        <span class="s2">return null</span><span class="s1">;</span>
+                    <span class="s1">}</span>
+                    <span class="s2">throw </span><span class="s1">e;</span>
+                <span class="s1">}</span>
+            <span class="s1">};</span>
+            <span class="s1">traceEntrypointsPluginSpan.traceFn(()=&gt;{</span>
+                <span class="s1">compilation.hooks.processAssets.tapAsync({</span>
+                    <span class="s1">name: PLUGIN_NAME,</span>
+                    <span class="s1">stage: _webpack.webpack.Compilation.PROCESS_ASSETS_STAGE_SUMMARIZE</span>
+                <span class="s1">}, (_, callback)=&gt;{</span>
+                    <span class="s2">this</span><span class="s1">.createTraceAssets(compilation, traceEntrypointsPluginSpan).then(()=&gt;callback()).catch((err)=&gt;callback(err));</span>
+                <span class="s1">});</span>
+                <span class="s2">let </span><span class="s1">resolver = compilation.resolverFactory.get(</span><span class="s0">'normal'</span><span class="s1">);</span>
+                <span class="s2">function </span><span class="s1">getPkgName(name) {</span>
+                    <span class="s2">const </span><span class="s1">segments = name.split(</span><span class="s0">'/'</span><span class="s1">);</span>
+                    <span class="s2">if </span><span class="s1">(name[</span><span class="s3">0</span><span class="s1">] === </span><span class="s0">'@' </span><span class="s1">&amp;&amp; segments.length &gt; </span><span class="s3">1</span><span class="s1">) </span><span class="s2">return </span><span class="s1">segments.length &gt; </span><span class="s3">1 </span><span class="s1">? segments.slice(</span><span class="s3">0</span><span class="s1">, </span><span class="s3">2</span><span class="s1">).join(</span><span class="s0">'/'</span><span class="s1">) : </span><span class="s2">null</span><span class="s1">;</span>
+                    <span class="s2">return </span><span class="s1">segments.length ? segments[</span><span class="s3">0</span><span class="s1">] : </span><span class="s2">null</span><span class="s1">;</span>
+                <span class="s1">}</span>
+                <span class="s2">const </span><span class="s1">getResolve = (options)=&gt;{</span>
+                    <span class="s2">const </span><span class="s1">curResolver = resolver.withOptions(options);</span>
+                    <span class="s2">return </span><span class="s1">(parent, request, job)=&gt;</span><span class="s2">new </span><span class="s1">Promise((resolve, reject)=&gt;{</span>
+                            <span class="s2">const </span><span class="s1">context = _path.default.dirname(parent);</span>
+                            <span class="s1">curResolver.resolve({}, context, request, {</span>
+                                <span class="s1">fileDependencies: compilation.fileDependencies,</span>
+                                <span class="s1">missingDependencies: compilation.missingDependencies,</span>
+                                <span class="s1">contextDependencies: compilation.contextDependencies</span>
+                            <span class="s1">}, async (err, result, resContext)=&gt;{</span>
+                                <span class="s2">if </span><span class="s1">(err) </span><span class="s2">return </span><span class="s1">reject(err);</span>
+                                <span class="s2">if </span><span class="s1">(!result) {</span>
+                                    <span class="s2">return </span><span class="s1">reject(Object.defineProperty(</span><span class="s2">new </span><span class="s1">Error(</span><span class="s0">'module not found'</span><span class="s1">), </span><span class="s0">&quot;__NEXT_ERROR_CODE&quot;</span><span class="s1">, {</span>
+                                        <span class="s1">value: </span><span class="s0">&quot;E512&quot;</span><span class="s1">,</span>
+                                        <span class="s1">enumerable: </span><span class="s2">false</span><span class="s1">,</span>
+                                        <span class="s1">configurable: </span><span class="s2">true</span>
+                                    <span class="s1">}));</span>
+                                <span class="s1">}</span>
+                                <span class="s4">// webpack resolver doesn't strip loader query info</span>
+                                <span class="s4">// from the result so use path instead</span>
+                                <span class="s2">if </span><span class="s1">(result.includes(</span><span class="s0">'?'</span><span class="s1">) || result.includes(</span><span class="s0">'!'</span><span class="s1">)) {</span>
+                                    <span class="s1">result = (resContext == </span><span class="s2">null </span><span class="s1">? </span><span class="s2">void </span><span class="s3">0 </span><span class="s1">: resContext.path) || result;</span>
+                                <span class="s1">}</span>
+                                <span class="s2">try </span><span class="s1">{</span>
+                                    <span class="s4">// we need to collect all parent package.json's used</span>
+                                    <span class="s4">// as webpack's resolve doesn't expose this and parent</span>
+                                    <span class="s4">// package.json could be needed for resolving e.g. stylis</span>
+                                    <span class="s4">// stylis/package.json -&gt; stylis/dist/umd/package.json</span>
+                                    <span class="s2">if </span><span class="s1">(result.includes(</span><span class="s0">'node_modules'</span><span class="s1">)) {</span>
+                                        <span class="s2">let </span><span class="s1">requestPath = result.replace(</span><span class="s5">/\\/g</span><span class="s1">, </span><span class="s0">'/'</span><span class="s1">).replace(</span><span class="s5">/\0/g</span><span class="s1">, </span><span class="s0">''</span><span class="s1">);</span>
+                                        <span class="s2">if </span><span class="s1">(!_path.default.isAbsolute(request) &amp;&amp; request.includes(</span><span class="s0">'/'</span><span class="s1">) &amp;&amp; (resContext == </span><span class="s2">null </span><span class="s1">? </span><span class="s2">void </span><span class="s3">0 </span><span class="s1">: resContext.descriptionFileRoot)) {</span>
+                                            <span class="s2">var </span><span class="s1">_getPkgName;</span>
+                                            <span class="s1">requestPath = (resContext.descriptionFileRoot + request.slice(((_getPkgName = getPkgName(request)) == </span><span class="s2">null </span><span class="s1">? </span><span class="s2">void </span><span class="s3">0 </span><span class="s1">: _getPkgName.length) || </span><span class="s3">0</span><span class="s1">) + _path.default.sep + </span><span class="s0">'package.json'</span><span class="s1">).replace(</span><span class="s5">/\\/g</span><span class="s1">, </span><span class="s0">'/'</span><span class="s1">).replace(</span><span class="s5">/\0/g</span><span class="s1">, </span><span class="s0">''</span><span class="s1">);</span>
+                                        <span class="s1">}</span>
+                                        <span class="s2">const </span><span class="s1">rootSeparatorIndex = requestPath.indexOf(</span><span class="s0">'/'</span><span class="s1">);</span>
+                                        <span class="s2">let </span><span class="s1">separatorIndex;</span>
+                                        <span class="s2">while</span><span class="s1">((separatorIndex = requestPath.lastIndexOf(</span><span class="s0">'/'</span><span class="s1">)) &gt; rootSeparatorIndex){</span>
+                                            <span class="s1">requestPath = requestPath.slice(</span><span class="s3">0</span><span class="s1">, separatorIndex);</span>
+                                            <span class="s2">const </span><span class="s1">curPackageJsonPath = </span><span class="s0">`</span><span class="s1">${requestPath}</span><span class="s0">/package.json`</span><span class="s1">;</span>
+                                            <span class="s2">if </span><span class="s1">(</span><span class="s2">await </span><span class="s1">job.isFile(curPackageJsonPath)) {</span>
+                                                <span class="s2">await </span><span class="s1">job.emitFile(</span><span class="s2">await </span><span class="s1">job.realpath(curPackageJsonPath), </span><span class="s0">'resolve'</span><span class="s1">, parent);</span>
+                                            <span class="s1">}</span>
+                                        <span class="s1">}</span>
+                                    <span class="s1">}</span>
+                                <span class="s1">} </span><span class="s2">catch </span><span class="s1">(_err) {</span>
+                                <span class="s4">// we failed to resolve the package.json boundary,</span>
+                                <span class="s4">// we don't block emitting the initial asset from this</span>
+                                <span class="s1">}</span>
+                                <span class="s1">resolve([</span>
+                                    <span class="s1">result,</span>
+                                    <span class="s1">options.dependencyType === </span><span class="s0">'esm'</span>
+                                <span class="s1">]);</span>
+                            <span class="s1">});</span>
+                        <span class="s1">});</span>
+                <span class="s1">};</span>
+                <span class="s2">const </span><span class="s1">CJS_RESOLVE_OPTIONS = {</span>
+                    <span class="s1">..._webpackconfig.NODE_RESOLVE_OPTIONS,</span>
+                    <span class="s1">fullySpecified: undefined,</span>
+                    <span class="s1">modules: undefined,</span>
+                    <span class="s1">extensions: undefined</span>
+                <span class="s1">};</span>
+                <span class="s2">const </span><span class="s1">BASE_CJS_RESOLVE_OPTIONS = {</span>
+                    <span class="s1">...CJS_RESOLVE_OPTIONS,</span>
+                    <span class="s1">alias: </span><span class="s2">false</span>
+                <span class="s1">};</span>
+                <span class="s2">const </span><span class="s1">ESM_RESOLVE_OPTIONS = {</span>
+                    <span class="s1">..._webpackconfig.NODE_ESM_RESOLVE_OPTIONS,</span>
+                    <span class="s1">fullySpecified: undefined,</span>
+                    <span class="s1">modules: undefined,</span>
+                    <span class="s1">extensions: undefined</span>
+                <span class="s1">};</span>
+                <span class="s2">const </span><span class="s1">BASE_ESM_RESOLVE_OPTIONS = {</span>
+                    <span class="s1">...ESM_RESOLVE_OPTIONS,</span>
+                    <span class="s1">alias: </span><span class="s2">false</span>
+                <span class="s1">};</span>
+                <span class="s2">const </span><span class="s1">doResolve = async (request, parent, job, isEsmRequested)=&gt;{</span>
+                    <span class="s2">const </span><span class="s1">context = _path.default.dirname(parent);</span>
+                    <span class="s4">// When in esm externals mode, and using import, we resolve with</span>
+                    <span class="s4">// ESM resolving options.</span>
+                    <span class="s2">const </span><span class="s1">{ res } = </span><span class="s2">await </span><span class="s1">(</span><span class="s3">0</span><span class="s1">, _handleexternals.resolveExternal)(</span><span class="s2">this</span><span class="s1">.rootDir, </span><span class="s2">this</span><span class="s1">.esmExternals, context, request, isEsmRequested, (options)=&gt;(_, resRequest)=&gt;{</span>
+                            <span class="s2">return </span><span class="s1">getResolve(options)(parent, resRequest, job);</span>
+                        <span class="s1">}, undefined, undefined, ESM_RESOLVE_OPTIONS, CJS_RESOLVE_OPTIONS, BASE_ESM_RESOLVE_OPTIONS, BASE_CJS_RESOLVE_OPTIONS);</span>
+                    <span class="s2">if </span><span class="s1">(!res) {</span>
+                        <span class="s2">throw </span><span class="s1">Object.defineProperty(</span><span class="s2">new </span><span class="s1">Error(</span><span class="s0">`failed to resolve </span><span class="s1">${request} </span><span class="s0">from </span><span class="s1">${parent}</span><span class="s0">`</span><span class="s1">), </span><span class="s0">&quot;__NEXT_ERROR_CODE&quot;</span><span class="s1">, {</span>
+                            <span class="s1">value: </span><span class="s0">&quot;E361&quot;</span><span class="s1">,</span>
+                            <span class="s1">enumerable: </span><span class="s2">false</span><span class="s1">,</span>
+                            <span class="s1">configurable: </span><span class="s2">true</span>
+                        <span class="s1">});</span>
+                    <span class="s1">}</span>
+                    <span class="s2">return </span><span class="s1">res.replace(</span><span class="s5">/\0/g</span><span class="s1">, </span><span class="s0">''</span><span class="s1">);</span>
+                <span class="s1">};</span>
+                <span class="s2">this</span><span class="s1">.tapfinishModules(compilation, traceEntrypointsPluginSpan, doResolve, readlink, stat);</span>
+            <span class="s1">});</span>
+        <span class="s1">});</span>
+    <span class="s1">}</span>
+<span class="s1">}</span>
+
+<span class="s4">//# sourceMappingURL=next-trace-entrypoints-plugin.js.map</span></pre>
+</body>
+</html>

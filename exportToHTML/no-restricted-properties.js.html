@@ -1,0 +1,255 @@
+<html>
+<head>
+<title>no-restricted-properties.js</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #8c8c8c; font-style: italic;}
+.s1 { color: #8c8c8c; font-style: italic;}
+.s2 { color: #080808;}
+.s3 { color: #067d17;}
+.s4 { color: #0033b3;}
+.s5 { color: #1750eb;}
+</style>
+</head>
+<body bgcolor="#ffffff">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#c0c0c0" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+no-restricted-properties.js</font>
+</center></td></tr></table>
+<pre><span class="s0">/**</span>
+ <span class="s0">* </span><span class="s1">@fileoverview </span><span class="s0">Rule to disallow certain object properties</span>
+ <span class="s0">* </span><span class="s1">@author </span><span class="s0">Will Klein &amp; Eli White</span>
+ <span class="s0">*/</span>
+
+<span class="s3">&quot;use strict&quot;</span><span class="s2">;</span>
+
+<span class="s4">const </span><span class="s2">astUtils = require(</span><span class="s3">&quot;./utils/ast-utils&quot;</span><span class="s2">);</span>
+
+<span class="s0">//------------------------------------------------------------------------------</span>
+<span class="s0">// Rule Definition</span>
+<span class="s0">//------------------------------------------------------------------------------</span>
+
+<span class="s0">/** </span><span class="s1">@type </span><span class="s0">{import('../types').Rule.RuleModule} */</span>
+<span class="s2">module.exports = {</span>
+	<span class="s2">meta: {</span>
+		<span class="s2">type: </span><span class="s3">&quot;suggestion&quot;</span><span class="s2">,</span>
+
+		<span class="s2">docs: {</span>
+			<span class="s2">description: </span><span class="s3">&quot;Disallow certain properties on certain objects&quot;</span><span class="s2">,</span>
+			<span class="s2">recommended: </span><span class="s4">false</span><span class="s2">,</span>
+			<span class="s2">url: </span><span class="s3">&quot;https://eslint.org/docs/latest/rules/no-restricted-properties&quot;</span><span class="s2">,</span>
+		<span class="s2">},</span>
+
+		<span class="s2">schema: {</span>
+			<span class="s2">type: </span><span class="s3">&quot;array&quot;</span><span class="s2">,</span>
+			<span class="s2">items: {</span>
+				<span class="s2">type: </span><span class="s3">&quot;object&quot;</span><span class="s2">,</span>
+				<span class="s2">properties: {</span>
+					<span class="s2">object: {</span>
+						<span class="s2">type: </span><span class="s3">&quot;string&quot;</span><span class="s2">,</span>
+					<span class="s2">},</span>
+					<span class="s2">property: {</span>
+						<span class="s2">type: </span><span class="s3">&quot;string&quot;</span><span class="s2">,</span>
+					<span class="s2">},</span>
+					<span class="s2">allowObjects: {</span>
+						<span class="s2">type: </span><span class="s3">&quot;array&quot;</span><span class="s2">,</span>
+						<span class="s2">items: {</span>
+							<span class="s2">type: </span><span class="s3">&quot;string&quot;</span><span class="s2">,</span>
+						<span class="s2">},</span>
+						<span class="s2">uniqueItems: </span><span class="s4">true</span><span class="s2">,</span>
+					<span class="s2">},</span>
+					<span class="s2">allowProperties: {</span>
+						<span class="s2">type: </span><span class="s3">&quot;array&quot;</span><span class="s2">,</span>
+						<span class="s2">items: {</span>
+							<span class="s2">type: </span><span class="s3">&quot;string&quot;</span><span class="s2">,</span>
+						<span class="s2">},</span>
+						<span class="s2">uniqueItems: </span><span class="s4">true</span><span class="s2">,</span>
+					<span class="s2">},</span>
+					<span class="s2">message: {</span>
+						<span class="s2">type: </span><span class="s3">&quot;string&quot;</span><span class="s2">,</span>
+					<span class="s2">},</span>
+				<span class="s2">},</span>
+				<span class="s2">anyOf: [</span>
+					<span class="s2">{</span>
+						<span class="s2">required: [</span><span class="s3">&quot;object&quot;</span><span class="s2">],</span>
+					<span class="s2">},</span>
+					<span class="s2">{</span>
+						<span class="s2">required: [</span><span class="s3">&quot;property&quot;</span><span class="s2">],</span>
+					<span class="s2">},</span>
+				<span class="s2">],</span>
+				<span class="s2">not: {</span>
+					<span class="s2">anyOf: [</span>
+						<span class="s2">{ required: [</span><span class="s3">&quot;allowObjects&quot;</span><span class="s2">, </span><span class="s3">&quot;object&quot;</span><span class="s2">] },</span>
+						<span class="s2">{ required: [</span><span class="s3">&quot;allowProperties&quot;</span><span class="s2">, </span><span class="s3">&quot;property&quot;</span><span class="s2">] },</span>
+					<span class="s2">],</span>
+				<span class="s2">},</span>
+				<span class="s2">additionalProperties: </span><span class="s4">false</span><span class="s2">,</span>
+			<span class="s2">},</span>
+			<span class="s2">uniqueItems: </span><span class="s4">true</span><span class="s2">,</span>
+		<span class="s2">},</span>
+
+		<span class="s2">messages: {</span>
+			<span class="s2">restrictedObjectProperty:</span>
+				<span class="s0">// eslint-disable-next-line eslint-plugin/report-message-format -- Custom message might not end in a period</span>
+				<span class="s3">&quot;'{{objectName}}.{{propertyName}}' is restricted from being used.{{allowedPropertiesMessage}}{{message}}&quot;</span><span class="s2">,</span>
+			<span class="s2">restrictedProperty:</span>
+				<span class="s0">// eslint-disable-next-line eslint-plugin/report-message-format -- Custom message might not end in a period</span>
+				<span class="s3">&quot;'{{propertyName}}' is restricted from being used.{{allowedObjectsMessage}}{{message}}&quot;</span><span class="s2">,</span>
+		<span class="s2">},</span>
+	<span class="s2">},</span>
+
+	<span class="s2">create(context) {</span>
+		<span class="s4">const </span><span class="s2">restrictedCalls = context.options;</span>
+
+		<span class="s4">if </span><span class="s2">(restrictedCalls.length === </span><span class="s5">0</span><span class="s2">) {</span>
+			<span class="s4">return </span><span class="s2">{};</span>
+		<span class="s2">}</span>
+
+		<span class="s4">const </span><span class="s2">restrictedProperties = </span><span class="s4">new </span><span class="s2">Map();</span>
+		<span class="s4">const </span><span class="s2">globallyRestrictedObjects = </span><span class="s4">new </span><span class="s2">Map();</span>
+		<span class="s4">const </span><span class="s2">globallyRestrictedProperties = </span><span class="s4">new </span><span class="s2">Map();</span>
+
+		<span class="s2">restrictedCalls.forEach(option =&gt; {</span>
+			<span class="s4">const </span><span class="s2">objectName = option.object;</span>
+			<span class="s4">const </span><span class="s2">propertyName = option.property;</span>
+
+			<span class="s4">if </span><span class="s2">(</span><span class="s4">typeof </span><span class="s2">objectName === </span><span class="s3">&quot;undefined&quot;</span><span class="s2">) {</span>
+				<span class="s2">globallyRestrictedProperties.set(propertyName, {</span>
+					<span class="s2">allowObjects: option.allowObjects,</span>
+					<span class="s2">message: option.message,</span>
+				<span class="s2">});</span>
+			<span class="s2">} </span><span class="s4">else if </span><span class="s2">(</span><span class="s4">typeof </span><span class="s2">propertyName === </span><span class="s3">&quot;undefined&quot;</span><span class="s2">) {</span>
+				<span class="s2">globallyRestrictedObjects.set(objectName, {</span>
+					<span class="s2">allowProperties: option.allowProperties,</span>
+					<span class="s2">message: option.message,</span>
+				<span class="s2">});</span>
+			<span class="s2">} </span><span class="s4">else </span><span class="s2">{</span>
+				<span class="s4">if </span><span class="s2">(!restrictedProperties.has(objectName)) {</span>
+					<span class="s2">restrictedProperties.set(objectName, </span><span class="s4">new </span><span class="s2">Map());</span>
+				<span class="s2">}</span>
+
+				<span class="s2">restrictedProperties.get(objectName).set(propertyName, {</span>
+					<span class="s2">message: option.message,</span>
+				<span class="s2">});</span>
+			<span class="s2">}</span>
+		<span class="s2">});</span>
+
+		<span class="s0">/**</span>
+		 <span class="s0">* Checks if a name is in the allowed list.</span>
+		 <span class="s0">* </span><span class="s1">@param </span><span class="s0">{string} name The name to check</span>
+		 <span class="s0">* </span><span class="s1">@param </span><span class="s0">{string[]} [allowedList] The list of allowed names</span>
+		 <span class="s0">* </span><span class="s1">@returns </span><span class="s0">{boolean} True if the name is allowed, false otherwise</span>
+		 <span class="s0">*/</span>
+		<span class="s4">function </span><span class="s2">isAllowed(name, allowedList) {</span>
+			<span class="s4">if </span><span class="s2">(!allowedList) {</span>
+				<span class="s4">return false</span><span class="s2">;</span>
+			<span class="s2">}</span>
+
+			<span class="s4">return </span><span class="s2">allowedList.includes(name);</span>
+		<span class="s2">}</span>
+
+		<span class="s0">/**</span>
+		 <span class="s0">* Checks to see whether a property access is restricted, and reports it if so.</span>
+		 <span class="s0">* </span><span class="s1">@param </span><span class="s0">{ASTNode} node The node to report</span>
+		 <span class="s0">* </span><span class="s1">@param </span><span class="s0">{string} objectName The name of the object</span>
+		 <span class="s0">* </span><span class="s1">@param </span><span class="s0">{string} propertyName The name of the property</span>
+		 <span class="s0">* </span><span class="s1">@returns </span><span class="s0">{undefined}</span>
+		 <span class="s0">*/</span>
+		<span class="s4">function </span><span class="s2">checkPropertyAccess(node, objectName, propertyName) {</span>
+			<span class="s4">if </span><span class="s2">(propertyName === </span><span class="s4">null</span><span class="s2">) {</span>
+				<span class="s4">return</span><span class="s2">;</span>
+			<span class="s2">}</span>
+			<span class="s4">const </span><span class="s2">matchedObject = restrictedProperties.get(objectName);</span>
+			<span class="s4">const </span><span class="s2">matchedObjectProperty = matchedObject</span>
+				<span class="s2">? matchedObject.get(propertyName)</span>
+				<span class="s2">: globallyRestrictedObjects.get(objectName);</span>
+			<span class="s4">const </span><span class="s2">globalMatchedProperty =</span>
+				<span class="s2">globallyRestrictedProperties.get(propertyName);</span>
+
+			<span class="s4">if </span><span class="s2">(</span>
+				<span class="s2">matchedObjectProperty &amp;&amp;</span>
+				<span class="s2">!isAllowed(propertyName, matchedObjectProperty.allowProperties)</span>
+			<span class="s2">) {</span>
+				<span class="s4">const </span><span class="s2">message = matchedObjectProperty.message</span>
+					<span class="s2">? </span><span class="s3">` </span><span class="s2">${matchedObjectProperty.message}</span><span class="s3">`</span>
+					<span class="s2">: </span><span class="s3">&quot;&quot;</span><span class="s2">;</span>
+				<span class="s4">const </span><span class="s2">allowedPropertiesMessage =</span>
+					<span class="s2">matchedObjectProperty.allowProperties</span>
+						<span class="s2">? </span><span class="s3">` Only these properties are allowed: </span><span class="s2">${matchedObjectProperty.allowProperties.join(</span><span class="s3">&quot;, &quot;</span><span class="s2">)}</span><span class="s3">.`</span>
+						<span class="s2">: </span><span class="s3">&quot;&quot;</span><span class="s2">;</span>
+
+				<span class="s2">context.report({</span>
+					<span class="s2">node,</span>
+					<span class="s2">messageId: </span><span class="s3">&quot;restrictedObjectProperty&quot;</span><span class="s2">,</span>
+					<span class="s2">data: {</span>
+						<span class="s2">objectName,</span>
+						<span class="s2">propertyName,</span>
+						<span class="s2">message,</span>
+						<span class="s2">allowedPropertiesMessage,</span>
+					<span class="s2">},</span>
+				<span class="s2">});</span>
+			<span class="s2">} </span><span class="s4">else if </span><span class="s2">(</span>
+				<span class="s2">globalMatchedProperty &amp;&amp;</span>
+				<span class="s2">!isAllowed(objectName, globalMatchedProperty.allowObjects)</span>
+			<span class="s2">) {</span>
+				<span class="s4">const </span><span class="s2">message = globalMatchedProperty.message</span>
+					<span class="s2">? </span><span class="s3">` </span><span class="s2">${globalMatchedProperty.message}</span><span class="s3">`</span>
+					<span class="s2">: </span><span class="s3">&quot;&quot;</span><span class="s2">;</span>
+				<span class="s4">const </span><span class="s2">allowedObjectsMessage = globalMatchedProperty.allowObjects</span>
+					<span class="s2">? </span><span class="s3">` Property '</span><span class="s2">${propertyName}</span><span class="s3">' is only allowed on these objects: </span><span class="s2">${globalMatchedProperty.allowObjects.join(</span><span class="s3">&quot;, &quot;</span><span class="s2">)}</span><span class="s3">.`</span>
+					<span class="s2">: </span><span class="s3">&quot;&quot;</span><span class="s2">;</span>
+
+				<span class="s2">context.report({</span>
+					<span class="s2">node,</span>
+					<span class="s2">messageId: </span><span class="s3">&quot;restrictedProperty&quot;</span><span class="s2">,</span>
+					<span class="s2">data: {</span>
+						<span class="s2">propertyName,</span>
+						<span class="s2">message,</span>
+						<span class="s2">allowedObjectsMessage,</span>
+					<span class="s2">},</span>
+				<span class="s2">});</span>
+			<span class="s2">}</span>
+		<span class="s2">}</span>
+
+		<span class="s4">return </span><span class="s2">{</span>
+			<span class="s2">MemberExpression(node) {</span>
+				<span class="s2">checkPropertyAccess(</span>
+					<span class="s2">node,</span>
+					<span class="s2">node.object &amp;&amp; node.object.name,</span>
+					<span class="s2">astUtils.getStaticPropertyName(node),</span>
+				<span class="s2">);</span>
+			<span class="s2">},</span>
+			<span class="s2">ObjectPattern(node) {</span>
+				<span class="s4">let </span><span class="s2">objectName = </span><span class="s4">null</span><span class="s2">;</span>
+
+				<span class="s4">if </span><span class="s2">(node.parent.type === </span><span class="s3">&quot;VariableDeclarator&quot;</span><span class="s2">) {</span>
+					<span class="s4">if </span><span class="s2">(</span>
+						<span class="s2">node.parent.init &amp;&amp;</span>
+						<span class="s2">node.parent.init.type === </span><span class="s3">&quot;Identifier&quot;</span>
+					<span class="s2">) {</span>
+						<span class="s2">objectName = node.parent.init.name;</span>
+					<span class="s2">}</span>
+				<span class="s2">} </span><span class="s4">else if </span><span class="s2">(</span>
+					<span class="s2">node.parent.type === </span><span class="s3">&quot;AssignmentExpression&quot; </span><span class="s2">||</span>
+					<span class="s2">node.parent.type === </span><span class="s3">&quot;AssignmentPattern&quot;</span>
+				<span class="s2">) {</span>
+					<span class="s4">if </span><span class="s2">(node.parent.right.type === </span><span class="s3">&quot;Identifier&quot;</span><span class="s2">) {</span>
+						<span class="s2">objectName = node.parent.right.name;</span>
+					<span class="s2">}</span>
+				<span class="s2">}</span>
+
+				<span class="s2">node.properties.forEach(property =&gt; {</span>
+					<span class="s2">checkPropertyAccess(</span>
+						<span class="s2">node,</span>
+						<span class="s2">objectName,</span>
+						<span class="s2">astUtils.getStaticPropertyName(property),</span>
+					<span class="s2">);</span>
+				<span class="s2">});</span>
+			<span class="s2">},</span>
+		<span class="s2">};</span>
+	<span class="s2">},</span>
+<span class="s2">};</span>
+</pre>
+</body>
+</html>

@@ -1,0 +1,1344 @@
+<html>
+<head>
+<title>emnapi.mjs</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #0033b3;}
+.s1 { color: #080808;}
+.s2 { color: #067d17;}
+.s3 { color: #1750eb;}
+.s4 { color: #0037a6;}
+</style>
+</head>
+<body bgcolor="#ffffff">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#c0c0c0" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+emnapi.mjs</font>
+</center></td></tr></table>
+<pre><span class="s0">const </span><span class="s1">externalValue = </span><span class="s0">new </span><span class="s1">WeakMap();</span>
+<span class="s0">function </span><span class="s1">isExternal(object) {</span>
+    <span class="s0">return </span><span class="s1">externalValue.has(object);</span>
+<span class="s1">}</span>
+<span class="s0">const </span><span class="s1">External = (() =&gt; {</span>
+    <span class="s0">function </span><span class="s1">External(value) {</span>
+        <span class="s1">Object.setPrototypeOf(</span><span class="s0">this</span><span class="s1">, </span><span class="s0">null</span><span class="s1">);</span>
+        <span class="s1">externalValue.set(</span><span class="s0">this</span><span class="s1">, value);</span>
+    <span class="s1">}</span>
+    <span class="s1">External.prototype = </span><span class="s0">null</span><span class="s1">;</span>
+    <span class="s0">return </span><span class="s1">External;</span>
+<span class="s1">})();</span>
+<span class="s0">function </span><span class="s1">getExternalValue(external) {</span>
+    <span class="s0">if </span><span class="s1">(!isExternal(external)) {</span>
+        <span class="s0">throw new </span><span class="s1">TypeError(</span><span class="s2">'not external'</span><span class="s1">);</span>
+    <span class="s1">}</span>
+    <span class="s0">return </span><span class="s1">externalValue.get(external);</span>
+<span class="s1">}</span>
+
+<span class="s0">const </span><span class="s1">supportNewFunction = (</span><span class="s0">function </span><span class="s1">() {</span>
+    <span class="s0">let </span><span class="s1">f;</span>
+    <span class="s0">try </span><span class="s1">{</span>
+        <span class="s1">f = </span><span class="s0">new </span><span class="s1">Function();</span>
+    <span class="s1">}</span>
+    <span class="s0">catch </span><span class="s1">(_) {</span>
+        <span class="s0">return false</span><span class="s1">;</span>
+    <span class="s1">}</span>
+    <span class="s0">return typeof </span><span class="s1">f === </span><span class="s2">'function'</span><span class="s1">;</span>
+<span class="s1">})();</span>
+<span class="s0">const </span><span class="s1">_global = (</span><span class="s0">function </span><span class="s1">() {</span>
+    <span class="s0">if </span><span class="s1">(</span><span class="s0">typeof </span><span class="s1">globalThis !== </span><span class="s2">'undefined'</span><span class="s1">)</span>
+        <span class="s0">return </span><span class="s1">globalThis;</span>
+    <span class="s0">let </span><span class="s1">g = (</span><span class="s0">function </span><span class="s1">() { </span><span class="s0">return this</span><span class="s1">; })();</span>
+    <span class="s0">if </span><span class="s1">(!g &amp;&amp; supportNewFunction) {</span>
+        <span class="s0">try </span><span class="s1">{</span>
+            <span class="s1">g = </span><span class="s0">new </span><span class="s1">Function(</span><span class="s2">'return this'</span><span class="s1">)();</span>
+        <span class="s1">}</span>
+        <span class="s0">catch </span><span class="s1">(_) { }</span>
+    <span class="s1">}</span>
+    <span class="s0">if </span><span class="s1">(!g) {</span>
+        <span class="s0">if </span><span class="s1">(</span><span class="s0">typeof </span><span class="s1">__webpack_public_path__ === </span><span class="s2">'undefined'</span><span class="s1">) {</span>
+            <span class="s0">if </span><span class="s1">(</span><span class="s0">typeof </span><span class="s1">global !== </span><span class="s2">'undefined'</span><span class="s1">)</span>
+                <span class="s0">return </span><span class="s1">global;</span>
+        <span class="s1">}</span>
+        <span class="s0">if </span><span class="s1">(</span><span class="s0">typeof </span><span class="s1">window !== </span><span class="s2">'undefined'</span><span class="s1">)</span>
+            <span class="s0">return </span><span class="s1">window;</span>
+        <span class="s0">if </span><span class="s1">(</span><span class="s0">typeof </span><span class="s1">self !== </span><span class="s2">'undefined'</span><span class="s1">)</span>
+            <span class="s0">return </span><span class="s1">self;</span>
+    <span class="s1">}</span>
+    <span class="s0">return </span><span class="s1">g;</span>
+<span class="s1">})();</span>
+<span class="s0">class </span><span class="s1">TryCatch {</span>
+    <span class="s1">constructor() {</span>
+        <span class="s0">this</span><span class="s1">._exception = undefined;</span>
+        <span class="s0">this</span><span class="s1">._caught = </span><span class="s0">false</span><span class="s1">;</span>
+    <span class="s1">}</span>
+    <span class="s1">isEmpty() {</span>
+        <span class="s0">return </span><span class="s1">!</span><span class="s0">this</span><span class="s1">._caught;</span>
+    <span class="s1">}</span>
+    <span class="s1">hasCaught() {</span>
+        <span class="s0">return this</span><span class="s1">._caught;</span>
+    <span class="s1">}</span>
+    <span class="s1">exception() {</span>
+        <span class="s0">return this</span><span class="s1">._exception;</span>
+    <span class="s1">}</span>
+    <span class="s1">setError(err) {</span>
+        <span class="s0">this</span><span class="s1">._caught = </span><span class="s0">true</span><span class="s1">;</span>
+        <span class="s0">this</span><span class="s1">._exception = err;</span>
+    <span class="s1">}</span>
+    <span class="s1">reset() {</span>
+        <span class="s0">this</span><span class="s1">._caught = </span><span class="s0">false</span><span class="s1">;</span>
+        <span class="s0">this</span><span class="s1">._exception = undefined;</span>
+    <span class="s1">}</span>
+    <span class="s1">extractException() {</span>
+        <span class="s0">const </span><span class="s1">e = </span><span class="s0">this</span><span class="s1">._exception;</span>
+        <span class="s0">this</span><span class="s1">.reset();</span>
+        <span class="s0">return </span><span class="s1">e;</span>
+    <span class="s1">}</span>
+<span class="s1">}</span>
+<span class="s0">const </span><span class="s1">canSetFunctionName = (</span><span class="s0">function </span><span class="s1">() {</span>
+    <span class="s0">var </span><span class="s1">_a;</span>
+    <span class="s0">try </span><span class="s1">{</span>
+        <span class="s0">return </span><span class="s1">Boolean((_a = Object.getOwnPropertyDescriptor(Function.prototype, </span><span class="s2">'name'</span><span class="s1">)) === </span><span class="s0">null </span><span class="s1">|| _a === </span><span class="s0">void </span><span class="s3">0 </span><span class="s1">? </span><span class="s0">void </span><span class="s3">0 </span><span class="s1">: _a.configurable);</span>
+    <span class="s1">}</span>
+    <span class="s0">catch </span><span class="s1">(_) {</span>
+        <span class="s0">return false</span><span class="s1">;</span>
+    <span class="s1">}</span>
+<span class="s1">})();</span>
+<span class="s0">const </span><span class="s1">supportReflect = </span><span class="s0">typeof </span><span class="s1">Reflect === </span><span class="s2">'object'</span><span class="s1">;</span>
+<span class="s0">const </span><span class="s1">supportFinalizer = (</span><span class="s0">typeof </span><span class="s1">FinalizationRegistry !== </span><span class="s2">'undefined'</span><span class="s1">) &amp;&amp; (</span><span class="s0">typeof </span><span class="s1">WeakRef !== </span><span class="s2">'undefined'</span><span class="s1">);</span>
+<span class="s0">const </span><span class="s1">supportWeakSymbol = (</span><span class="s0">function </span><span class="s1">() {</span>
+    <span class="s0">try </span><span class="s1">{</span>
+        <span class="s0">const </span><span class="s1">sym = Symbol();</span>
+        <span class="s0">new </span><span class="s1">WeakRef(sym);</span>
+        <span class="s0">new </span><span class="s1">WeakMap().set(sym, undefined);</span>
+    <span class="s1">}</span>
+    <span class="s0">catch </span><span class="s1">(_) {</span>
+        <span class="s0">return false</span><span class="s1">;</span>
+    <span class="s1">}</span>
+    <span class="s0">return true</span><span class="s1">;</span>
+<span class="s1">})();</span>
+<span class="s0">const </span><span class="s1">supportBigInt = </span><span class="s0">typeof </span><span class="s1">BigInt !== </span><span class="s2">'undefined'</span><span class="s1">;</span>
+<span class="s0">function </span><span class="s1">isReferenceType(v) {</span>
+    <span class="s0">return </span><span class="s1">(</span><span class="s0">typeof </span><span class="s1">v === </span><span class="s2">'object' </span><span class="s1">&amp;&amp; v !== </span><span class="s0">null</span><span class="s1">) || </span><span class="s0">typeof </span><span class="s1">v === </span><span class="s2">'function'</span><span class="s1">;</span>
+<span class="s1">}</span>
+<span class="s0">const </span><span class="s1">_require = (</span><span class="s0">function </span><span class="s1">() {</span>
+    <span class="s0">let </span><span class="s1">nativeRequire;</span>
+    <span class="s0">if </span><span class="s1">(</span><span class="s0">typeof </span><span class="s1">__webpack_public_path__ !== </span><span class="s2">'undefined'</span><span class="s1">) {</span>
+        <span class="s1">nativeRequire = (</span><span class="s0">function </span><span class="s1">() {</span>
+            <span class="s0">return typeof </span><span class="s1">__non_webpack_require__ !== </span><span class="s2">'undefined' </span><span class="s1">? __non_webpack_require__ : undefined;</span>
+        <span class="s1">})();</span>
+    <span class="s1">}</span>
+    <span class="s0">else </span><span class="s1">{</span>
+        <span class="s1">nativeRequire = (</span><span class="s0">function </span><span class="s1">() {</span>
+            <span class="s0">return typeof </span><span class="s1">__webpack_public_path__ !== </span><span class="s2">'undefined' </span><span class="s1">? (</span><span class="s0">typeof </span><span class="s1">__non_webpack_require__ !== </span><span class="s2">'undefined' </span><span class="s1">? __non_webpack_require__ : undefined) : (</span><span class="s0">typeof </span><span class="s1">require !== </span><span class="s2">'undefined' </span><span class="s1">? require : undefined);</span>
+        <span class="s1">})();</span>
+    <span class="s1">}</span>
+    <span class="s0">return </span><span class="s1">nativeRequire;</span>
+<span class="s1">})();</span>
+<span class="s0">const </span><span class="s1">_MessageChannel = </span><span class="s0">typeof </span><span class="s1">MessageChannel === </span><span class="s2">'function'</span>
+    <span class="s1">? MessageChannel</span>
+    <span class="s1">: (</span><span class="s0">function </span><span class="s1">() {</span>
+        <span class="s0">try </span><span class="s1">{</span>
+            <span class="s0">return </span><span class="s1">_require(</span><span class="s2">'worker_threads'</span><span class="s1">).MessageChannel;</span>
+        <span class="s1">}</span>
+        <span class="s0">catch </span><span class="s1">(_) { }</span>
+        <span class="s0">return </span><span class="s1">undefined;</span>
+    <span class="s1">})();</span>
+<span class="s0">const </span><span class="s1">_setImmediate = </span><span class="s0">typeof </span><span class="s1">setImmediate === </span><span class="s2">'function'</span>
+    <span class="s1">? setImmediate</span>
+    <span class="s1">: </span><span class="s0">function </span><span class="s1">(callback) {</span>
+        <span class="s0">if </span><span class="s1">(</span><span class="s0">typeof </span><span class="s1">callback !== </span><span class="s2">'function'</span><span class="s1">) {</span>
+            <span class="s0">throw new </span><span class="s1">TypeError(</span><span class="s2">'The &quot;callback&quot; argument must be of type function'</span><span class="s1">);</span>
+        <span class="s1">}</span>
+        <span class="s0">if </span><span class="s1">(_MessageChannel) {</span>
+            <span class="s0">let </span><span class="s1">channel = </span><span class="s0">new </span><span class="s1">_MessageChannel();</span>
+            <span class="s1">channel.port1.onmessage = </span><span class="s0">function </span><span class="s1">() {</span>
+                <span class="s1">channel.port1.onmessage = </span><span class="s0">null</span><span class="s1">;</span>
+                <span class="s1">channel = undefined;</span>
+                <span class="s1">callback();</span>
+            <span class="s1">};</span>
+            <span class="s1">channel.port2.postMessage(</span><span class="s0">null</span><span class="s1">);</span>
+        <span class="s1">}</span>
+        <span class="s0">else </span><span class="s1">{</span>
+            <span class="s1">setTimeout(callback, </span><span class="s3">0</span><span class="s1">);</span>
+        <span class="s1">}</span>
+    <span class="s1">};</span>
+<span class="s0">const </span><span class="s1">_Buffer = </span><span class="s0">typeof </span><span class="s1">Buffer === </span><span class="s2">'function'</span>
+    <span class="s1">? Buffer</span>
+    <span class="s1">: (</span><span class="s0">function </span><span class="s1">() {</span>
+        <span class="s0">try </span><span class="s1">{</span>
+            <span class="s0">return </span><span class="s1">_require(</span><span class="s2">'buffer'</span><span class="s1">).Buffer;</span>
+        <span class="s1">}</span>
+        <span class="s0">catch </span><span class="s1">(_) { }</span>
+        <span class="s0">return </span><span class="s1">undefined;</span>
+    <span class="s1">})();</span>
+<span class="s0">const </span><span class="s1">version = </span><span class="s2">&quot;1.5.0&quot;</span><span class="s1">;</span>
+<span class="s0">const </span><span class="s1">NODE_API_SUPPORTED_VERSION_MIN = </span><span class="s3">1</span><span class="s1">;</span>
+<span class="s0">const </span><span class="s1">NODE_API_SUPPORTED_VERSION_MAX = </span><span class="s3">10</span><span class="s1">;</span>
+<span class="s0">const </span><span class="s1">NAPI_VERSION_EXPERIMENTAL = </span><span class="s3">2147483647</span><span class="s1">;</span>
+<span class="s0">const </span><span class="s1">NODE_API_DEFAULT_MODULE_API_VERSION = </span><span class="s3">8</span><span class="s1">;</span>
+
+<span class="s0">class </span><span class="s1">Handle {</span>
+    <span class="s1">constructor(id, value) {</span>
+        <span class="s0">this</span><span class="s1">.id = id;</span>
+        <span class="s0">this</span><span class="s1">.value = value;</span>
+    <span class="s1">}</span>
+    <span class="s1">data() {</span>
+        <span class="s0">return </span><span class="s1">getExternalValue(</span><span class="s0">this</span><span class="s1">.value);</span>
+    <span class="s1">}</span>
+    <span class="s1">isNumber() {</span>
+        <span class="s0">return typeof this</span><span class="s1">.value === </span><span class="s2">'number'</span><span class="s1">;</span>
+    <span class="s1">}</span>
+    <span class="s1">isBigInt() {</span>
+        <span class="s0">return typeof this</span><span class="s1">.value === </span><span class="s2">'bigint'</span><span class="s1">;</span>
+    <span class="s1">}</span>
+    <span class="s1">isString() {</span>
+        <span class="s0">return typeof this</span><span class="s1">.value === </span><span class="s2">'string'</span><span class="s1">;</span>
+    <span class="s1">}</span>
+    <span class="s1">isFunction() {</span>
+        <span class="s0">return typeof this</span><span class="s1">.value === </span><span class="s2">'function'</span><span class="s1">;</span>
+    <span class="s1">}</span>
+    <span class="s1">isExternal() {</span>
+        <span class="s0">return </span><span class="s1">isExternal(</span><span class="s0">this</span><span class="s1">.value);</span>
+    <span class="s1">}</span>
+    <span class="s1">isObject() {</span>
+        <span class="s0">return typeof this</span><span class="s1">.value === </span><span class="s2">'object' </span><span class="s1">&amp;&amp; </span><span class="s0">this</span><span class="s1">.value !== </span><span class="s0">null</span><span class="s1">;</span>
+    <span class="s1">}</span>
+    <span class="s1">isArray() {</span>
+        <span class="s0">return </span><span class="s1">Array.isArray(</span><span class="s0">this</span><span class="s1">.value);</span>
+    <span class="s1">}</span>
+    <span class="s1">isArrayBuffer() {</span>
+        <span class="s0">return </span><span class="s1">(</span><span class="s0">this</span><span class="s1">.value </span><span class="s0">instanceof </span><span class="s1">ArrayBuffer);</span>
+    <span class="s1">}</span>
+    <span class="s1">isTypedArray() {</span>
+        <span class="s0">return </span><span class="s1">(ArrayBuffer.isView(</span><span class="s0">this</span><span class="s1">.value)) &amp;&amp; !(</span><span class="s0">this</span><span class="s1">.value </span><span class="s0">instanceof </span><span class="s1">DataView);</span>
+    <span class="s1">}</span>
+    <span class="s1">isBuffer(BufferConstructor) {</span>
+        <span class="s0">if </span><span class="s1">(ArrayBuffer.isView(</span><span class="s0">this</span><span class="s1">.value))</span>
+            <span class="s0">return true</span><span class="s1">;</span>
+        <span class="s1">BufferConstructor !== </span><span class="s0">null </span><span class="s1">&amp;&amp; BufferConstructor !== </span><span class="s0">void </span><span class="s3">0 </span><span class="s1">? BufferConstructor : (BufferConstructor = _Buffer);</span>
+        <span class="s0">return typeof </span><span class="s1">BufferConstructor === </span><span class="s2">'function' </span><span class="s1">&amp;&amp; BufferConstructor.isBuffer(</span><span class="s0">this</span><span class="s1">.value);</span>
+    <span class="s1">}</span>
+    <span class="s1">isDataView() {</span>
+        <span class="s0">return </span><span class="s1">(</span><span class="s0">this</span><span class="s1">.value </span><span class="s0">instanceof </span><span class="s1">DataView);</span>
+    <span class="s1">}</span>
+    <span class="s1">isDate() {</span>
+        <span class="s0">return </span><span class="s1">(</span><span class="s0">this</span><span class="s1">.value </span><span class="s0">instanceof </span><span class="s1">Date);</span>
+    <span class="s1">}</span>
+    <span class="s1">isPromise() {</span>
+        <span class="s0">return </span><span class="s1">(</span><span class="s0">this</span><span class="s1">.value </span><span class="s0">instanceof </span><span class="s1">Promise);</span>
+    <span class="s1">}</span>
+    <span class="s1">isBoolean() {</span>
+        <span class="s0">return typeof this</span><span class="s1">.value === </span><span class="s2">'boolean'</span><span class="s1">;</span>
+    <span class="s1">}</span>
+    <span class="s1">isUndefined() {</span>
+        <span class="s0">return this</span><span class="s1">.value === undefined;</span>
+    <span class="s1">}</span>
+    <span class="s1">isSymbol() {</span>
+        <span class="s0">return typeof this</span><span class="s1">.value === </span><span class="s2">'symbol'</span><span class="s1">;</span>
+    <span class="s1">}</span>
+    <span class="s1">isNull() {</span>
+        <span class="s0">return this</span><span class="s1">.value === </span><span class="s0">null</span><span class="s1">;</span>
+    <span class="s1">}</span>
+    <span class="s1">dispose() {</span>
+        <span class="s0">this</span><span class="s1">.value = undefined;</span>
+    <span class="s1">}</span>
+<span class="s1">}</span>
+<span class="s0">class </span><span class="s1">ConstHandle </span><span class="s0">extends </span><span class="s1">Handle {</span>
+    <span class="s1">constructor(id, value) {</span>
+        <span class="s0">super</span><span class="s1">(id, value);</span>
+    <span class="s1">}</span>
+    <span class="s1">dispose() { }</span>
+<span class="s1">}</span>
+<span class="s0">class </span><span class="s1">HandleStore {</span>
+    <span class="s1">constructor() {</span>
+        <span class="s0">this</span><span class="s1">._values = [</span>
+            <span class="s1">undefined,</span>
+            <span class="s1">HandleStore.UNDEFINED,</span>
+            <span class="s1">HandleStore.NULL,</span>
+            <span class="s1">HandleStore.FALSE,</span>
+            <span class="s1">HandleStore.TRUE,</span>
+            <span class="s1">HandleStore.GLOBAL</span>
+        <span class="s1">];</span>
+        <span class="s0">this</span><span class="s1">._next = HandleStore.MIN_ID;</span>
+    <span class="s1">}</span>
+    <span class="s1">push(value) {</span>
+        <span class="s0">let </span><span class="s1">h;</span>
+        <span class="s0">const </span><span class="s1">next = </span><span class="s0">this</span><span class="s1">._next;</span>
+        <span class="s0">const </span><span class="s1">values = </span><span class="s0">this</span><span class="s1">._values;</span>
+        <span class="s0">if </span><span class="s1">(next &lt; values.length) {</span>
+            <span class="s1">h = values[next];</span>
+            <span class="s1">h.value = value;</span>
+        <span class="s1">}</span>
+        <span class="s0">else </span><span class="s1">{</span>
+            <span class="s1">h = </span><span class="s0">new </span><span class="s1">Handle(next, value);</span>
+            <span class="s1">values[next] = h;</span>
+        <span class="s1">}</span>
+        <span class="s0">this</span><span class="s1">._next++;</span>
+        <span class="s0">return </span><span class="s1">h;</span>
+    <span class="s1">}</span>
+    <span class="s1">erase(start, end) {</span>
+        <span class="s0">this</span><span class="s1">._next = start;</span>
+        <span class="s0">const </span><span class="s1">values = </span><span class="s0">this</span><span class="s1">._values;</span>
+        <span class="s0">for </span><span class="s1">(</span><span class="s0">let </span><span class="s1">i = start; i &lt; end; ++i) {</span>
+            <span class="s1">values[i].dispose();</span>
+        <span class="s1">}</span>
+    <span class="s1">}</span>
+    <span class="s1">get(id) {</span>
+        <span class="s0">return this</span><span class="s1">._values[id];</span>
+    <span class="s1">}</span>
+    <span class="s1">swap(a, b) {</span>
+        <span class="s0">const </span><span class="s1">values = </span><span class="s0">this</span><span class="s1">._values;</span>
+        <span class="s0">const </span><span class="s1">h = values[a];</span>
+        <span class="s1">values[a] = values[b];</span>
+        <span class="s1">values[a].id = Number(a);</span>
+        <span class="s1">values[b] = h;</span>
+        <span class="s1">h.id = Number(b);</span>
+    <span class="s1">}</span>
+    <span class="s1">dispose() {</span>
+        <span class="s0">this</span><span class="s1">._values.length = HandleStore.MIN_ID;</span>
+        <span class="s0">this</span><span class="s1">._next = HandleStore.MIN_ID;</span>
+    <span class="s1">}</span>
+<span class="s1">}</span>
+<span class="s1">HandleStore.UNDEFINED = </span><span class="s0">new </span><span class="s1">ConstHandle(</span><span class="s3">1</span><span class="s1">, undefined);</span>
+<span class="s1">HandleStore.NULL = </span><span class="s0">new </span><span class="s1">ConstHandle(</span><span class="s3">2</span><span class="s1">, </span><span class="s0">null</span><span class="s1">);</span>
+<span class="s1">HandleStore.FALSE = </span><span class="s0">new </span><span class="s1">ConstHandle(</span><span class="s3">3</span><span class="s1">, </span><span class="s0">false</span><span class="s1">);</span>
+<span class="s1">HandleStore.TRUE = </span><span class="s0">new </span><span class="s1">ConstHandle(</span><span class="s3">4</span><span class="s1">, </span><span class="s0">true</span><span class="s1">);</span>
+<span class="s1">HandleStore.GLOBAL = </span><span class="s0">new </span><span class="s1">ConstHandle(</span><span class="s3">5</span><span class="s1">, _global);</span>
+<span class="s1">HandleStore.MIN_ID = </span><span class="s3">6</span><span class="s1">;</span>
+
+<span class="s0">class </span><span class="s1">HandleScope {</span>
+    <span class="s1">constructor(handleStore, id, parentScope, start, end = start) {</span>
+        <span class="s0">this</span><span class="s1">.handleStore = handleStore;</span>
+        <span class="s0">this</span><span class="s1">.id = id;</span>
+        <span class="s0">this</span><span class="s1">.parent = parentScope;</span>
+        <span class="s0">this</span><span class="s1">.child = </span><span class="s0">null</span><span class="s1">;</span>
+        <span class="s0">if </span><span class="s1">(parentScope !== </span><span class="s0">null</span><span class="s1">)</span>
+            <span class="s1">parentScope.child = </span><span class="s0">this</span><span class="s1">;</span>
+        <span class="s0">this</span><span class="s1">.start = start;</span>
+        <span class="s0">this</span><span class="s1">.end = end;</span>
+        <span class="s0">this</span><span class="s1">._escapeCalled = </span><span class="s0">false</span><span class="s1">;</span>
+        <span class="s0">this</span><span class="s1">.callbackInfo = {</span>
+            <span class="s1">thiz: undefined,</span>
+            <span class="s1">data: </span><span class="s3">0</span><span class="s1">,</span>
+            <span class="s1">args: undefined,</span>
+            <span class="s1">fn: undefined</span>
+        <span class="s1">};</span>
+    <span class="s1">}</span>
+    <span class="s1">add(value) {</span>
+        <span class="s0">const </span><span class="s1">h = </span><span class="s0">this</span><span class="s1">.handleStore.push(value);</span>
+        <span class="s0">this</span><span class="s1">.end++;</span>
+        <span class="s0">return </span><span class="s1">h;</span>
+    <span class="s1">}</span>
+    <span class="s1">addExternal(data) {</span>
+        <span class="s0">return this</span><span class="s1">.add(</span><span class="s0">new </span><span class="s1">External(data));</span>
+    <span class="s1">}</span>
+    <span class="s1">dispose() {</span>
+        <span class="s0">if </span><span class="s1">(</span><span class="s0">this</span><span class="s1">._escapeCalled)</span>
+            <span class="s0">this</span><span class="s1">._escapeCalled = </span><span class="s0">false</span><span class="s1">;</span>
+        <span class="s0">if </span><span class="s1">(</span><span class="s0">this</span><span class="s1">.start === </span><span class="s0">this</span><span class="s1">.end)</span>
+            <span class="s0">return</span><span class="s1">;</span>
+        <span class="s0">this</span><span class="s1">.handleStore.erase(</span><span class="s0">this</span><span class="s1">.start, </span><span class="s0">this</span><span class="s1">.end);</span>
+    <span class="s1">}</span>
+    <span class="s1">escape(handle) {</span>
+        <span class="s0">if </span><span class="s1">(</span><span class="s0">this</span><span class="s1">._escapeCalled)</span>
+            <span class="s0">return null</span><span class="s1">;</span>
+        <span class="s0">this</span><span class="s1">._escapeCalled = </span><span class="s0">true</span><span class="s1">;</span>
+        <span class="s0">if </span><span class="s1">(handle &lt; </span><span class="s0">this</span><span class="s1">.start || handle &gt;= </span><span class="s0">this</span><span class="s1">.end) {</span>
+            <span class="s0">return null</span><span class="s1">;</span>
+        <span class="s1">}</span>
+        <span class="s0">this</span><span class="s1">.handleStore.swap(handle, </span><span class="s0">this</span><span class="s1">.start);</span>
+        <span class="s0">const </span><span class="s1">h = </span><span class="s0">this</span><span class="s1">.handleStore.get(</span><span class="s0">this</span><span class="s1">.start);</span>
+        <span class="s0">this</span><span class="s1">.start++;</span>
+        <span class="s0">this</span><span class="s1">.parent.end++;</span>
+        <span class="s0">return </span><span class="s1">h;</span>
+    <span class="s1">}</span>
+    <span class="s1">escapeCalled() {</span>
+        <span class="s0">return this</span><span class="s1">._escapeCalled;</span>
+    <span class="s1">}</span>
+<span class="s1">}</span>
+
+<span class="s0">class </span><span class="s1">ScopeStore {</span>
+    <span class="s1">constructor() {</span>
+        <span class="s0">this</span><span class="s1">._rootScope = </span><span class="s0">new </span><span class="s1">HandleScope(</span><span class="s0">null</span><span class="s1">, </span><span class="s3">0</span><span class="s1">, </span><span class="s0">null</span><span class="s1">, </span><span class="s3">1</span><span class="s1">, HandleStore.MIN_ID);</span>
+        <span class="s0">this</span><span class="s1">.currentScope = </span><span class="s0">this</span><span class="s1">._rootScope;</span>
+        <span class="s0">this</span><span class="s1">._values = [undefined];</span>
+    <span class="s1">}</span>
+    <span class="s1">get(id) {</span>
+        <span class="s0">return this</span><span class="s1">._values[id];</span>
+    <span class="s1">}</span>
+    <span class="s1">openScope(handleStore) {</span>
+        <span class="s0">const </span><span class="s1">currentScope = </span><span class="s0">this</span><span class="s1">.currentScope;</span>
+        <span class="s0">let </span><span class="s1">scope = currentScope.child;</span>
+        <span class="s0">if </span><span class="s1">(scope !== </span><span class="s0">null</span><span class="s1">) {</span>
+            <span class="s1">scope.start = scope.end = currentScope.end;</span>
+        <span class="s1">}</span>
+        <span class="s0">else </span><span class="s1">{</span>
+            <span class="s0">const </span><span class="s1">id = currentScope.id + </span><span class="s3">1</span><span class="s1">;</span>
+            <span class="s1">scope = </span><span class="s0">new </span><span class="s1">HandleScope(handleStore, id, currentScope, currentScope.end);</span>
+            <span class="s0">this</span><span class="s1">._values[id] = scope;</span>
+        <span class="s1">}</span>
+        <span class="s0">this</span><span class="s1">.currentScope = scope;</span>
+        <span class="s0">return </span><span class="s1">scope;</span>
+    <span class="s1">}</span>
+    <span class="s1">closeScope() {</span>
+        <span class="s0">const </span><span class="s1">scope = </span><span class="s0">this</span><span class="s1">.currentScope;</span>
+        <span class="s0">this</span><span class="s1">.currentScope = scope.parent;</span>
+        <span class="s1">scope.dispose();</span>
+    <span class="s1">}</span>
+    <span class="s1">dispose() {</span>
+        <span class="s0">this</span><span class="s1">.currentScope = </span><span class="s0">this</span><span class="s1">._rootScope;</span>
+        <span class="s0">this</span><span class="s1">._values.length = </span><span class="s3">1</span><span class="s1">;</span>
+    <span class="s1">}</span>
+<span class="s1">}</span>
+
+<span class="s0">class </span><span class="s1">RefTracker {</span>
+    <span class="s1">constructor() {</span>
+        <span class="s0">this</span><span class="s1">._next = </span><span class="s0">null</span><span class="s1">;</span>
+        <span class="s0">this</span><span class="s1">._prev = </span><span class="s0">null</span><span class="s1">;</span>
+    <span class="s1">}</span>
+    <span class="s1">dispose() { }</span>
+    <span class="s1">finalize() { }</span>
+    <span class="s1">link(list) {</span>
+        <span class="s0">this</span><span class="s1">._prev = list;</span>
+        <span class="s0">this</span><span class="s1">._next = list._next;</span>
+        <span class="s0">if </span><span class="s1">(</span><span class="s0">this</span><span class="s1">._next !== </span><span class="s0">null</span><span class="s1">) {</span>
+            <span class="s0">this</span><span class="s1">._next._prev = </span><span class="s0">this</span><span class="s1">;</span>
+        <span class="s1">}</span>
+        <span class="s1">list._next = </span><span class="s0">this</span><span class="s1">;</span>
+    <span class="s1">}</span>
+    <span class="s1">unlink() {</span>
+        <span class="s0">if </span><span class="s1">(</span><span class="s0">this</span><span class="s1">._prev !== </span><span class="s0">null</span><span class="s1">) {</span>
+            <span class="s0">this</span><span class="s1">._prev._next = </span><span class="s0">this</span><span class="s1">._next;</span>
+        <span class="s1">}</span>
+        <span class="s0">if </span><span class="s1">(</span><span class="s0">this</span><span class="s1">._next !== </span><span class="s0">null</span><span class="s1">) {</span>
+            <span class="s0">this</span><span class="s1">._next._prev = </span><span class="s0">this</span><span class="s1">._prev;</span>
+        <span class="s1">}</span>
+        <span class="s0">this</span><span class="s1">._prev = </span><span class="s0">null</span><span class="s1">;</span>
+        <span class="s0">this</span><span class="s1">._next = </span><span class="s0">null</span><span class="s1">;</span>
+    <span class="s1">}</span>
+    <span class="s0">static </span><span class="s1">finalizeAll(list) {</span>
+        <span class="s0">while </span><span class="s1">(list._next !== </span><span class="s0">null</span><span class="s1">) {</span>
+            <span class="s1">list._next.finalize();</span>
+        <span class="s1">}</span>
+    <span class="s1">}</span>
+<span class="s1">}</span>
+
+<span class="s0">class </span><span class="s1">Finalizer {</span>
+    <span class="s1">constructor(envObject, _finalizeCallback = </span><span class="s3">0</span><span class="s1">, _finalizeData = </span><span class="s3">0</span><span class="s1">, _finalizeHint = </span><span class="s3">0</span><span class="s1">) {</span>
+        <span class="s0">this</span><span class="s1">.envObject = envObject;</span>
+        <span class="s0">this</span><span class="s1">._finalizeCallback = _finalizeCallback;</span>
+        <span class="s0">this</span><span class="s1">._finalizeData = _finalizeData;</span>
+        <span class="s0">this</span><span class="s1">._finalizeHint = _finalizeHint;</span>
+        <span class="s0">this</span><span class="s1">._makeDynCall_vppp = envObject.makeDynCall_vppp;</span>
+    <span class="s1">}</span>
+    <span class="s1">callback() { </span><span class="s0">return this</span><span class="s1">._finalizeCallback; }</span>
+    <span class="s1">data() { </span><span class="s0">return this</span><span class="s1">._finalizeData; }</span>
+    <span class="s1">hint() { </span><span class="s0">return this</span><span class="s1">._finalizeHint; }</span>
+    <span class="s1">resetEnv() {</span>
+        <span class="s0">this</span><span class="s1">.envObject = undefined;</span>
+    <span class="s1">}</span>
+    <span class="s1">resetFinalizer() {</span>
+        <span class="s0">this</span><span class="s1">._finalizeCallback = </span><span class="s3">0</span><span class="s1">;</span>
+        <span class="s0">this</span><span class="s1">._finalizeData = </span><span class="s3">0</span><span class="s1">;</span>
+        <span class="s0">this</span><span class="s1">._finalizeHint = </span><span class="s3">0</span><span class="s1">;</span>
+    <span class="s1">}</span>
+    <span class="s1">callFinalizer() {</span>
+        <span class="s0">const </span><span class="s1">finalize_callback = </span><span class="s0">this</span><span class="s1">._finalizeCallback;</span>
+        <span class="s0">const </span><span class="s1">finalize_data = </span><span class="s0">this</span><span class="s1">._finalizeData;</span>
+        <span class="s0">const </span><span class="s1">finalize_hint = </span><span class="s0">this</span><span class="s1">._finalizeHint;</span>
+        <span class="s0">this</span><span class="s1">.resetFinalizer();</span>
+        <span class="s0">if </span><span class="s1">(!finalize_callback)</span>
+            <span class="s0">return</span><span class="s1">;</span>
+        <span class="s0">const </span><span class="s1">fini = Number(finalize_callback);</span>
+        <span class="s0">if </span><span class="s1">(!</span><span class="s0">this</span><span class="s1">.envObject) {</span>
+            <span class="s0">this</span><span class="s1">._makeDynCall_vppp(fini)(</span><span class="s3">0</span><span class="s1">, finalize_data, finalize_hint);</span>
+        <span class="s1">}</span>
+        <span class="s0">else </span><span class="s1">{</span>
+            <span class="s0">this</span><span class="s1">.envObject.callFinalizer(fini, finalize_data, finalize_hint);</span>
+        <span class="s1">}</span>
+    <span class="s1">}</span>
+    <span class="s1">dispose() {</span>
+        <span class="s0">this</span><span class="s1">.envObject = undefined;</span>
+        <span class="s0">this</span><span class="s1">._makeDynCall_vppp = undefined;</span>
+    <span class="s1">}</span>
+<span class="s1">}</span>
+
+<span class="s0">class </span><span class="s1">TrackedFinalizer </span><span class="s0">extends </span><span class="s1">RefTracker {</span>
+    <span class="s0">static </span><span class="s1">create(envObject, finalize_callback, finalize_data, finalize_hint) {</span>
+        <span class="s0">const </span><span class="s1">finalizer = </span><span class="s0">new </span><span class="s1">TrackedFinalizer(envObject, finalize_callback, finalize_data, finalize_hint);</span>
+        <span class="s1">finalizer.link(envObject.finalizing_reflist);</span>
+        <span class="s0">return </span><span class="s1">finalizer;</span>
+    <span class="s1">}</span>
+    <span class="s1">constructor(envObject, finalize_callback, finalize_data, finalize_hint) {</span>
+        <span class="s0">super</span><span class="s1">();</span>
+        <span class="s0">this</span><span class="s1">._finalizer = </span><span class="s0">new </span><span class="s1">Finalizer(envObject, finalize_callback, finalize_data, finalize_hint);</span>
+    <span class="s1">}</span>
+    <span class="s1">data() {</span>
+        <span class="s0">return this</span><span class="s1">._finalizer.data();</span>
+    <span class="s1">}</span>
+    <span class="s1">dispose() {</span>
+        <span class="s0">if </span><span class="s1">(!</span><span class="s0">this</span><span class="s1">._finalizer)</span>
+            <span class="s0">return</span><span class="s1">;</span>
+        <span class="s0">this</span><span class="s1">.unlink();</span>
+        <span class="s0">this</span><span class="s1">._finalizer.envObject.dequeueFinalizer(</span><span class="s0">this</span><span class="s1">);</span>
+        <span class="s0">this</span><span class="s1">._finalizer.dispose();</span>
+        <span class="s0">this</span><span class="s1">._finalizer = undefined;</span>
+        <span class="s0">super</span><span class="s1">.dispose();</span>
+    <span class="s1">}</span>
+    <span class="s1">finalize() {</span>
+        <span class="s0">this</span><span class="s1">.unlink();</span>
+        <span class="s0">let </span><span class="s1">error;</span>
+        <span class="s0">let </span><span class="s1">caught = </span><span class="s0">false</span><span class="s1">;</span>
+        <span class="s0">try </span><span class="s1">{</span>
+            <span class="s0">this</span><span class="s1">._finalizer.callFinalizer();</span>
+        <span class="s1">}</span>
+        <span class="s0">catch </span><span class="s1">(err) {</span>
+            <span class="s1">caught = </span><span class="s0">true</span><span class="s1">;</span>
+            <span class="s1">error = err;</span>
+        <span class="s1">}</span>
+        <span class="s0">this</span><span class="s1">.dispose();</span>
+        <span class="s0">if </span><span class="s1">(caught) {</span>
+            <span class="s0">throw </span><span class="s1">error;</span>
+        <span class="s1">}</span>
+    <span class="s1">}</span>
+<span class="s1">}</span>
+
+<span class="s0">function </span><span class="s1">throwNodeApiVersionError(moduleName, moduleApiVersion) {</span>
+    <span class="s0">const </span><span class="s1">errorMessage = </span><span class="s2">`</span><span class="s1">${moduleName} </span><span class="s2">requires Node-API version </span><span class="s1">${moduleApiVersion}</span><span class="s2">, but this version of Node.js only supports version </span><span class="s1">${NODE_API_SUPPORTED_VERSION_MAX} </span><span class="s2">add-ons.`</span><span class="s1">;</span>
+    <span class="s0">throw new </span><span class="s1">Error(errorMessage);</span>
+<span class="s1">}</span>
+<span class="s0">function </span><span class="s1">handleThrow(envObject, value) {</span>
+    <span class="s0">if </span><span class="s1">(envObject.terminatedOrTerminating()) {</span>
+        <span class="s0">return</span><span class="s1">;</span>
+    <span class="s1">}</span>
+    <span class="s0">throw </span><span class="s1">value;</span>
+<span class="s1">}</span>
+<span class="s0">class </span><span class="s1">Env {</span>
+    <span class="s1">constructor(ctx, moduleApiVersion, makeDynCall_vppp, makeDynCall_vp, abort) {</span>
+        <span class="s0">this</span><span class="s1">.ctx = ctx;</span>
+        <span class="s0">this</span><span class="s1">.moduleApiVersion = moduleApiVersion;</span>
+        <span class="s0">this</span><span class="s1">.makeDynCall_vppp = makeDynCall_vppp;</span>
+        <span class="s0">this</span><span class="s1">.makeDynCall_vp = makeDynCall_vp;</span>
+        <span class="s0">this</span><span class="s1">.abort = abort;</span>
+        <span class="s0">this</span><span class="s1">.openHandleScopes = </span><span class="s3">0</span><span class="s1">;</span>
+        <span class="s0">this</span><span class="s1">.instanceData = </span><span class="s0">null</span><span class="s1">;</span>
+        <span class="s0">this</span><span class="s1">.tryCatch = </span><span class="s0">new </span><span class="s1">TryCatch();</span>
+        <span class="s0">this</span><span class="s1">.refs = </span><span class="s3">1</span><span class="s1">;</span>
+        <span class="s0">this</span><span class="s1">.reflist = </span><span class="s0">new </span><span class="s1">RefTracker();</span>
+        <span class="s0">this</span><span class="s1">.finalizing_reflist = </span><span class="s0">new </span><span class="s1">RefTracker();</span>
+        <span class="s0">this</span><span class="s1">.pendingFinalizers = [];</span>
+        <span class="s0">this</span><span class="s1">.lastError = {</span>
+            <span class="s1">errorCode: </span><span class="s3">0</span><span class="s1">,</span>
+            <span class="s1">engineErrorCode: </span><span class="s3">0</span><span class="s1">,</span>
+            <span class="s1">engineReserved: </span><span class="s3">0</span>
+        <span class="s1">};</span>
+        <span class="s0">this</span><span class="s1">.inGcFinalizer = </span><span class="s0">false</span><span class="s1">;</span>
+        <span class="s0">this</span><span class="s1">._bindingMap = </span><span class="s0">new </span><span class="s1">WeakMap();</span>
+        <span class="s0">this</span><span class="s1">.id = </span><span class="s3">0</span><span class="s1">;</span>
+    <span class="s1">}</span>
+    <span class="s1">canCallIntoJs() {</span>
+        <span class="s0">return true</span><span class="s1">;</span>
+    <span class="s1">}</span>
+    <span class="s1">terminatedOrTerminating() {</span>
+        <span class="s0">return </span><span class="s1">!</span><span class="s0">this</span><span class="s1">.canCallIntoJs();</span>
+    <span class="s1">}</span>
+    <span class="s1">ref() {</span>
+        <span class="s0">this</span><span class="s1">.refs++;</span>
+    <span class="s1">}</span>
+    <span class="s1">unref() {</span>
+        <span class="s0">this</span><span class="s1">.refs--;</span>
+        <span class="s0">if </span><span class="s1">(</span><span class="s0">this</span><span class="s1">.refs === </span><span class="s3">0</span><span class="s1">) {</span>
+            <span class="s0">this</span><span class="s1">.dispose();</span>
+        <span class="s1">}</span>
+    <span class="s1">}</span>
+    <span class="s1">ensureHandle(value) {</span>
+        <span class="s0">return this</span><span class="s1">.ctx.ensureHandle(value);</span>
+    <span class="s1">}</span>
+    <span class="s1">ensureHandleId(value) {</span>
+        <span class="s0">return this</span><span class="s1">.ensureHandle(value).id;</span>
+    <span class="s1">}</span>
+    <span class="s1">clearLastError() {</span>
+        <span class="s0">const </span><span class="s1">lastError = </span><span class="s0">this</span><span class="s1">.lastError;</span>
+        <span class="s0">if </span><span class="s1">(lastError.errorCode !== </span><span class="s3">0</span><span class="s1">)</span>
+            <span class="s1">lastError.errorCode = </span><span class="s3">0</span><span class="s1">;</span>
+        <span class="s0">if </span><span class="s1">(lastError.engineErrorCode !== </span><span class="s3">0</span><span class="s1">)</span>
+            <span class="s1">lastError.engineErrorCode = </span><span class="s3">0</span><span class="s1">;</span>
+        <span class="s0">if </span><span class="s1">(lastError.engineReserved !== </span><span class="s3">0</span><span class="s1">)</span>
+            <span class="s1">lastError.engineReserved = </span><span class="s3">0</span><span class="s1">;</span>
+        <span class="s0">return </span><span class="s3">0</span><span class="s1">;</span>
+    <span class="s1">}</span>
+    <span class="s1">setLastError(error_code, engine_error_code = </span><span class="s3">0</span><span class="s1">, engine_reserved = </span><span class="s3">0</span><span class="s1">) {</span>
+        <span class="s0">const </span><span class="s1">lastError = </span><span class="s0">this</span><span class="s1">.lastError;</span>
+        <span class="s0">if </span><span class="s1">(lastError.errorCode !== error_code)</span>
+            <span class="s1">lastError.errorCode = error_code;</span>
+        <span class="s0">if </span><span class="s1">(lastError.engineErrorCode !== engine_error_code)</span>
+            <span class="s1">lastError.engineErrorCode = engine_error_code;</span>
+        <span class="s0">if </span><span class="s1">(lastError.engineReserved !== engine_reserved)</span>
+            <span class="s1">lastError.engineReserved = engine_reserved;</span>
+        <span class="s0">return </span><span class="s1">error_code;</span>
+    <span class="s1">}</span>
+    <span class="s1">getReturnStatus() {</span>
+        <span class="s0">return </span><span class="s1">!</span><span class="s0">this</span><span class="s1">.tryCatch.hasCaught() ? </span><span class="s3">0 </span><span class="s1">: </span><span class="s0">this</span><span class="s1">.setLastError(</span><span class="s3">10</span><span class="s1">);</span>
+    <span class="s1">}</span>
+    <span class="s1">callIntoModule(fn, handleException = handleThrow) {</span>
+        <span class="s0">const </span><span class="s1">openHandleScopesBefore = </span><span class="s0">this</span><span class="s1">.openHandleScopes;</span>
+        <span class="s0">this</span><span class="s1">.clearLastError();</span>
+        <span class="s0">const </span><span class="s1">r = fn(</span><span class="s0">this</span><span class="s1">);</span>
+        <span class="s0">if </span><span class="s1">(openHandleScopesBefore !== </span><span class="s0">this</span><span class="s1">.openHandleScopes) {</span>
+            <span class="s0">this</span><span class="s1">.abort(</span><span class="s2">'open_handle_scopes != open_handle_scopes_before'</span><span class="s1">);</span>
+        <span class="s1">}</span>
+        <span class="s0">if </span><span class="s1">(</span><span class="s0">this</span><span class="s1">.tryCatch.hasCaught()) {</span>
+            <span class="s0">const </span><span class="s1">err = </span><span class="s0">this</span><span class="s1">.tryCatch.extractException();</span>
+            <span class="s1">handleException(</span><span class="s0">this</span><span class="s1">, err);</span>
+        <span class="s1">}</span>
+        <span class="s0">return </span><span class="s1">r;</span>
+    <span class="s1">}</span>
+    <span class="s1">invokeFinalizerFromGC(finalizer) {</span>
+        <span class="s0">if </span><span class="s1">(</span><span class="s0">this</span><span class="s1">.moduleApiVersion !== NAPI_VERSION_EXPERIMENTAL) {</span>
+            <span class="s0">this</span><span class="s1">.enqueueFinalizer(finalizer);</span>
+        <span class="s1">}</span>
+        <span class="s0">else </span><span class="s1">{</span>
+            <span class="s0">const </span><span class="s1">saved = </span><span class="s0">this</span><span class="s1">.inGcFinalizer;</span>
+            <span class="s0">this</span><span class="s1">.inGcFinalizer = </span><span class="s0">true</span><span class="s1">;</span>
+            <span class="s0">try </span><span class="s1">{</span>
+                <span class="s1">finalizer.finalize();</span>
+            <span class="s1">}</span>
+            <span class="s0">finally </span><span class="s1">{</span>
+                <span class="s0">this</span><span class="s1">.inGcFinalizer = saved;</span>
+            <span class="s1">}</span>
+        <span class="s1">}</span>
+    <span class="s1">}</span>
+    <span class="s1">checkGCAccess() {</span>
+        <span class="s0">if </span><span class="s1">(</span><span class="s0">this</span><span class="s1">.moduleApiVersion === NAPI_VERSION_EXPERIMENTAL &amp;&amp; </span><span class="s0">this</span><span class="s1">.inGcFinalizer) {</span>
+            <span class="s0">this</span><span class="s1">.abort(</span><span class="s2">'Finalizer is calling a function that may affect GC state.</span><span class="s4">\n</span><span class="s2">' </span><span class="s1">+</span>
+                <span class="s2">'The finalizers are run directly from GC and must not affect GC ' </span><span class="s1">+</span>
+                <span class="s2">'state.</span><span class="s4">\n</span><span class="s2">' </span><span class="s1">+</span>
+                <span class="s2">'Use `node_api_post_finalizer` from inside of the finalizer to work ' </span><span class="s1">+</span>
+                <span class="s2">'around this issue.</span><span class="s4">\n</span><span class="s2">' </span><span class="s1">+</span>
+                <span class="s2">'It schedules the call as a new task in the event loop.'</span><span class="s1">);</span>
+        <span class="s1">}</span>
+    <span class="s1">}</span>
+    <span class="s1">enqueueFinalizer(finalizer) {</span>
+        <span class="s0">if </span><span class="s1">(</span><span class="s0">this</span><span class="s1">.pendingFinalizers.indexOf(finalizer) === -</span><span class="s3">1</span><span class="s1">) {</span>
+            <span class="s0">this</span><span class="s1">.pendingFinalizers.push(finalizer);</span>
+        <span class="s1">}</span>
+    <span class="s1">}</span>
+    <span class="s1">dequeueFinalizer(finalizer) {</span>
+        <span class="s0">const </span><span class="s1">index = </span><span class="s0">this</span><span class="s1">.pendingFinalizers.indexOf(finalizer);</span>
+        <span class="s0">if </span><span class="s1">(index !== -</span><span class="s3">1</span><span class="s1">) {</span>
+            <span class="s0">this</span><span class="s1">.pendingFinalizers.splice(index, </span><span class="s3">1</span><span class="s1">);</span>
+        <span class="s1">}</span>
+    <span class="s1">}</span>
+    <span class="s1">deleteMe() {</span>
+        <span class="s1">RefTracker.finalizeAll(</span><span class="s0">this</span><span class="s1">.finalizing_reflist);</span>
+        <span class="s1">RefTracker.finalizeAll(</span><span class="s0">this</span><span class="s1">.reflist);</span>
+        <span class="s0">this</span><span class="s1">.tryCatch.extractException();</span>
+        <span class="s0">this</span><span class="s1">.ctx.envStore.remove(</span><span class="s0">this</span><span class="s1">.id);</span>
+    <span class="s1">}</span>
+    <span class="s1">dispose() {</span>
+        <span class="s0">if </span><span class="s1">(</span><span class="s0">this</span><span class="s1">.id === </span><span class="s3">0</span><span class="s1">)</span>
+            <span class="s0">return</span><span class="s1">;</span>
+        <span class="s0">this</span><span class="s1">.deleteMe();</span>
+        <span class="s0">this</span><span class="s1">.finalizing_reflist.dispose();</span>
+        <span class="s0">this</span><span class="s1">.reflist.dispose();</span>
+        <span class="s0">this</span><span class="s1">.id = </span><span class="s3">0</span><span class="s1">;</span>
+    <span class="s1">}</span>
+    <span class="s1">initObjectBinding(value) {</span>
+        <span class="s0">const </span><span class="s1">binding = {</span>
+            <span class="s1">wrapped: </span><span class="s3">0</span><span class="s1">,</span>
+            <span class="s1">tag: </span><span class="s0">null</span>
+        <span class="s1">};</span>
+        <span class="s0">this</span><span class="s1">._bindingMap.set(value, binding);</span>
+        <span class="s0">return </span><span class="s1">binding;</span>
+    <span class="s1">}</span>
+    <span class="s1">getObjectBinding(value) {</span>
+        <span class="s0">if </span><span class="s1">(</span><span class="s0">this</span><span class="s1">._bindingMap.has(value)) {</span>
+            <span class="s0">return this</span><span class="s1">._bindingMap.get(value);</span>
+        <span class="s1">}</span>
+        <span class="s0">return this</span><span class="s1">.initObjectBinding(value);</span>
+    <span class="s1">}</span>
+    <span class="s1">setInstanceData(data, finalize_cb, finalize_hint) {</span>
+        <span class="s0">if </span><span class="s1">(</span><span class="s0">this</span><span class="s1">.instanceData) {</span>
+            <span class="s0">this</span><span class="s1">.instanceData.dispose();</span>
+        <span class="s1">}</span>
+        <span class="s0">this</span><span class="s1">.instanceData = TrackedFinalizer.create(</span><span class="s0">this</span><span class="s1">, finalize_cb, data, finalize_hint);</span>
+    <span class="s1">}</span>
+    <span class="s1">getInstanceData() {</span>
+        <span class="s0">return this</span><span class="s1">.instanceData ? </span><span class="s0">this</span><span class="s1">.instanceData.data() : </span><span class="s3">0</span><span class="s1">;</span>
+    <span class="s1">}</span>
+<span class="s1">}</span>
+<span class="s0">class </span><span class="s1">NodeEnv </span><span class="s0">extends </span><span class="s1">Env {</span>
+    <span class="s1">constructor(ctx, filename, moduleApiVersion, makeDynCall_vppp, makeDynCall_vp, abort, nodeBinding) {</span>
+        <span class="s0">super</span><span class="s1">(ctx, moduleApiVersion, makeDynCall_vppp, makeDynCall_vp, abort);</span>
+        <span class="s0">this</span><span class="s1">.filename = filename;</span>
+        <span class="s0">this</span><span class="s1">.nodeBinding = nodeBinding;</span>
+        <span class="s0">this</span><span class="s1">.destructing = </span><span class="s0">false</span><span class="s1">;</span>
+        <span class="s0">this</span><span class="s1">.finalizationScheduled = </span><span class="s0">false</span><span class="s1">;</span>
+    <span class="s1">}</span>
+    <span class="s1">deleteMe() {</span>
+        <span class="s0">this</span><span class="s1">.destructing = </span><span class="s0">true</span><span class="s1">;</span>
+        <span class="s0">this</span><span class="s1">.drainFinalizerQueue();</span>
+        <span class="s0">super</span><span class="s1">.deleteMe();</span>
+    <span class="s1">}</span>
+    <span class="s1">canCallIntoJs() {</span>
+        <span class="s0">return super</span><span class="s1">.canCallIntoJs() &amp;&amp; </span><span class="s0">this</span><span class="s1">.ctx.canCallIntoJs();</span>
+    <span class="s1">}</span>
+    <span class="s1">triggerFatalException(err) {</span>
+        <span class="s0">if </span><span class="s1">(</span><span class="s0">this</span><span class="s1">.nodeBinding) {</span>
+            <span class="s0">this</span><span class="s1">.nodeBinding.napi.fatalException(err);</span>
+        <span class="s1">}</span>
+        <span class="s0">else </span><span class="s1">{</span>
+            <span class="s0">if </span><span class="s1">(</span><span class="s0">typeof </span><span class="s1">process === </span><span class="s2">'object' </span><span class="s1">&amp;&amp; process !== </span><span class="s0">null </span><span class="s1">&amp;&amp; </span><span class="s0">typeof </span><span class="s1">process._fatalException === </span><span class="s2">'function'</span><span class="s1">) {</span>
+                <span class="s0">const </span><span class="s1">handled = process._fatalException(err);</span>
+                <span class="s0">if </span><span class="s1">(!handled) {</span>
+                    <span class="s1">console.error(err);</span>
+                    <span class="s1">process.exit(</span><span class="s3">1</span><span class="s1">);</span>
+                <span class="s1">}</span>
+            <span class="s1">}</span>
+            <span class="s0">else </span><span class="s1">{</span>
+                <span class="s0">throw </span><span class="s1">err;</span>
+            <span class="s1">}</span>
+        <span class="s1">}</span>
+    <span class="s1">}</span>
+    <span class="s1">callbackIntoModule(enforceUncaughtExceptionPolicy, fn) {</span>
+        <span class="s0">return this</span><span class="s1">.callIntoModule(fn, (envObject, err) =&gt; {</span>
+            <span class="s0">if </span><span class="s1">(envObject.terminatedOrTerminating()) {</span>
+                <span class="s0">return</span><span class="s1">;</span>
+            <span class="s1">}</span>
+            <span class="s0">const </span><span class="s1">hasProcess = </span><span class="s0">typeof </span><span class="s1">process === </span><span class="s2">'object' </span><span class="s1">&amp;&amp; process !== </span><span class="s0">null</span><span class="s1">;</span>
+            <span class="s0">const </span><span class="s1">hasForceFlag = hasProcess ? Boolean(process.execArgv &amp;&amp; (process.execArgv.indexOf(</span><span class="s2">'--force-node-api-uncaught-exceptions-policy'</span><span class="s1">) !== -</span><span class="s3">1</span><span class="s1">)) : </span><span class="s0">false</span><span class="s1">;</span>
+            <span class="s0">if </span><span class="s1">(envObject.moduleApiVersion &lt; </span><span class="s3">10 </span><span class="s1">&amp;&amp; !hasForceFlag &amp;&amp; !enforceUncaughtExceptionPolicy) {</span>
+                <span class="s0">const </span><span class="s1">warn = hasProcess &amp;&amp; </span><span class="s0">typeof </span><span class="s1">process.emitWarning === </span><span class="s2">'function'</span>
+                    <span class="s1">? process.emitWarning</span>
+                    <span class="s1">: </span><span class="s0">function </span><span class="s1">(warning, type, code) {</span>
+                        <span class="s0">if </span><span class="s1">(warning </span><span class="s0">instanceof </span><span class="s1">Error) {</span>
+                            <span class="s1">console.warn(warning.toString());</span>
+                        <span class="s1">}</span>
+                        <span class="s0">else </span><span class="s1">{</span>
+                            <span class="s0">const </span><span class="s1">prefix = code ? </span><span class="s2">`[</span><span class="s1">${code}</span><span class="s2">] ` </span><span class="s1">: </span><span class="s2">''</span><span class="s1">;</span>
+                            <span class="s1">console.warn(</span><span class="s2">`</span><span class="s1">${prefix}${type || </span><span class="s2">'Warning'</span><span class="s1">}</span><span class="s2">: </span><span class="s1">${warning}</span><span class="s2">`</span><span class="s1">);</span>
+                        <span class="s1">}</span>
+                    <span class="s1">};</span>
+                <span class="s1">warn(</span><span class="s2">'Uncaught N-API callback exception detected, please run node with option --force-node-api-uncaught-exceptions-policy=true to handle those exceptions properly.'</span><span class="s1">, </span><span class="s2">'DeprecationWarning'</span><span class="s1">, </span><span class="s2">'DEP0168'</span><span class="s1">);</span>
+                <span class="s0">return</span><span class="s1">;</span>
+            <span class="s1">}</span>
+            <span class="s1">envObject.triggerFatalException(err);</span>
+        <span class="s1">});</span>
+    <span class="s1">}</span>
+    <span class="s1">callFinalizer(cb, data, hint) {</span>
+        <span class="s0">this</span><span class="s1">.callFinalizerInternal(</span><span class="s3">1</span><span class="s1">, cb, data, hint);</span>
+    <span class="s1">}</span>
+    <span class="s1">callFinalizerInternal(forceUncaught, cb, data, hint) {</span>
+        <span class="s0">const </span><span class="s1">f = </span><span class="s0">this</span><span class="s1">.makeDynCall_vppp(cb);</span>
+        <span class="s0">const </span><span class="s1">env = </span><span class="s0">this</span><span class="s1">.id;</span>
+        <span class="s0">const </span><span class="s1">scope = </span><span class="s0">this</span><span class="s1">.ctx.openScope(</span><span class="s0">this</span><span class="s1">);</span>
+        <span class="s0">try </span><span class="s1">{</span>
+            <span class="s0">this</span><span class="s1">.callbackIntoModule(Boolean(forceUncaught), () =&gt; { f(env, data, hint); });</span>
+        <span class="s1">}</span>
+        <span class="s0">finally </span><span class="s1">{</span>
+            <span class="s0">this</span><span class="s1">.ctx.closeScope(</span><span class="s0">this</span><span class="s1">, scope);</span>
+        <span class="s1">}</span>
+    <span class="s1">}</span>
+    <span class="s1">enqueueFinalizer(finalizer) {</span>
+        <span class="s0">super</span><span class="s1">.enqueueFinalizer(finalizer);</span>
+        <span class="s0">if </span><span class="s1">(!</span><span class="s0">this</span><span class="s1">.finalizationScheduled &amp;&amp; !</span><span class="s0">this</span><span class="s1">.destructing) {</span>
+            <span class="s0">this</span><span class="s1">.finalizationScheduled = </span><span class="s0">true</span><span class="s1">;</span>
+            <span class="s0">this</span><span class="s1">.ref();</span>
+            <span class="s1">_setImmediate(() =&gt; {</span>
+                <span class="s0">this</span><span class="s1">.finalizationScheduled = </span><span class="s0">false</span><span class="s1">;</span>
+                <span class="s0">this</span><span class="s1">.unref();</span>
+                <span class="s0">this</span><span class="s1">.drainFinalizerQueue();</span>
+            <span class="s1">});</span>
+        <span class="s1">}</span>
+    <span class="s1">}</span>
+    <span class="s1">drainFinalizerQueue() {</span>
+        <span class="s0">while </span><span class="s1">(</span><span class="s0">this</span><span class="s1">.pendingFinalizers.length &gt; </span><span class="s3">0</span><span class="s1">) {</span>
+            <span class="s0">const </span><span class="s1">refTracker = </span><span class="s0">this</span><span class="s1">.pendingFinalizers.shift();</span>
+            <span class="s1">refTracker.finalize();</span>
+        <span class="s1">}</span>
+    <span class="s1">}</span>
+<span class="s1">}</span>
+<span class="s0">function </span><span class="s1">newEnv(ctx, filename, moduleApiVersion, makeDynCall_vppp, makeDynCall_vp, abort, nodeBinding) {</span>
+    <span class="s1">moduleApiVersion = </span><span class="s0">typeof </span><span class="s1">moduleApiVersion !== </span><span class="s2">'number' </span><span class="s1">? NODE_API_DEFAULT_MODULE_API_VERSION : moduleApiVersion;</span>
+    <span class="s0">if </span><span class="s1">(moduleApiVersion &lt; NODE_API_DEFAULT_MODULE_API_VERSION) {</span>
+        <span class="s1">moduleApiVersion = NODE_API_DEFAULT_MODULE_API_VERSION;</span>
+    <span class="s1">}</span>
+    <span class="s0">else if </span><span class="s1">(moduleApiVersion &gt; NODE_API_SUPPORTED_VERSION_MAX &amp;&amp; moduleApiVersion !== NAPI_VERSION_EXPERIMENTAL) {</span>
+        <span class="s1">throwNodeApiVersionError(filename, moduleApiVersion);</span>
+    <span class="s1">}</span>
+    <span class="s0">const </span><span class="s1">env = </span><span class="s0">new </span><span class="s1">NodeEnv(ctx, filename, moduleApiVersion, makeDynCall_vppp, makeDynCall_vp, abort, nodeBinding);</span>
+    <span class="s1">ctx.envStore.add(env);</span>
+    <span class="s1">ctx.addCleanupHook(env, () =&gt; { env.unref(); }, </span><span class="s3">0</span><span class="s1">);</span>
+    <span class="s0">return </span><span class="s1">env;</span>
+<span class="s1">}</span>
+
+<span class="s0">class </span><span class="s1">EmnapiError </span><span class="s0">extends </span><span class="s1">Error {</span>
+    <span class="s1">constructor(message) {</span>
+        <span class="s0">super</span><span class="s1">(message);</span>
+        <span class="s0">const </span><span class="s1">ErrorConstructor = </span><span class="s0">new</span><span class="s1">.target;</span>
+        <span class="s0">const </span><span class="s1">proto = ErrorConstructor.prototype;</span>
+        <span class="s0">if </span><span class="s1">(!(</span><span class="s0">this instanceof </span><span class="s1">EmnapiError)) {</span>
+            <span class="s0">const </span><span class="s1">setPrototypeOf = Object.setPrototypeOf;</span>
+            <span class="s0">if </span><span class="s1">(</span><span class="s0">typeof </span><span class="s1">setPrototypeOf === </span><span class="s2">'function'</span><span class="s1">) {</span>
+                <span class="s1">setPrototypeOf.call(Object, </span><span class="s0">this</span><span class="s1">, proto);</span>
+            <span class="s1">}</span>
+            <span class="s0">else </span><span class="s1">{</span>
+                <span class="s0">this</span><span class="s1">.__proto__ = proto;</span>
+            <span class="s1">}</span>
+            <span class="s0">if </span><span class="s1">(</span><span class="s0">typeof </span><span class="s1">Error.captureStackTrace === </span><span class="s2">'function'</span><span class="s1">) {</span>
+                <span class="s1">Error.captureStackTrace(</span><span class="s0">this</span><span class="s1">, ErrorConstructor);</span>
+            <span class="s1">}</span>
+        <span class="s1">}</span>
+    <span class="s1">}</span>
+<span class="s1">}</span>
+<span class="s1">Object.defineProperty(EmnapiError.prototype, </span><span class="s2">'name'</span><span class="s1">, {</span>
+    <span class="s1">configurable: </span><span class="s0">true</span><span class="s1">,</span>
+    <span class="s1">writable: </span><span class="s0">true</span><span class="s1">,</span>
+    <span class="s1">value: </span><span class="s2">'EmnapiError'</span>
+<span class="s1">});</span>
+<span class="s0">class </span><span class="s1">NotSupportWeakRefError </span><span class="s0">extends </span><span class="s1">EmnapiError {</span>
+    <span class="s1">constructor(api, message) {</span>
+        <span class="s0">super</span><span class="s1">(</span><span class="s2">`</span><span class="s1">${api}</span><span class="s2">: The current runtime does not support &quot;FinalizationRegistry&quot; and &quot;WeakRef&quot;.</span><span class="s1">${message ? </span><span class="s2">` </span><span class="s1">${message}</span><span class="s2">` </span><span class="s1">: </span><span class="s2">''</span><span class="s1">}</span><span class="s2">`</span><span class="s1">);</span>
+    <span class="s1">}</span>
+<span class="s1">}</span>
+<span class="s1">Object.defineProperty(NotSupportWeakRefError.prototype, </span><span class="s2">'name'</span><span class="s1">, {</span>
+    <span class="s1">configurable: </span><span class="s0">true</span><span class="s1">,</span>
+    <span class="s1">writable: </span><span class="s0">true</span><span class="s1">,</span>
+    <span class="s1">value: </span><span class="s2">'NotSupportWeakRefError'</span>
+<span class="s1">});</span>
+<span class="s0">class </span><span class="s1">NotSupportBufferError </span><span class="s0">extends </span><span class="s1">EmnapiError {</span>
+    <span class="s1">constructor(api, message) {</span>
+        <span class="s0">super</span><span class="s1">(</span><span class="s2">`</span><span class="s1">${api}</span><span class="s2">: The current runtime does not support &quot;Buffer&quot;. Consider using buffer polyfill to make sure </span><span class="s4">\`</span><span class="s2">globalThis.Buffer</span><span class="s4">\` </span><span class="s2">is defined.</span><span class="s1">${message ? </span><span class="s2">` </span><span class="s1">${message}</span><span class="s2">` </span><span class="s1">: </span><span class="s2">''</span><span class="s1">}</span><span class="s2">`</span><span class="s1">);</span>
+    <span class="s1">}</span>
+<span class="s1">}</span>
+<span class="s1">Object.defineProperty(NotSupportBufferError.prototype, </span><span class="s2">'name'</span><span class="s1">, {</span>
+    <span class="s1">configurable: </span><span class="s0">true</span><span class="s1">,</span>
+    <span class="s1">writable: </span><span class="s0">true</span><span class="s1">,</span>
+    <span class="s1">value: </span><span class="s2">'NotSupportBufferError'</span>
+<span class="s1">});</span>
+
+<span class="s0">class </span><span class="s1">StrongRef {</span>
+    <span class="s1">constructor(value) {</span>
+        <span class="s0">this</span><span class="s1">._value = value;</span>
+    <span class="s1">}</span>
+    <span class="s1">deref() {</span>
+        <span class="s0">return this</span><span class="s1">._value;</span>
+    <span class="s1">}</span>
+    <span class="s1">dispose() {</span>
+        <span class="s0">this</span><span class="s1">._value = undefined;</span>
+    <span class="s1">}</span>
+<span class="s1">}</span>
+<span class="s0">class </span><span class="s1">Persistent {</span>
+    <span class="s1">constructor(value) {</span>
+        <span class="s0">this</span><span class="s1">._ref = </span><span class="s0">new </span><span class="s1">StrongRef(value);</span>
+    <span class="s1">}</span>
+    <span class="s1">setWeak(param, callback) {</span>
+        <span class="s0">if </span><span class="s1">(!supportFinalizer || </span><span class="s0">this</span><span class="s1">._ref === undefined || </span><span class="s0">this</span><span class="s1">._ref </span><span class="s0">instanceof </span><span class="s1">WeakRef)</span>
+            <span class="s0">return</span><span class="s1">;</span>
+        <span class="s0">const </span><span class="s1">value = </span><span class="s0">this</span><span class="s1">._ref.deref();</span>
+        <span class="s0">try </span><span class="s1">{</span>
+            <span class="s1">Persistent._registry.register(value, </span><span class="s0">this</span><span class="s1">, </span><span class="s0">this</span><span class="s1">);</span>
+            <span class="s0">const </span><span class="s1">weakRef = </span><span class="s0">new </span><span class="s1">WeakRef(value);</span>
+            <span class="s0">this</span><span class="s1">._ref.dispose();</span>
+            <span class="s0">this</span><span class="s1">._ref = weakRef;</span>
+            <span class="s0">this</span><span class="s1">._param = param;</span>
+            <span class="s0">this</span><span class="s1">._callback = callback;</span>
+        <span class="s1">}</span>
+        <span class="s0">catch </span><span class="s1">(err) {</span>
+            <span class="s0">if </span><span class="s1">(</span><span class="s0">typeof </span><span class="s1">value === </span><span class="s2">'symbol'</span><span class="s1">) ;</span>
+            <span class="s0">else </span><span class="s1">{</span>
+                <span class="s0">throw </span><span class="s1">err;</span>
+            <span class="s1">}</span>
+        <span class="s1">}</span>
+    <span class="s1">}</span>
+    <span class="s1">clearWeak() {</span>
+        <span class="s0">if </span><span class="s1">(!supportFinalizer || </span><span class="s0">this</span><span class="s1">._ref === undefined)</span>
+            <span class="s0">return</span><span class="s1">;</span>
+        <span class="s0">if </span><span class="s1">(</span><span class="s0">this</span><span class="s1">._ref </span><span class="s0">instanceof </span><span class="s1">WeakRef) {</span>
+            <span class="s0">try </span><span class="s1">{</span>
+                <span class="s1">Persistent._registry.unregister(</span><span class="s0">this</span><span class="s1">);</span>
+            <span class="s1">}</span>
+            <span class="s0">catch </span><span class="s1">(_) { }</span>
+            <span class="s0">this</span><span class="s1">._param = undefined;</span>
+            <span class="s0">this</span><span class="s1">._callback = undefined;</span>
+            <span class="s0">const </span><span class="s1">value = </span><span class="s0">this</span><span class="s1">._ref.deref();</span>
+            <span class="s0">if </span><span class="s1">(value === undefined) {</span>
+                <span class="s0">this</span><span class="s1">._ref = value;</span>
+            <span class="s1">}</span>
+            <span class="s0">else </span><span class="s1">{</span>
+                <span class="s0">this</span><span class="s1">._ref = </span><span class="s0">new </span><span class="s1">StrongRef(value);</span>
+            <span class="s1">}</span>
+        <span class="s1">}</span>
+    <span class="s1">}</span>
+    <span class="s1">reset() {</span>
+        <span class="s0">if </span><span class="s1">(supportFinalizer) {</span>
+            <span class="s0">try </span><span class="s1">{</span>
+                <span class="s1">Persistent._registry.unregister(</span><span class="s0">this</span><span class="s1">);</span>
+            <span class="s1">}</span>
+            <span class="s0">catch </span><span class="s1">(_) { }</span>
+        <span class="s1">}</span>
+        <span class="s0">this</span><span class="s1">._param = undefined;</span>
+        <span class="s0">this</span><span class="s1">._callback = undefined;</span>
+        <span class="s0">if </span><span class="s1">(</span><span class="s0">this</span><span class="s1">._ref </span><span class="s0">instanceof </span><span class="s1">StrongRef) {</span>
+            <span class="s0">this</span><span class="s1">._ref.dispose();</span>
+        <span class="s1">}</span>
+        <span class="s0">this</span><span class="s1">._ref = undefined;</span>
+    <span class="s1">}</span>
+    <span class="s1">isEmpty() {</span>
+        <span class="s0">return this</span><span class="s1">._ref === undefined;</span>
+    <span class="s1">}</span>
+    <span class="s1">deref() {</span>
+        <span class="s0">if </span><span class="s1">(</span><span class="s0">this</span><span class="s1">._ref === undefined)</span>
+            <span class="s0">return </span><span class="s1">undefined;</span>
+        <span class="s0">return this</span><span class="s1">._ref.deref();</span>
+    <span class="s1">}</span>
+<span class="s1">}</span>
+<span class="s1">Persistent._registry = supportFinalizer</span>
+    <span class="s1">? </span><span class="s0">new </span><span class="s1">FinalizationRegistry((value) =&gt; {</span>
+        <span class="s1">value._ref = undefined;</span>
+        <span class="s0">const </span><span class="s1">callback = value._callback;</span>
+        <span class="s0">const </span><span class="s1">param = value._param;</span>
+        <span class="s1">value._callback = undefined;</span>
+        <span class="s1">value._param = undefined;</span>
+        <span class="s0">if </span><span class="s1">(</span><span class="s0">typeof </span><span class="s1">callback === </span><span class="s2">'function'</span><span class="s1">) {</span>
+            <span class="s1">callback(param);</span>
+        <span class="s1">}</span>
+    <span class="s1">})</span>
+    <span class="s1">: undefined;</span>
+
+<span class="s0">var </span><span class="s1">ReferenceOwnership;</span>
+<span class="s1">(</span><span class="s0">function </span><span class="s1">(ReferenceOwnership) {</span>
+    <span class="s1">ReferenceOwnership[ReferenceOwnership[</span><span class="s2">&quot;kRuntime&quot;</span><span class="s1">] = </span><span class="s3">0</span><span class="s1">] = </span><span class="s2">&quot;kRuntime&quot;</span><span class="s1">;</span>
+    <span class="s1">ReferenceOwnership[ReferenceOwnership[</span><span class="s2">&quot;kUserland&quot;</span><span class="s1">] = </span><span class="s3">1</span><span class="s1">] = </span><span class="s2">&quot;kUserland&quot;</span><span class="s1">;</span>
+<span class="s1">})(ReferenceOwnership || (ReferenceOwnership = {}));</span>
+<span class="s0">function </span><span class="s1">canBeHeldWeakly(value) {</span>
+    <span class="s0">return </span><span class="s1">value.isObject() || value.isFunction() || value.isSymbol();</span>
+<span class="s1">}</span>
+<span class="s0">class </span><span class="s1">Reference </span><span class="s0">extends </span><span class="s1">RefTracker {</span>
+    <span class="s0">static </span><span class="s1">weakCallback(ref) {</span>
+        <span class="s1">ref.persistent.reset();</span>
+        <span class="s1">ref.invokeFinalizerFromGC();</span>
+    <span class="s1">}</span>
+    <span class="s0">static </span><span class="s1">create(envObject, handle_id, initialRefcount, ownership, _unused1, _unused2, _unused3) {</span>
+        <span class="s0">const </span><span class="s1">ref = </span><span class="s0">new </span><span class="s1">Reference(envObject, handle_id, initialRefcount, ownership);</span>
+        <span class="s1">envObject.ctx.refStore.add(ref);</span>
+        <span class="s1">ref.link(envObject.reflist);</span>
+        <span class="s0">return </span><span class="s1">ref;</span>
+    <span class="s1">}</span>
+    <span class="s1">constructor(envObject, handle_id, initialRefcount, ownership) {</span>
+        <span class="s0">super</span><span class="s1">();</span>
+        <span class="s0">this</span><span class="s1">.envObject = envObject;</span>
+        <span class="s0">this</span><span class="s1">._refcount = initialRefcount;</span>
+        <span class="s0">this</span><span class="s1">._ownership = ownership;</span>
+        <span class="s0">const </span><span class="s1">handle = envObject.ctx.handleStore.get(handle_id);</span>
+        <span class="s0">this</span><span class="s1">.canBeWeak = canBeHeldWeakly(handle);</span>
+        <span class="s0">this</span><span class="s1">.persistent = </span><span class="s0">new </span><span class="s1">Persistent(handle.value);</span>
+        <span class="s0">this</span><span class="s1">.id = </span><span class="s3">0</span><span class="s1">;</span>
+        <span class="s0">if </span><span class="s1">(initialRefcount === </span><span class="s3">0</span><span class="s1">) {</span>
+            <span class="s0">this</span><span class="s1">._setWeak();</span>
+        <span class="s1">}</span>
+    <span class="s1">}</span>
+    <span class="s1">ref() {</span>
+        <span class="s0">if </span><span class="s1">(</span><span class="s0">this</span><span class="s1">.persistent.isEmpty()) {</span>
+            <span class="s0">return </span><span class="s3">0</span><span class="s1">;</span>
+        <span class="s1">}</span>
+        <span class="s0">if </span><span class="s1">(++</span><span class="s0">this</span><span class="s1">._refcount === </span><span class="s3">1 </span><span class="s1">&amp;&amp; </span><span class="s0">this</span><span class="s1">.canBeWeak) {</span>
+            <span class="s0">this</span><span class="s1">.persistent.clearWeak();</span>
+        <span class="s1">}</span>
+        <span class="s0">return this</span><span class="s1">._refcount;</span>
+    <span class="s1">}</span>
+    <span class="s1">unref() {</span>
+        <span class="s0">if </span><span class="s1">(</span><span class="s0">this</span><span class="s1">.persistent.isEmpty() || </span><span class="s0">this</span><span class="s1">._refcount === </span><span class="s3">0</span><span class="s1">) {</span>
+            <span class="s0">return </span><span class="s3">0</span><span class="s1">;</span>
+        <span class="s1">}</span>
+        <span class="s0">if </span><span class="s1">(--</span><span class="s0">this</span><span class="s1">._refcount === </span><span class="s3">0</span><span class="s1">) {</span>
+            <span class="s0">this</span><span class="s1">._setWeak();</span>
+        <span class="s1">}</span>
+        <span class="s0">return this</span><span class="s1">._refcount;</span>
+    <span class="s1">}</span>
+    <span class="s1">get(envObject = </span><span class="s0">this</span><span class="s1">.envObject) {</span>
+        <span class="s0">if </span><span class="s1">(</span><span class="s0">this</span><span class="s1">.persistent.isEmpty()) {</span>
+            <span class="s0">return </span><span class="s3">0</span><span class="s1">;</span>
+        <span class="s1">}</span>
+        <span class="s0">const </span><span class="s1">obj = </span><span class="s0">this</span><span class="s1">.persistent.deref();</span>
+        <span class="s0">const </span><span class="s1">handle = envObject.ensureHandle(obj);</span>
+        <span class="s0">return </span><span class="s1">handle.id;</span>
+    <span class="s1">}</span>
+    <span class="s1">resetFinalizer() { }</span>
+    <span class="s1">data() { </span><span class="s0">return </span><span class="s3">0</span><span class="s1">; }</span>
+    <span class="s1">refcount() { </span><span class="s0">return this</span><span class="s1">._refcount; }</span>
+    <span class="s1">ownership() { </span><span class="s0">return this</span><span class="s1">._ownership; }</span>
+    <span class="s1">callUserFinalizer() { }</span>
+    <span class="s1">invokeFinalizerFromGC() {</span>
+        <span class="s0">this</span><span class="s1">.finalize();</span>
+    <span class="s1">}</span>
+    <span class="s1">_setWeak() {</span>
+        <span class="s0">if </span><span class="s1">(</span><span class="s0">this</span><span class="s1">.canBeWeak) {</span>
+            <span class="s0">this</span><span class="s1">.persistent.setWeak(</span><span class="s0">this</span><span class="s1">, Reference.weakCallback);</span>
+        <span class="s1">}</span>
+        <span class="s0">else </span><span class="s1">{</span>
+            <span class="s0">this</span><span class="s1">.persistent.reset();</span>
+        <span class="s1">}</span>
+    <span class="s1">}</span>
+    <span class="s1">finalize() {</span>
+        <span class="s0">this</span><span class="s1">.persistent.reset();</span>
+        <span class="s0">const </span><span class="s1">deleteMe = </span><span class="s0">this</span><span class="s1">._ownership === ReferenceOwnership.kRuntime;</span>
+        <span class="s0">this</span><span class="s1">.unlink();</span>
+        <span class="s0">this</span><span class="s1">.callUserFinalizer();</span>
+        <span class="s0">if </span><span class="s1">(deleteMe) {</span>
+            <span class="s0">this</span><span class="s1">.dispose();</span>
+        <span class="s1">}</span>
+    <span class="s1">}</span>
+    <span class="s1">dispose() {</span>
+        <span class="s0">if </span><span class="s1">(</span><span class="s0">this</span><span class="s1">.id === </span><span class="s3">0</span><span class="s1">)</span>
+            <span class="s0">return</span><span class="s1">;</span>
+        <span class="s0">this</span><span class="s1">.unlink();</span>
+        <span class="s0">this</span><span class="s1">.persistent.reset();</span>
+        <span class="s0">this</span><span class="s1">.envObject.ctx.refStore.remove(</span><span class="s0">this</span><span class="s1">.id);</span>
+        <span class="s0">super</span><span class="s1">.dispose();</span>
+        <span class="s0">this</span><span class="s1">.envObject = undefined;</span>
+        <span class="s0">this</span><span class="s1">.id = </span><span class="s3">0</span><span class="s1">;</span>
+    <span class="s1">}</span>
+<span class="s1">}</span>
+<span class="s0">class </span><span class="s1">ReferenceWithData </span><span class="s0">extends </span><span class="s1">Reference {</span>
+    <span class="s0">static </span><span class="s1">create(envObject, value, initialRefcount, ownership, data) {</span>
+        <span class="s0">const </span><span class="s1">reference = </span><span class="s0">new </span><span class="s1">ReferenceWithData(envObject, value, initialRefcount, ownership, data);</span>
+        <span class="s1">envObject.ctx.refStore.add(reference);</span>
+        <span class="s1">reference.link(envObject.reflist);</span>
+        <span class="s0">return </span><span class="s1">reference;</span>
+    <span class="s1">}</span>
+    <span class="s1">constructor(envObject, value, initialRefcount, ownership, _data) {</span>
+        <span class="s0">super</span><span class="s1">(envObject, value, initialRefcount, ownership);</span>
+        <span class="s0">this</span><span class="s1">._data = _data;</span>
+    <span class="s1">}</span>
+    <span class="s1">data() {</span>
+        <span class="s0">return this</span><span class="s1">._data;</span>
+    <span class="s1">}</span>
+<span class="s1">}</span>
+<span class="s0">class </span><span class="s1">ReferenceWithFinalizer </span><span class="s0">extends </span><span class="s1">Reference {</span>
+    <span class="s0">static </span><span class="s1">create(envObject, value, initialRefcount, ownership, finalize_callback, finalize_data, finalize_hint) {</span>
+        <span class="s0">const </span><span class="s1">reference = </span><span class="s0">new </span><span class="s1">ReferenceWithFinalizer(envObject, value, initialRefcount, ownership, finalize_callback, finalize_data, finalize_hint);</span>
+        <span class="s1">envObject.ctx.refStore.add(reference);</span>
+        <span class="s1">reference.link(envObject.finalizing_reflist);</span>
+        <span class="s0">return </span><span class="s1">reference;</span>
+    <span class="s1">}</span>
+    <span class="s1">constructor(envObject, value, initialRefcount, ownership, finalize_callback, finalize_data, finalize_hint) {</span>
+        <span class="s0">super</span><span class="s1">(envObject, value, initialRefcount, ownership);</span>
+        <span class="s0">this</span><span class="s1">._finalizer = </span><span class="s0">new </span><span class="s1">Finalizer(envObject, finalize_callback, finalize_data, finalize_hint);</span>
+    <span class="s1">}</span>
+    <span class="s1">resetFinalizer() {</span>
+        <span class="s0">this</span><span class="s1">._finalizer.resetFinalizer();</span>
+    <span class="s1">}</span>
+    <span class="s1">data() {</span>
+        <span class="s0">return this</span><span class="s1">._finalizer.data();</span>
+    <span class="s1">}</span>
+    <span class="s1">callUserFinalizer() {</span>
+        <span class="s0">this</span><span class="s1">._finalizer.callFinalizer();</span>
+    <span class="s1">}</span>
+    <span class="s1">invokeFinalizerFromGC() {</span>
+        <span class="s0">this</span><span class="s1">._finalizer.envObject.invokeFinalizerFromGC(</span><span class="s0">this</span><span class="s1">);</span>
+    <span class="s1">}</span>
+    <span class="s1">dispose() {</span>
+        <span class="s0">if </span><span class="s1">(!</span><span class="s0">this</span><span class="s1">._finalizer)</span>
+            <span class="s0">return</span><span class="s1">;</span>
+        <span class="s0">this</span><span class="s1">._finalizer.envObject.dequeueFinalizer(</span><span class="s0">this</span><span class="s1">);</span>
+        <span class="s0">this</span><span class="s1">._finalizer.dispose();</span>
+        <span class="s0">super</span><span class="s1">.dispose();</span>
+        <span class="s0">this</span><span class="s1">._finalizer = undefined;</span>
+    <span class="s1">}</span>
+<span class="s1">}</span>
+
+<span class="s0">class </span><span class="s1">Deferred {</span>
+    <span class="s0">static </span><span class="s1">create(ctx, value) {</span>
+        <span class="s0">const </span><span class="s1">deferred = </span><span class="s0">new </span><span class="s1">Deferred(ctx, value);</span>
+        <span class="s1">ctx.deferredStore.add(deferred);</span>
+        <span class="s0">return </span><span class="s1">deferred;</span>
+    <span class="s1">}</span>
+    <span class="s1">constructor(ctx, value) {</span>
+        <span class="s0">this</span><span class="s1">.id = </span><span class="s3">0</span><span class="s1">;</span>
+        <span class="s0">this</span><span class="s1">.ctx = ctx;</span>
+        <span class="s0">this</span><span class="s1">.value = value;</span>
+    <span class="s1">}</span>
+    <span class="s1">resolve(value) {</span>
+        <span class="s0">this</span><span class="s1">.value.resolve(value);</span>
+        <span class="s0">this</span><span class="s1">.dispose();</span>
+    <span class="s1">}</span>
+    <span class="s1">reject(reason) {</span>
+        <span class="s0">this</span><span class="s1">.value.reject(reason);</span>
+        <span class="s0">this</span><span class="s1">.dispose();</span>
+    <span class="s1">}</span>
+    <span class="s1">dispose() {</span>
+        <span class="s0">this</span><span class="s1">.ctx.deferredStore.remove(</span><span class="s0">this</span><span class="s1">.id);</span>
+        <span class="s0">this</span><span class="s1">.id = </span><span class="s3">0</span><span class="s1">;</span>
+        <span class="s0">this</span><span class="s1">.value = </span><span class="s0">null</span><span class="s1">;</span>
+        <span class="s0">this</span><span class="s1">.ctx = </span><span class="s0">null</span><span class="s1">;</span>
+    <span class="s1">}</span>
+<span class="s1">}</span>
+
+<span class="s0">class </span><span class="s1">Store {</span>
+    <span class="s1">constructor() {</span>
+        <span class="s0">this</span><span class="s1">._values = [undefined];</span>
+        <span class="s0">this</span><span class="s1">._values.length = </span><span class="s3">4</span><span class="s1">;</span>
+        <span class="s0">this</span><span class="s1">._size = </span><span class="s3">1</span><span class="s1">;</span>
+        <span class="s0">this</span><span class="s1">._freeList = [];</span>
+    <span class="s1">}</span>
+    <span class="s1">add(value) {</span>
+        <span class="s0">let </span><span class="s1">id;</span>
+        <span class="s0">if </span><span class="s1">(</span><span class="s0">this</span><span class="s1">._freeList.length) {</span>
+            <span class="s1">id = </span><span class="s0">this</span><span class="s1">._freeList.shift();</span>
+        <span class="s1">}</span>
+        <span class="s0">else </span><span class="s1">{</span>
+            <span class="s1">id = </span><span class="s0">this</span><span class="s1">._size;</span>
+            <span class="s0">this</span><span class="s1">._size++;</span>
+            <span class="s0">const </span><span class="s1">capacity = </span><span class="s0">this</span><span class="s1">._values.length;</span>
+            <span class="s0">if </span><span class="s1">(id &gt;= capacity) {</span>
+                <span class="s0">this</span><span class="s1">._values.length = capacity + (capacity &gt;&gt; </span><span class="s3">1</span><span class="s1">) + </span><span class="s3">16</span><span class="s1">;</span>
+            <span class="s1">}</span>
+        <span class="s1">}</span>
+        <span class="s1">value.id = id;</span>
+        <span class="s0">this</span><span class="s1">._values[id] = value;</span>
+    <span class="s1">}</span>
+    <span class="s1">get(id) {</span>
+        <span class="s0">return this</span><span class="s1">._values[id];</span>
+    <span class="s1">}</span>
+    <span class="s1">has(id) {</span>
+        <span class="s0">return this</span><span class="s1">._values[id] !== undefined;</span>
+    <span class="s1">}</span>
+    <span class="s1">remove(id) {</span>
+        <span class="s0">const </span><span class="s1">value = </span><span class="s0">this</span><span class="s1">._values[id];</span>
+        <span class="s0">if </span><span class="s1">(value) {</span>
+            <span class="s1">value.id = </span><span class="s3">0</span><span class="s1">;</span>
+            <span class="s0">this</span><span class="s1">._values[id] = undefined;</span>
+            <span class="s0">this</span><span class="s1">._freeList.push(Number(id));</span>
+        <span class="s1">}</span>
+    <span class="s1">}</span>
+    <span class="s1">dispose() {</span>
+        <span class="s0">for </span><span class="s1">(</span><span class="s0">let </span><span class="s1">i = </span><span class="s3">1</span><span class="s1">; i &lt; </span><span class="s0">this</span><span class="s1">._size; ++i) {</span>
+            <span class="s0">const </span><span class="s1">value = </span><span class="s0">this</span><span class="s1">._values[i];</span>
+            <span class="s1">value === </span><span class="s0">null </span><span class="s1">|| value === </span><span class="s0">void </span><span class="s3">0 </span><span class="s1">? </span><span class="s0">void </span><span class="s3">0 </span><span class="s1">: value.dispose();</span>
+        <span class="s1">}</span>
+        <span class="s0">this</span><span class="s1">._values = [undefined];</span>
+        <span class="s0">this</span><span class="s1">._size = </span><span class="s3">1</span><span class="s1">;</span>
+        <span class="s0">this</span><span class="s1">._freeList = [];</span>
+    <span class="s1">}</span>
+<span class="s1">}</span>
+
+<span class="s0">class </span><span class="s1">CleanupHookCallback {</span>
+    <span class="s1">constructor(envObject, fn, arg, order) {</span>
+        <span class="s0">this</span><span class="s1">.envObject = envObject;</span>
+        <span class="s0">this</span><span class="s1">.fn = fn;</span>
+        <span class="s0">this</span><span class="s1">.arg = arg;</span>
+        <span class="s0">this</span><span class="s1">.order = order;</span>
+    <span class="s1">}</span>
+<span class="s1">}</span>
+<span class="s0">class </span><span class="s1">CleanupQueue {</span>
+    <span class="s1">constructor() {</span>
+        <span class="s0">this</span><span class="s1">._cleanupHooks = [];</span>
+        <span class="s0">this</span><span class="s1">._cleanupHookCounter = </span><span class="s3">0</span><span class="s1">;</span>
+    <span class="s1">}</span>
+    <span class="s1">empty() {</span>
+        <span class="s0">return this</span><span class="s1">._cleanupHooks.length === </span><span class="s3">0</span><span class="s1">;</span>
+    <span class="s1">}</span>
+    <span class="s1">add(envObject, fn, arg) {</span>
+        <span class="s0">if </span><span class="s1">(</span><span class="s0">this</span><span class="s1">._cleanupHooks.filter((hook) =&gt; (hook.envObject === envObject &amp;&amp; hook.fn === fn &amp;&amp; hook.arg === arg)).length &gt; </span><span class="s3">0</span><span class="s1">) {</span>
+            <span class="s0">throw new </span><span class="s1">Error(</span><span class="s2">'Can not add same fn and arg twice'</span><span class="s1">);</span>
+        <span class="s1">}</span>
+        <span class="s0">this</span><span class="s1">._cleanupHooks.push(</span><span class="s0">new </span><span class="s1">CleanupHookCallback(envObject, fn, arg, </span><span class="s0">this</span><span class="s1">._cleanupHookCounter++));</span>
+    <span class="s1">}</span>
+    <span class="s1">remove(envObject, fn, arg) {</span>
+        <span class="s0">for </span><span class="s1">(</span><span class="s0">let </span><span class="s1">i = </span><span class="s3">0</span><span class="s1">; i &lt; </span><span class="s0">this</span><span class="s1">._cleanupHooks.length; ++i) {</span>
+            <span class="s0">const </span><span class="s1">hook = </span><span class="s0">this</span><span class="s1">._cleanupHooks[i];</span>
+            <span class="s0">if </span><span class="s1">(hook.envObject === envObject &amp;&amp; hook.fn === fn &amp;&amp; hook.arg === arg) {</span>
+                <span class="s0">this</span><span class="s1">._cleanupHooks.splice(i, </span><span class="s3">1</span><span class="s1">);</span>
+                <span class="s0">return</span><span class="s1">;</span>
+            <span class="s1">}</span>
+        <span class="s1">}</span>
+    <span class="s1">}</span>
+    <span class="s1">drain() {</span>
+        <span class="s0">const </span><span class="s1">hooks = </span><span class="s0">this</span><span class="s1">._cleanupHooks.slice();</span>
+        <span class="s1">hooks.sort((a, b) =&gt; (b.order - a.order));</span>
+        <span class="s0">for </span><span class="s1">(</span><span class="s0">let </span><span class="s1">i = </span><span class="s3">0</span><span class="s1">; i &lt; hooks.length; ++i) {</span>
+            <span class="s0">const </span><span class="s1">cb = hooks[i];</span>
+            <span class="s0">if </span><span class="s1">(</span><span class="s0">typeof </span><span class="s1">cb.fn === </span><span class="s2">'number'</span><span class="s1">) {</span>
+                <span class="s1">cb.envObject.makeDynCall_vp(cb.fn)(cb.arg);</span>
+            <span class="s1">}</span>
+            <span class="s0">else </span><span class="s1">{</span>
+                <span class="s1">cb.fn(cb.arg);</span>
+            <span class="s1">}</span>
+            <span class="s0">this</span><span class="s1">._cleanupHooks.splice(</span><span class="s0">this</span><span class="s1">._cleanupHooks.indexOf(cb), </span><span class="s3">1</span><span class="s1">);</span>
+        <span class="s1">}</span>
+    <span class="s1">}</span>
+    <span class="s1">dispose() {</span>
+        <span class="s0">this</span><span class="s1">._cleanupHooks.length = </span><span class="s3">0</span><span class="s1">;</span>
+        <span class="s0">this</span><span class="s1">._cleanupHookCounter = </span><span class="s3">0</span><span class="s1">;</span>
+    <span class="s1">}</span>
+<span class="s1">}</span>
+<span class="s0">class </span><span class="s1">NodejsWaitingRequestCounter {</span>
+    <span class="s1">constructor() {</span>
+        <span class="s0">this</span><span class="s1">.refHandle = </span><span class="s0">new </span><span class="s1">_MessageChannel().port1;</span>
+        <span class="s0">this</span><span class="s1">.count = </span><span class="s3">0</span><span class="s1">;</span>
+    <span class="s1">}</span>
+    <span class="s1">increase() {</span>
+        <span class="s0">if </span><span class="s1">(</span><span class="s0">this</span><span class="s1">.count === </span><span class="s3">0</span><span class="s1">) {</span>
+            <span class="s0">if </span><span class="s1">(</span><span class="s0">this</span><span class="s1">.refHandle.ref) {</span>
+                <span class="s0">this</span><span class="s1">.refHandle.ref();</span>
+            <span class="s1">}</span>
+        <span class="s1">}</span>
+        <span class="s0">this</span><span class="s1">.count++;</span>
+    <span class="s1">}</span>
+    <span class="s1">decrease() {</span>
+        <span class="s0">if </span><span class="s1">(</span><span class="s0">this</span><span class="s1">.count === </span><span class="s3">0</span><span class="s1">)</span>
+            <span class="s0">return</span><span class="s1">;</span>
+        <span class="s0">if </span><span class="s1">(</span><span class="s0">this</span><span class="s1">.count === </span><span class="s3">1</span><span class="s1">) {</span>
+            <span class="s0">if </span><span class="s1">(</span><span class="s0">this</span><span class="s1">.refHandle.unref) {</span>
+                <span class="s0">this</span><span class="s1">.refHandle.unref();</span>
+            <span class="s1">}</span>
+        <span class="s1">}</span>
+        <span class="s0">this</span><span class="s1">.count--;</span>
+    <span class="s1">}</span>
+<span class="s1">}</span>
+<span class="s0">class </span><span class="s1">Context {</span>
+    <span class="s1">constructor() {</span>
+        <span class="s0">this</span><span class="s1">._isStopping = </span><span class="s0">false</span><span class="s1">;</span>
+        <span class="s0">this</span><span class="s1">._canCallIntoJs = </span><span class="s0">true</span><span class="s1">;</span>
+        <span class="s0">this</span><span class="s1">._suppressDestroy = </span><span class="s0">false</span><span class="s1">;</span>
+        <span class="s0">this</span><span class="s1">.envStore = </span><span class="s0">new </span><span class="s1">Store();</span>
+        <span class="s0">this</span><span class="s1">.scopeStore = </span><span class="s0">new </span><span class="s1">ScopeStore();</span>
+        <span class="s0">this</span><span class="s1">.refStore = </span><span class="s0">new </span><span class="s1">Store();</span>
+        <span class="s0">this</span><span class="s1">.deferredStore = </span><span class="s0">new </span><span class="s1">Store();</span>
+        <span class="s0">this</span><span class="s1">.handleStore = </span><span class="s0">new </span><span class="s1">HandleStore();</span>
+        <span class="s0">this</span><span class="s1">.feature = {</span>
+            <span class="s1">supportReflect,</span>
+            <span class="s1">supportFinalizer,</span>
+            <span class="s1">supportWeakSymbol,</span>
+            <span class="s1">supportBigInt,</span>
+            <span class="s1">supportNewFunction,</span>
+            <span class="s1">canSetFunctionName,</span>
+            <span class="s1">setImmediate: _setImmediate,</span>
+            <span class="s1">Buffer: _Buffer,</span>
+            <span class="s1">MessageChannel: _MessageChannel</span>
+        <span class="s1">};</span>
+        <span class="s0">this</span><span class="s1">.cleanupQueue = </span><span class="s0">new </span><span class="s1">CleanupQueue();</span>
+        <span class="s0">if </span><span class="s1">(</span><span class="s0">typeof </span><span class="s1">process === </span><span class="s2">'object' </span><span class="s1">&amp;&amp; process !== </span><span class="s0">null </span><span class="s1">&amp;&amp; </span><span class="s0">typeof </span><span class="s1">process.once === </span><span class="s2">'function'</span><span class="s1">) {</span>
+            <span class="s0">this</span><span class="s1">.refCounter = </span><span class="s0">new </span><span class="s1">NodejsWaitingRequestCounter();</span>
+            <span class="s1">process.once(</span><span class="s2">'beforeExit'</span><span class="s1">, () =&gt; {</span>
+                <span class="s0">if </span><span class="s1">(!</span><span class="s0">this</span><span class="s1">._suppressDestroy) {</span>
+                    <span class="s0">this</span><span class="s1">.destroy();</span>
+                <span class="s1">}</span>
+            <span class="s1">});</span>
+        <span class="s1">}</span>
+    <span class="s1">}</span>
+    <span class="s1">suppressDestroy() {</span>
+        <span class="s0">this</span><span class="s1">._suppressDestroy = </span><span class="s0">true</span><span class="s1">;</span>
+    <span class="s1">}</span>
+    <span class="s1">getRuntimeVersions() {</span>
+        <span class="s0">return </span><span class="s1">{</span>
+            <span class="s1">version,</span>
+            <span class="s1">NODE_API_SUPPORTED_VERSION_MAX,</span>
+            <span class="s1">NAPI_VERSION_EXPERIMENTAL,</span>
+            <span class="s1">NODE_API_DEFAULT_MODULE_API_VERSION</span>
+        <span class="s1">};</span>
+    <span class="s1">}</span>
+    <span class="s1">createNotSupportWeakRefError(api, message) {</span>
+        <span class="s0">return new </span><span class="s1">NotSupportWeakRefError(api, message);</span>
+    <span class="s1">}</span>
+    <span class="s1">createNotSupportBufferError(api, message) {</span>
+        <span class="s0">return new </span><span class="s1">NotSupportBufferError(api, message);</span>
+    <span class="s1">}</span>
+    <span class="s1">createReference(envObject, handle_id, initialRefcount, ownership) {</span>
+        <span class="s0">return </span><span class="s1">Reference.create(envObject, handle_id, initialRefcount, ownership);</span>
+    <span class="s1">}</span>
+    <span class="s1">createReferenceWithData(envObject, handle_id, initialRefcount, ownership, data) {</span>
+        <span class="s0">return </span><span class="s1">ReferenceWithData.create(envObject, handle_id, initialRefcount, ownership, data);</span>
+    <span class="s1">}</span>
+    <span class="s1">createReferenceWithFinalizer(envObject, handle_id, initialRefcount, ownership, finalize_callback = </span><span class="s3">0</span><span class="s1">, finalize_data = </span><span class="s3">0</span><span class="s1">, finalize_hint = </span><span class="s3">0</span><span class="s1">) {</span>
+        <span class="s0">return </span><span class="s1">ReferenceWithFinalizer.create(envObject, handle_id, initialRefcount, ownership, finalize_callback, finalize_data, finalize_hint);</span>
+    <span class="s1">}</span>
+    <span class="s1">createDeferred(value) {</span>
+        <span class="s0">return </span><span class="s1">Deferred.create(</span><span class="s0">this</span><span class="s1">, value);</span>
+    <span class="s1">}</span>
+    <span class="s1">createEnv(filename, moduleApiVersion, makeDynCall_vppp, makeDynCall_vp, abort, nodeBinding) {</span>
+        <span class="s0">return </span><span class="s1">newEnv(</span><span class="s0">this</span><span class="s1">, filename, moduleApiVersion, makeDynCall_vppp, makeDynCall_vp, abort, nodeBinding);</span>
+    <span class="s1">}</span>
+    <span class="s1">createTrackedFinalizer(envObject, finalize_callback, finalize_data, finalize_hint) {</span>
+        <span class="s0">return </span><span class="s1">TrackedFinalizer.create(envObject, finalize_callback, finalize_data, finalize_hint);</span>
+    <span class="s1">}</span>
+    <span class="s1">getCurrentScope() {</span>
+        <span class="s0">return this</span><span class="s1">.scopeStore.currentScope;</span>
+    <span class="s1">}</span>
+    <span class="s1">addToCurrentScope(value) {</span>
+        <span class="s0">return this</span><span class="s1">.scopeStore.currentScope.add(value);</span>
+    <span class="s1">}</span>
+    <span class="s1">openScope(envObject) {</span>
+        <span class="s0">const </span><span class="s1">scope = </span><span class="s0">this</span><span class="s1">.scopeStore.openScope(</span><span class="s0">this</span><span class="s1">.handleStore);</span>
+        <span class="s0">if </span><span class="s1">(envObject)</span>
+            <span class="s1">envObject.openHandleScopes++;</span>
+        <span class="s0">return </span><span class="s1">scope;</span>
+    <span class="s1">}</span>
+    <span class="s1">closeScope(envObject, _scope) {</span>
+        <span class="s0">if </span><span class="s1">(envObject &amp;&amp; envObject.openHandleScopes === </span><span class="s3">0</span><span class="s1">)</span>
+            <span class="s0">return</span><span class="s1">;</span>
+        <span class="s0">this</span><span class="s1">.scopeStore.closeScope();</span>
+        <span class="s0">if </span><span class="s1">(envObject)</span>
+            <span class="s1">envObject.openHandleScopes--;</span>
+    <span class="s1">}</span>
+    <span class="s1">ensureHandle(value) {</span>
+        <span class="s0">switch </span><span class="s1">(value) {</span>
+            <span class="s0">case </span><span class="s1">undefined: </span><span class="s0">return </span><span class="s1">HandleStore.UNDEFINED;</span>
+            <span class="s0">case null</span><span class="s1">: </span><span class="s0">return </span><span class="s1">HandleStore.NULL;</span>
+            <span class="s0">case true</span><span class="s1">: </span><span class="s0">return </span><span class="s1">HandleStore.TRUE;</span>
+            <span class="s0">case false</span><span class="s1">: </span><span class="s0">return </span><span class="s1">HandleStore.FALSE;</span>
+            <span class="s0">case </span><span class="s1">_global: </span><span class="s0">return </span><span class="s1">HandleStore.GLOBAL;</span>
+        <span class="s1">}</span>
+        <span class="s0">return this</span><span class="s1">.addToCurrentScope(value);</span>
+    <span class="s1">}</span>
+    <span class="s1">addCleanupHook(envObject, fn, arg) {</span>
+        <span class="s0">this</span><span class="s1">.cleanupQueue.add(envObject, fn, arg);</span>
+    <span class="s1">}</span>
+    <span class="s1">removeCleanupHook(envObject, fn, arg) {</span>
+        <span class="s0">this</span><span class="s1">.cleanupQueue.remove(envObject, fn, arg);</span>
+    <span class="s1">}</span>
+    <span class="s1">runCleanup() {</span>
+        <span class="s0">while </span><span class="s1">(!</span><span class="s0">this</span><span class="s1">.cleanupQueue.empty()) {</span>
+            <span class="s0">this</span><span class="s1">.cleanupQueue.drain();</span>
+        <span class="s1">}</span>
+    <span class="s1">}</span>
+    <span class="s1">increaseWaitingRequestCounter() {</span>
+        <span class="s0">var </span><span class="s1">_a;</span>
+        <span class="s1">(_a = </span><span class="s0">this</span><span class="s1">.refCounter) === </span><span class="s0">null </span><span class="s1">|| _a === </span><span class="s0">void </span><span class="s3">0 </span><span class="s1">? </span><span class="s0">void </span><span class="s3">0 </span><span class="s1">: _a.increase();</span>
+    <span class="s1">}</span>
+    <span class="s1">decreaseWaitingRequestCounter() {</span>
+        <span class="s0">var </span><span class="s1">_a;</span>
+        <span class="s1">(_a = </span><span class="s0">this</span><span class="s1">.refCounter) === </span><span class="s0">null </span><span class="s1">|| _a === </span><span class="s0">void </span><span class="s3">0 </span><span class="s1">? </span><span class="s0">void </span><span class="s3">0 </span><span class="s1">: _a.decrease();</span>
+    <span class="s1">}</span>
+    <span class="s1">setCanCallIntoJs(value) {</span>
+        <span class="s0">this</span><span class="s1">._canCallIntoJs = value;</span>
+    <span class="s1">}</span>
+    <span class="s1">setStopping(value) {</span>
+        <span class="s0">this</span><span class="s1">._isStopping = value;</span>
+    <span class="s1">}</span>
+    <span class="s1">canCallIntoJs() {</span>
+        <span class="s0">return this</span><span class="s1">._canCallIntoJs &amp;&amp; !</span><span class="s0">this</span><span class="s1">._isStopping;</span>
+    <span class="s1">}</span>
+    <span class="s1">destroy() {</span>
+        <span class="s0">this</span><span class="s1">.setStopping(</span><span class="s0">true</span><span class="s1">);</span>
+        <span class="s0">this</span><span class="s1">.setCanCallIntoJs(</span><span class="s0">false</span><span class="s1">);</span>
+        <span class="s0">this</span><span class="s1">.runCleanup();</span>
+    <span class="s1">}</span>
+<span class="s1">}</span>
+<span class="s0">let </span><span class="s1">defaultContext;</span>
+<span class="s0">function </span><span class="s1">createContext() {</span>
+    <span class="s0">return new </span><span class="s1">Context();</span>
+<span class="s1">}</span>
+<span class="s0">function </span><span class="s1">getDefaultContext() {</span>
+    <span class="s0">if </span><span class="s1">(!defaultContext) {</span>
+        <span class="s1">defaultContext = createContext();</span>
+    <span class="s1">}</span>
+    <span class="s0">return </span><span class="s1">defaultContext;</span>
+<span class="s1">}</span>
+
+<span class="s0">export </span><span class="s1">{ ConstHandle, Context, Deferred, EmnapiError, Env, External, Finalizer, Handle, HandleScope, HandleStore, NAPI_VERSION_EXPERIMENTAL, NODE_API_DEFAULT_MODULE_API_VERSION, NODE_API_SUPPORTED_VERSION_MAX, NODE_API_SUPPORTED_VERSION_MIN, NodeEnv, NotSupportBufferError, NotSupportWeakRefError, Persistent, RefTracker, Reference, ReferenceOwnership, ReferenceWithData, ReferenceWithFinalizer, ScopeStore, Store, TrackedFinalizer, TryCatch, createContext, getDefaultContext, getExternalValue, isExternal, isReferenceType, version };</span>
+</pre>
+</body>
+</html>

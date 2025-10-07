@@ -1,0 +1,1312 @@
+<html>
+<head>
+<title>hot-reloader-webpack.js</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #067d17;}
+.s1 { color: #080808;}
+.s2 { color: #0033b3;}
+.s3 { color: #1750eb;}
+.s4 { color: #8c8c8c; font-style: italic;}
+.s5 { color: #0037a6;}
+.s6 { color: #264eff;}
+</style>
+</head>
+<body bgcolor="#ffffff">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#c0c0c0" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+hot-reloader-webpack.js</font>
+</center></td></tr></table>
+<pre><span class="s0">&quot;use strict&quot;</span><span class="s1">;</span>
+<span class="s1">Object.defineProperty(exports, </span><span class="s0">&quot;__esModule&quot;</span><span class="s1">, {</span>
+    <span class="s1">value: </span><span class="s2">true</span>
+<span class="s1">});</span>
+<span class="s3">0 </span><span class="s1">&amp;&amp; (module.exports = {</span>
+    <span class="s2">default</span><span class="s1">: </span><span class="s2">null</span><span class="s1">,</span>
+    <span class="s1">getVersionInfo: </span><span class="s2">null</span><span class="s1">,</span>
+    <span class="s1">matchNextPageBundleRequest: </span><span class="s2">null</span><span class="s1">,</span>
+    <span class="s1">renderScriptError: </span><span class="s2">null</span>
+<span class="s1">});</span>
+<span class="s2">function </span><span class="s1">_export(target, all) {</span>
+    <span class="s2">for</span><span class="s1">(</span><span class="s2">var </span><span class="s1">name </span><span class="s2">in </span><span class="s1">all)Object.defineProperty(target, name, {</span>
+        <span class="s1">enumerable: </span><span class="s2">true</span><span class="s1">,</span>
+        <span class="s1">get: all[name]</span>
+    <span class="s1">});</span>
+<span class="s1">}</span>
+<span class="s1">_export(exports, {</span>
+    <span class="s2">default</span><span class="s1">: </span><span class="s2">function</span><span class="s1">() {</span>
+        <span class="s2">return </span><span class="s1">HotReloaderWebpack;</span>
+    <span class="s1">},</span>
+    <span class="s1">getVersionInfo: </span><span class="s2">function</span><span class="s1">() {</span>
+        <span class="s2">return </span><span class="s1">getVersionInfo;</span>
+    <span class="s1">},</span>
+    <span class="s1">matchNextPageBundleRequest: </span><span class="s2">function</span><span class="s1">() {</span>
+        <span class="s2">return </span><span class="s1">matchNextPageBundleRequest;</span>
+    <span class="s1">},</span>
+    <span class="s1">renderScriptError: </span><span class="s2">function</span><span class="s1">() {</span>
+        <span class="s2">return </span><span class="s1">renderScriptError;</span>
+    <span class="s1">}</span>
+<span class="s1">});</span>
+<span class="s2">const </span><span class="s1">_webpack = require(</span><span class="s0">&quot;next/dist/compiled/webpack/webpack&quot;</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">_middlewarewebpack = require(</span><span class="s0">&quot;./middleware-webpack&quot;</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">_hotmiddleware = require(</span><span class="s0">&quot;./hot-middleware&quot;</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">_path = require(</span><span class="s0">&quot;path&quot;</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">_entries = require(</span><span class="s0">&quot;../../build/entries&quot;</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">_output = require(</span><span class="s0">&quot;../../build/output&quot;</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">_log = </span><span class="s4">/*#__PURE__*/ </span><span class="s1">_interop_require_wildcard(require(</span><span class="s0">&quot;../../build/output/log&quot;</span><span class="s1">));</span>
+<span class="s2">const </span><span class="s1">_webpackconfig = </span><span class="s4">/*#__PURE__*/ </span><span class="s1">_interop_require_wildcard(require(</span><span class="s0">&quot;../../build/webpack-config&quot;</span><span class="s1">));</span>
+<span class="s2">const </span><span class="s1">_constants = require(</span><span class="s0">&quot;../../lib/constants&quot;</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">_recursivedelete = require(</span><span class="s0">&quot;../../lib/recursive-delete&quot;</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">_constants1 = require(</span><span class="s0">&quot;../../shared/lib/constants&quot;</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">_pathmatch = require(</span><span class="s0">&quot;../../shared/lib/router/utils/path-match&quot;</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">_findpagefile = require(</span><span class="s0">&quot;../lib/find-page-file&quot;</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">_ondemandentryhandler = require(</span><span class="s0">&quot;./on-demand-entry-handler&quot;</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">_denormalizepagepath = require(</span><span class="s0">&quot;../../shared/lib/page-path/denormalize-page-path&quot;</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">_normalizepathsep = require(</span><span class="s0">&quot;../../shared/lib/page-path/normalize-path-sep&quot;</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">_getroutefromentrypoint = </span><span class="s4">/*#__PURE__*/ </span><span class="s1">_interop_require_default(require(</span><span class="s0">&quot;../get-route-from-entrypoint&quot;</span><span class="s1">));</span>
+<span class="s2">const </span><span class="s1">_utils = require(</span><span class="s0">&quot;../../build/utils&quot;</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">_utils1 = require(</span><span class="s0">&quot;../../shared/lib/utils&quot;</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">_trace = require(</span><span class="s0">&quot;../../trace&quot;</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">_iserror = require(</span><span class="s0">&quot;../../lib/is-error&quot;</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">_ws = </span><span class="s4">/*#__PURE__*/ </span><span class="s1">_interop_require_default(require(</span><span class="s0">&quot;next/dist/compiled/ws&quot;</span><span class="s1">));</span>
+<span class="s2">const </span><span class="s1">_fs = require(</span><span class="s0">&quot;fs&quot;</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">_parseversioninfo = require(</span><span class="s0">&quot;./parse-version-info&quot;</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">_isapiroute = require(</span><span class="s0">&quot;../../lib/is-api-route&quot;</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">_nextrouteloader = require(</span><span class="s0">&quot;../../build/webpack/loaders/next-route-loader&quot;</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">_isinternalcomponent = require(</span><span class="s0">&quot;../../lib/is-internal-component&quot;</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">_routekind = require(</span><span class="s0">&quot;../route-kind&quot;</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">_hotreloadertypes = require(</span><span class="s0">&quot;./hot-reloader-types&quot;</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">_pagetypes = require(</span><span class="s0">&quot;../../lib/page-types&quot;</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">_messages = require(</span><span class="s0">&quot;./messages&quot;</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">_utils2 = require(</span><span class="s0">&quot;../lib/utils&quot;</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">_getnexterrorfeedbackmiddleware = require(</span><span class="s0">&quot;../../next-devtools/server/get-next-error-feedback-middleware&quot;</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">_getdevoverlayfontmiddleware = require(</span><span class="s0">&quot;../../next-devtools/server/font/get-dev-overlay-font-middleware&quot;</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">_devindicatormiddleware = require(</span><span class="s0">&quot;../../next-devtools/server/dev-indicator-middleware&quot;</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">_getwebpackbundler = </span><span class="s4">/*#__PURE__*/ </span><span class="s1">_interop_require_default(require(</span><span class="s0">&quot;../../shared/lib/get-webpack-bundler&quot;</span><span class="s1">));</span>
+<span class="s2">const </span><span class="s1">_restartdevservermiddleware = require(</span><span class="s0">&quot;../../next-devtools/server/restart-dev-server-middleware&quot;</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">_cacheinvalidation = require(</span><span class="s0">&quot;../../build/webpack/cache-invalidation&quot;</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">_receivelogs = require(</span><span class="s0">&quot;./browser-logs/receive-logs&quot;</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">_devtoolsconfigmiddleware = require(</span><span class="s0">&quot;../../next-devtools/server/devtools-config-middleware&quot;</span><span class="s1">);</span>
+<span class="s2">function </span><span class="s1">_interop_require_default(obj) {</span>
+    <span class="s2">return </span><span class="s1">obj &amp;&amp; obj.__esModule ? obj : {</span>
+        <span class="s2">default</span><span class="s1">: obj</span>
+    <span class="s1">};</span>
+<span class="s1">}</span>
+<span class="s2">function </span><span class="s1">_getRequireWildcardCache(nodeInterop) {</span>
+    <span class="s2">if </span><span class="s1">(</span><span class="s2">typeof </span><span class="s1">WeakMap !== </span><span class="s0">&quot;function&quot;</span><span class="s1">) </span><span class="s2">return null</span><span class="s1">;</span>
+    <span class="s2">var </span><span class="s1">cacheBabelInterop = </span><span class="s2">new </span><span class="s1">WeakMap();</span>
+    <span class="s2">var </span><span class="s1">cacheNodeInterop = </span><span class="s2">new </span><span class="s1">WeakMap();</span>
+    <span class="s2">return </span><span class="s1">(_getRequireWildcardCache = </span><span class="s2">function</span><span class="s1">(nodeInterop) {</span>
+        <span class="s2">return </span><span class="s1">nodeInterop ? cacheNodeInterop : cacheBabelInterop;</span>
+    <span class="s1">})(nodeInterop);</span>
+<span class="s1">}</span>
+<span class="s2">function </span><span class="s1">_interop_require_wildcard(obj, nodeInterop) {</span>
+    <span class="s2">if </span><span class="s1">(!nodeInterop &amp;&amp; obj &amp;&amp; obj.__esModule) {</span>
+        <span class="s2">return </span><span class="s1">obj;</span>
+    <span class="s1">}</span>
+    <span class="s2">if </span><span class="s1">(obj === </span><span class="s2">null </span><span class="s1">|| </span><span class="s2">typeof </span><span class="s1">obj !== </span><span class="s0">&quot;object&quot; </span><span class="s1">&amp;&amp; </span><span class="s2">typeof </span><span class="s1">obj !== </span><span class="s0">&quot;function&quot;</span><span class="s1">) {</span>
+        <span class="s2">return </span><span class="s1">{</span>
+            <span class="s2">default</span><span class="s1">: obj</span>
+        <span class="s1">};</span>
+    <span class="s1">}</span>
+    <span class="s2">var </span><span class="s1">cache = _getRequireWildcardCache(nodeInterop);</span>
+    <span class="s2">if </span><span class="s1">(cache &amp;&amp; cache.has(obj)) {</span>
+        <span class="s2">return </span><span class="s1">cache.get(obj);</span>
+    <span class="s1">}</span>
+    <span class="s2">var </span><span class="s1">newObj = {</span>
+        <span class="s1">__proto__: </span><span class="s2">null</span>
+    <span class="s1">};</span>
+    <span class="s2">var </span><span class="s1">hasPropertyDescriptor = Object.defineProperty &amp;&amp; Object.getOwnPropertyDescriptor;</span>
+    <span class="s2">for</span><span class="s1">(</span><span class="s2">var </span><span class="s1">key </span><span class="s2">in </span><span class="s1">obj){</span>
+        <span class="s2">if </span><span class="s1">(key !== </span><span class="s0">&quot;default&quot; </span><span class="s1">&amp;&amp; Object.prototype.hasOwnProperty.call(obj, key)) {</span>
+            <span class="s2">var </span><span class="s1">desc = hasPropertyDescriptor ? Object.getOwnPropertyDescriptor(obj, key) : </span><span class="s2">null</span><span class="s1">;</span>
+            <span class="s2">if </span><span class="s1">(desc &amp;&amp; (desc.get || desc.set)) {</span>
+                <span class="s1">Object.defineProperty(newObj, key, desc);</span>
+            <span class="s1">} </span><span class="s2">else </span><span class="s1">{</span>
+                <span class="s1">newObj[key] = obj[key];</span>
+            <span class="s1">}</span>
+        <span class="s1">}</span>
+    <span class="s1">}</span>
+    <span class="s1">newObj.default = obj;</span>
+    <span class="s2">if </span><span class="s1">(cache) {</span>
+        <span class="s1">cache.set(obj, newObj);</span>
+    <span class="s1">}</span>
+    <span class="s2">return </span><span class="s1">newObj;</span>
+<span class="s1">}</span>
+<span class="s2">const </span><span class="s1">MILLISECONDS_IN_NANOSECOND = BigInt(</span><span class="s3">1000000</span><span class="s1">);</span>
+<span class="s2">function </span><span class="s1">diff(a, b) {</span>
+    <span class="s2">return new </span><span class="s1">Set([</span>
+        <span class="s1">...a</span>
+    <span class="s1">].filter((v)=&gt;!b.has(v)));</span>
+<span class="s1">}</span>
+<span class="s2">const </span><span class="s1">wsServer = </span><span class="s2">new </span><span class="s1">_ws.default.Server({</span>
+    <span class="s1">noServer: </span><span class="s2">true</span>
+<span class="s1">});</span>
+<span class="s1">async </span><span class="s2">function </span><span class="s1">renderScriptError(res, error, { verbose = </span><span class="s2">true </span><span class="s1">} = {}) {</span>
+    <span class="s4">// Asks CDNs and others to not to cache the errored page</span>
+    <span class="s1">res.setHeader(</span><span class="s0">'Cache-Control'</span><span class="s1">, </span><span class="s0">'no-cache, no-store, max-age=0, must-revalidate'</span><span class="s1">);</span>
+    <span class="s2">if </span><span class="s1">(error.code === </span><span class="s0">'ENOENT'</span><span class="s1">) {</span>
+        <span class="s2">return </span><span class="s1">{</span>
+            <span class="s1">finished: undefined</span>
+        <span class="s1">};</span>
+    <span class="s1">}</span>
+    <span class="s2">if </span><span class="s1">(verbose) {</span>
+        <span class="s1">console.error(error.stack);</span>
+    <span class="s1">}</span>
+    <span class="s1">res.statusCode = </span><span class="s3">500</span><span class="s1">;</span>
+    <span class="s1">res.end(</span><span class="s0">'500 - Internal Error'</span><span class="s1">);</span>
+    <span class="s2">return </span><span class="s1">{</span>
+        <span class="s1">finished: </span><span class="s2">true</span>
+    <span class="s1">};</span>
+<span class="s1">}</span>
+<span class="s2">function </span><span class="s1">addCorsSupport(req, res) {</span>
+    <span class="s4">// Only rewrite CORS handling when URL matches a hot-reloader middleware</span>
+    <span class="s2">if </span><span class="s1">(!req.url.startsWith(</span><span class="s0">'/__next'</span><span class="s1">)) {</span>
+        <span class="s2">return </span><span class="s1">{</span>
+            <span class="s1">preflight: </span><span class="s2">false</span>
+        <span class="s1">};</span>
+    <span class="s1">}</span>
+    <span class="s2">if </span><span class="s1">(!req.headers.origin) {</span>
+        <span class="s2">return </span><span class="s1">{</span>
+            <span class="s1">preflight: </span><span class="s2">false</span>
+        <span class="s1">};</span>
+    <span class="s1">}</span>
+    <span class="s1">res.setHeader(</span><span class="s0">'Access-Control-Allow-Origin'</span><span class="s1">, req.headers.origin);</span>
+    <span class="s1">res.setHeader(</span><span class="s0">'Access-Control-Allow-Methods'</span><span class="s1">, </span><span class="s0">'OPTIONS, GET'</span><span class="s1">);</span>
+    <span class="s4">// Based on https://github.com/primus/access-control/blob/4cf1bc0e54b086c91e6aa44fb14966fa5ef7549c/index.js#L158</span>
+    <span class="s2">if </span><span class="s1">(req.headers[</span><span class="s0">'access-control-request-headers'</span><span class="s1">]) {</span>
+        <span class="s1">res.setHeader(</span><span class="s0">'Access-Control-Allow-Headers'</span><span class="s1">, req.headers[</span><span class="s0">'access-control-request-headers'</span><span class="s1">]);</span>
+    <span class="s1">}</span>
+    <span class="s2">if </span><span class="s1">(req.method === </span><span class="s0">'OPTIONS'</span><span class="s1">) {</span>
+        <span class="s1">res.writeHead(</span><span class="s3">200</span><span class="s1">);</span>
+        <span class="s1">res.end();</span>
+        <span class="s2">return </span><span class="s1">{</span>
+            <span class="s1">preflight: </span><span class="s2">true</span>
+        <span class="s1">};</span>
+    <span class="s1">}</span>
+    <span class="s2">return </span><span class="s1">{</span>
+        <span class="s1">preflight: </span><span class="s2">false</span>
+    <span class="s1">};</span>
+<span class="s1">}</span>
+<span class="s2">const </span><span class="s1">matchNextPageBundleRequest = (</span><span class="s3">0</span><span class="s1">, _pathmatch.getPathMatch)(</span><span class="s0">'/_next/static/chunks/pages/:path*.js(</span><span class="s5">\\</span><span class="s0">.map|)'</span><span class="s1">);</span>
+<span class="s4">// Iteratively look up the issuer till it ends up at the root</span>
+<span class="s2">function </span><span class="s1">findEntryModule(module1, compilation) {</span>
+    <span class="s2">for</span><span class="s1">(;;){</span>
+        <span class="s2">const </span><span class="s1">issuer = compilation.moduleGraph.getIssuer(module1);</span>
+        <span class="s2">if </span><span class="s1">(!issuer) </span><span class="s2">return </span><span class="s1">module1;</span>
+        <span class="s1">module1 = issuer;</span>
+    <span class="s1">}</span>
+<span class="s1">}</span>
+<span class="s2">function </span><span class="s1">erroredPages(compilation) {</span>
+    <span class="s2">const </span><span class="s1">failedPages = {};</span>
+    <span class="s2">for </span><span class="s1">(</span><span class="s2">const </span><span class="s1">error of compilation.errors){</span>
+        <span class="s2">if </span><span class="s1">(!error.module) {</span>
+            <span class="s2">continue</span><span class="s1">;</span>
+        <span class="s1">}</span>
+        <span class="s2">const </span><span class="s1">entryModule = findEntryModule(error.module, compilation);</span>
+        <span class="s2">const </span><span class="s1">{ name } = entryModule;</span>
+        <span class="s2">if </span><span class="s1">(!name) {</span>
+            <span class="s2">continue</span><span class="s1">;</span>
+        <span class="s1">}</span>
+        <span class="s4">// Only pages have to be reloaded</span>
+        <span class="s2">const </span><span class="s1">enhancedName = (</span><span class="s3">0</span><span class="s1">, _getroutefromentrypoint.default)(name);</span>
+        <span class="s2">if </span><span class="s1">(!enhancedName) {</span>
+            <span class="s2">continue</span><span class="s1">;</span>
+        <span class="s1">}</span>
+        <span class="s2">if </span><span class="s1">(!failedPages[enhancedName]) {</span>
+            <span class="s1">failedPages[enhancedName] = [];</span>
+        <span class="s1">}</span>
+        <span class="s1">failedPages[enhancedName].push(error);</span>
+    <span class="s1">}</span>
+    <span class="s2">return </span><span class="s1">failedPages;</span>
+<span class="s1">}</span>
+<span class="s1">async </span><span class="s2">function </span><span class="s1">getVersionInfo() {</span>
+    <span class="s2">let </span><span class="s1">installed = </span><span class="s0">'0.0.0'</span><span class="s1">;</span>
+    <span class="s2">try </span><span class="s1">{</span>
+        <span class="s1">installed = require(</span><span class="s0">'next/package.json'</span><span class="s1">).version;</span>
+        <span class="s2">let </span><span class="s1">res;</span>
+        <span class="s2">try </span><span class="s1">{</span>
+            <span class="s4">// use NPM registry regardless user using Yarn</span>
+            <span class="s1">res = </span><span class="s2">await </span><span class="s1">fetch(</span><span class="s0">'https://registry.npmjs.org/-/package/next/dist-tags'</span><span class="s1">);</span>
+        <span class="s1">} </span><span class="s2">catch  </span><span class="s1">{</span>
+        <span class="s4">// ignore fetch errors</span>
+        <span class="s1">}</span>
+        <span class="s2">if </span><span class="s1">(!res || !res.ok) </span><span class="s2">return </span><span class="s1">{</span>
+            <span class="s1">installed,</span>
+            <span class="s1">staleness: </span><span class="s0">'unknown'</span>
+        <span class="s1">};</span>
+        <span class="s2">const </span><span class="s1">{ latest, canary } = </span><span class="s2">await </span><span class="s1">res.json();</span>
+        <span class="s2">return </span><span class="s1">(</span><span class="s3">0</span><span class="s1">, _parseversioninfo.parseVersionInfo)({</span>
+            <span class="s1">installed,</span>
+            <span class="s1">latest,</span>
+            <span class="s1">canary</span>
+        <span class="s1">});</span>
+    <span class="s1">} </span><span class="s2">catch </span><span class="s1">(e) {</span>
+        <span class="s1">console.error(e);</span>
+        <span class="s2">return </span><span class="s1">{</span>
+            <span class="s1">installed,</span>
+            <span class="s1">staleness: </span><span class="s0">'unknown'</span>
+        <span class="s1">};</span>
+    <span class="s1">}</span>
+<span class="s1">}</span>
+<span class="s2">class </span><span class="s1">HotReloaderWebpack {</span>
+    <span class="s1">constructor(dir, { config, isSrcDir, pagesDir, distDir, buildId, encryptionKey, previewProps, rewrites, appDir, telemetry, resetFetch }){</span>
+        <span class="s2">this</span><span class="s1">.clientError = </span><span class="s2">null</span><span class="s1">;</span>
+        <span class="s2">this</span><span class="s1">.serverError = </span><span class="s2">null</span><span class="s1">;</span>
+        <span class="s2">this</span><span class="s1">.hmrServerError = </span><span class="s2">null</span><span class="s1">;</span>
+        <span class="s2">this</span><span class="s1">.pagesMapping = {};</span>
+        <span class="s2">this</span><span class="s1">.versionInfo = {</span>
+            <span class="s1">staleness: </span><span class="s0">'unknown'</span><span class="s1">,</span>
+            <span class="s1">installed: </span><span class="s0">'0.0.0'</span>
+        <span class="s1">};</span>
+        <span class="s2">this</span><span class="s1">.reloadAfterInvalidation = </span><span class="s2">false</span><span class="s1">;</span>
+        <span class="s2">this</span><span class="s1">.hasAmpEntrypoints = </span><span class="s2">false</span><span class="s1">;</span>
+        <span class="s2">this</span><span class="s1">.hasAppRouterEntrypoints = </span><span class="s2">false</span><span class="s1">;</span>
+        <span class="s2">this</span><span class="s1">.hasPagesRouterEntrypoints = </span><span class="s2">false</span><span class="s1">;</span>
+        <span class="s2">this</span><span class="s1">.buildId = buildId;</span>
+        <span class="s2">this</span><span class="s1">.encryptionKey = encryptionKey;</span>
+        <span class="s2">this</span><span class="s1">.dir = dir;</span>
+        <span class="s2">this</span><span class="s1">.isSrcDir = isSrcDir;</span>
+        <span class="s2">this</span><span class="s1">.middlewares = [];</span>
+        <span class="s2">this</span><span class="s1">.pagesDir = pagesDir;</span>
+        <span class="s2">this</span><span class="s1">.appDir = appDir;</span>
+        <span class="s2">this</span><span class="s1">.distDir = distDir;</span>
+        <span class="s2">this</span><span class="s1">.clientStats = </span><span class="s2">null</span><span class="s1">;</span>
+        <span class="s2">this</span><span class="s1">.serverStats = </span><span class="s2">null</span><span class="s1">;</span>
+        <span class="s2">this</span><span class="s1">.edgeServerStats = </span><span class="s2">null</span><span class="s1">;</span>
+        <span class="s2">this</span><span class="s1">.serverPrevDocumentHash = </span><span class="s2">null</span><span class="s1">;</span>
+        <span class="s2">this</span><span class="s1">.telemetry = telemetry;</span>
+        <span class="s2">this</span><span class="s1">.resetFetch = resetFetch;</span>
+        <span class="s2">this</span><span class="s1">.config = config;</span>
+        <span class="s2">this</span><span class="s1">.previewProps = previewProps;</span>
+        <span class="s2">this</span><span class="s1">.rewrites = rewrites;</span>
+        <span class="s2">this</span><span class="s1">.hotReloaderSpan = (</span><span class="s3">0</span><span class="s1">, _trace.trace)(</span><span class="s0">'hot-reloader'</span><span class="s1">, undefined, {</span>
+            <span class="s1">version: </span><span class="s0">&quot;15.5.4&quot;</span>
+        <span class="s1">});</span>
+        <span class="s4">// Ensure the hotReloaderSpan is flushed immediately as it's the parentSpan for all processing</span>
+        <span class="s4">// of the current `next dev` invocation.</span>
+        <span class="s2">this</span><span class="s1">.hotReloaderSpan.stop();</span>
+    <span class="s1">}</span>
+    <span class="s1">async run(req, res, parsedUrl) {</span>
+        <span class="s4">// Usually CORS support is not needed for the hot-reloader (this is dev only feature)</span>
+        <span class="s4">// With when the app runs for multi-zones support behind a proxy,</span>
+        <span class="s4">// the current page is trying to access this URL via assetPrefix.</span>
+        <span class="s4">// That's when the CORS support is needed.</span>
+        <span class="s2">const </span><span class="s1">{ preflight } = addCorsSupport(req, res);</span>
+        <span class="s2">if </span><span class="s1">(preflight) {</span>
+            <span class="s2">return </span><span class="s1">{};</span>
+        <span class="s1">}</span>
+        <span class="s4">// When a request comes in that is a page bundle, e.g. /_next/static/&lt;buildid&gt;/pages/index.js</span>
+        <span class="s4">// we have to compile the page using on-demand-entries, this middleware will handle doing that</span>
+        <span class="s4">// by adding the page to on-demand-entries, waiting till it's done</span>
+        <span class="s4">// and then the bundle will be served like usual by the actual route in server/index.js</span>
+        <span class="s2">const </span><span class="s1">handlePageBundleRequest = async (pageBundleRes, parsedPageBundleUrl)=&gt;{</span>
+            <span class="s2">const </span><span class="s1">{ pathname } = parsedPageBundleUrl;</span>
+            <span class="s2">if </span><span class="s1">(!pathname) </span><span class="s2">return </span><span class="s1">{};</span>
+            <span class="s2">const </span><span class="s1">params = matchNextPageBundleRequest(pathname);</span>
+            <span class="s2">if </span><span class="s1">(!params) </span><span class="s2">return </span><span class="s1">{};</span>
+            <span class="s2">let </span><span class="s1">decodedPagePath;</span>
+            <span class="s2">try </span><span class="s1">{</span>
+                <span class="s1">decodedPagePath = </span><span class="s0">`/</span><span class="s1">${params.path.map((param)=&gt;decodeURIComponent(param)).join(</span><span class="s0">'/'</span><span class="s1">)}</span><span class="s0">`</span><span class="s1">;</span>
+            <span class="s1">} </span><span class="s2">catch </span><span class="s1">(_) {</span>
+                <span class="s2">throw </span><span class="s1">Object.defineProperty(</span><span class="s2">new </span><span class="s1">_utils1.DecodeError(</span><span class="s0">'failed to decode param'</span><span class="s1">), </span><span class="s0">&quot;__NEXT_ERROR_CODE&quot;</span><span class="s1">, {</span>
+                    <span class="s1">value: </span><span class="s0">&quot;E528&quot;</span><span class="s1">,</span>
+                    <span class="s1">enumerable: </span><span class="s2">false</span><span class="s1">,</span>
+                    <span class="s1">configurable: </span><span class="s2">true</span>
+                <span class="s1">});</span>
+            <span class="s1">}</span>
+            <span class="s2">const </span><span class="s1">page = (</span><span class="s3">0</span><span class="s1">, _denormalizepagepath.denormalizePagePath)(decodedPagePath);</span>
+            <span class="s2">if </span><span class="s1">(page === </span><span class="s0">'/_error' </span><span class="s1">|| _constants1.BLOCKED_PAGES.indexOf(page) === -</span><span class="s3">1</span><span class="s1">) {</span>
+                <span class="s2">try </span><span class="s1">{</span>
+                    <span class="s2">await this</span><span class="s1">.ensurePage({</span>
+                        <span class="s1">page,</span>
+                        <span class="s1">clientOnly: </span><span class="s2">true</span><span class="s1">,</span>
+                        <span class="s1">url: req.url</span>
+                    <span class="s1">});</span>
+                <span class="s1">} </span><span class="s2">catch </span><span class="s1">(error) {</span>
+                    <span class="s2">return await </span><span class="s1">renderScriptError(pageBundleRes, (</span><span class="s3">0</span><span class="s1">, _iserror.getProperError)(error));</span>
+                <span class="s1">}</span>
+                <span class="s2">const </span><span class="s1">errors = </span><span class="s2">await this</span><span class="s1">.getCompilationErrors(page);</span>
+                <span class="s2">if </span><span class="s1">(errors.length &gt; </span><span class="s3">0</span><span class="s1">) {</span>
+                    <span class="s2">return await </span><span class="s1">renderScriptError(pageBundleRes, errors[</span><span class="s3">0</span><span class="s1">], {</span>
+                        <span class="s1">verbose: </span><span class="s2">false</span>
+                    <span class="s1">});</span>
+                <span class="s1">}</span>
+            <span class="s1">}</span>
+            <span class="s2">return </span><span class="s1">{};</span>
+        <span class="s1">};</span>
+        <span class="s2">const </span><span class="s1">{ finished } = </span><span class="s2">await </span><span class="s1">handlePageBundleRequest(res, parsedUrl);</span>
+        <span class="s2">for </span><span class="s1">(</span><span class="s2">const </span><span class="s1">middleware of </span><span class="s2">this</span><span class="s1">.middlewares){</span>
+            <span class="s2">let </span><span class="s1">calledNext = </span><span class="s2">false</span><span class="s1">;</span>
+            <span class="s2">await </span><span class="s1">middleware(req, res, ()=&gt;{</span>
+                <span class="s1">calledNext = </span><span class="s2">true</span><span class="s1">;</span>
+            <span class="s1">});</span>
+            <span class="s2">if </span><span class="s1">(!calledNext) {</span>
+                <span class="s2">return </span><span class="s1">{</span>
+                    <span class="s1">finished: </span><span class="s2">true</span>
+                <span class="s1">};</span>
+            <span class="s1">}</span>
+        <span class="s1">}</span>
+        <span class="s2">return </span><span class="s1">{</span>
+            <span class="s1">finished</span>
+        <span class="s1">};</span>
+    <span class="s1">}</span>
+    <span class="s1">setHmrServerError(error) {</span>
+        <span class="s2">this</span><span class="s1">.hmrServerError = error;</span>
+    <span class="s1">}</span>
+    <span class="s1">clearHmrServerError() {</span>
+        <span class="s2">if </span><span class="s1">(</span><span class="s2">this</span><span class="s1">.hmrServerError) {</span>
+            <span class="s2">this</span><span class="s1">.setHmrServerError(</span><span class="s2">null</span><span class="s1">);</span>
+            <span class="s2">this</span><span class="s1">.send({</span>
+                <span class="s1">action: _hotreloadertypes.HMR_ACTIONS_SENT_TO_BROWSER.RELOAD_PAGE,</span>
+                <span class="s1">data: </span><span class="s0">'clear hmr server error'</span>
+            <span class="s1">});</span>
+        <span class="s1">}</span>
+    <span class="s1">}</span>
+    <span class="s1">async refreshServerComponents(hash) {</span>
+        <span class="s2">this</span><span class="s1">.send({</span>
+            <span class="s1">action: _hotreloadertypes.HMR_ACTIONS_SENT_TO_BROWSER.SERVER_COMPONENT_CHANGES,</span>
+            <span class="s1">hash</span>
+        <span class="s1">});</span>
+    <span class="s1">}</span>
+    <span class="s1">onHMR(req, _socket, head, callback) {</span>
+        <span class="s1">wsServer.handleUpgrade(req, req.socket, head, (client)=&gt;{</span>
+            <span class="s2">var </span><span class="s1">_this_webpackHotMiddleware, _this_onDemandEntries;</span>
+            <span class="s1">(_this_webpackHotMiddleware = </span><span class="s2">this</span><span class="s1">.webpackHotMiddleware) == </span><span class="s2">null </span><span class="s1">? </span><span class="s2">void </span><span class="s3">0 </span><span class="s1">: _this_webpackHotMiddleware.onHMR(client);</span>
+            <span class="s1">(_this_onDemandEntries = </span><span class="s2">this</span><span class="s1">.onDemandEntries) == </span><span class="s2">null </span><span class="s1">? </span><span class="s2">void </span><span class="s3">0 </span><span class="s1">: _this_onDemandEntries.onHMR(client, ()=&gt;</span><span class="s2">this</span><span class="s1">.hmrServerError);</span>
+            <span class="s1">callback(client);</span>
+            <span class="s1">client.addEventListener(</span><span class="s0">'message'</span><span class="s1">, async ({ data })=&gt;{</span>
+                <span class="s1">data = </span><span class="s2">typeof </span><span class="s1">data !== </span><span class="s0">'string' </span><span class="s1">? data.toString() : data;</span>
+                <span class="s2">try </span><span class="s1">{</span>
+                    <span class="s2">const </span><span class="s1">payload = JSON.parse(data);</span>
+                    <span class="s2">let </span><span class="s1">traceChild;</span>
+                    <span class="s2">switch</span><span class="s1">(payload.event){</span>
+                        <span class="s2">case </span><span class="s0">'span-end'</span><span class="s1">:</span>
+                            <span class="s1">{</span>
+                                <span class="s1">traceChild = {</span>
+                                    <span class="s1">name: payload.spanName,</span>
+                                    <span class="s1">startTime: BigInt(Math.floor(payload.startTime)) * MILLISECONDS_IN_NANOSECOND,</span>
+                                    <span class="s1">attrs: payload.attributes,</span>
+                                    <span class="s1">endTime: BigInt(Math.floor(payload.endTime)) * MILLISECONDS_IN_NANOSECOND</span>
+                                <span class="s1">};</span>
+                                <span class="s2">break</span><span class="s1">;</span>
+                            <span class="s1">}</span>
+                        <span class="s2">case </span><span class="s0">'client-hmr-latency'</span><span class="s1">:</span>
+                            <span class="s1">{</span>
+                                <span class="s1">traceChild = {</span>
+                                    <span class="s1">name: payload.event,</span>
+                                    <span class="s1">startTime: BigInt(payload.startTime) * MILLISECONDS_IN_NANOSECOND,</span>
+                                    <span class="s1">endTime: BigInt(payload.endTime) * MILLISECONDS_IN_NANOSECOND,</span>
+                                    <span class="s1">attrs: {</span>
+                                        <span class="s1">updatedModules: payload.updatedModules.map((m)=&gt;m.replace(</span><span class="s0">`(</span><span class="s1">${_constants.WEBPACK_LAYERS.appPagesBrowser}</span><span class="s0">)/`</span><span class="s1">, </span><span class="s0">''</span><span class="s1">).replace(</span><span class="s6">/^\.\//</span><span class="s1">, </span><span class="s0">'[project]/'</span><span class="s1">)),</span>
+                                        <span class="s1">page: payload.page,</span>
+                                        <span class="s1">isPageHidden: payload.isPageHidden</span>
+                                    <span class="s1">}</span>
+                                <span class="s1">};</span>
+                                <span class="s2">break</span><span class="s1">;</span>
+                            <span class="s1">}</span>
+                        <span class="s2">case </span><span class="s0">'client-reload-page'</span><span class="s1">:</span>
+                        <span class="s2">case </span><span class="s0">'client-success'</span><span class="s1">:</span>
+                            <span class="s1">{</span>
+                                <span class="s1">traceChild = {</span>
+                                    <span class="s1">name: payload.event</span>
+                                <span class="s1">};</span>
+                                <span class="s2">break</span><span class="s1">;</span>
+                            <span class="s1">}</span>
+                        <span class="s2">case </span><span class="s0">'client-error'</span><span class="s1">:</span>
+                            <span class="s1">{</span>
+                                <span class="s1">traceChild = {</span>
+                                    <span class="s1">name: payload.event,</span>
+                                    <span class="s1">attrs: {</span>
+                                        <span class="s1">errorCount: payload.errorCount</span>
+                                    <span class="s1">}</span>
+                                <span class="s1">};</span>
+                                <span class="s2">break</span><span class="s1">;</span>
+                            <span class="s1">}</span>
+                        <span class="s2">case </span><span class="s0">'client-warning'</span><span class="s1">:</span>
+                            <span class="s1">{</span>
+                                <span class="s1">traceChild = {</span>
+                                    <span class="s1">name: payload.event,</span>
+                                    <span class="s1">attrs: {</span>
+                                        <span class="s1">warningCount: payload.warningCount</span>
+                                    <span class="s1">}</span>
+                                <span class="s1">};</span>
+                                <span class="s2">break</span><span class="s1">;</span>
+                            <span class="s1">}</span>
+                        <span class="s2">case </span><span class="s0">'client-removed-page'</span><span class="s1">:</span>
+                        <span class="s2">case </span><span class="s0">'client-added-page'</span><span class="s1">:</span>
+                            <span class="s1">{</span>
+                                <span class="s1">traceChild = {</span>
+                                    <span class="s1">name: payload.event,</span>
+                                    <span class="s1">attrs: {</span>
+                                        <span class="s1">page: payload.page || </span><span class="s0">''</span>
+                                    <span class="s1">}</span>
+                                <span class="s1">};</span>
+                                <span class="s2">break</span><span class="s1">;</span>
+                            <span class="s1">}</span>
+                        <span class="s2">case </span><span class="s0">'client-full-reload'</span><span class="s1">:</span>
+                            <span class="s1">{</span>
+                                <span class="s2">const </span><span class="s1">{ event, stackTrace, hadRuntimeError } = payload;</span>
+                                <span class="s1">traceChild = {</span>
+                                    <span class="s1">name: event,</span>
+                                    <span class="s1">attrs: {</span>
+                                        <span class="s1">stackTrace: stackTrace ?? </span><span class="s0">''</span>
+                                    <span class="s1">}</span>
+                                <span class="s1">};</span>
+                                <span class="s2">if </span><span class="s1">(hadRuntimeError) {</span>
+                                    <span class="s1">_log.warn(_messages.FAST_REFRESH_RUNTIME_RELOAD);</span>
+                                    <span class="s2">break</span><span class="s1">;</span>
+                                <span class="s1">}</span>
+                                <span class="s2">let </span><span class="s1">fileMessage = </span><span class="s0">''</span><span class="s1">;</span>
+                                <span class="s2">if </span><span class="s1">(stackTrace) {</span>
+                                    <span class="s2">var </span><span class="s1">_exec;</span>
+                                    <span class="s2">const </span><span class="s1">file = (_exec = </span><span class="s6">/Aborted because (.+) is not accepted/</span><span class="s1">.exec(stackTrace)) == </span><span class="s2">null </span><span class="s1">? </span><span class="s2">void </span><span class="s3">0 </span><span class="s1">: _exec[</span><span class="s3">1</span><span class="s1">];</span>
+                                    <span class="s2">if </span><span class="s1">(file) {</span>
+                                        <span class="s4">// `file` is filepath in `pages/` but it can be a webpack url.</span>
+                                        <span class="s4">// If it's a webpack loader URL, it will include the app-pages layer</span>
+                                        <span class="s2">if </span><span class="s1">(file.startsWith(</span><span class="s0">`(</span><span class="s1">${_constants.WEBPACK_LAYERS.appPagesBrowser}</span><span class="s0">)/`</span><span class="s1">)) {</span>
+                                            <span class="s2">const </span><span class="s1">fileUrl = </span><span class="s2">new </span><span class="s1">URL(file, </span><span class="s0">'file://'</span><span class="s1">);</span>
+                                            <span class="s2">const </span><span class="s1">cwd = process.cwd();</span>
+                                            <span class="s2">const </span><span class="s1">modules = fileUrl.searchParams.getAll(</span><span class="s0">'modules'</span><span class="s1">).map((filepath)=&gt;filepath.slice(cwd.length + </span><span class="s3">1</span><span class="s1">)).filter((filepath)=&gt;!filepath.startsWith(</span><span class="s0">'node_modules'</span><span class="s1">));</span>
+                                            <span class="s2">if </span><span class="s1">(modules.length &gt; </span><span class="s3">0</span><span class="s1">) {</span>
+                                                <span class="s1">fileMessage = </span><span class="s0">` when </span><span class="s1">${modules.join(</span><span class="s0">', '</span><span class="s1">)} </span><span class="s0">changed`</span><span class="s1">;</span>
+                                            <span class="s1">}</span>
+                                        <span class="s1">} </span><span class="s2">else if </span><span class="s1">(</span><span class="s4">// Handle known webpack layers</span>
+                                        <span class="s1">file.startsWith(</span><span class="s0">`(</span><span class="s1">${_constants.WEBPACK_LAYERS.pagesDirBrowser}</span><span class="s0">)/`</span><span class="s1">)) {</span>
+                                            <span class="s2">const </span><span class="s1">cleanedFilePath = file.slice(</span><span class="s0">`(</span><span class="s1">${_constants.WEBPACK_LAYERS.pagesDirBrowser}</span><span class="s0">)/`</span><span class="s1">.length);</span>
+                                            <span class="s1">fileMessage = </span><span class="s0">` when </span><span class="s1">${cleanedFilePath} </span><span class="s0">changed`</span><span class="s1">;</span>
+                                        <span class="s1">} </span><span class="s2">else </span><span class="s1">{</span>
+                                            <span class="s1">fileMessage = </span><span class="s0">` when </span><span class="s1">${file} </span><span class="s0">changed`</span><span class="s1">;</span>
+                                        <span class="s1">}</span>
+                                    <span class="s1">}</span>
+                                <span class="s1">}</span>
+                                <span class="s1">_log.warn(</span><span class="s0">`Fast Refresh had to perform a full reload</span><span class="s1">${fileMessage}</span><span class="s0">. Read more: https://nextjs.org/docs/messages/fast-refresh-reload`</span><span class="s1">);</span>
+                                <span class="s2">break</span><span class="s1">;</span>
+                            <span class="s1">}</span>
+                        <span class="s2">case </span><span class="s0">'browser-logs'</span><span class="s1">:</span>
+                            <span class="s1">{</span>
+                                <span class="s2">if </span><span class="s1">(</span><span class="s2">this</span><span class="s1">.config.experimental.browserDebugInfoInTerminal) {</span>
+                                    <span class="s2">await </span><span class="s1">(</span><span class="s3">0</span><span class="s1">, _receivelogs.receiveBrowserLogsWebpack)({</span>
+                                        <span class="s1">entries: payload.entries,</span>
+                                        <span class="s1">router: payload.router,</span>
+                                        <span class="s1">sourceType: payload.sourceType,</span>
+                                        <span class="s1">clientStats: ()=&gt;</span><span class="s2">this</span><span class="s1">.clientStats,</span>
+                                        <span class="s1">serverStats: ()=&gt;</span><span class="s2">this</span><span class="s1">.serverStats,</span>
+                                        <span class="s1">edgeServerStats: ()=&gt;</span><span class="s2">this</span><span class="s1">.edgeServerStats,</span>
+                                        <span class="s1">rootDirectory: </span><span class="s2">this</span><span class="s1">.dir,</span>
+                                        <span class="s1">distDir: </span><span class="s2">this</span><span class="s1">.distDir,</span>
+                                        <span class="s1">config: </span><span class="s2">this</span><span class="s1">.config.experimental.browserDebugInfoInTerminal</span>
+                                    <span class="s1">});</span>
+                                <span class="s1">}</span>
+                                <span class="s2">break</span><span class="s1">;</span>
+                            <span class="s1">}</span>
+                        <span class="s2">default</span><span class="s1">:</span>
+                            <span class="s1">{</span>
+                                <span class="s2">break</span><span class="s1">;</span>
+                            <span class="s1">}</span>
+                    <span class="s1">}</span>
+                    <span class="s2">if </span><span class="s1">(traceChild) {</span>
+                        <span class="s2">this</span><span class="s1">.hotReloaderSpan.manualTraceChild(traceChild.name, traceChild.startTime, traceChild.endTime, {</span>
+                            <span class="s1">...traceChild.attrs,</span>
+                            <span class="s1">clientId: payload.id</span>
+                        <span class="s1">});</span>
+                    <span class="s1">}</span>
+                <span class="s1">} </span><span class="s2">catch </span><span class="s1">(_) {</span>
+                <span class="s4">// invalid WebSocket message</span>
+                <span class="s1">}</span>
+            <span class="s1">});</span>
+        <span class="s1">});</span>
+    <span class="s1">}</span>
+    <span class="s1">async clean(span) {</span>
+        <span class="s2">return </span><span class="s1">span.traceChild(</span><span class="s0">'clean'</span><span class="s1">).traceAsyncFn(()=&gt;(</span><span class="s3">0</span><span class="s1">, _recursivedelete.recursiveDelete)((</span><span class="s3">0</span><span class="s1">, _path.join)(</span><span class="s2">this</span><span class="s1">.dir, </span><span class="s2">this</span><span class="s1">.config.distDir), </span><span class="s6">/^cache/</span><span class="s1">));</span>
+    <span class="s1">}</span>
+    <span class="s1">async getWebpackConfig(span) {</span>
+        <span class="s2">const </span><span class="s1">webpackConfigSpan = span.traceChild(</span><span class="s0">'get-webpack-config'</span><span class="s1">);</span>
+        <span class="s2">const </span><span class="s1">pageExtensions = </span><span class="s2">this</span><span class="s1">.config.pageExtensions;</span>
+        <span class="s2">return </span><span class="s1">webpackConfigSpan.traceAsyncFn(async ()=&gt;{</span>
+            <span class="s2">const </span><span class="s1">pagePaths = !</span><span class="s2">this</span><span class="s1">.pagesDir ? [] : </span><span class="s2">await </span><span class="s1">webpackConfigSpan.traceChild(</span><span class="s0">'get-page-paths'</span><span class="s1">).traceAsyncFn(()=&gt;Promise.all([</span>
+                    <span class="s1">(</span><span class="s3">0</span><span class="s1">, _findpagefile.findPageFile)(</span><span class="s2">this</span><span class="s1">.pagesDir, </span><span class="s0">'/_app'</span><span class="s1">, pageExtensions, </span><span class="s2">false</span><span class="s1">),</span>
+                    <span class="s1">(</span><span class="s3">0</span><span class="s1">, _findpagefile.findPageFile)(</span><span class="s2">this</span><span class="s1">.pagesDir, </span><span class="s0">'/_document'</span><span class="s1">, pageExtensions, </span><span class="s2">false</span><span class="s1">)</span>
+                <span class="s1">]));</span>
+            <span class="s2">this</span><span class="s1">.pagesMapping = </span><span class="s2">await </span><span class="s1">webpackConfigSpan.traceChild(</span><span class="s0">'create-pages-mapping'</span><span class="s1">).traceAsyncFn(()=&gt;(</span><span class="s3">0</span><span class="s1">, _entries.createPagesMapping)({</span>
+                    <span class="s1">isDev: </span><span class="s2">true</span><span class="s1">,</span>
+                    <span class="s1">pageExtensions: </span><span class="s2">this</span><span class="s1">.config.pageExtensions,</span>
+                    <span class="s1">pagesType: _pagetypes.PAGE_TYPES.PAGES,</span>
+                    <span class="s1">pagePaths: pagePaths.filter((i)=&gt;</span><span class="s2">typeof </span><span class="s1">i === </span><span class="s0">'string'</span><span class="s1">),</span>
+                    <span class="s1">pagesDir: </span><span class="s2">this</span><span class="s1">.pagesDir,</span>
+                    <span class="s1">appDir: </span><span class="s2">this</span><span class="s1">.appDir</span>
+                <span class="s1">}));</span>
+            <span class="s2">const </span><span class="s1">entrypoints = </span><span class="s2">await </span><span class="s1">webpackConfigSpan.traceChild(</span><span class="s0">'create-entrypoints'</span><span class="s1">).traceAsyncFn(()=&gt;(</span><span class="s3">0</span><span class="s1">, _entries.createEntrypoints)({</span>
+                    <span class="s1">appDir: </span><span class="s2">this</span><span class="s1">.appDir,</span>
+                    <span class="s1">buildId: </span><span class="s2">this</span><span class="s1">.buildId,</span>
+                    <span class="s1">config: </span><span class="s2">this</span><span class="s1">.config,</span>
+                    <span class="s1">envFiles: [],</span>
+                    <span class="s1">isDev: </span><span class="s2">true</span><span class="s1">,</span>
+                    <span class="s1">pages: </span><span class="s2">this</span><span class="s1">.pagesMapping,</span>
+                    <span class="s1">pagesDir: </span><span class="s2">this</span><span class="s1">.pagesDir,</span>
+                    <span class="s1">previewMode: </span><span class="s2">this</span><span class="s1">.previewProps,</span>
+                    <span class="s1">rootDir: </span><span class="s2">this</span><span class="s1">.dir,</span>
+                    <span class="s1">pageExtensions: </span><span class="s2">this</span><span class="s1">.config.pageExtensions</span>
+                <span class="s1">}));</span>
+            <span class="s2">const </span><span class="s1">commonWebpackOptions = {</span>
+                <span class="s1">dev: </span><span class="s2">true</span><span class="s1">,</span>
+                <span class="s1">buildId: </span><span class="s2">this</span><span class="s1">.buildId,</span>
+                <span class="s1">encryptionKey: </span><span class="s2">this</span><span class="s1">.encryptionKey,</span>
+                <span class="s1">config: </span><span class="s2">this</span><span class="s1">.config,</span>
+                <span class="s1">pagesDir: </span><span class="s2">this</span><span class="s1">.pagesDir,</span>
+                <span class="s1">rewrites: </span><span class="s2">this</span><span class="s1">.rewrites,</span>
+                <span class="s1">originalRewrites: </span><span class="s2">this</span><span class="s1">.config._originalRewrites,</span>
+                <span class="s1">originalRedirects: </span><span class="s2">this</span><span class="s1">.config._originalRedirects,</span>
+                <span class="s1">runWebpackSpan: </span><span class="s2">this</span><span class="s1">.hotReloaderSpan,</span>
+                <span class="s1">appDir: </span><span class="s2">this</span><span class="s1">.appDir,</span>
+                <span class="s1">previewProps: </span><span class="s2">this</span><span class="s1">.previewProps</span>
+            <span class="s1">};</span>
+            <span class="s2">return </span><span class="s1">webpackConfigSpan.traceChild(</span><span class="s0">'generate-webpack-config'</span><span class="s1">).traceAsyncFn(async ()=&gt;{</span>
+                <span class="s2">const </span><span class="s1">info = </span><span class="s2">await </span><span class="s1">(</span><span class="s3">0</span><span class="s1">, _webpackconfig.loadProjectInfo)({</span>
+                    <span class="s1">dir: </span><span class="s2">this</span><span class="s1">.dir,</span>
+                    <span class="s1">config: commonWebpackOptions.config,</span>
+                    <span class="s1">dev: </span><span class="s2">true</span>
+                <span class="s1">});</span>
+                <span class="s2">return </span><span class="s1">Promise.all([</span>
+                    <span class="s4">// order is important here</span>
+                    <span class="s1">(</span><span class="s3">0</span><span class="s1">, _webpackconfig.default)(</span><span class="s2">this</span><span class="s1">.dir, {</span>
+                        <span class="s1">...commonWebpackOptions,</span>
+                        <span class="s1">compilerType: _constants1.COMPILER_NAMES.client,</span>
+                        <span class="s1">entrypoints: entrypoints.client,</span>
+                        <span class="s1">...info</span>
+                    <span class="s1">}),</span>
+                    <span class="s1">(</span><span class="s3">0</span><span class="s1">, _webpackconfig.default)(</span><span class="s2">this</span><span class="s1">.dir, {</span>
+                        <span class="s1">...commonWebpackOptions,</span>
+                        <span class="s1">compilerType: _constants1.COMPILER_NAMES.server,</span>
+                        <span class="s1">entrypoints: entrypoints.server,</span>
+                        <span class="s1">...info</span>
+                    <span class="s1">}),</span>
+                    <span class="s1">(</span><span class="s3">0</span><span class="s1">, _webpackconfig.default)(</span><span class="s2">this</span><span class="s1">.dir, {</span>
+                        <span class="s1">...commonWebpackOptions,</span>
+                        <span class="s1">compilerType: _constants1.COMPILER_NAMES.edgeServer,</span>
+                        <span class="s1">entrypoints: entrypoints.edgeServer,</span>
+                        <span class="s1">...info</span>
+                    <span class="s1">})</span>
+                <span class="s1">]);</span>
+            <span class="s1">});</span>
+        <span class="s1">});</span>
+    <span class="s1">}</span>
+    <span class="s1">async buildFallbackError() {</span>
+        <span class="s2">if </span><span class="s1">(</span><span class="s2">this</span><span class="s1">.fallbackWatcher) </span><span class="s2">return</span><span class="s1">;</span>
+        <span class="s2">const </span><span class="s1">info = </span><span class="s2">await </span><span class="s1">(</span><span class="s3">0</span><span class="s1">, _webpackconfig.loadProjectInfo)({</span>
+            <span class="s1">dir: </span><span class="s2">this</span><span class="s1">.dir,</span>
+            <span class="s1">config: </span><span class="s2">this</span><span class="s1">.config,</span>
+            <span class="s1">dev: </span><span class="s2">true</span>
+        <span class="s1">});</span>
+        <span class="s2">const </span><span class="s1">fallbackConfig = </span><span class="s2">await </span><span class="s1">(</span><span class="s3">0</span><span class="s1">, _webpackconfig.default)(</span><span class="s2">this</span><span class="s1">.dir, {</span>
+            <span class="s1">previewProps: </span><span class="s2">this</span><span class="s1">.previewProps,</span>
+            <span class="s1">runWebpackSpan: </span><span class="s2">this</span><span class="s1">.hotReloaderSpan,</span>
+            <span class="s1">dev: </span><span class="s2">true</span><span class="s1">,</span>
+            <span class="s1">compilerType: _constants1.COMPILER_NAMES.client,</span>
+            <span class="s1">config: </span><span class="s2">this</span><span class="s1">.config,</span>
+            <span class="s1">buildId: </span><span class="s2">this</span><span class="s1">.buildId,</span>
+            <span class="s1">encryptionKey: </span><span class="s2">this</span><span class="s1">.encryptionKey,</span>
+            <span class="s1">appDir: </span><span class="s2">this</span><span class="s1">.appDir,</span>
+            <span class="s1">pagesDir: </span><span class="s2">this</span><span class="s1">.pagesDir,</span>
+            <span class="s1">rewrites: {</span>
+                <span class="s1">beforeFiles: [],</span>
+                <span class="s1">afterFiles: [],</span>
+                <span class="s1">fallback: []</span>
+            <span class="s1">},</span>
+            <span class="s1">originalRewrites: {</span>
+                <span class="s1">beforeFiles: [],</span>
+                <span class="s1">afterFiles: [],</span>
+                <span class="s1">fallback: []</span>
+            <span class="s1">},</span>
+            <span class="s1">originalRedirects: [],</span>
+            <span class="s1">isDevFallback: </span><span class="s2">true</span><span class="s1">,</span>
+            <span class="s1">entrypoints: (</span><span class="s2">await </span><span class="s1">(</span><span class="s3">0</span><span class="s1">, _entries.createEntrypoints)({</span>
+                <span class="s1">appDir: </span><span class="s2">this</span><span class="s1">.appDir,</span>
+                <span class="s1">buildId: </span><span class="s2">this</span><span class="s1">.buildId,</span>
+                <span class="s1">config: </span><span class="s2">this</span><span class="s1">.config,</span>
+                <span class="s1">envFiles: [],</span>
+                <span class="s1">isDev: </span><span class="s2">true</span><span class="s1">,</span>
+                <span class="s1">pages: {</span>
+                    <span class="s0">'/_app'</span><span class="s1">: </span><span class="s0">'next/dist/pages/_app'</span><span class="s1">,</span>
+                    <span class="s0">'/_error'</span><span class="s1">: </span><span class="s0">'next/dist/pages/_error'</span>
+                <span class="s1">},</span>
+                <span class="s1">pagesDir: </span><span class="s2">this</span><span class="s1">.pagesDir,</span>
+                <span class="s1">previewMode: </span><span class="s2">this</span><span class="s1">.previewProps,</span>
+                <span class="s1">rootDir: </span><span class="s2">this</span><span class="s1">.dir,</span>
+                <span class="s1">pageExtensions: </span><span class="s2">this</span><span class="s1">.config.pageExtensions</span>
+            <span class="s1">})).client,</span>
+            <span class="s1">...info</span>
+        <span class="s1">});</span>
+        <span class="s2">const </span><span class="s1">fallbackCompiler = (</span><span class="s3">0</span><span class="s1">, _getwebpackbundler.default)()(fallbackConfig);</span>
+        <span class="s2">this</span><span class="s1">.fallbackWatcher = </span><span class="s2">await new </span><span class="s1">Promise((resolve)=&gt;{</span>
+            <span class="s2">let </span><span class="s1">bootedFallbackCompiler = </span><span class="s2">false</span><span class="s1">;</span>
+            <span class="s1">fallbackCompiler.watch(</span><span class="s4">// @ts-ignore webpack supports an array of watchOptions when using a multiCompiler</span>
+            <span class="s1">fallbackConfig.watchOptions, </span><span class="s4">// Errors are handled separately</span>
+            <span class="s1">(_err)=&gt;{</span>
+                <span class="s2">if </span><span class="s1">(!bootedFallbackCompiler) {</span>
+                    <span class="s1">bootedFallbackCompiler = </span><span class="s2">true</span><span class="s1">;</span>
+                    <span class="s1">resolve(</span><span class="s2">true</span><span class="s1">);</span>
+                <span class="s1">}</span>
+            <span class="s1">});</span>
+        <span class="s1">});</span>
+    <span class="s1">}</span>
+    <span class="s1">async tracedGetVersionInfo(span) {</span>
+        <span class="s2">const </span><span class="s1">versionInfoSpan = span.traceChild(</span><span class="s0">'get-version-info'</span><span class="s1">);</span>
+        <span class="s2">return </span><span class="s1">versionInfoSpan.traceAsyncFn(async ()=&gt;getVersionInfo());</span>
+    <span class="s1">}</span>
+    <span class="s1">async start() {</span>
+        <span class="s2">const </span><span class="s1">startSpan = </span><span class="s2">this</span><span class="s1">.hotReloaderSpan.traceChild(</span><span class="s0">'start'</span><span class="s1">);</span>
+        <span class="s1">startSpan.stop() </span><span class="s4">// Stop immediately to create an artificial parent span</span>
+        <span class="s1">;</span>
+        <span class="s2">this</span><span class="s1">.versionInfo = </span><span class="s2">await this</span><span class="s1">.tracedGetVersionInfo(startSpan);</span>
+        <span class="s2">const </span><span class="s1">nodeDebugType = (</span><span class="s3">0</span><span class="s1">, _utils2.getNodeDebugType)();</span>
+        <span class="s2">if </span><span class="s1">(nodeDebugType &amp;&amp; !</span><span class="s2">this</span><span class="s1">.devtoolsFrontendUrl) {</span>
+            <span class="s2">const </span><span class="s1">debugPort = process.debugPort;</span>
+            <span class="s2">let </span><span class="s1">debugInfo;</span>
+            <span class="s2">try </span><span class="s1">{</span>
+                <span class="s4">// It requires to use 127.0.0.1 instead of localhost for server-side fetching.</span>
+                <span class="s2">const </span><span class="s1">debugInfoList = </span><span class="s2">await </span><span class="s1">fetch(</span><span class="s0">`http://127.0.0.1:</span><span class="s1">${debugPort}</span><span class="s0">/json/list`</span><span class="s1">).then((res)=&gt;res.json());</span>
+                <span class="s4">// There will be only one item for current process, so always get the first item.</span>
+                <span class="s1">debugInfo = debugInfoList[</span><span class="s3">0</span><span class="s1">];</span>
+            <span class="s1">} </span><span class="s2">catch  </span><span class="s1">{}</span>
+            <span class="s2">if </span><span class="s1">(debugInfo) {</span>
+                <span class="s2">this</span><span class="s1">.devtoolsFrontendUrl = debugInfo.devtoolsFrontendUrl;</span>
+            <span class="s1">}</span>
+        <span class="s1">}</span>
+        <span class="s2">await this</span><span class="s1">.clean(startSpan);</span>
+        <span class="s4">// Ensure distDir exists before writing package.json</span>
+        <span class="s2">await </span><span class="s1">_fs.promises.mkdir(</span><span class="s2">this</span><span class="s1">.distDir, {</span>
+            <span class="s1">recursive: </span><span class="s2">true</span>
+        <span class="s1">});</span>
+        <span class="s2">const </span><span class="s1">initialDevToolsConfig = </span><span class="s2">await </span><span class="s1">(</span><span class="s3">0</span><span class="s1">, _devtoolsconfigmiddleware.getDevToolsConfig)(</span><span class="s2">this</span><span class="s1">.distDir);</span>
+        <span class="s2">const </span><span class="s1">distPackageJsonPath = (</span><span class="s3">0</span><span class="s1">, _path.join)(</span><span class="s2">this</span><span class="s1">.distDir, </span><span class="s0">'package.json'</span><span class="s1">);</span>
+        <span class="s4">// Ensure commonjs handling is used for files in the distDir (generally .next)</span>
+        <span class="s4">// Files outside of the distDir can be &quot;type&quot;: &quot;module&quot;</span>
+        <span class="s2">await </span><span class="s1">_fs.promises.writeFile(distPackageJsonPath, </span><span class="s0">'{&quot;type&quot;: &quot;commonjs&quot;}'</span><span class="s1">);</span>
+        <span class="s2">this</span><span class="s1">.activeWebpackConfigs = </span><span class="s2">await this</span><span class="s1">.getWebpackConfig(startSpan);</span>
+        <span class="s2">for </span><span class="s1">(</span><span class="s2">const </span><span class="s1">config of </span><span class="s2">this</span><span class="s1">.activeWebpackConfigs){</span>
+            <span class="s2">const </span><span class="s1">defaultEntry = config.entry;</span>
+            <span class="s1">config.entry = async (...args)=&gt;{</span>
+                <span class="s2">var </span><span class="s1">_this_multiCompiler;</span>
+                <span class="s2">const </span><span class="s1">outputPath = ((_this_multiCompiler = </span><span class="s2">this</span><span class="s1">.multiCompiler) == </span><span class="s2">null </span><span class="s1">? </span><span class="s2">void </span><span class="s3">0 </span><span class="s1">: _this_multiCompiler.outputPath) || </span><span class="s0">''</span><span class="s1">;</span>
+                <span class="s2">const </span><span class="s1">entries = (</span><span class="s3">0</span><span class="s1">, _ondemandentryhandler.getEntries)(outputPath);</span>
+                <span class="s4">// @ts-ignore entry is always a function</span>
+                <span class="s2">const </span><span class="s1">entrypoints = </span><span class="s2">await </span><span class="s1">defaultEntry(...args);</span>
+                <span class="s2">const </span><span class="s1">isClientCompilation = config.name === _constants1.COMPILER_NAMES.client;</span>
+                <span class="s2">const </span><span class="s1">isNodeServerCompilation = config.name === _constants1.COMPILER_NAMES.server;</span>
+                <span class="s2">const </span><span class="s1">isEdgeServerCompilation = config.name === _constants1.COMPILER_NAMES.edgeServer;</span>
+                <span class="s2">await </span><span class="s1">Promise.all(Object.keys(entries).map(async (entryKey)=&gt;{</span>
+                    <span class="s2">const </span><span class="s1">entryData = entries[entryKey];</span>
+                    <span class="s2">const </span><span class="s1">{ bundlePath, dispose } = entryData;</span>
+                    <span class="s2">const </span><span class="s1">result = </span><span class="s6">/^(client|server|edge-server)@(app|pages|root)@(.*)/g</span><span class="s1">.exec(entryKey);</span>
+                    <span class="s2">const </span><span class="s1">[, key </span><span class="s4">/* pageType */ </span><span class="s1">, , page] = result</span><span class="s4">// this match should always happen</span>
+                    <span class="s1">;</span>
+                    <span class="s2">if </span><span class="s1">(key === _constants1.COMPILER_NAMES.client &amp;&amp; !isClientCompilation) </span><span class="s2">return</span><span class="s1">;</span>
+                    <span class="s2">if </span><span class="s1">(key === _constants1.COMPILER_NAMES.server &amp;&amp; !isNodeServerCompilation) </span><span class="s2">return</span><span class="s1">;</span>
+                    <span class="s2">if </span><span class="s1">(key === _constants1.COMPILER_NAMES.edgeServer &amp;&amp; !isEdgeServerCompilation) </span><span class="s2">return</span><span class="s1">;</span>
+                    <span class="s2">const </span><span class="s1">isEntry = entryData.type === _ondemandentryhandler.EntryTypes.ENTRY;</span>
+                    <span class="s2">const </span><span class="s1">isChildEntry = entryData.type === _ondemandentryhandler.EntryTypes.CHILD_ENTRY;</span>
+                    <span class="s4">// Check if the page was removed or disposed and remove it</span>
+                    <span class="s2">if </span><span class="s1">(isEntry) {</span>
+                        <span class="s2">const </span><span class="s1">pageExists = !dispose &amp;&amp; (</span><span class="s3">0</span><span class="s1">, _fs.existsSync)(entryData.absolutePagePath);</span>
+                        <span class="s2">if </span><span class="s1">(!pageExists) {</span>
+                            <span class="s2">delete </span><span class="s1">entries[entryKey];</span>
+                            <span class="s2">return</span><span class="s1">;</span>
+                        <span class="s1">}</span>
+                    <span class="s1">}</span>
+                    <span class="s4">// For child entries, if it has an entry file and it's gone, remove it</span>
+                    <span class="s2">if </span><span class="s1">(isChildEntry) {</span>
+                        <span class="s2">if </span><span class="s1">(entryData.absoluteEntryFilePath) {</span>
+                            <span class="s2">const </span><span class="s1">pageExists = !dispose &amp;&amp; (</span><span class="s3">0</span><span class="s1">, _fs.existsSync)(entryData.absoluteEntryFilePath);</span>
+                            <span class="s2">if </span><span class="s1">(!pageExists) {</span>
+                                <span class="s2">delete </span><span class="s1">entries[entryKey];</span>
+                                <span class="s2">return</span><span class="s1">;</span>
+                            <span class="s1">}</span>
+                        <span class="s1">}</span>
+                    <span class="s1">}</span>
+                    <span class="s4">// Ensure _error is considered a `pages` page.</span>
+                    <span class="s2">if </span><span class="s1">(page === </span><span class="s0">'/_error'</span><span class="s1">) {</span>
+                        <span class="s2">this</span><span class="s1">.hasPagesRouterEntrypoints = </span><span class="s2">true</span><span class="s1">;</span>
+                    <span class="s1">}</span>
+                    <span class="s2">const </span><span class="s1">hasAppDir = !!</span><span class="s2">this</span><span class="s1">.appDir;</span>
+                    <span class="s2">const </span><span class="s1">isAppPath = hasAppDir &amp;&amp; bundlePath.startsWith(</span><span class="s0">'app/'</span><span class="s1">);</span>
+                    <span class="s2">const </span><span class="s1">staticInfo = isEntry ? </span><span class="s2">await </span><span class="s1">(</span><span class="s3">0</span><span class="s1">, _entries.getStaticInfoIncludingLayouts)({</span>
+                        <span class="s1">isInsideAppDir: isAppPath,</span>
+                        <span class="s1">pageExtensions: </span><span class="s2">this</span><span class="s1">.config.pageExtensions,</span>
+                        <span class="s1">pageFilePath: entryData.absolutePagePath,</span>
+                        <span class="s1">appDir: </span><span class="s2">this</span><span class="s1">.appDir,</span>
+                        <span class="s1">config: </span><span class="s2">this</span><span class="s1">.config,</span>
+                        <span class="s1">isDev: </span><span class="s2">true</span><span class="s1">,</span>
+                        <span class="s1">page</span>
+                    <span class="s1">}) : undefined;</span>
+                    <span class="s2">if </span><span class="s1">((staticInfo == </span><span class="s2">null </span><span class="s1">? </span><span class="s2">void </span><span class="s3">0 </span><span class="s1">: staticInfo.type) === _pagetypes.PAGE_TYPES.PAGES) {</span>
+                        <span class="s2">var </span><span class="s1">_staticInfo_config_config, _staticInfo_config, _staticInfo_config_config1, _staticInfo_config1;</span>
+                        <span class="s2">if </span><span class="s1">(((_staticInfo_config = staticInfo.config) == </span><span class="s2">null </span><span class="s1">? </span><span class="s2">void </span><span class="s3">0 </span><span class="s1">: (_staticInfo_config_config = _staticInfo_config.config) == </span><span class="s2">null </span><span class="s1">? </span><span class="s2">void </span><span class="s3">0 </span><span class="s1">: _staticInfo_config_config.amp) === </span><span class="s2">true </span><span class="s1">|| ((_staticInfo_config1 = staticInfo.config) == </span><span class="s2">null </span><span class="s1">? </span><span class="s2">void </span><span class="s3">0 </span><span class="s1">: (_staticInfo_config_config1 = _staticInfo_config1.config) == </span><span class="s2">null </span><span class="s1">? </span><span class="s2">void </span><span class="s3">0 </span><span class="s1">: _staticInfo_config_config1.amp) === </span><span class="s0">'hybrid'</span><span class="s1">) {</span>
+                            <span class="s2">this</span><span class="s1">.hasAmpEntrypoints = </span><span class="s2">true</span><span class="s1">;</span>
+                        <span class="s1">}</span>
+                    <span class="s1">}</span>
+                    <span class="s2">const </span><span class="s1">isServerComponent = isAppPath &amp;&amp; (staticInfo == </span><span class="s2">null </span><span class="s1">? </span><span class="s2">void </span><span class="s3">0 </span><span class="s1">: staticInfo.rsc) !== _constants1.RSC_MODULE_TYPES.client;</span>
+                    <span class="s2">const </span><span class="s1">pageType = entryData.bundlePath.startsWith(</span><span class="s0">'pages/'</span><span class="s1">) ? _pagetypes.PAGE_TYPES.PAGES : entryData.bundlePath.startsWith(</span><span class="s0">'app/'</span><span class="s1">) ? _pagetypes.PAGE_TYPES.APP : _pagetypes.PAGE_TYPES.ROOT;</span>
+                    <span class="s2">if </span><span class="s1">(pageType === </span><span class="s0">'pages'</span><span class="s1">) {</span>
+                        <span class="s2">this</span><span class="s1">.hasPagesRouterEntrypoints = </span><span class="s2">true</span><span class="s1">;</span>
+                    <span class="s1">}</span>
+                    <span class="s2">if </span><span class="s1">(pageType === </span><span class="s0">'app'</span><span class="s1">) {</span>
+                        <span class="s2">this</span><span class="s1">.hasAppRouterEntrypoints = </span><span class="s2">true</span><span class="s1">;</span>
+                    <span class="s1">}</span>
+                    <span class="s2">const </span><span class="s1">isInstrumentation = (</span><span class="s3">0</span><span class="s1">, _utils.isInstrumentationHookFile)(page) &amp;&amp; pageType === _pagetypes.PAGE_TYPES.ROOT;</span>
+                    <span class="s2">let </span><span class="s1">pageRuntime = staticInfo == </span><span class="s2">null </span><span class="s1">? </span><span class="s2">void </span><span class="s3">0 </span><span class="s1">: staticInfo.runtime;</span>
+                    <span class="s1">(</span><span class="s3">0</span><span class="s1">, _entries.runDependingOnPageType)({</span>
+                        <span class="s1">page,</span>
+                        <span class="s1">pageRuntime,</span>
+                        <span class="s1">pageType,</span>
+                        <span class="s1">onEdgeServer: ()=&gt;{</span>
+                            <span class="s4">// TODO-APP: verify if child entry should support.</span>
+                            <span class="s2">if </span><span class="s1">(!isEdgeServerCompilation || !isEntry) </span><span class="s2">return</span><span class="s1">;</span>
+                            <span class="s1">entries[entryKey].status = _ondemandentryhandler.BUILDING;</span>
+                            <span class="s2">if </span><span class="s1">(isInstrumentation) {</span>
+                                <span class="s2">const </span><span class="s1">normalizedBundlePath = bundlePath.replace(</span><span class="s0">'src/'</span><span class="s1">, </span><span class="s0">''</span><span class="s1">);</span>
+                                <span class="s1">entrypoints[normalizedBundlePath] = (</span><span class="s3">0</span><span class="s1">, _entries.finalizeEntrypoint)({</span>
+                                    <span class="s1">compilerType: _constants1.COMPILER_NAMES.edgeServer,</span>
+                                    <span class="s1">name: normalizedBundlePath,</span>
+                                    <span class="s1">value: (</span><span class="s3">0</span><span class="s1">, _entries.getInstrumentationEntry)({</span>
+                                        <span class="s1">absolutePagePath: entryData.absolutePagePath,</span>
+                                        <span class="s1">isEdgeServer: </span><span class="s2">true</span><span class="s1">,</span>
+                                        <span class="s1">isDev: </span><span class="s2">true</span>
+                                    <span class="s1">}),</span>
+                                    <span class="s1">isServerComponent: </span><span class="s2">true</span><span class="s1">,</span>
+                                    <span class="s1">hasAppDir</span>
+                                <span class="s1">});</span>
+                                <span class="s2">return</span><span class="s1">;</span>
+                            <span class="s1">}</span>
+                            <span class="s2">const </span><span class="s1">appDirLoader = isAppPath ? (</span><span class="s3">0</span><span class="s1">, _entries.getAppEntry)({</span>
+                                <span class="s1">name: bundlePath,</span>
+                                <span class="s1">page,</span>
+                                <span class="s1">appPaths: entryData.appPaths,</span>
+                                <span class="s1">pagePath: _path.posix.join(_constants.APP_DIR_ALIAS, (</span><span class="s3">0</span><span class="s1">, _path.relative)(</span><span class="s2">this</span><span class="s1">.appDir, entryData.absolutePagePath).replace(</span><span class="s6">/\\/g</span><span class="s1">, </span><span class="s0">'/'</span><span class="s1">)),</span>
+                                <span class="s1">appDir: </span><span class="s2">this</span><span class="s1">.appDir,</span>
+                                <span class="s1">pageExtensions: </span><span class="s2">this</span><span class="s1">.config.pageExtensions,</span>
+                                <span class="s1">rootDir: </span><span class="s2">this</span><span class="s1">.dir,</span>
+                                <span class="s1">isDev: </span><span class="s2">true</span><span class="s1">,</span>
+                                <span class="s1">tsconfigPath: </span><span class="s2">this</span><span class="s1">.config.typescript.tsconfigPath,</span>
+                                <span class="s1">basePath: </span><span class="s2">this</span><span class="s1">.config.basePath,</span>
+                                <span class="s1">assetPrefix: </span><span class="s2">this</span><span class="s1">.config.assetPrefix,</span>
+                                <span class="s1">nextConfigOutput: </span><span class="s2">this</span><span class="s1">.config.output,</span>
+                                <span class="s1">preferredRegion: staticInfo == </span><span class="s2">null </span><span class="s1">? </span><span class="s2">void </span><span class="s3">0 </span><span class="s1">: staticInfo.preferredRegion,</span>
+                                <span class="s1">middlewareConfig: Buffer.from(JSON.stringify((staticInfo == </span><span class="s2">null </span><span class="s1">? </span><span class="s2">void </span><span class="s3">0 </span><span class="s1">: staticInfo.middleware) || {})).toString(</span><span class="s0">'base64'</span><span class="s1">),</span>
+                                <span class="s1">isGlobalNotFoundEnabled: </span><span class="s2">this</span><span class="s1">.config.experimental.globalNotFound ? </span><span class="s2">true </span><span class="s1">: undefined</span>
+                            <span class="s1">}).import : undefined;</span>
+                            <span class="s1">entrypoints[bundlePath] = (</span><span class="s3">0</span><span class="s1">, _entries.finalizeEntrypoint)({</span>
+                                <span class="s1">compilerType: _constants1.COMPILER_NAMES.edgeServer,</span>
+                                <span class="s1">name: bundlePath,</span>
+                                <span class="s1">value: (</span><span class="s3">0</span><span class="s1">, _entries.getEdgeServerEntry)({</span>
+                                    <span class="s1">absolutePagePath: entryData.absolutePagePath,</span>
+                                    <span class="s1">rootDir: </span><span class="s2">this</span><span class="s1">.dir,</span>
+                                    <span class="s1">buildId: </span><span class="s2">this</span><span class="s1">.buildId,</span>
+                                    <span class="s1">bundlePath,</span>
+                                    <span class="s1">config: </span><span class="s2">this</span><span class="s1">.config,</span>
+                                    <span class="s1">isDev: </span><span class="s2">true</span><span class="s1">,</span>
+                                    <span class="s1">page,</span>
+                                    <span class="s1">pages: </span><span class="s2">this</span><span class="s1">.pagesMapping,</span>
+                                    <span class="s1">isServerComponent,</span>
+                                    <span class="s1">appDirLoader,</span>
+                                    <span class="s1">pagesType: isAppPath ? _pagetypes.PAGE_TYPES.APP : _pagetypes.PAGE_TYPES.PAGES,</span>
+                                    <span class="s1">preferredRegion: staticInfo == </span><span class="s2">null </span><span class="s1">? </span><span class="s2">void </span><span class="s3">0 </span><span class="s1">: staticInfo.preferredRegion</span>
+                                <span class="s1">}),</span>
+                                <span class="s1">hasAppDir</span>
+                            <span class="s1">});</span>
+                        <span class="s1">},</span>
+                        <span class="s1">onClient: ()=&gt;{</span>
+                            <span class="s2">if </span><span class="s1">(!isClientCompilation) </span><span class="s2">return</span><span class="s1">;</span>
+                            <span class="s2">if </span><span class="s1">(isChildEntry) {</span>
+                                <span class="s1">entries[entryKey].status = _ondemandentryhandler.BUILDING;</span>
+                                <span class="s1">entrypoints[bundlePath] = (</span><span class="s3">0</span><span class="s1">, _entries.finalizeEntrypoint)({</span>
+                                    <span class="s1">name: bundlePath,</span>
+                                    <span class="s1">compilerType: _constants1.COMPILER_NAMES.client,</span>
+                                    <span class="s1">value: entryData.request,</span>
+                                    <span class="s1">hasAppDir</span>
+                                <span class="s1">});</span>
+                            <span class="s1">} </span><span class="s2">else </span><span class="s1">{</span>
+                                <span class="s1">entries[entryKey].status = _ondemandentryhandler.BUILDING;</span>
+                                <span class="s1">entrypoints[bundlePath] = (</span><span class="s3">0</span><span class="s1">, _entries.finalizeEntrypoint)({</span>
+                                    <span class="s1">name: bundlePath,</span>
+                                    <span class="s1">compilerType: _constants1.COMPILER_NAMES.client,</span>
+                                    <span class="s1">value: (</span><span class="s3">0</span><span class="s1">, _entries.getClientEntry)({</span>
+                                        <span class="s1">absolutePagePath: entryData.absolutePagePath,</span>
+                                        <span class="s1">page</span>
+                                    <span class="s1">}),</span>
+                                    <span class="s1">hasAppDir</span>
+                                <span class="s1">});</span>
+                            <span class="s1">}</span>
+                        <span class="s1">},</span>
+                        <span class="s1">onServer: ()=&gt;{</span>
+                            <span class="s4">// TODO-APP: verify if child entry should support.</span>
+                            <span class="s2">if </span><span class="s1">(!isNodeServerCompilation || !isEntry) </span><span class="s2">return</span><span class="s1">;</span>
+                            <span class="s1">entries[entryKey].status = _ondemandentryhandler.BUILDING;</span>
+                            <span class="s2">let </span><span class="s1">relativeRequest = (</span><span class="s3">0</span><span class="s1">, _path.relative)(config.context, entryData.absolutePagePath);</span>
+                            <span class="s2">if </span><span class="s1">(!(</span><span class="s3">0</span><span class="s1">, _path.isAbsolute)(relativeRequest) &amp;&amp; !relativeRequest.startsWith(</span><span class="s0">'../'</span><span class="s1">)) {</span>
+                                <span class="s1">relativeRequest = </span><span class="s0">`./</span><span class="s1">${relativeRequest}</span><span class="s0">`</span><span class="s1">;</span>
+                            <span class="s1">}</span>
+                            <span class="s2">let </span><span class="s1">value;</span>
+                            <span class="s2">if </span><span class="s1">(isInstrumentation) {</span>
+                                <span class="s1">value = (</span><span class="s3">0</span><span class="s1">, _entries.getInstrumentationEntry)({</span>
+                                    <span class="s1">absolutePagePath: entryData.absolutePagePath,</span>
+                                    <span class="s1">isEdgeServer: </span><span class="s2">false</span><span class="s1">,</span>
+                                    <span class="s1">isDev: </span><span class="s2">true</span>
+                                <span class="s1">});</span>
+                                <span class="s1">entrypoints[bundlePath] = (</span><span class="s3">0</span><span class="s1">, _entries.finalizeEntrypoint)({</span>
+                                    <span class="s1">compilerType: _constants1.COMPILER_NAMES.server,</span>
+                                    <span class="s1">name: bundlePath,</span>
+                                    <span class="s1">isServerComponent: </span><span class="s2">true</span><span class="s1">,</span>
+                                    <span class="s1">value,</span>
+                                    <span class="s1">hasAppDir</span>
+                                <span class="s1">});</span>
+                            <span class="s1">} </span><span class="s2">else if </span><span class="s1">((</span><span class="s3">0</span><span class="s1">, _utils.isMiddlewareFile)(page)) {</span>
+                                <span class="s1">value = (</span><span class="s3">0</span><span class="s1">, _entries.getEdgeServerEntry)({</span>
+                                    <span class="s1">absolutePagePath: entryData.absolutePagePath,</span>
+                                    <span class="s1">rootDir: </span><span class="s2">this</span><span class="s1">.dir,</span>
+                                    <span class="s1">buildId: </span><span class="s2">this</span><span class="s1">.buildId,</span>
+                                    <span class="s1">bundlePath,</span>
+                                    <span class="s1">config: </span><span class="s2">this</span><span class="s1">.config,</span>
+                                    <span class="s1">isDev: </span><span class="s2">true</span><span class="s1">,</span>
+                                    <span class="s1">page,</span>
+                                    <span class="s1">pages: </span><span class="s2">this</span><span class="s1">.pagesMapping,</span>
+                                    <span class="s1">isServerComponent,</span>
+                                    <span class="s1">pagesType: _pagetypes.PAGE_TYPES.PAGES,</span>
+                                    <span class="s1">preferredRegion: staticInfo == </span><span class="s2">null </span><span class="s1">? </span><span class="s2">void </span><span class="s3">0 </span><span class="s1">: staticInfo.preferredRegion</span>
+                                <span class="s1">});</span>
+                            <span class="s1">} </span><span class="s2">else if </span><span class="s1">(isAppPath) {</span>
+                                <span class="s4">// This path normalization is critical for webpack to resolve the next internals as entry.</span>
+                                <span class="s2">const </span><span class="s1">pagePath = entryData.absolutePagePath.startsWith((</span><span class="s3">0</span><span class="s1">, _path.dirname)(require.resolve(</span><span class="s0">'next/package.json'</span><span class="s1">))) ? entryData.absolutePagePath : _path.posix.join(_constants.APP_DIR_ALIAS, (</span><span class="s3">0</span><span class="s1">, _path.relative)(</span><span class="s2">this</span><span class="s1">.appDir, entryData.absolutePagePath).replace(</span><span class="s6">/\\/g</span><span class="s1">, </span><span class="s0">'/'</span><span class="s1">));</span>
+                                <span class="s1">value = (</span><span class="s3">0</span><span class="s1">, _entries.getAppEntry)({</span>
+                                    <span class="s1">name: bundlePath,</span>
+                                    <span class="s1">page,</span>
+                                    <span class="s1">appPaths: entryData.appPaths,</span>
+                                    <span class="s1">pagePath,</span>
+                                    <span class="s1">appDir: </span><span class="s2">this</span><span class="s1">.appDir,</span>
+                                    <span class="s1">pageExtensions: </span><span class="s2">this</span><span class="s1">.config.pageExtensions,</span>
+                                    <span class="s1">rootDir: </span><span class="s2">this</span><span class="s1">.dir,</span>
+                                    <span class="s1">isDev: </span><span class="s2">true</span><span class="s1">,</span>
+                                    <span class="s1">tsconfigPath: </span><span class="s2">this</span><span class="s1">.config.typescript.tsconfigPath,</span>
+                                    <span class="s1">basePath: </span><span class="s2">this</span><span class="s1">.config.basePath,</span>
+                                    <span class="s1">assetPrefix: </span><span class="s2">this</span><span class="s1">.config.assetPrefix,</span>
+                                    <span class="s1">nextConfigOutput: </span><span class="s2">this</span><span class="s1">.config.output,</span>
+                                    <span class="s1">preferredRegion: staticInfo == </span><span class="s2">null </span><span class="s1">? </span><span class="s2">void </span><span class="s3">0 </span><span class="s1">: staticInfo.preferredRegion,</span>
+                                    <span class="s1">middlewareConfig: Buffer.from(JSON.stringify((staticInfo == </span><span class="s2">null </span><span class="s1">? </span><span class="s2">void </span><span class="s3">0 </span><span class="s1">: staticInfo.middleware) || {})).toString(</span><span class="s0">'base64'</span><span class="s1">),</span>
+                                    <span class="s1">isGlobalNotFoundEnabled: </span><span class="s2">this</span><span class="s1">.config.experimental.globalNotFound ? </span><span class="s2">true </span><span class="s1">: undefined</span>
+                                <span class="s1">});</span>
+                            <span class="s1">} </span><span class="s2">else if </span><span class="s1">((</span><span class="s3">0</span><span class="s1">, _isapiroute.isAPIRoute)(page)) {</span>
+                                <span class="s1">value = (</span><span class="s3">0</span><span class="s1">, _nextrouteloader.getRouteLoaderEntry)({</span>
+                                    <span class="s1">kind: _routekind.RouteKind.PAGES_API,</span>
+                                    <span class="s1">page,</span>
+                                    <span class="s1">absolutePagePath: relativeRequest,</span>
+                                    <span class="s1">preferredRegion: staticInfo == </span><span class="s2">null </span><span class="s1">? </span><span class="s2">void </span><span class="s3">0 </span><span class="s1">: staticInfo.preferredRegion,</span>
+                                    <span class="s1">middlewareConfig: (staticInfo == </span><span class="s2">null </span><span class="s1">? </span><span class="s2">void </span><span class="s3">0 </span><span class="s1">: staticInfo.middleware) || {}</span>
+                                <span class="s1">});</span>
+                            <span class="s1">} </span><span class="s2">else if </span><span class="s1">(!(</span><span class="s3">0</span><span class="s1">, _utils.isMiddlewareFile)(page) &amp;&amp; !(</span><span class="s3">0</span><span class="s1">, _isinternalcomponent.isInternalComponent)(relativeRequest) &amp;&amp; !(</span><span class="s3">0</span><span class="s1">, _isinternalcomponent.isNonRoutePagesPage)(page) &amp;&amp; !isInstrumentation) {</span>
+                                <span class="s1">value = (</span><span class="s3">0</span><span class="s1">, _nextrouteloader.getRouteLoaderEntry)({</span>
+                                    <span class="s1">kind: _routekind.RouteKind.PAGES,</span>
+                                    <span class="s1">page,</span>
+                                    <span class="s1">pages: </span><span class="s2">this</span><span class="s1">.pagesMapping,</span>
+                                    <span class="s1">absolutePagePath: relativeRequest,</span>
+                                    <span class="s1">preferredRegion: staticInfo == </span><span class="s2">null </span><span class="s1">? </span><span class="s2">void </span><span class="s3">0 </span><span class="s1">: staticInfo.preferredRegion,</span>
+                                    <span class="s1">middlewareConfig: (staticInfo == </span><span class="s2">null </span><span class="s1">? </span><span class="s2">void </span><span class="s3">0 </span><span class="s1">: staticInfo.middleware) ?? {}</span>
+                                <span class="s1">});</span>
+                            <span class="s1">} </span><span class="s2">else </span><span class="s1">{</span>
+                                <span class="s1">value = relativeRequest;</span>
+                            <span class="s1">}</span>
+                            <span class="s1">entrypoints[bundlePath] = (</span><span class="s3">0</span><span class="s1">, _entries.finalizeEntrypoint)({</span>
+                                <span class="s1">compilerType: _constants1.COMPILER_NAMES.server,</span>
+                                <span class="s1">name: bundlePath,</span>
+                                <span class="s1">isServerComponent,</span>
+                                <span class="s1">value,</span>
+                                <span class="s1">hasAppDir</span>
+                            <span class="s1">});</span>
+                        <span class="s1">}</span>
+                    <span class="s1">});</span>
+                <span class="s1">}));</span>
+                <span class="s2">if </span><span class="s1">(!</span><span class="s2">this</span><span class="s1">.hasAmpEntrypoints) {</span>
+                    <span class="s2">delete </span><span class="s1">entrypoints[_constants1.CLIENT_STATIC_FILES_RUNTIME_AMP];</span>
+                <span class="s1">}</span>
+                <span class="s2">if </span><span class="s1">(!</span><span class="s2">this</span><span class="s1">.hasPagesRouterEntrypoints) {</span>
+                    <span class="s2">delete </span><span class="s1">entrypoints[_constants1.CLIENT_STATIC_FILES_RUNTIME_MAIN];</span>
+                    <span class="s2">delete </span><span class="s1">entrypoints[</span><span class="s0">'pages/_app'</span><span class="s1">];</span>
+                    <span class="s2">delete </span><span class="s1">entrypoints[</span><span class="s0">'pages/_error'</span><span class="s1">];</span>
+                    <span class="s2">delete </span><span class="s1">entrypoints[</span><span class="s0">'/_error'</span><span class="s1">];</span>
+                    <span class="s2">delete </span><span class="s1">entrypoints[</span><span class="s0">'pages/_document'</span><span class="s1">];</span>
+                <span class="s1">}</span>
+                <span class="s4">// Remove React Refresh entrypoint chunk as `app` doesn't require it.</span>
+                <span class="s2">if </span><span class="s1">(!</span><span class="s2">this</span><span class="s1">.hasAmpEntrypoints &amp;&amp; !</span><span class="s2">this</span><span class="s1">.hasPagesRouterEntrypoints) {</span>
+                    <span class="s2">delete </span><span class="s1">entrypoints[_constants1.CLIENT_STATIC_FILES_RUNTIME_REACT_REFRESH];</span>
+                <span class="s1">}</span>
+                <span class="s2">if </span><span class="s1">(!</span><span class="s2">this</span><span class="s1">.hasAppRouterEntrypoints) {</span>
+                    <span class="s2">delete </span><span class="s1">entrypoints[_constants1.CLIENT_STATIC_FILES_RUNTIME_MAIN_APP];</span>
+                <span class="s1">}</span>
+                <span class="s2">return </span><span class="s1">entrypoints;</span>
+            <span class="s1">};</span>
+        <span class="s1">}</span>
+        <span class="s4">// Enable building of client compilation before server compilation in development</span>
+        <span class="s4">// @ts-ignore webpack 5</span>
+        <span class="s2">this</span><span class="s1">.activeWebpackConfigs.parallelism = </span><span class="s3">1</span><span class="s1">;</span>
+        <span class="s2">await </span><span class="s1">Promise.all(Array.from((</span><span class="s3">0</span><span class="s1">, _webpackconfig.getCacheDirectories)(</span><span class="s2">this</span><span class="s1">.activeWebpackConfigs)).map(_cacheinvalidation.checkPersistentCacheInvalidationAndCleanup));</span>
+        <span class="s2">this</span><span class="s1">.multiCompiler = (</span><span class="s3">0</span><span class="s1">, _getwebpackbundler.default)()(</span><span class="s2">this</span><span class="s1">.activeWebpackConfigs);</span>
+        <span class="s4">// Copy over the filesystem so that it is shared between all compilers.</span>
+        <span class="s2">const </span><span class="s1">inputFileSystem = </span><span class="s2">this</span><span class="s1">.multiCompiler.compilers[</span><span class="s3">0</span><span class="s1">].inputFileSystem;</span>
+        <span class="s2">for </span><span class="s1">(</span><span class="s2">const </span><span class="s1">compiler of </span><span class="s2">this</span><span class="s1">.multiCompiler.compilers){</span>
+            <span class="s1">compiler.inputFileSystem = inputFileSystem;</span>
+            <span class="s4">// This is set for the initial compile. After that Watching class in webpack adds it.</span>
+            <span class="s1">compiler.fsStartTime = Date.now();</span>
+            <span class="s4">// Ensure NodeEnvironmentPlugin doesn't purge the inputFileSystem. Purging is handled in `done` below.</span>
+            <span class="s1">compiler.hooks.beforeRun.intercept({</span>
+                <span class="s1">register (tapInfo) {</span>
+                    <span class="s2">if </span><span class="s1">(tapInfo.name === </span><span class="s0">'NodeEnvironmentPlugin'</span><span class="s1">) {</span>
+                        <span class="s2">return null</span><span class="s1">;</span>
+                    <span class="s1">}</span>
+                    <span class="s2">return </span><span class="s1">tapInfo;</span>
+                <span class="s1">}</span>
+            <span class="s1">});</span>
+        <span class="s1">}</span>
+        <span class="s2">this</span><span class="s1">.multiCompiler.hooks.done.tap(</span><span class="s0">'NextjsHotReloader'</span><span class="s1">, ()=&gt;{</span>
+            <span class="s2">var </span><span class="s1">_inputFileSystem_purge;</span>
+            <span class="s1">inputFileSystem == </span><span class="s2">null </span><span class="s1">? </span><span class="s2">void </span><span class="s3">0 </span><span class="s1">: (_inputFileSystem_purge = inputFileSystem.purge) == </span><span class="s2">null </span><span class="s1">? </span><span class="s2">void </span><span class="s3">0 </span><span class="s1">: _inputFileSystem_purge.call(inputFileSystem);</span>
+        <span class="s1">});</span>
+        <span class="s1">(</span><span class="s3">0</span><span class="s1">, _output.watchCompilers)(</span><span class="s2">this</span><span class="s1">.multiCompiler.compilers[</span><span class="s3">0</span><span class="s1">], </span><span class="s2">this</span><span class="s1">.multiCompiler.compilers[</span><span class="s3">1</span><span class="s1">], </span><span class="s2">this</span><span class="s1">.multiCompiler.compilers[</span><span class="s3">2</span><span class="s1">]);</span>
+        <span class="s4">// Watch for changes to client/server page files so we can tell when just</span>
+        <span class="s4">// the server file changes and trigger a reload for GS(S)P pages</span>
+        <span class="s2">const </span><span class="s1">changedClientPages = </span><span class="s2">new </span><span class="s1">Set();</span>
+        <span class="s2">const </span><span class="s1">changedServerPages = </span><span class="s2">new </span><span class="s1">Set();</span>
+        <span class="s2">const </span><span class="s1">changedEdgeServerPages = </span><span class="s2">new </span><span class="s1">Set();</span>
+        <span class="s2">const </span><span class="s1">changedServerComponentPages = </span><span class="s2">new </span><span class="s1">Set();</span>
+        <span class="s2">const </span><span class="s1">changedCSSImportPages = </span><span class="s2">new </span><span class="s1">Set();</span>
+        <span class="s2">const </span><span class="s1">prevClientPageHashes = </span><span class="s2">new </span><span class="s1">Map();</span>
+        <span class="s2">const </span><span class="s1">prevServerPageHashes = </span><span class="s2">new </span><span class="s1">Map();</span>
+        <span class="s2">const </span><span class="s1">prevEdgeServerPageHashes = </span><span class="s2">new </span><span class="s1">Map();</span>
+        <span class="s2">const </span><span class="s1">prevCSSImportModuleHashes = </span><span class="s2">new </span><span class="s1">Map();</span>
+        <span class="s2">const </span><span class="s1">pageExtensionRegex = </span><span class="s2">new </span><span class="s1">RegExp(</span><span class="s0">`</span><span class="s5">\\</span><span class="s0">.(?:</span><span class="s1">${</span><span class="s2">this</span><span class="s1">.config.pageExtensions.join(</span><span class="s0">'|'</span><span class="s1">)}</span><span class="s0">)$`</span><span class="s1">);</span>
+        <span class="s2">const </span><span class="s1">trackPageChanges = (pageHashMap, changedItems, serverComponentChangedItems)=&gt;(stats)=&gt;{</span>
+                <span class="s2">try </span><span class="s1">{</span>
+                    <span class="s1">stats.entrypoints.forEach((entry, key)=&gt;{</span>
+                        <span class="s2">if </span><span class="s1">(key.startsWith(</span><span class="s0">'pages/'</span><span class="s1">) || key.startsWith(</span><span class="s0">'app/'</span><span class="s1">) || (</span><span class="s3">0</span><span class="s1">, _utils.isMiddlewareFilename)(key)) {</span>
+                            <span class="s4">// TODO this doesn't handle on demand loaded chunks</span>
+                            <span class="s1">entry.chunks.forEach((chunk)=&gt;{</span>
+                                <span class="s2">if </span><span class="s1">(chunk.id === key) {</span>
+                                    <span class="s2">const </span><span class="s1">modsIterable = stats.chunkGraph.getChunkModulesIterable(chunk);</span>
+                                    <span class="s2">let </span><span class="s1">hasCSSModuleChanges = </span><span class="s2">false</span><span class="s1">;</span>
+                                    <span class="s2">let </span><span class="s1">chunksHash = </span><span class="s2">new </span><span class="s1">_webpack.StringXor();</span>
+                                    <span class="s2">let </span><span class="s1">chunksHashServerLayer = </span><span class="s2">new </span><span class="s1">_webpack.StringXor();</span>
+                                    <span class="s1">modsIterable.forEach((mod)=&gt;{</span>
+                                        <span class="s2">if </span><span class="s1">(mod.resource &amp;&amp; mod.resource.replace(</span><span class="s6">/\\/g</span><span class="s1">, </span><span class="s0">'/'</span><span class="s1">).includes(key) &amp;&amp; </span><span class="s4">// Shouldn't match CSS modules, etc.</span>
+                                        <span class="s1">pageExtensionRegex.test(mod.resource)) {</span>
+                                            <span class="s2">var </span><span class="s1">_mod_buildInfo_rsc, _mod_buildInfo;</span>
+                                            <span class="s4">// use original source to calculate hash since mod.hash</span>
+                                            <span class="s4">// includes the source map in development which changes</span>
+                                            <span class="s4">// every time for both server and client so we calculate</span>
+                                            <span class="s4">// the hash without the source map for the page module</span>
+                                            <span class="s2">const </span><span class="s1">hash = require(</span><span class="s0">'crypto'</span><span class="s1">).createHash(</span><span class="s0">'sha1'</span><span class="s1">).update(mod.originalSource().buffer()).digest().toString(</span><span class="s0">'hex'</span><span class="s1">);</span>
+                                            <span class="s2">if </span><span class="s1">(mod.layer === _constants.WEBPACK_LAYERS.reactServerComponents &amp;&amp; (mod == </span><span class="s2">null </span><span class="s1">? </span><span class="s2">void </span><span class="s3">0 </span><span class="s1">: (_mod_buildInfo = mod.buildInfo) == </span><span class="s2">null </span><span class="s1">? </span><span class="s2">void </span><span class="s3">0 </span><span class="s1">: (_mod_buildInfo_rsc = _mod_buildInfo.rsc) == </span><span class="s2">null </span><span class="s1">? </span><span class="s2">void </span><span class="s3">0 </span><span class="s1">: _mod_buildInfo_rsc.type) !== </span><span class="s0">'client'</span><span class="s1">) {</span>
+                                                <span class="s1">chunksHashServerLayer.add(hash);</span>
+                                            <span class="s1">}</span>
+                                            <span class="s1">chunksHash.add(hash);</span>
+                                        <span class="s1">} </span><span class="s2">else </span><span class="s1">{</span>
+                                            <span class="s2">var </span><span class="s1">_mod_buildInfo_rsc1, _mod_buildInfo1;</span>
+                                            <span class="s4">// for non-pages we can use the module hash directly</span>
+                                            <span class="s2">const </span><span class="s1">hash = stats.chunkGraph.getModuleHash(mod, chunk.runtime);</span>
+                                            <span class="s2">if </span><span class="s1">(mod.layer === _constants.WEBPACK_LAYERS.reactServerComponents &amp;&amp; (mod == </span><span class="s2">null </span><span class="s1">? </span><span class="s2">void </span><span class="s3">0 </span><span class="s1">: (_mod_buildInfo1 = mod.buildInfo) == </span><span class="s2">null </span><span class="s1">? </span><span class="s2">void </span><span class="s3">0 </span><span class="s1">: (_mod_buildInfo_rsc1 = _mod_buildInfo1.rsc) == </span><span class="s2">null </span><span class="s1">? </span><span class="s2">void </span><span class="s3">0 </span><span class="s1">: _mod_buildInfo_rsc1.type) !== </span><span class="s0">'client'</span><span class="s1">) {</span>
+                                                <span class="s1">chunksHashServerLayer.add(hash);</span>
+                                            <span class="s1">}</span>
+                                            <span class="s1">chunksHash.add(hash);</span>
+                                            <span class="s4">// Both CSS import changes from server and client</span>
+                                            <span class="s4">// components are tracked.</span>
+                                            <span class="s2">if </span><span class="s1">(key.startsWith(</span><span class="s0">'app/'</span><span class="s1">) &amp;&amp; </span><span class="s6">/\.(css|scss|sass)$/</span><span class="s1">.test(mod.resource || </span><span class="s0">''</span><span class="s1">)) {</span>
+                                                <span class="s2">const </span><span class="s1">resourceKey = mod.layer + </span><span class="s0">':' </span><span class="s1">+ mod.resource;</span>
+                                                <span class="s2">const </span><span class="s1">prevHash = prevCSSImportModuleHashes.get(resourceKey);</span>
+                                                <span class="s2">if </span><span class="s1">(prevHash &amp;&amp; prevHash !== hash) {</span>
+                                                    <span class="s1">hasCSSModuleChanges = </span><span class="s2">true</span><span class="s1">;</span>
+                                                <span class="s1">}</span>
+                                                <span class="s1">prevCSSImportModuleHashes.set(resourceKey, hash);</span>
+                                            <span class="s1">}</span>
+                                        <span class="s1">}</span>
+                                    <span class="s1">});</span>
+                                    <span class="s2">const </span><span class="s1">prevHash = pageHashMap.get(key);</span>
+                                    <span class="s2">const </span><span class="s1">curHash = chunksHash.toString();</span>
+                                    <span class="s2">if </span><span class="s1">(prevHash &amp;&amp; prevHash !== curHash) {</span>
+                                        <span class="s1">changedItems.add(key);</span>
+                                    <span class="s1">}</span>
+                                    <span class="s1">pageHashMap.set(key, curHash);</span>
+                                    <span class="s2">if </span><span class="s1">(serverComponentChangedItems) {</span>
+                                        <span class="s2">const </span><span class="s1">serverKey = _constants.WEBPACK_LAYERS.reactServerComponents + </span><span class="s0">':' </span><span class="s1">+ key;</span>
+                                        <span class="s2">const </span><span class="s1">prevServerHash = pageHashMap.get(serverKey);</span>
+                                        <span class="s2">const </span><span class="s1">curServerHash = chunksHashServerLayer.toString();</span>
+                                        <span class="s2">if </span><span class="s1">(prevServerHash &amp;&amp; prevServerHash !== curServerHash) {</span>
+                                            <span class="s1">serverComponentChangedItems.add(key);</span>
+                                        <span class="s1">}</span>
+                                        <span class="s1">pageHashMap.set(serverKey, curServerHash);</span>
+                                    <span class="s1">}</span>
+                                    <span class="s2">if </span><span class="s1">(hasCSSModuleChanges) {</span>
+                                        <span class="s1">changedCSSImportPages.add(key);</span>
+                                    <span class="s1">}</span>
+                                <span class="s1">}</span>
+                            <span class="s1">});</span>
+                        <span class="s1">}</span>
+                    <span class="s1">});</span>
+                <span class="s1">} </span><span class="s2">catch </span><span class="s1">(err) {</span>
+                    <span class="s1">console.error(err);</span>
+                <span class="s1">}</span>
+            <span class="s1">};</span>
+        <span class="s2">this</span><span class="s1">.multiCompiler.compilers[</span><span class="s3">0</span><span class="s1">].hooks.emit.tap(</span><span class="s0">'NextjsHotReloaderForClient'</span><span class="s1">, trackPageChanges(prevClientPageHashes, changedClientPages));</span>
+        <span class="s2">this</span><span class="s1">.multiCompiler.compilers[</span><span class="s3">1</span><span class="s1">].hooks.emit.tap(</span><span class="s0">'NextjsHotReloaderForServer'</span><span class="s1">, trackPageChanges(prevServerPageHashes, changedServerPages, changedServerComponentPages));</span>
+        <span class="s2">this</span><span class="s1">.multiCompiler.compilers[</span><span class="s3">2</span><span class="s1">].hooks.emit.tap(</span><span class="s0">'NextjsHotReloaderForServer'</span><span class="s1">, trackPageChanges(prevEdgeServerPageHashes, changedEdgeServerPages, changedServerComponentPages));</span>
+        <span class="s4">// This plugin watches for changes to _document.js and notifies the client side that it should reload the page</span>
+        <span class="s2">this</span><span class="s1">.multiCompiler.compilers[</span><span class="s3">1</span><span class="s1">].hooks.failed.tap(</span><span class="s0">'NextjsHotReloaderForServer'</span><span class="s1">, (err)=&gt;{</span>
+            <span class="s2">this</span><span class="s1">.serverError = err;</span>
+            <span class="s2">this</span><span class="s1">.serverStats = </span><span class="s2">null</span><span class="s1">;</span>
+            <span class="s2">this</span><span class="s1">.serverChunkNames = undefined;</span>
+        <span class="s1">});</span>
+        <span class="s2">this</span><span class="s1">.multiCompiler.compilers[</span><span class="s3">2</span><span class="s1">].hooks.done.tap(</span><span class="s0">'NextjsHotReloaderForServer'</span><span class="s1">, (stats)=&gt;{</span>
+            <span class="s2">this</span><span class="s1">.serverError = </span><span class="s2">null</span><span class="s1">;</span>
+            <span class="s2">this</span><span class="s1">.edgeServerStats = stats;</span>
+        <span class="s1">});</span>
+        <span class="s2">this</span><span class="s1">.multiCompiler.compilers[</span><span class="s3">1</span><span class="s1">].hooks.done.tap(</span><span class="s0">'NextjsHotReloaderForServer'</span><span class="s1">, (stats)=&gt;{</span>
+            <span class="s2">this</span><span class="s1">.serverError = </span><span class="s2">null</span><span class="s1">;</span>
+            <span class="s2">this</span><span class="s1">.serverStats = stats;</span>
+            <span class="s2">if </span><span class="s1">(!</span><span class="s2">this</span><span class="s1">.pagesDir) {</span>
+                <span class="s2">return</span><span class="s1">;</span>
+            <span class="s1">}</span>
+            <span class="s2">const </span><span class="s1">{ compilation } = stats;</span>
+            <span class="s4">// We only watch `_document` for changes on the server compilation</span>
+            <span class="s4">// the rest of the files will be triggered by the client compilation</span>
+            <span class="s2">const </span><span class="s1">documentChunk = compilation.namedChunks.get(</span><span class="s0">'pages/_document'</span><span class="s1">);</span>
+            <span class="s4">// If the document chunk can't be found we do nothing</span>
+            <span class="s2">if </span><span class="s1">(!documentChunk) {</span>
+                <span class="s2">return</span><span class="s1">;</span>
+            <span class="s1">}</span>
+            <span class="s4">// Initial value</span>
+            <span class="s2">if </span><span class="s1">(</span><span class="s2">this</span><span class="s1">.serverPrevDocumentHash === </span><span class="s2">null</span><span class="s1">) {</span>
+                <span class="s2">this</span><span class="s1">.serverPrevDocumentHash = documentChunk.hash || </span><span class="s2">null</span><span class="s1">;</span>
+                <span class="s2">return</span><span class="s1">;</span>
+            <span class="s1">}</span>
+            <span class="s4">// If _document.js didn't change we don't trigger a reload.</span>
+            <span class="s2">if </span><span class="s1">(documentChunk.hash === </span><span class="s2">this</span><span class="s1">.serverPrevDocumentHash) {</span>
+                <span class="s2">return</span><span class="s1">;</span>
+            <span class="s1">}</span>
+            <span class="s4">// As document chunk will change if new app pages are joined,</span>
+            <span class="s4">// since react bundle is different it will effect the chunk hash.</span>
+            <span class="s4">// So we diff the chunk changes, if there's only new app page chunk joins,</span>
+            <span class="s4">// then we don't trigger a reload by checking pages/_document chunk change.</span>
+            <span class="s2">if </span><span class="s1">(</span><span class="s2">this</span><span class="s1">.appDir) {</span>
+                <span class="s2">const </span><span class="s1">chunkNames = </span><span class="s2">new </span><span class="s1">Set(compilation.namedChunks.keys());</span>
+                <span class="s2">const </span><span class="s1">diffChunkNames = (</span><span class="s3">0</span><span class="s1">, _utils.difference)(</span><span class="s2">this</span><span class="s1">.serverChunkNames || </span><span class="s2">new </span><span class="s1">Set(), chunkNames);</span>
+                <span class="s2">if </span><span class="s1">(diffChunkNames.length === </span><span class="s3">0 </span><span class="s1">|| diffChunkNames.every((chunkName)=&gt;chunkName.startsWith(</span><span class="s0">'app/'</span><span class="s1">))) {</span>
+                    <span class="s2">return</span><span class="s1">;</span>
+                <span class="s1">}</span>
+                <span class="s2">this</span><span class="s1">.serverChunkNames = chunkNames;</span>
+            <span class="s1">}</span>
+            <span class="s2">this</span><span class="s1">.serverPrevDocumentHash = documentChunk.hash || </span><span class="s2">null</span><span class="s1">;</span>
+            <span class="s4">// Notify reload to reload the page, as _document.js was changed (different hash)</span>
+            <span class="s2">this</span><span class="s1">.send({</span>
+                <span class="s1">action: _hotreloadertypes.HMR_ACTIONS_SENT_TO_BROWSER.RELOAD_PAGE,</span>
+                <span class="s1">data: </span><span class="s0">'_document has changed'</span>
+            <span class="s1">});</span>
+        <span class="s1">});</span>
+        <span class="s2">this</span><span class="s1">.multiCompiler.hooks.done.tap(</span><span class="s0">'NextjsHotReloaderForServer'</span><span class="s1">, (stats)=&gt;{</span>
+            <span class="s2">const </span><span class="s1">reloadAfterInvalidation = </span><span class="s2">this</span><span class="s1">.reloadAfterInvalidation;</span>
+            <span class="s2">this</span><span class="s1">.reloadAfterInvalidation = </span><span class="s2">false</span><span class="s1">;</span>
+            <span class="s2">const </span><span class="s1">serverOnlyChanges = (</span><span class="s3">0</span><span class="s1">, _utils.difference)(changedServerPages, changedClientPages);</span>
+            <span class="s2">const </span><span class="s1">edgeServerOnlyChanges = (</span><span class="s3">0</span><span class="s1">, _utils.difference)(changedEdgeServerPages, changedClientPages);</span>
+            <span class="s2">const </span><span class="s1">pageChanges = serverOnlyChanges.concat(edgeServerOnlyChanges).filter((key)=&gt;key.startsWith(</span><span class="s0">'pages/'</span><span class="s1">));</span>
+            <span class="s2">const </span><span class="s1">middlewareChanges = [</span>
+                <span class="s1">...Array.from(changedEdgeServerPages),</span>
+                <span class="s1">...Array.from(changedServerPages)</span>
+            <span class="s1">].filter((name)=&gt;(</span><span class="s3">0</span><span class="s1">, _utils.isMiddlewareFilename)(name));</span>
+            <span class="s2">if </span><span class="s1">(middlewareChanges.length &gt; </span><span class="s3">0</span><span class="s1">) {</span>
+                <span class="s2">this</span><span class="s1">.send({</span>
+                    <span class="s1">event: _hotreloadertypes.HMR_ACTIONS_SENT_TO_BROWSER.MIDDLEWARE_CHANGES</span>
+                <span class="s1">});</span>
+            <span class="s1">}</span>
+            <span class="s2">if </span><span class="s1">(pageChanges.length &gt; </span><span class="s3">0</span><span class="s1">) {</span>
+                <span class="s2">this</span><span class="s1">.send({</span>
+                    <span class="s1">event: _hotreloadertypes.HMR_ACTIONS_SENT_TO_BROWSER.SERVER_ONLY_CHANGES,</span>
+                    <span class="s1">pages: serverOnlyChanges.map((pg)=&gt;(</span><span class="s3">0</span><span class="s1">, _denormalizepagepath.denormalizePagePath)(pg.slice(</span><span class="s0">'pages'</span><span class="s1">.length)))</span>
+                <span class="s1">});</span>
+            <span class="s1">}</span>
+            <span class="s2">if </span><span class="s1">(changedServerComponentPages.size || changedCSSImportPages.size || reloadAfterInvalidation) {</span>
+                <span class="s2">this</span><span class="s1">.resetFetch();</span>
+                <span class="s2">this</span><span class="s1">.refreshServerComponents(stats.hash);</span>
+            <span class="s1">}</span>
+            <span class="s1">changedClientPages.clear();</span>
+            <span class="s1">changedServerPages.clear();</span>
+            <span class="s1">changedEdgeServerPages.clear();</span>
+            <span class="s1">changedServerComponentPages.clear();</span>
+            <span class="s1">changedCSSImportPages.clear();</span>
+        <span class="s1">});</span>
+        <span class="s2">this</span><span class="s1">.multiCompiler.compilers[</span><span class="s3">0</span><span class="s1">].hooks.failed.tap(</span><span class="s0">'NextjsHotReloaderForClient'</span><span class="s1">, (err)=&gt;{</span>
+            <span class="s2">this</span><span class="s1">.clientError = err;</span>
+            <span class="s2">this</span><span class="s1">.clientStats = </span><span class="s2">null</span><span class="s1">;</span>
+        <span class="s1">});</span>
+        <span class="s2">this</span><span class="s1">.multiCompiler.compilers[</span><span class="s3">0</span><span class="s1">].hooks.done.tap(</span><span class="s0">'NextjsHotReloaderForClient'</span><span class="s1">, (stats)=&gt;{</span>
+            <span class="s2">this</span><span class="s1">.clientError = </span><span class="s2">null</span><span class="s1">;</span>
+            <span class="s2">this</span><span class="s1">.clientStats = stats;</span>
+            <span class="s2">const </span><span class="s1">{ compilation } = stats;</span>
+            <span class="s2">const </span><span class="s1">chunkNames = </span><span class="s2">new </span><span class="s1">Set([</span>
+                <span class="s1">...compilation.namedChunks.keys()</span>
+            <span class="s1">].filter((name)=&gt;!!(</span><span class="s3">0</span><span class="s1">, _getroutefromentrypoint.default)(name)));</span>
+            <span class="s2">if </span><span class="s1">(</span><span class="s2">this</span><span class="s1">.prevChunkNames) {</span>
+                <span class="s4">// detect chunks which have to be replaced with a new template</span>
+                <span class="s4">// e.g, pages/index.js &lt;-&gt; pages/_error.js</span>
+                <span class="s2">const </span><span class="s1">addedPages = diff(chunkNames, </span><span class="s2">this</span><span class="s1">.prevChunkNames);</span>
+                <span class="s2">const </span><span class="s1">removedPages = diff(</span><span class="s2">this</span><span class="s1">.prevChunkNames, chunkNames);</span>
+                <span class="s2">if </span><span class="s1">(addedPages.size &gt; </span><span class="s3">0</span><span class="s1">) {</span>
+                    <span class="s2">for </span><span class="s1">(</span><span class="s2">const </span><span class="s1">addedPage of addedPages){</span>
+                        <span class="s2">const </span><span class="s1">page = (</span><span class="s3">0</span><span class="s1">, _getroutefromentrypoint.default)(addedPage);</span>
+                        <span class="s2">this</span><span class="s1">.send({</span>
+                            <span class="s1">action: _hotreloadertypes.HMR_ACTIONS_SENT_TO_BROWSER.ADDED_PAGE,</span>
+                            <span class="s1">data: [</span>
+                                <span class="s1">page</span>
+                            <span class="s1">]</span>
+                        <span class="s1">});</span>
+                    <span class="s1">}</span>
+                <span class="s1">}</span>
+                <span class="s2">if </span><span class="s1">(removedPages.size &gt; </span><span class="s3">0</span><span class="s1">) {</span>
+                    <span class="s2">for </span><span class="s1">(</span><span class="s2">const </span><span class="s1">removedPage of removedPages){</span>
+                        <span class="s2">const </span><span class="s1">page = (</span><span class="s3">0</span><span class="s1">, _getroutefromentrypoint.default)(removedPage);</span>
+                        <span class="s2">this</span><span class="s1">.send({</span>
+                            <span class="s1">action: _hotreloadertypes.HMR_ACTIONS_SENT_TO_BROWSER.REMOVED_PAGE,</span>
+                            <span class="s1">data: [</span>
+                                <span class="s1">page</span>
+                            <span class="s1">]</span>
+                        <span class="s1">});</span>
+                    <span class="s1">}</span>
+                <span class="s1">}</span>
+            <span class="s1">}</span>
+            <span class="s2">this</span><span class="s1">.prevChunkNames = chunkNames;</span>
+        <span class="s1">});</span>
+        <span class="s2">this</span><span class="s1">.webpackHotMiddleware = </span><span class="s2">new </span><span class="s1">_hotmiddleware.WebpackHotMiddleware(</span><span class="s2">this</span><span class="s1">.multiCompiler.compilers, </span><span class="s2">this</span><span class="s1">.versionInfo, </span><span class="s2">this</span><span class="s1">.devtoolsFrontendUrl, initialDevToolsConfig);</span>
+        <span class="s2">let </span><span class="s1">booted = </span><span class="s2">false</span><span class="s1">;</span>
+        <span class="s2">this</span><span class="s1">.watcher = </span><span class="s2">await new </span><span class="s1">Promise((resolve)=&gt;{</span>
+            <span class="s2">var </span><span class="s1">_this_multiCompiler;</span>
+            <span class="s2">const </span><span class="s1">watcher = (_this_multiCompiler = </span><span class="s2">this</span><span class="s1">.multiCompiler) == </span><span class="s2">null </span><span class="s1">? </span><span class="s2">void </span><span class="s3">0 </span><span class="s1">: _this_multiCompiler.watch(</span><span class="s4">// @ts-ignore webpack supports an array of watchOptions when using a multiCompiler</span>
+            <span class="s2">this</span><span class="s1">.activeWebpackConfigs.map((config)=&gt;config.watchOptions), </span><span class="s4">// Errors are handled separately</span>
+            <span class="s1">(_err)=&gt;{</span>
+                <span class="s2">if </span><span class="s1">(!booted) {</span>
+                    <span class="s1">booted = </span><span class="s2">true</span><span class="s1">;</span>
+                    <span class="s1">resolve(watcher);</span>
+                <span class="s1">}</span>
+            <span class="s1">});</span>
+        <span class="s1">});</span>
+        <span class="s2">this</span><span class="s1">.onDemandEntries = (</span><span class="s3">0</span><span class="s1">, _ondemandentryhandler.onDemandEntryHandler)({</span>
+            <span class="s1">hotReloader: </span><span class="s2">this</span><span class="s1">,</span>
+            <span class="s1">multiCompiler: </span><span class="s2">this</span><span class="s1">.multiCompiler,</span>
+            <span class="s1">pagesDir: </span><span class="s2">this</span><span class="s1">.pagesDir,</span>
+            <span class="s1">appDir: </span><span class="s2">this</span><span class="s1">.appDir,</span>
+            <span class="s1">rootDir: </span><span class="s2">this</span><span class="s1">.dir,</span>
+            <span class="s1">nextConfig: </span><span class="s2">this</span><span class="s1">.config,</span>
+            <span class="s1">...</span><span class="s2">this</span><span class="s1">.config.onDemandEntries</span>
+        <span class="s1">});</span>
+        <span class="s2">this</span><span class="s1">.middlewares = [</span>
+            <span class="s1">(</span><span class="s3">0</span><span class="s1">, _middlewarewebpack.getOverlayMiddleware)({</span>
+                <span class="s1">rootDirectory: </span><span class="s2">this</span><span class="s1">.dir,</span>
+                <span class="s1">isSrcDir: </span><span class="s2">this</span><span class="s1">.isSrcDir,</span>
+                <span class="s1">clientStats: ()=&gt;</span><span class="s2">this</span><span class="s1">.clientStats,</span>
+                <span class="s1">serverStats: ()=&gt;</span><span class="s2">this</span><span class="s1">.serverStats,</span>
+                <span class="s1">edgeServerStats: ()=&gt;</span><span class="s2">this</span><span class="s1">.edgeServerStats</span>
+            <span class="s1">}),</span>
+            <span class="s1">(</span><span class="s3">0</span><span class="s1">, _middlewarewebpack.getSourceMapMiddleware)({</span>
+                <span class="s1">clientStats: ()=&gt;</span><span class="s2">this</span><span class="s1">.clientStats,</span>
+                <span class="s1">serverStats: ()=&gt;</span><span class="s2">this</span><span class="s1">.serverStats,</span>
+                <span class="s1">edgeServerStats: ()=&gt;</span><span class="s2">this</span><span class="s1">.edgeServerStats</span>
+            <span class="s1">}),</span>
+            <span class="s1">(</span><span class="s3">0</span><span class="s1">, _getnexterrorfeedbackmiddleware.getNextErrorFeedbackMiddleware)(</span><span class="s2">this</span><span class="s1">.telemetry),</span>
+            <span class="s1">(</span><span class="s3">0</span><span class="s1">, _getdevoverlayfontmiddleware.getDevOverlayFontMiddleware)(),</span>
+            <span class="s1">(</span><span class="s3">0</span><span class="s1">, _devindicatormiddleware.getDisableDevIndicatorMiddleware)(),</span>
+            <span class="s1">(</span><span class="s3">0</span><span class="s1">, _restartdevservermiddleware.getRestartDevServerMiddleware)({</span>
+                <span class="s1">telemetry: </span><span class="s2">this</span><span class="s1">.telemetry,</span>
+                <span class="s1">webpackCacheDirectories: </span><span class="s2">this</span><span class="s1">.activeWebpackConfigs != </span><span class="s2">null </span><span class="s1">? (</span><span class="s3">0</span><span class="s1">, _webpackconfig.getCacheDirectories)(</span><span class="s2">this</span><span class="s1">.activeWebpackConfigs) : undefined</span>
+            <span class="s1">}),</span>
+            <span class="s1">(</span><span class="s3">0</span><span class="s1">, _devtoolsconfigmiddleware.devToolsConfigMiddleware)({</span>
+                <span class="s1">distDir: </span><span class="s2">this</span><span class="s1">.distDir,</span>
+                <span class="s1">sendUpdateSignal: (data)=&gt;{</span>
+                    <span class="s2">var </span><span class="s4">// Update the in-memory devToolsConfig value</span>
+                    <span class="s4">// which will be used for the next onHMR call.</span>
+                    <span class="s1">_this_webpackHotMiddleware;</span>
+                    <span class="s1">(_this_webpackHotMiddleware = </span><span class="s2">this</span><span class="s1">.webpackHotMiddleware) == </span><span class="s2">null </span><span class="s1">? </span><span class="s2">void </span><span class="s3">0 </span><span class="s1">: _this_webpackHotMiddleware.updateDevToolsConfig(data);</span>
+                    <span class="s2">this</span><span class="s1">.send({</span>
+                        <span class="s1">action: _hotreloadertypes.HMR_ACTIONS_SENT_TO_BROWSER.DEVTOOLS_CONFIG,</span>
+                        <span class="s1">data</span>
+                    <span class="s1">});</span>
+                <span class="s1">}</span>
+            <span class="s1">})</span>
+        <span class="s1">];</span>
+    <span class="s1">}</span>
+    <span class="s1">invalidate({ reloadAfterInvalidation } = {</span>
+        <span class="s1">reloadAfterInvalidation: </span><span class="s2">false</span>
+    <span class="s1">}) {</span>
+        <span class="s2">var </span><span class="s1">_this_multiCompiler;</span>
+        <span class="s4">// Cache the `reloadAfterInvalidation` flag, and use it to reload the page when compilation is done</span>
+        <span class="s2">this</span><span class="s1">.reloadAfterInvalidation = reloadAfterInvalidation;</span>
+        <span class="s2">const </span><span class="s1">outputPath = (_this_multiCompiler = </span><span class="s2">this</span><span class="s1">.multiCompiler) == </span><span class="s2">null </span><span class="s1">? </span><span class="s2">void </span><span class="s3">0 </span><span class="s1">: _this_multiCompiler.outputPath;</span>
+        <span class="s2">if </span><span class="s1">(outputPath) {</span>
+            <span class="s2">var </span><span class="s1">_getInvalidator;</span>
+            <span class="s1">(_getInvalidator = (</span><span class="s3">0</span><span class="s1">, _ondemandentryhandler.getInvalidator)(outputPath)) == </span><span class="s2">null </span><span class="s1">? </span><span class="s2">void </span><span class="s3">0 </span><span class="s1">: _getInvalidator.invalidate();</span>
+        <span class="s1">}</span>
+    <span class="s1">}</span>
+    <span class="s1">async getCompilationErrors(page) {</span>
+        <span class="s2">var </span><span class="s1">_this_clientStats, _this_serverStats, _this_edgeServerStats;</span>
+        <span class="s2">const </span><span class="s1">getErrors = ({ compilation })=&gt;{</span>
+            <span class="s2">var </span><span class="s1">_failedPages_normalizedPage;</span>
+            <span class="s2">const </span><span class="s1">failedPages = erroredPages(compilation);</span>
+            <span class="s2">const </span><span class="s1">normalizedPage = (</span><span class="s3">0</span><span class="s1">, _normalizepathsep.normalizePathSep)(page);</span>
+            <span class="s4">// If there is an error related to the requesting page we display it instead of the first error</span>
+            <span class="s2">return </span><span class="s1">((_failedPages_normalizedPage = failedPages[normalizedPage]) == </span><span class="s2">null </span><span class="s1">? </span><span class="s2">void </span><span class="s3">0 </span><span class="s1">: _failedPages_normalizedPage.length) &gt; </span><span class="s3">0 </span><span class="s1">? failedPages[normalizedPage] : compilation.errors;</span>
+        <span class="s1">};</span>
+        <span class="s2">if </span><span class="s1">(</span><span class="s2">this</span><span class="s1">.clientError) {</span>
+            <span class="s2">return </span><span class="s1">[</span>
+                <span class="s2">this</span><span class="s1">.clientError</span>
+            <span class="s1">];</span>
+        <span class="s1">} </span><span class="s2">else if </span><span class="s1">(</span><span class="s2">this</span><span class="s1">.serverError) {</span>
+            <span class="s2">return </span><span class="s1">[</span>
+                <span class="s2">this</span><span class="s1">.serverError</span>
+            <span class="s1">];</span>
+        <span class="s1">} </span><span class="s2">else if </span><span class="s1">((_this_clientStats = </span><span class="s2">this</span><span class="s1">.clientStats) == </span><span class="s2">null </span><span class="s1">? </span><span class="s2">void </span><span class="s3">0 </span><span class="s1">: _this_clientStats.hasErrors()) {</span>
+            <span class="s2">return </span><span class="s1">getErrors(</span><span class="s2">this</span><span class="s1">.clientStats);</span>
+        <span class="s1">} </span><span class="s2">else if </span><span class="s1">((_this_serverStats = </span><span class="s2">this</span><span class="s1">.serverStats) == </span><span class="s2">null </span><span class="s1">? </span><span class="s2">void </span><span class="s3">0 </span><span class="s1">: _this_serverStats.hasErrors()) {</span>
+            <span class="s2">return </span><span class="s1">getErrors(</span><span class="s2">this</span><span class="s1">.serverStats);</span>
+        <span class="s1">} </span><span class="s2">else if </span><span class="s1">((_this_edgeServerStats = </span><span class="s2">this</span><span class="s1">.edgeServerStats) == </span><span class="s2">null </span><span class="s1">? </span><span class="s2">void </span><span class="s3">0 </span><span class="s1">: _this_edgeServerStats.hasErrors()) {</span>
+            <span class="s2">return </span><span class="s1">getErrors(</span><span class="s2">this</span><span class="s1">.edgeServerStats);</span>
+        <span class="s1">} </span><span class="s2">else </span><span class="s1">{</span>
+            <span class="s2">return </span><span class="s1">[];</span>
+        <span class="s1">}</span>
+    <span class="s1">}</span>
+    <span class="s1">send(action) {</span>
+        <span class="s2">this</span><span class="s1">.webpackHotMiddleware.publish(action);</span>
+    <span class="s1">}</span>
+    <span class="s1">async ensurePage({ page, clientOnly, appPaths, definition, isApp, url }) {</span>
+        <span class="s2">return this</span><span class="s1">.hotReloaderSpan.traceChild(</span><span class="s0">'ensure-page'</span><span class="s1">, {</span>
+            <span class="s1">inputPage: page</span>
+        <span class="s1">}).traceAsyncFn(async ()=&gt;{</span>
+            <span class="s2">var </span><span class="s1">_this_onDemandEntries;</span>
+            <span class="s4">// Make sure we don't re-build or dispose prebuilt pages</span>
+            <span class="s2">if </span><span class="s1">(page !== </span><span class="s0">'/_error' </span><span class="s1">&amp;&amp; _constants1.BLOCKED_PAGES.indexOf(page) !== -</span><span class="s3">1</span><span class="s1">) {</span>
+                <span class="s2">return</span><span class="s1">;</span>
+            <span class="s1">}</span>
+            <span class="s2">const </span><span class="s1">error = clientOnly ? </span><span class="s2">this</span><span class="s1">.clientError : </span><span class="s2">this</span><span class="s1">.serverError || </span><span class="s2">this</span><span class="s1">.clientError;</span>
+            <span class="s2">if </span><span class="s1">(error) {</span>
+                <span class="s2">throw </span><span class="s1">error;</span>
+            <span class="s1">}</span>
+            <span class="s2">return </span><span class="s1">(_this_onDemandEntries = </span><span class="s2">this</span><span class="s1">.onDemandEntries) == </span><span class="s2">null </span><span class="s1">? </span><span class="s2">void </span><span class="s3">0 </span><span class="s1">: _this_onDemandEntries.ensurePage({</span>
+                <span class="s1">page,</span>
+                <span class="s1">appPaths,</span>
+                <span class="s1">definition,</span>
+                <span class="s1">isApp,</span>
+                <span class="s1">url</span>
+            <span class="s1">});</span>
+        <span class="s1">});</span>
+    <span class="s1">}</span>
+    <span class="s1">close() {</span>
+        <span class="s2">var </span><span class="s1">_this_webpackHotMiddleware;</span>
+        <span class="s1">(_this_webpackHotMiddleware = </span><span class="s2">this</span><span class="s1">.webpackHotMiddleware) == </span><span class="s2">null </span><span class="s1">? </span><span class="s2">void </span><span class="s3">0 </span><span class="s1">: _this_webpackHotMiddleware.close();</span>
+    <span class="s1">}</span>
+<span class="s1">}</span>
+
+<span class="s4">//# sourceMappingURL=hot-reloader-webpack.js.map</span></pre>
+</body>
+</html>

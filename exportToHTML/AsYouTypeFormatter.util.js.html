@@ -1,0 +1,120 @@
+<html>
+<head>
+<title>AsYouTypeFormatter.util.js</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #8c8c8c; font-style: italic;}
+.s1 { color: #080808;}
+.s2 { color: #0033b3;}
+.s3 { color: #067d17;}
+.s4 { color: #1750eb;}
+</style>
+</head>
+<body bgcolor="#ffffff">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#c0c0c0" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+AsYouTypeFormatter.util.js</font>
+</center></td></tr></table>
+<pre><span class="s0">// Should be the same as `DIGIT_PLACEHOLDER` in `libphonenumber-metadata-generator`.</span>
+<span class="s2">export const </span><span class="s1">DIGIT_PLACEHOLDER = </span><span class="s3">'x' </span><span class="s0">// '\u2008' (punctuation space)</span>
+<span class="s2">const </span><span class="s1">DIGIT_PLACEHOLDER_MATCHER = </span><span class="s2">new </span><span class="s1">RegExp(DIGIT_PLACEHOLDER)</span>
+
+<span class="s0">// Counts all occurences of a symbol in a string.</span>
+<span class="s0">// Unicode-unsafe (because using `.split()`).</span>
+<span class="s2">export function </span><span class="s1">countOccurences(symbol, string) {</span>
+	<span class="s2">let </span><span class="s1">count = </span><span class="s4">0</span>
+	<span class="s0">// Using `.split('')` to iterate through a string here</span>
+	<span class="s0">// to avoid requiring `Symbol.iterator` polyfill.</span>
+	<span class="s0">// `.split('')` is generally not safe for Unicode,</span>
+	<span class="s0">// but in this particular case for counting brackets it is safe.</span>
+	<span class="s0">// for (const character of string)</span>
+	<span class="s2">for </span><span class="s1">(</span><span class="s2">const </span><span class="s1">character of string.split(</span><span class="s3">''</span><span class="s1">)) {</span>
+		<span class="s2">if </span><span class="s1">(character === symbol) {</span>
+			<span class="s1">count++</span>
+		<span class="s1">}</span>
+	<span class="s1">}</span>
+	<span class="s2">return </span><span class="s1">count</span>
+<span class="s1">}</span>
+
+<span class="s0">// Repeats a string (or a symbol) N times.</span>
+<span class="s0">// http://stackoverflow.com/questions/202605/repeat-string-javascript</span>
+<span class="s2">export function </span><span class="s1">repeat(string, times) {</span>
+	<span class="s2">if </span><span class="s1">(times &lt; </span><span class="s4">1</span><span class="s1">) {</span>
+		<span class="s2">return </span><span class="s3">''</span>
+	<span class="s1">}</span>
+	<span class="s2">let </span><span class="s1">result = </span><span class="s3">''</span>
+	<span class="s2">while </span><span class="s1">(times &gt; </span><span class="s4">1</span><span class="s1">) {</span>
+		<span class="s2">if </span><span class="s1">(times &amp; </span><span class="s4">1</span><span class="s1">) {</span>
+			<span class="s1">result += string</span>
+		<span class="s1">}</span>
+		<span class="s1">times &gt;&gt;= </span><span class="s4">1</span>
+		<span class="s1">string += string</span>
+	<span class="s1">}</span>
+	<span class="s2">return </span><span class="s1">result + string</span>
+<span class="s1">}</span>
+
+<span class="s2">export function </span><span class="s1">cutAndStripNonPairedParens(string, cutBeforeIndex) {</span>
+	<span class="s2">if </span><span class="s1">(string[cutBeforeIndex] === </span><span class="s3">')'</span><span class="s1">) {</span>
+		<span class="s1">cutBeforeIndex++</span>
+	<span class="s1">}</span>
+	<span class="s2">return </span><span class="s1">stripNonPairedParens(string.slice(</span><span class="s4">0</span><span class="s1">, cutBeforeIndex))</span>
+<span class="s1">}</span>
+
+<span class="s2">export function </span><span class="s1">closeNonPairedParens(template, cut_before) {</span>
+	<span class="s2">const </span><span class="s1">retained_template = template.slice(</span><span class="s4">0</span><span class="s1">, cut_before)</span>
+	<span class="s2">const </span><span class="s1">opening_braces = countOccurences(</span><span class="s3">'('</span><span class="s1">, retained_template)</span>
+	<span class="s2">const </span><span class="s1">closing_braces = countOccurences(</span><span class="s3">')'</span><span class="s1">, retained_template)</span>
+	<span class="s2">let </span><span class="s1">dangling_braces = opening_braces - closing_braces</span>
+	<span class="s2">while </span><span class="s1">(dangling_braces &gt; </span><span class="s4">0 </span><span class="s1">&amp;&amp; cut_before &lt; template.length) {</span>
+		<span class="s2">if </span><span class="s1">(template[cut_before] === </span><span class="s3">')'</span><span class="s1">) {</span>
+			<span class="s1">dangling_braces--</span>
+		<span class="s1">}</span>
+		<span class="s1">cut_before++</span>
+	<span class="s1">}</span>
+	<span class="s2">return </span><span class="s1">template.slice(</span><span class="s4">0</span><span class="s1">, cut_before)</span>
+<span class="s1">}</span>
+
+<span class="s2">export function </span><span class="s1">stripNonPairedParens(string) {</span>
+	<span class="s2">const </span><span class="s1">dangling_braces =[]</span>
+	<span class="s2">let </span><span class="s1">i = </span><span class="s4">0</span>
+	<span class="s2">while </span><span class="s1">(i &lt; string.length) {</span>
+		<span class="s2">if </span><span class="s1">(string[i] === </span><span class="s3">'('</span><span class="s1">) {</span>
+			<span class="s1">dangling_braces.push(i)</span>
+		<span class="s1">}</span>
+		<span class="s2">else if </span><span class="s1">(string[i] === </span><span class="s3">')'</span><span class="s1">) {</span>
+			<span class="s1">dangling_braces.pop()</span>
+		<span class="s1">}</span>
+		<span class="s1">i++</span>
+	<span class="s1">}</span>
+	<span class="s2">let </span><span class="s1">start = </span><span class="s4">0</span>
+	<span class="s2">let </span><span class="s1">cleared_string = </span><span class="s3">''</span>
+	<span class="s1">dangling_braces.push(string.length)</span>
+	<span class="s2">for </span><span class="s1">(</span><span class="s2">const </span><span class="s1">index of dangling_braces) {</span>
+		<span class="s1">cleared_string += string.slice(start, index)</span>
+		<span class="s1">start = index + </span><span class="s4">1</span>
+	<span class="s1">}</span>
+	<span class="s2">return </span><span class="s1">cleared_string</span>
+<span class="s1">}</span>
+
+<span class="s2">export function </span><span class="s1">populateTemplateWithDigits(template, position, digits) {</span>
+	<span class="s0">// Using `.split('')` to iterate through a string here</span>
+	<span class="s0">// to avoid requiring `Symbol.iterator` polyfill.</span>
+	<span class="s0">// `.split('')` is generally not safe for Unicode,</span>
+	<span class="s0">// but in this particular case for `digits` it is safe.</span>
+	<span class="s0">// for (const digit of digits)</span>
+	<span class="s2">for </span><span class="s1">(</span><span class="s2">const </span><span class="s1">digit of digits.split(</span><span class="s3">''</span><span class="s1">)) {</span>
+		<span class="s0">// If there is room for more digits in current `template`,</span>
+		<span class="s0">// then set the next digit in the `template`,</span>
+		<span class="s0">// and return the formatted digits so far.</span>
+		<span class="s0">// If more digits are entered than the current format could handle.</span>
+		<span class="s2">if </span><span class="s1">(template.slice(position + </span><span class="s4">1</span><span class="s1">).search(DIGIT_PLACEHOLDER_MATCHER) &lt; </span><span class="s4">0</span><span class="s1">) {</span>
+			<span class="s2">return</span>
+		<span class="s1">}</span>
+		<span class="s1">position = template.search(DIGIT_PLACEHOLDER_MATCHER)</span>
+		<span class="s1">template = template.replace(DIGIT_PLACEHOLDER_MATCHER, digit)</span>
+	<span class="s1">}</span>
+	<span class="s2">return </span><span class="s1">[template, position]</span>
+<span class="s1">}</span></pre>
+</body>
+</html>

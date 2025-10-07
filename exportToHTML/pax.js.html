@@ -1,0 +1,180 @@
+<html>
+<head>
+<title>pax.js</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #067d17;}
+.s1 { color: #080808;}
+.s2 { color: #0033b3;}
+.s3 { color: #1750eb;}
+.s4 { color: #8c8c8c; font-style: italic;}
+.s5 { color: #0037a6;}
+.s6 { color: #264eff;}
+</style>
+</head>
+<body bgcolor="#ffffff">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#c0c0c0" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+pax.js</font>
+</center></td></tr></table>
+<pre><span class="s0">&quot;use strict&quot;</span><span class="s1">;</span>
+<span class="s1">Object.defineProperty(exports, </span><span class="s0">&quot;__esModule&quot;</span><span class="s1">, { value: </span><span class="s2">true </span><span class="s1">});</span>
+<span class="s1">exports.Pax = </span><span class="s2">void </span><span class="s3">0</span><span class="s1">;</span>
+<span class="s2">const </span><span class="s1">node_path_1 = require(</span><span class="s0">&quot;node:path&quot;</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">header_js_1 = require(</span><span class="s0">&quot;./header.js&quot;</span><span class="s1">);</span>
+<span class="s2">class </span><span class="s1">Pax {</span>
+    <span class="s1">atime;</span>
+    <span class="s1">mtime;</span>
+    <span class="s1">ctime;</span>
+    <span class="s1">charset;</span>
+    <span class="s1">comment;</span>
+    <span class="s1">gid;</span>
+    <span class="s1">uid;</span>
+    <span class="s1">gname;</span>
+    <span class="s1">uname;</span>
+    <span class="s1">linkpath;</span>
+    <span class="s1">dev;</span>
+    <span class="s1">ino;</span>
+    <span class="s1">nlink;</span>
+    <span class="s1">path;</span>
+    <span class="s1">size;</span>
+    <span class="s1">mode;</span>
+    <span class="s1">global;</span>
+    <span class="s1">constructor(obj, global = </span><span class="s2">false</span><span class="s1">) {</span>
+        <span class="s2">this</span><span class="s1">.atime = obj.atime;</span>
+        <span class="s2">this</span><span class="s1">.charset = obj.charset;</span>
+        <span class="s2">this</span><span class="s1">.comment = obj.comment;</span>
+        <span class="s2">this</span><span class="s1">.ctime = obj.ctime;</span>
+        <span class="s2">this</span><span class="s1">.dev = obj.dev;</span>
+        <span class="s2">this</span><span class="s1">.gid = obj.gid;</span>
+        <span class="s2">this</span><span class="s1">.global = global;</span>
+        <span class="s2">this</span><span class="s1">.gname = obj.gname;</span>
+        <span class="s2">this</span><span class="s1">.ino = obj.ino;</span>
+        <span class="s2">this</span><span class="s1">.linkpath = obj.linkpath;</span>
+        <span class="s2">this</span><span class="s1">.mtime = obj.mtime;</span>
+        <span class="s2">this</span><span class="s1">.nlink = obj.nlink;</span>
+        <span class="s2">this</span><span class="s1">.path = obj.path;</span>
+        <span class="s2">this</span><span class="s1">.size = obj.size;</span>
+        <span class="s2">this</span><span class="s1">.uid = obj.uid;</span>
+        <span class="s2">this</span><span class="s1">.uname = obj.uname;</span>
+    <span class="s1">}</span>
+    <span class="s1">encode() {</span>
+        <span class="s2">const </span><span class="s1">body = </span><span class="s2">this</span><span class="s1">.encodeBody();</span>
+        <span class="s2">if </span><span class="s1">(body === </span><span class="s0">''</span><span class="s1">) {</span>
+            <span class="s2">return </span><span class="s1">Buffer.allocUnsafe(</span><span class="s3">0</span><span class="s1">);</span>
+        <span class="s1">}</span>
+        <span class="s2">const </span><span class="s1">bodyLen = Buffer.byteLength(body);</span>
+        <span class="s4">// round up to 512 bytes</span>
+        <span class="s4">// add 512 for header</span>
+        <span class="s2">const </span><span class="s1">bufLen = </span><span class="s3">512 </span><span class="s1">* Math.ceil(</span><span class="s3">1 </span><span class="s1">+ bodyLen / </span><span class="s3">512</span><span class="s1">);</span>
+        <span class="s2">const </span><span class="s1">buf = Buffer.allocUnsafe(bufLen);</span>
+        <span class="s4">// 0-fill the header section, it might not hit every field</span>
+        <span class="s2">for </span><span class="s1">(</span><span class="s2">let </span><span class="s1">i = </span><span class="s3">0</span><span class="s1">; i &lt; </span><span class="s3">512</span><span class="s1">; i++) {</span>
+            <span class="s1">buf[i] = </span><span class="s3">0</span><span class="s1">;</span>
+        <span class="s1">}</span>
+        <span class="s2">new </span><span class="s1">header_js_1.Header({</span>
+            <span class="s4">// XXX split the path</span>
+            <span class="s4">// then the path should be PaxHeader + basename, but less than 99,</span>
+            <span class="s4">// prepend with the dirname</span>
+            <span class="s4">/* c8 ignore start */</span>
+            <span class="s1">path: (</span><span class="s0">'PaxHeader/' </span><span class="s1">+ (</span><span class="s3">0</span><span class="s1">, node_path_1.basename)(</span><span class="s2">this</span><span class="s1">.path ?? </span><span class="s0">''</span><span class="s1">)).slice(</span><span class="s3">0</span><span class="s1">, </span><span class="s3">99</span><span class="s1">),</span>
+            <span class="s4">/* c8 ignore stop */</span>
+            <span class="s1">mode: </span><span class="s2">this</span><span class="s1">.mode || </span><span class="s3">0o644</span><span class="s1">,</span>
+            <span class="s1">uid: </span><span class="s2">this</span><span class="s1">.uid,</span>
+            <span class="s1">gid: </span><span class="s2">this</span><span class="s1">.gid,</span>
+            <span class="s1">size: bodyLen,</span>
+            <span class="s1">mtime: </span><span class="s2">this</span><span class="s1">.mtime,</span>
+            <span class="s1">type: </span><span class="s2">this</span><span class="s1">.global ? </span><span class="s0">'GlobalExtendedHeader' </span><span class="s1">: </span><span class="s0">'ExtendedHeader'</span><span class="s1">,</span>
+            <span class="s1">linkpath: </span><span class="s0">''</span><span class="s1">,</span>
+            <span class="s1">uname: </span><span class="s2">this</span><span class="s1">.uname || </span><span class="s0">''</span><span class="s1">,</span>
+            <span class="s1">gname: </span><span class="s2">this</span><span class="s1">.gname || </span><span class="s0">''</span><span class="s1">,</span>
+            <span class="s1">devmaj: </span><span class="s3">0</span><span class="s1">,</span>
+            <span class="s1">devmin: </span><span class="s3">0</span><span class="s1">,</span>
+            <span class="s1">atime: </span><span class="s2">this</span><span class="s1">.atime,</span>
+            <span class="s1">ctime: </span><span class="s2">this</span><span class="s1">.ctime,</span>
+        <span class="s1">}).encode(buf);</span>
+        <span class="s1">buf.write(body, </span><span class="s3">512</span><span class="s1">, bodyLen, </span><span class="s0">'utf8'</span><span class="s1">);</span>
+        <span class="s4">// null pad after the body</span>
+        <span class="s2">for </span><span class="s1">(</span><span class="s2">let </span><span class="s1">i = bodyLen + </span><span class="s3">512</span><span class="s1">; i &lt; buf.length; i++) {</span>
+            <span class="s1">buf[i] = </span><span class="s3">0</span><span class="s1">;</span>
+        <span class="s1">}</span>
+        <span class="s2">return </span><span class="s1">buf;</span>
+    <span class="s1">}</span>
+    <span class="s1">encodeBody() {</span>
+        <span class="s2">return </span><span class="s1">(</span><span class="s2">this</span><span class="s1">.encodeField(</span><span class="s0">'path'</span><span class="s1">) +</span>
+            <span class="s2">this</span><span class="s1">.encodeField(</span><span class="s0">'ctime'</span><span class="s1">) +</span>
+            <span class="s2">this</span><span class="s1">.encodeField(</span><span class="s0">'atime'</span><span class="s1">) +</span>
+            <span class="s2">this</span><span class="s1">.encodeField(</span><span class="s0">'dev'</span><span class="s1">) +</span>
+            <span class="s2">this</span><span class="s1">.encodeField(</span><span class="s0">'ino'</span><span class="s1">) +</span>
+            <span class="s2">this</span><span class="s1">.encodeField(</span><span class="s0">'nlink'</span><span class="s1">) +</span>
+            <span class="s2">this</span><span class="s1">.encodeField(</span><span class="s0">'charset'</span><span class="s1">) +</span>
+            <span class="s2">this</span><span class="s1">.encodeField(</span><span class="s0">'comment'</span><span class="s1">) +</span>
+            <span class="s2">this</span><span class="s1">.encodeField(</span><span class="s0">'gid'</span><span class="s1">) +</span>
+            <span class="s2">this</span><span class="s1">.encodeField(</span><span class="s0">'gname'</span><span class="s1">) +</span>
+            <span class="s2">this</span><span class="s1">.encodeField(</span><span class="s0">'linkpath'</span><span class="s1">) +</span>
+            <span class="s2">this</span><span class="s1">.encodeField(</span><span class="s0">'mtime'</span><span class="s1">) +</span>
+            <span class="s2">this</span><span class="s1">.encodeField(</span><span class="s0">'size'</span><span class="s1">) +</span>
+            <span class="s2">this</span><span class="s1">.encodeField(</span><span class="s0">'uid'</span><span class="s1">) +</span>
+            <span class="s2">this</span><span class="s1">.encodeField(</span><span class="s0">'uname'</span><span class="s1">));</span>
+    <span class="s1">}</span>
+    <span class="s1">encodeField(field) {</span>
+        <span class="s2">if </span><span class="s1">(</span><span class="s2">this</span><span class="s1">[field] === undefined) {</span>
+            <span class="s2">return </span><span class="s0">''</span><span class="s1">;</span>
+        <span class="s1">}</span>
+        <span class="s2">const </span><span class="s1">r = </span><span class="s2">this</span><span class="s1">[field];</span>
+        <span class="s2">const </span><span class="s1">v = r </span><span class="s2">instanceof </span><span class="s1">Date ? r.getTime() / </span><span class="s3">1000 </span><span class="s1">: r;</span>
+        <span class="s2">const </span><span class="s1">s = </span><span class="s0">' ' </span><span class="s1">+</span>
+            <span class="s1">(field === </span><span class="s0">'dev' </span><span class="s1">|| field === </span><span class="s0">'ino' </span><span class="s1">|| field === </span><span class="s0">'nlink' </span><span class="s1">?</span>
+                <span class="s0">'SCHILY.'</span>
+                <span class="s1">: </span><span class="s0">''</span><span class="s1">) +</span>
+            <span class="s1">field +</span>
+            <span class="s0">'=' </span><span class="s1">+</span>
+            <span class="s1">v +</span>
+            <span class="s0">'</span><span class="s5">\n</span><span class="s0">'</span><span class="s1">;</span>
+        <span class="s2">const </span><span class="s1">byteLen = Buffer.byteLength(s);</span>
+        <span class="s4">// the digits includes the length of the digits in ascii base-10</span>
+        <span class="s4">// so if it's 9 characters, then adding 1 for the 9 makes it 10</span>
+        <span class="s4">// which makes it 11 chars.</span>
+        <span class="s2">let </span><span class="s1">digits = Math.floor(Math.log(byteLen) / Math.log(</span><span class="s3">10</span><span class="s1">)) + </span><span class="s3">1</span><span class="s1">;</span>
+        <span class="s2">if </span><span class="s1">(byteLen + digits &gt;= Math.pow(</span><span class="s3">10</span><span class="s1">, digits)) {</span>
+            <span class="s1">digits += </span><span class="s3">1</span><span class="s1">;</span>
+        <span class="s1">}</span>
+        <span class="s2">const </span><span class="s1">len = digits + byteLen;</span>
+        <span class="s2">return </span><span class="s1">len + s;</span>
+    <span class="s1">}</span>
+    <span class="s2">static </span><span class="s1">parse(str, ex, g = </span><span class="s2">false</span><span class="s1">) {</span>
+        <span class="s2">return new </span><span class="s1">Pax(merge(parseKV(str), ex), g);</span>
+    <span class="s1">}</span>
+<span class="s1">}</span>
+<span class="s1">exports.Pax = Pax;</span>
+<span class="s2">const </span><span class="s1">merge = (a, b) =&gt; b ? Object.assign({}, b, a) : a;</span>
+<span class="s2">const </span><span class="s1">parseKV = (str) =&gt; str</span>
+    <span class="s1">.replace(</span><span class="s6">/\n$/</span><span class="s1">, </span><span class="s0">''</span><span class="s1">)</span>
+    <span class="s1">.split(</span><span class="s0">'</span><span class="s5">\n</span><span class="s0">'</span><span class="s1">)</span>
+    <span class="s1">.reduce(parseKVLine, Object.create(</span><span class="s2">null</span><span class="s1">));</span>
+<span class="s2">const </span><span class="s1">parseKVLine = (set, line) =&gt; {</span>
+    <span class="s2">const </span><span class="s1">n = parseInt(line, </span><span class="s3">10</span><span class="s1">);</span>
+    <span class="s4">// XXX Values with \n in them will fail this.</span>
+    <span class="s4">// Refactor to not be a naive line-by-line parse.</span>
+    <span class="s2">if </span><span class="s1">(n !== Buffer.byteLength(line) + </span><span class="s3">1</span><span class="s1">) {</span>
+        <span class="s2">return </span><span class="s1">set;</span>
+    <span class="s1">}</span>
+    <span class="s1">line = line.slice((n + </span><span class="s0">' '</span><span class="s1">).length);</span>
+    <span class="s2">const </span><span class="s1">kv = line.split(</span><span class="s0">'='</span><span class="s1">);</span>
+    <span class="s2">const </span><span class="s1">r = kv.shift();</span>
+    <span class="s2">if </span><span class="s1">(!r) {</span>
+        <span class="s2">return </span><span class="s1">set;</span>
+    <span class="s1">}</span>
+    <span class="s2">const </span><span class="s1">k = r.replace(</span><span class="s6">/^SCHILY\.(dev|ino|nlink)/</span><span class="s1">, </span><span class="s0">'$1'</span><span class="s1">);</span>
+    <span class="s2">const </span><span class="s1">v = kv.join(</span><span class="s0">'='</span><span class="s1">);</span>
+    <span class="s1">set[k] =</span>
+        <span class="s6">/^([A-Z]+\.)?([mac]|birth|creation)time$/</span><span class="s1">.test(k) ?</span>
+            <span class="s2">new </span><span class="s1">Date(Number(v) * </span><span class="s3">1000</span><span class="s1">)</span>
+            <span class="s1">: </span><span class="s6">/^[0-9]+$/</span><span class="s1">.test(v) ? +v</span>
+                <span class="s1">: v;</span>
+    <span class="s2">return </span><span class="s1">set;</span>
+<span class="s1">};</span>
+<span class="s4">//# sourceMappingURL=pax.js.map</span></pre>
+</body>
+</html>

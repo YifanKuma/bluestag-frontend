@@ -1,0 +1,76 @@
+<html>
+<head>
+<title>FlattenIntoArray.js</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #067d17;}
+.s1 { color: #080808;}
+.s2 { color: #0033b3;}
+.s3 { color: #8c8c8c; font-style: italic;}
+.s4 { color: #1750eb;}
+</style>
+</head>
+<body bgcolor="#ffffff">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#c0c0c0" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+FlattenIntoArray.js</font>
+</center></td></tr></table>
+<pre><span class="s0">'use strict'</span><span class="s1">;</span>
+
+<span class="s2">var </span><span class="s1">$TypeError = require(</span><span class="s0">'es-errors/type'</span><span class="s1">);</span>
+
+<span class="s2">var </span><span class="s1">MAX_SAFE_INTEGER = require(</span><span class="s0">'math-intrinsics/constants/maxSafeInteger'</span><span class="s1">);</span>
+
+<span class="s2">var </span><span class="s1">Call = require(</span><span class="s0">'./Call'</span><span class="s1">);</span>
+<span class="s2">var </span><span class="s1">CreateDataPropertyOrThrow = require(</span><span class="s0">'./CreateDataPropertyOrThrow'</span><span class="s1">);</span>
+<span class="s2">var </span><span class="s1">Get = require(</span><span class="s0">'./Get'</span><span class="s1">);</span>
+<span class="s2">var </span><span class="s1">HasProperty = require(</span><span class="s0">'./HasProperty'</span><span class="s1">);</span>
+<span class="s2">var </span><span class="s1">IsArray = require(</span><span class="s0">'./IsArray'</span><span class="s1">);</span>
+<span class="s2">var </span><span class="s1">LengthOfArrayLike = require(</span><span class="s0">'./LengthOfArrayLike'</span><span class="s1">);</span>
+<span class="s2">var </span><span class="s1">ToString = require(</span><span class="s0">'./ToString'</span><span class="s1">);</span>
+
+<span class="s3">// https://262.ecma-international.org/11.0/#sec-flattenintoarray</span>
+
+<span class="s1">module.exports = </span><span class="s2">function </span><span class="s1">FlattenIntoArray(target, source, sourceLen, start, depth) {</span>
+	<span class="s2">var </span><span class="s1">mapperFunction;</span>
+	<span class="s2">if </span><span class="s1">(arguments.length &gt; </span><span class="s4">5</span><span class="s1">) {</span>
+		<span class="s1">mapperFunction = arguments[</span><span class="s4">5</span><span class="s1">];</span>
+	<span class="s1">}</span>
+
+	<span class="s2">var </span><span class="s1">targetIndex = start;</span>
+	<span class="s2">var </span><span class="s1">sourceIndex = </span><span class="s4">0</span><span class="s1">;</span>
+	<span class="s2">while </span><span class="s1">(sourceIndex &lt; sourceLen) {</span>
+		<span class="s2">var </span><span class="s1">P = ToString(sourceIndex);</span>
+		<span class="s2">var </span><span class="s1">exists = HasProperty(source, P);</span>
+		<span class="s2">if </span><span class="s1">(exists === </span><span class="s2">true</span><span class="s1">) {</span>
+			<span class="s2">var </span><span class="s1">element = Get(source, P);</span>
+			<span class="s2">if </span><span class="s1">(</span><span class="s2">typeof </span><span class="s1">mapperFunction !== </span><span class="s0">'undefined'</span><span class="s1">) {</span>
+				<span class="s2">if </span><span class="s1">(arguments.length &lt;= </span><span class="s4">6</span><span class="s1">) {</span>
+					<span class="s2">throw new </span><span class="s1">$TypeError(</span><span class="s0">'Assertion failed: thisArg is required when mapperFunction is provided'</span><span class="s1">);</span>
+				<span class="s1">}</span>
+				<span class="s1">element = Call(mapperFunction, arguments[</span><span class="s4">6</span><span class="s1">], [element, sourceIndex, source]);</span>
+			<span class="s1">}</span>
+			<span class="s2">var </span><span class="s1">shouldFlatten = </span><span class="s2">false</span><span class="s1">;</span>
+			<span class="s2">if </span><span class="s1">(depth &gt; </span><span class="s4">0</span><span class="s1">) {</span>
+				<span class="s1">shouldFlatten = IsArray(element);</span>
+			<span class="s1">}</span>
+			<span class="s2">if </span><span class="s1">(shouldFlatten) {</span>
+				<span class="s2">var </span><span class="s1">elementLen = LengthOfArrayLike(element);</span>
+				<span class="s1">targetIndex = FlattenIntoArray(target, element, elementLen, targetIndex, depth - </span><span class="s4">1</span><span class="s1">);</span>
+			<span class="s1">} </span><span class="s2">else </span><span class="s1">{</span>
+				<span class="s2">if </span><span class="s1">(targetIndex &gt;= MAX_SAFE_INTEGER) {</span>
+					<span class="s2">throw new </span><span class="s1">$TypeError(</span><span class="s0">'index too large'</span><span class="s1">);</span>
+				<span class="s1">}</span>
+				<span class="s1">CreateDataPropertyOrThrow(target, ToString(targetIndex), element);</span>
+				<span class="s1">targetIndex += </span><span class="s4">1</span><span class="s1">;</span>
+			<span class="s1">}</span>
+		<span class="s1">}</span>
+		<span class="s1">sourceIndex += </span><span class="s4">1</span><span class="s1">;</span>
+	<span class="s1">}</span>
+
+	<span class="s2">return </span><span class="s1">targetIndex;</span>
+<span class="s1">};</span>
+</pre>
+</body>
+</html>

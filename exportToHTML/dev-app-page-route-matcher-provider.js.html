@@ -1,0 +1,112 @@
+<html>
+<head>
+<title>dev-app-page-route-matcher-provider.js</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #067d17;}
+.s1 { color: #080808;}
+.s2 { color: #0033b3;}
+.s3 { color: #8c8c8c; font-style: italic;}
+.s4 { color: #0037a6;}
+.s5 { color: #264eff;}
+.s6 { color: #1750eb;}
+</style>
+</head>
+<body bgcolor="#ffffff">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#c0c0c0" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+dev-app-page-route-matcher-provider.js</font>
+</center></td></tr></table>
+<pre><span class="s0">&quot;use strict&quot;</span><span class="s1">;</span>
+<span class="s1">Object.defineProperty(exports, </span><span class="s0">&quot;__esModule&quot;</span><span class="s1">, {</span>
+    <span class="s1">value: </span><span class="s2">true</span>
+<span class="s1">});</span>
+<span class="s1">Object.defineProperty(exports, </span><span class="s0">&quot;DevAppPageRouteMatcherProvider&quot;</span><span class="s1">, {</span>
+    <span class="s1">enumerable: </span><span class="s2">true</span><span class="s1">,</span>
+    <span class="s1">get: </span><span class="s2">function</span><span class="s1">() {</span>
+        <span class="s2">return </span><span class="s1">DevAppPageRouteMatcherProvider;</span>
+    <span class="s1">}</span>
+<span class="s1">});</span>
+<span class="s2">const </span><span class="s1">_apppageroutematcher = require(</span><span class="s0">&quot;../../route-matchers/app-page-route-matcher&quot;</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">_routekind = require(</span><span class="s0">&quot;../../route-kind&quot;</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">_filecacheroutematcherprovider = require(</span><span class="s0">&quot;./file-cache-route-matcher-provider&quot;</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">_app = require(</span><span class="s0">&quot;../../normalizers/built/app&quot;</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">_normalizecatchallroutes = require(</span><span class="s0">&quot;../../../build/normalize-catchall-routes&quot;</span><span class="s1">);</span>
+<span class="s2">class </span><span class="s1">DevAppPageRouteMatcherProvider </span><span class="s2">extends </span><span class="s1">_filecacheroutematcherprovider.FileCacheRouteMatcherProvider {</span>
+    <span class="s1">constructor(appDir, extensions, reader, isTurbopack){</span>
+        <span class="s2">super</span><span class="s1">(appDir, reader);</span>
+        <span class="s2">this</span><span class="s1">.normalizers = </span><span class="s2">new </span><span class="s1">_app.DevAppNormalizers(appDir, extensions, isTurbopack);</span>
+        <span class="s3">// Match any page file that ends with `/page.${extension}` or `/default.${extension}` under the app</span>
+        <span class="s3">// directory.</span>
+        <span class="s2">this</span><span class="s1">.expression = </span><span class="s2">new </span><span class="s1">RegExp(</span><span class="s0">`[/</span><span class="s4">\\\\</span><span class="s0">](page|default)</span><span class="s4">\\</span><span class="s0">.(?:</span><span class="s1">${extensions.join(</span><span class="s0">'|'</span><span class="s1">)}</span><span class="s0">)$`</span><span class="s1">);</span>
+        <span class="s2">this</span><span class="s1">.isTurbopack = isTurbopack;</span>
+    <span class="s1">}</span>
+    <span class="s1">async transform(files) {</span>
+        <span class="s3">// Collect all the app paths for each page. This could include any parallel</span>
+        <span class="s3">// routes.</span>
+        <span class="s2">const </span><span class="s1">cache = </span><span class="s2">new </span><span class="s1">Map();</span>
+        <span class="s2">const </span><span class="s1">routeFilenames = </span><span class="s2">new </span><span class="s1">Array();</span>
+        <span class="s2">let </span><span class="s1">appPaths = {};</span>
+        <span class="s2">for </span><span class="s1">(</span><span class="s2">const </span><span class="s1">filename of files){</span>
+            <span class="s3">// If the file isn't a match for this matcher, then skip it.</span>
+            <span class="s2">if </span><span class="s1">(!</span><span class="s2">this</span><span class="s1">.expression.test(filename)) </span><span class="s2">continue</span><span class="s1">;</span>
+            <span class="s2">let </span><span class="s1">page = </span><span class="s2">this</span><span class="s1">.normalizers.page.normalize(filename);</span>
+            <span class="s3">// Validate that this is not an ignored page.</span>
+            <span class="s2">if </span><span class="s1">(page.includes(</span><span class="s0">'/_'</span><span class="s1">)) </span><span class="s2">continue</span><span class="s1">;</span>
+            <span class="s3">// Turbopack uses the correct page name with the underscore normalized.</span>
+            <span class="s3">// TODO: Move implementation to packages/next/src/server/normalizers/built/app/app-page-normalizer.ts.</span>
+            <span class="s3">// The `includes('/_')` check above needs to be moved for that to work as otherwise `%5Fsegmentname`</span>
+            <span class="s3">// will result in `_segmentname` which hits that includes check and be skipped.</span>
+            <span class="s2">if </span><span class="s1">(</span><span class="s2">this</span><span class="s1">.isTurbopack) {</span>
+                <span class="s1">page = page.replace(</span><span class="s5">/%5F/g</span><span class="s1">, </span><span class="s0">'_'</span><span class="s1">);</span>
+            <span class="s1">}</span>
+            <span class="s3">// This is a valid file that we want to create a matcher for.</span>
+            <span class="s1">routeFilenames.push(filename);</span>
+            <span class="s2">const </span><span class="s1">pathname = </span><span class="s2">this</span><span class="s1">.normalizers.pathname.normalize(filename);</span>
+            <span class="s2">const </span><span class="s1">bundlePath = </span><span class="s2">this</span><span class="s1">.normalizers.bundlePath.normalize(filename);</span>
+            <span class="s3">// Save the normalization results.</span>
+            <span class="s1">cache.set(filename, {</span>
+                <span class="s1">page,</span>
+                <span class="s1">pathname,</span>
+                <span class="s1">bundlePath</span>
+            <span class="s1">});</span>
+            <span class="s2">if </span><span class="s1">(pathname </span><span class="s2">in </span><span class="s1">appPaths) appPaths[pathname].push(page);</span>
+            <span class="s2">else </span><span class="s1">appPaths[pathname] = [</span>
+                <span class="s1">page</span>
+            <span class="s1">];</span>
+        <span class="s1">}</span>
+        <span class="s1">(</span><span class="s6">0</span><span class="s1">, _normalizecatchallroutes.normalizeCatchAllRoutes)(appPaths);</span>
+        <span class="s3">// Make sure to sort parallel routes to make the result deterministic.</span>
+        <span class="s1">appPaths = Object.fromEntries(Object.entries(appPaths).map(([k, v])=&gt;[</span>
+                <span class="s1">k,</span>
+                <span class="s1">v.sort()</span>
+            <span class="s1">]));</span>
+        <span class="s2">const </span><span class="s1">matchers = [];</span>
+        <span class="s2">for </span><span class="s1">(</span><span class="s2">const </span><span class="s1">filename of routeFilenames){</span>
+            <span class="s3">// Grab the cached values (and the appPaths).</span>
+            <span class="s2">const </span><span class="s1">cached = cache.get(filename);</span>
+            <span class="s2">if </span><span class="s1">(!cached) {</span>
+                <span class="s2">throw </span><span class="s1">Object.defineProperty(</span><span class="s2">new </span><span class="s1">Error(</span><span class="s0">'Invariant: expected filename to exist in cache'</span><span class="s1">), </span><span class="s0">&quot;__NEXT_ERROR_CODE&quot;</span><span class="s1">, {</span>
+                    <span class="s1">value: </span><span class="s0">&quot;E190&quot;</span><span class="s1">,</span>
+                    <span class="s1">enumerable: </span><span class="s2">false</span><span class="s1">,</span>
+                    <span class="s1">configurable: </span><span class="s2">true</span>
+                <span class="s1">});</span>
+            <span class="s1">}</span>
+            <span class="s2">const </span><span class="s1">{ pathname, page, bundlePath } = cached;</span>
+            <span class="s1">matchers.push(</span><span class="s2">new </span><span class="s1">_apppageroutematcher.AppPageRouteMatcher({</span>
+                <span class="s1">kind: _routekind.RouteKind.APP_PAGE,</span>
+                <span class="s1">pathname,</span>
+                <span class="s1">page,</span>
+                <span class="s1">bundlePath,</span>
+                <span class="s1">filename,</span>
+                <span class="s1">appPaths: appPaths[pathname]</span>
+            <span class="s1">}));</span>
+        <span class="s1">}</span>
+        <span class="s2">return </span><span class="s1">matchers;</span>
+    <span class="s1">}</span>
+<span class="s1">}</span>
+
+<span class="s3">//# sourceMappingURL=dev-app-page-route-matcher-provider.js.map</span></pre>
+</body>
+</html>

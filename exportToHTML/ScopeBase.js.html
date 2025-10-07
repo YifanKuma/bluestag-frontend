@@ -1,0 +1,382 @@
+<html>
+<head>
+<title>ScopeBase.js</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #067d17;}
+.s1 { color: #080808;}
+.s2 { color: #0033b3;}
+.s3 { color: #1750eb;}
+.s4 { color: #8c8c8c; font-style: italic;}
+.s5 { color: #8c8c8c; font-style: italic;}
+</style>
+</head>
+<body bgcolor="#ffffff">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#c0c0c0" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+ScopeBase.js</font>
+</center></td></tr></table>
+<pre><span class="s0">&quot;use strict&quot;</span><span class="s1">;</span>
+<span class="s1">Object.defineProperty(exports, </span><span class="s0">&quot;__esModule&quot;</span><span class="s1">, { value: </span><span class="s2">true </span><span class="s1">});</span>
+<span class="s1">exports.ScopeBase = </span><span class="s2">void </span><span class="s3">0</span><span class="s1">;</span>
+<span class="s2">const </span><span class="s1">types_1 = require(</span><span class="s0">&quot;@typescript-eslint/types&quot;</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">assert_1 = require(</span><span class="s0">&quot;../assert&quot;</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">definition_1 = require(</span><span class="s0">&quot;../definition&quot;</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">ID_1 = require(</span><span class="s0">&quot;../ID&quot;</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">Reference_1 = require(</span><span class="s0">&quot;../referencer/Reference&quot;</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">variable_1 = require(</span><span class="s0">&quot;../variable&quot;</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">ScopeType_1 = require(</span><span class="s0">&quot;./ScopeType&quot;</span><span class="s1">);</span>
+<span class="s4">/**</span>
+ <span class="s4">* Test if scope is strict</span>
+ <span class="s4">*/</span>
+<span class="s2">function </span><span class="s1">isStrictScope(scope, block, isMethodDefinition) {</span>
+    <span class="s2">let </span><span class="s1">body;</span>
+    <span class="s4">// When upper scope is exists and strict, inner scope is also strict.</span>
+    <span class="s2">if </span><span class="s1">(scope.upper?.isStrict) {</span>
+        <span class="s2">return true</span><span class="s1">;</span>
+    <span class="s1">}</span>
+    <span class="s2">if </span><span class="s1">(isMethodDefinition) {</span>
+        <span class="s2">return true</span><span class="s1">;</span>
+    <span class="s1">}</span>
+    <span class="s2">if </span><span class="s1">(scope.type === ScopeType_1.ScopeType.class ||</span>
+        <span class="s1">scope.type === ScopeType_1.ScopeType.conditionalType ||</span>
+        <span class="s1">scope.type === ScopeType_1.ScopeType.functionType ||</span>
+        <span class="s1">scope.type === ScopeType_1.ScopeType.mappedType ||</span>
+        <span class="s1">scope.type === ScopeType_1.ScopeType.module ||</span>
+        <span class="s1">scope.type === ScopeType_1.ScopeType.tsEnum ||</span>
+        <span class="s1">scope.type === ScopeType_1.ScopeType.tsModule ||</span>
+        <span class="s1">scope.type === ScopeType_1.ScopeType.type) {</span>
+        <span class="s2">return true</span><span class="s1">;</span>
+    <span class="s1">}</span>
+    <span class="s2">if </span><span class="s1">(scope.type === ScopeType_1.ScopeType.block || scope.type === ScopeType_1.ScopeType.switch) {</span>
+        <span class="s2">return false</span><span class="s1">;</span>
+    <span class="s1">}</span>
+    <span class="s2">if </span><span class="s1">(scope.type === ScopeType_1.ScopeType.function) {</span>
+        <span class="s2">const </span><span class="s1">functionBody = block;</span>
+        <span class="s2">switch </span><span class="s1">(functionBody.type) {</span>
+            <span class="s2">case </span><span class="s1">types_1.AST_NODE_TYPES.ArrowFunctionExpression:</span>
+                <span class="s2">if </span><span class="s1">(functionBody.body.type !== types_1.AST_NODE_TYPES.BlockStatement) {</span>
+                    <span class="s2">return false</span><span class="s1">;</span>
+                <span class="s1">}</span>
+                <span class="s1">body = functionBody.body;</span>
+                <span class="s2">break</span><span class="s1">;</span>
+            <span class="s2">case </span><span class="s1">types_1.AST_NODE_TYPES.Program:</span>
+                <span class="s1">body = functionBody;</span>
+                <span class="s2">break</span><span class="s1">;</span>
+            <span class="s2">default</span><span class="s1">:</span>
+                <span class="s1">body = functionBody.body;</span>
+        <span class="s1">}</span>
+        <span class="s2">if </span><span class="s1">(!body) {</span>
+            <span class="s2">return false</span><span class="s1">;</span>
+        <span class="s1">}</span>
+    <span class="s1">}</span>
+    <span class="s2">else if </span><span class="s1">(scope.type === ScopeType_1.ScopeType.global) {</span>
+        <span class="s1">body = block;</span>
+    <span class="s1">}</span>
+    <span class="s2">else </span><span class="s1">{</span>
+        <span class="s2">return false</span><span class="s1">;</span>
+    <span class="s1">}</span>
+    <span class="s4">// Search 'use strict' directive.</span>
+    <span class="s2">for </span><span class="s1">(</span><span class="s2">const </span><span class="s1">stmt of body.body) {</span>
+        <span class="s2">if </span><span class="s1">(stmt.type !== types_1.AST_NODE_TYPES.ExpressionStatement) {</span>
+            <span class="s2">break</span><span class="s1">;</span>
+        <span class="s1">}</span>
+        <span class="s2">if </span><span class="s1">(stmt.directive === </span><span class="s0">'use strict'</span><span class="s1">) {</span>
+            <span class="s2">return true</span><span class="s1">;</span>
+        <span class="s1">}</span>
+        <span class="s2">const </span><span class="s1">expr = stmt.expression;</span>
+        <span class="s2">if </span><span class="s1">(expr.type !== types_1.AST_NODE_TYPES.Literal) {</span>
+            <span class="s2">break</span><span class="s1">;</span>
+        <span class="s1">}</span>
+        <span class="s2">if </span><span class="s1">(expr.raw === </span><span class="s0">'&quot;use strict&quot;' </span><span class="s1">|| expr.raw === </span><span class="s0">&quot;'use strict'&quot;</span><span class="s1">) {</span>
+            <span class="s2">return true</span><span class="s1">;</span>
+        <span class="s1">}</span>
+        <span class="s2">if </span><span class="s1">(expr.value === </span><span class="s0">'use strict'</span><span class="s1">) {</span>
+            <span class="s2">return true</span><span class="s1">;</span>
+        <span class="s1">}</span>
+    <span class="s1">}</span>
+    <span class="s2">return false</span><span class="s1">;</span>
+<span class="s1">}</span>
+<span class="s2">function </span><span class="s1">registerScope(scopeManager, scope) {</span>
+    <span class="s1">scopeManager.scopes.push(scope);</span>
+    <span class="s2">const </span><span class="s1">scopes = scopeManager.nodeToScope.get(scope.block);</span>
+    <span class="s2">if </span><span class="s1">(scopes) {</span>
+        <span class="s1">scopes.push(scope);</span>
+    <span class="s1">}</span>
+    <span class="s2">else </span><span class="s1">{</span>
+        <span class="s1">scopeManager.nodeToScope.set(scope.block, [scope]);</span>
+    <span class="s1">}</span>
+<span class="s1">}</span>
+<span class="s2">const </span><span class="s1">generator = (</span><span class="s3">0</span><span class="s1">, ID_1.createIdGenerator)();</span>
+<span class="s2">const </span><span class="s1">VARIABLE_SCOPE_TYPES = </span><span class="s2">new </span><span class="s1">Set([</span>
+    <span class="s1">ScopeType_1.ScopeType.classFieldInitializer,</span>
+    <span class="s1">ScopeType_1.ScopeType.classStaticBlock,</span>
+    <span class="s1">ScopeType_1.ScopeType.function,</span>
+    <span class="s1">ScopeType_1.ScopeType.global,</span>
+    <span class="s1">ScopeType_1.ScopeType.module,</span>
+    <span class="s1">ScopeType_1.ScopeType.tsModule,</span>
+<span class="s1">]);</span>
+<span class="s2">class </span><span class="s1">ScopeBase {</span>
+    <span class="s4">/**</span>
+     <span class="s4">* A unique ID for this instance - primarily used to help debugging and testing</span>
+     <span class="s4">*/</span>
+    <span class="s1">$id = generator();</span>
+    <span class="s4">/**</span>
+     <span class="s4">* The AST node which created this scope.</span>
+     <span class="s4">* </span><span class="s5">@public</span>
+     <span class="s4">*/</span>
+    <span class="s1">block;</span>
+    <span class="s4">/**</span>
+     <span class="s4">* The array of child scopes. This does not include grandchild scopes.</span>
+     <span class="s4">* </span><span class="s5">@public</span>
+     <span class="s4">*/</span>
+    <span class="s1">childScopes = [];</span>
+    <span class="s4">/**</span>
+     <span class="s4">* A map of the variables for each node in this scope.</span>
+     <span class="s4">* This is map is a pointer to the one in the parent ScopeManager instance</span>
+     <span class="s4">*/</span>
+    <span class="s1">#declaredVariables;</span>
+    <span class="s4">/**</span>
+     <span class="s4">* Generally, through the lexical scoping of JS you can always know which variable an identifier in the source code</span>
+     <span class="s4">* refers to. There are a few exceptions to this rule. With `global` and `with` scopes you can only decide at runtime</span>
+     <span class="s4">* which variable a reference refers to.</span>
+     <span class="s4">* All those scopes are considered &quot;dynamic&quot;.</span>
+     <span class="s4">*/</span>
+    <span class="s1">#dynamic;</span>
+    <span class="s4">/**</span>
+     <span class="s4">* Whether this scope is created by a FunctionExpression.</span>
+     <span class="s4">* </span><span class="s5">@public</span>
+     <span class="s4">*/</span>
+    <span class="s1">functionExpressionScope = </span><span class="s2">false</span><span class="s1">;</span>
+    <span class="s4">/**</span>
+     <span class="s4">* Whether 'use strict' is in effect in this scope.</span>
+     <span class="s4">* </span><span class="s5">@public</span>
+     <span class="s4">*/</span>
+    <span class="s1">isStrict;</span>
+    <span class="s4">/**</span>
+     <span class="s4">* List of {</span><span class="s5">@link </span><span class="s4">Reference}s that are left to be resolved (i.e. which</span>
+     <span class="s4">* need to be linked to the variable they refer to).</span>
+     <span class="s4">*/</span>
+    <span class="s1">leftToResolve = [];</span>
+    <span class="s4">/**</span>
+     <span class="s4">* Any variable {</span><span class="s5">@link </span><span class="s4">Reference} found in this scope.</span>
+     <span class="s4">* This includes occurrences of local variables as well as variables from parent scopes (including the global scope).</span>
+     <span class="s4">* For local variables this also includes defining occurrences (like in a 'var' statement).</span>
+     <span class="s4">* In a 'function' scope this does not include the occurrences of the formal parameter in the parameter list.</span>
+     <span class="s4">* </span><span class="s5">@public</span>
+     <span class="s4">*/</span>
+    <span class="s1">references = [];</span>
+    <span class="s4">/**</span>
+     <span class="s4">* The map from variable names to variable objects.</span>
+     <span class="s4">* </span><span class="s5">@public</span>
+     <span class="s4">*/</span>
+    <span class="s1">set = </span><span class="s2">new </span><span class="s1">Map();</span>
+    <span class="s4">/**</span>
+     <span class="s4">* The {</span><span class="s5">@link </span><span class="s4">Reference}s that are not resolved with this scope.</span>
+     <span class="s4">* </span><span class="s5">@public</span>
+     <span class="s4">*/</span>
+    <span class="s1">through = [];</span>
+    <span class="s1">type;</span>
+    <span class="s4">/**</span>
+     <span class="s4">* Reference to the parent {</span><span class="s5">@link </span><span class="s4">Scope}.</span>
+     <span class="s4">* </span><span class="s5">@public</span>
+     <span class="s4">*/</span>
+    <span class="s1">upper;</span>
+    <span class="s4">/**</span>
+     <span class="s4">* The scoped {</span><span class="s5">@link </span><span class="s4">Variable}s of this scope.</span>
+     <span class="s4">* In the case of a 'function' scope this includes the automatic argument `arguments` as its first element, as well</span>
+     <span class="s4">* as all further formal arguments.</span>
+     <span class="s4">* This does not include variables which are defined in child scopes.</span>
+     <span class="s4">* </span><span class="s5">@public</span>
+     <span class="s4">*/</span>
+    <span class="s1">variables = [];</span>
+    <span class="s4">/**</span>
+     <span class="s4">* For scopes that can contain variable declarations, this is a self-reference.</span>
+     <span class="s4">* For other scope types this is the *variableScope* value of the parent scope.</span>
+     <span class="s4">* </span><span class="s5">@public</span>
+     <span class="s4">*/</span>
+    <span class="s1">#dynamicCloseRef = (ref) =&gt; {</span>
+        <span class="s4">// notify all names are through to global</span>
+        <span class="s2">let </span><span class="s1">current = </span><span class="s2">this</span><span class="s1">;</span>
+        <span class="s2">do </span><span class="s1">{</span>
+            <span class="s4">/* eslint-disable @typescript-eslint/no-non-null-assertion */</span>
+            <span class="s1">current.through.push(ref);</span>
+            <span class="s1">current = current.upper;</span>
+            <span class="s4">/* eslint-enable @typescript-eslint/no-non-null-assertion */</span>
+        <span class="s1">} </span><span class="s2">while </span><span class="s1">(current);</span>
+    <span class="s1">};</span>
+    <span class="s1">#globalCloseRef = (ref, scopeManager) =&gt; {</span>
+        <span class="s4">// let/const/class declarations should be resolved statically.</span>
+        <span class="s4">// others should be resolved dynamically.</span>
+        <span class="s2">if </span><span class="s1">(</span><span class="s2">this</span><span class="s1">.shouldStaticallyCloseForGlobal(ref, scopeManager)) {</span>
+            <span class="s2">this</span><span class="s1">.#staticCloseRef(ref);</span>
+        <span class="s1">}</span>
+        <span class="s2">else </span><span class="s1">{</span>
+            <span class="s2">this</span><span class="s1">.#dynamicCloseRef(ref);</span>
+        <span class="s1">}</span>
+    <span class="s1">};</span>
+    <span class="s1">#staticCloseRef = (ref) =&gt; {</span>
+        <span class="s2">const </span><span class="s1">resolve = () =&gt; {</span>
+            <span class="s2">const </span><span class="s1">name = ref.identifier.name;</span>
+            <span class="s2">const </span><span class="s1">variable = </span><span class="s2">this</span><span class="s1">.set.get(name);</span>
+            <span class="s2">if </span><span class="s1">(!variable) {</span>
+                <span class="s2">return false</span><span class="s1">;</span>
+            <span class="s1">}</span>
+            <span class="s2">if </span><span class="s1">(!</span><span class="s2">this</span><span class="s1">.isValidResolution(ref, variable)) {</span>
+                <span class="s2">return false</span><span class="s1">;</span>
+            <span class="s1">}</span>
+            <span class="s4">// make sure we don't match a type reference to a value variable</span>
+            <span class="s2">const </span><span class="s1">isValidTypeReference = ref.isTypeReference &amp;&amp; variable.isTypeVariable;</span>
+            <span class="s2">const </span><span class="s1">isValidValueReference = ref.isValueReference &amp;&amp; variable.isValueVariable;</span>
+            <span class="s2">if </span><span class="s1">(!isValidTypeReference &amp;&amp; !isValidValueReference) {</span>
+                <span class="s2">return false</span><span class="s1">;</span>
+            <span class="s1">}</span>
+            <span class="s1">variable.references.push(ref);</span>
+            <span class="s1">ref.resolved = variable;</span>
+            <span class="s2">return true</span><span class="s1">;</span>
+        <span class="s1">};</span>
+        <span class="s2">if </span><span class="s1">(!resolve()) {</span>
+            <span class="s2">this</span><span class="s1">.delegateToUpperScope(ref);</span>
+        <span class="s1">}</span>
+    <span class="s1">};</span>
+    <span class="s1">variableScope;</span>
+    <span class="s1">constructor(scopeManager, type, upperScope, block, isMethodDefinition) {</span>
+        <span class="s2">const </span><span class="s1">upperScopeAsScopeBase = upperScope;</span>
+        <span class="s2">this</span><span class="s1">.type = type;</span>
+        <span class="s2">this</span><span class="s1">.#dynamic =</span>
+            <span class="s2">this</span><span class="s1">.type === ScopeType_1.ScopeType.global || </span><span class="s2">this</span><span class="s1">.type === ScopeType_1.ScopeType.with;</span>
+        <span class="s2">this</span><span class="s1">.block = block;</span>
+        <span class="s2">this</span><span class="s1">.variableScope = </span><span class="s2">this</span><span class="s1">.isVariableScope()</span>
+            <span class="s1">? </span><span class="s2">this</span>
+            <span class="s1">: </span><span class="s4">// eslint-disable-next-line @typescript-eslint/no-non-null-assertion</span>
+                <span class="s1">upperScopeAsScopeBase.variableScope;</span>
+        <span class="s2">this</span><span class="s1">.upper = upperScope;</span>
+        <span class="s4">/**</span>
+         <span class="s4">* Whether 'use strict' is in effect in this scope.</span>
+         <span class="s4">* </span><span class="s5">@member </span><span class="s4">{boolean} Scope#isStrict</span>
+         <span class="s4">*/</span>
+        <span class="s2">this</span><span class="s1">.isStrict = isStrictScope(</span><span class="s2">this</span><span class="s1">, block, isMethodDefinition);</span>
+        <span class="s4">// this is guaranteed to be correct at runtime</span>
+        <span class="s1">upperScopeAsScopeBase?.childScopes.push(</span><span class="s2">this</span><span class="s1">);</span>
+        <span class="s2">this</span><span class="s1">.#declaredVariables = scopeManager.declaredVariables;</span>
+        <span class="s1">registerScope(scopeManager, </span><span class="s2">this</span><span class="s1">);</span>
+    <span class="s1">}</span>
+    <span class="s1">isVariableScope() {</span>
+        <span class="s2">return </span><span class="s1">VARIABLE_SCOPE_TYPES.has(</span><span class="s2">this</span><span class="s1">.type);</span>
+    <span class="s1">}</span>
+    <span class="s1">shouldStaticallyCloseForGlobal(ref, scopeManager) {</span>
+        <span class="s4">// On global scope, let/const/class declarations should be resolved statically.</span>
+        <span class="s2">const </span><span class="s1">name = ref.identifier.name;</span>
+        <span class="s2">const </span><span class="s1">variable = </span><span class="s2">this</span><span class="s1">.set.get(name);</span>
+        <span class="s2">if </span><span class="s1">(!variable) {</span>
+            <span class="s2">return false</span><span class="s1">;</span>
+        <span class="s1">}</span>
+        <span class="s4">// variable exists on the scope</span>
+        <span class="s4">// in module mode, we can statically resolve everything, regardless of its decl type</span>
+        <span class="s2">if </span><span class="s1">(scopeManager.isModule()) {</span>
+            <span class="s2">return true</span><span class="s1">;</span>
+        <span class="s1">}</span>
+        <span class="s4">// in script mode, only certain cases should be statically resolved</span>
+        <span class="s4">// Example:</span>
+        <span class="s4">// a `var` decl is ignored by the runtime if it clashes with a global name</span>
+        <span class="s4">// this means that we should not resolve the reference to the variable</span>
+        <span class="s2">const </span><span class="s1">defs = variable.defs;</span>
+        <span class="s2">return </span><span class="s1">(defs.length &gt; </span><span class="s3">0 </span><span class="s1">&amp;&amp;</span>
+            <span class="s1">defs.every(def =&gt; {</span>
+                <span class="s2">if </span><span class="s1">(def.type === definition_1.DefinitionType.Variable &amp;&amp; def.parent.kind === </span><span class="s0">'var'</span><span class="s1">) {</span>
+                    <span class="s2">return false</span><span class="s1">;</span>
+                <span class="s1">}</span>
+                <span class="s2">return true</span><span class="s1">;</span>
+            <span class="s1">}));</span>
+    <span class="s1">}</span>
+    <span class="s1">close(scopeManager) {</span>
+        <span class="s2">let </span><span class="s1">closeRef;</span>
+        <span class="s2">if </span><span class="s1">(</span><span class="s2">this</span><span class="s1">.shouldStaticallyClose()) {</span>
+            <span class="s1">closeRef = </span><span class="s2">this</span><span class="s1">.#staticCloseRef;</span>
+        <span class="s1">}</span>
+        <span class="s2">else if </span><span class="s1">(</span><span class="s2">this</span><span class="s1">.type !== </span><span class="s0">'global'</span><span class="s1">) {</span>
+            <span class="s1">closeRef = </span><span class="s2">this</span><span class="s1">.#dynamicCloseRef;</span>
+        <span class="s1">}</span>
+        <span class="s2">else </span><span class="s1">{</span>
+            <span class="s1">closeRef = </span><span class="s2">this</span><span class="s1">.#globalCloseRef;</span>
+        <span class="s1">}</span>
+        <span class="s4">// Try Resolving all references in this scope.</span>
+        <span class="s1">(</span><span class="s3">0</span><span class="s1">, assert_1.assert)(</span><span class="s2">this</span><span class="s1">.leftToResolve);</span>
+        <span class="s2">this</span><span class="s1">.leftToResolve.forEach(ref =&gt; closeRef(ref, scopeManager));</span>
+        <span class="s2">this</span><span class="s1">.leftToResolve = </span><span class="s2">null</span><span class="s1">;</span>
+        <span class="s2">return this</span><span class="s1">.upper;</span>
+    <span class="s1">}</span>
+    <span class="s1">shouldStaticallyClose() {</span>
+        <span class="s2">return </span><span class="s1">!</span><span class="s2">this</span><span class="s1">.#dynamic;</span>
+    <span class="s1">}</span>
+    <span class="s4">/**</span>
+     <span class="s4">* To override by function scopes.</span>
+     <span class="s4">* References in default parameters isn't resolved to variables which are in their function body.</span>
+     <span class="s4">*/</span>
+    <span class="s1">defineVariable(nameOrVariable, set, variables, node, def) {</span>
+        <span class="s2">const </span><span class="s1">name = </span><span class="s2">typeof </span><span class="s1">nameOrVariable === </span><span class="s0">'string' </span><span class="s1">? nameOrVariable : nameOrVariable.name;</span>
+        <span class="s2">let </span><span class="s1">variable = set.get(name);</span>
+        <span class="s2">if </span><span class="s1">(!variable) {</span>
+            <span class="s1">variable =</span>
+                <span class="s2">typeof </span><span class="s1">nameOrVariable === </span><span class="s0">'string'</span>
+                    <span class="s1">? </span><span class="s2">new </span><span class="s1">variable_1.Variable(name, </span><span class="s2">this</span><span class="s1">)</span>
+                    <span class="s1">: nameOrVariable;</span>
+            <span class="s1">set.set(name, variable);</span>
+            <span class="s1">variables.push(variable);</span>
+        <span class="s1">}</span>
+        <span class="s2">if </span><span class="s1">(def) {</span>
+            <span class="s1">variable.defs.push(def);</span>
+            <span class="s2">this</span><span class="s1">.addDeclaredVariablesOfNode(variable, def.node);</span>
+            <span class="s2">this</span><span class="s1">.addDeclaredVariablesOfNode(variable, def.parent);</span>
+        <span class="s1">}</span>
+        <span class="s2">if </span><span class="s1">(node) {</span>
+            <span class="s1">variable.identifiers.push(node);</span>
+        <span class="s1">}</span>
+    <span class="s1">}</span>
+    <span class="s1">delegateToUpperScope(ref) {</span>
+        <span class="s2">this</span><span class="s1">.upper?.leftToResolve?.push(ref);</span>
+        <span class="s2">this</span><span class="s1">.through.push(ref);</span>
+    <span class="s1">}</span>
+    <span class="s1">isValidResolution(_ref, _variable) {</span>
+        <span class="s2">return true</span><span class="s1">;</span>
+    <span class="s1">}</span>
+    <span class="s1">addDeclaredVariablesOfNode(variable, node) {</span>
+        <span class="s2">if </span><span class="s1">(node == </span><span class="s2">null</span><span class="s1">) {</span>
+            <span class="s2">return</span><span class="s1">;</span>
+        <span class="s1">}</span>
+        <span class="s2">let </span><span class="s1">variables = </span><span class="s2">this</span><span class="s1">.#declaredVariables.get(node);</span>
+        <span class="s2">if </span><span class="s1">(variables == </span><span class="s2">null</span><span class="s1">) {</span>
+            <span class="s1">variables = [];</span>
+            <span class="s2">this</span><span class="s1">.#declaredVariables.set(node, variables);</span>
+        <span class="s1">}</span>
+        <span class="s2">if </span><span class="s1">(!variables.includes(variable)) {</span>
+            <span class="s1">variables.push(variable);</span>
+        <span class="s1">}</span>
+    <span class="s1">}</span>
+    <span class="s1">defineIdentifier(node, def) {</span>
+        <span class="s2">this</span><span class="s1">.defineVariable(node.name, </span><span class="s2">this</span><span class="s1">.set, </span><span class="s2">this</span><span class="s1">.variables, node, def);</span>
+    <span class="s1">}</span>
+    <span class="s1">defineLiteralIdentifier(node, def) {</span>
+        <span class="s2">this</span><span class="s1">.defineVariable(node.value, </span><span class="s2">this</span><span class="s1">.set, </span><span class="s2">this</span><span class="s1">.variables, </span><span class="s2">null</span><span class="s1">, def);</span>
+    <span class="s1">}</span>
+    <span class="s1">referenceDualValueType(node) {</span>
+        <span class="s2">const </span><span class="s1">ref = </span><span class="s2">new </span><span class="s1">Reference_1.Reference(node, </span><span class="s2">this</span><span class="s1">, Reference_1.ReferenceFlag.Read, </span><span class="s2">null</span><span class="s1">, </span><span class="s2">null</span><span class="s1">, </span><span class="s2">false</span><span class="s1">, Reference_1.ReferenceTypeFlag.Type | Reference_1.ReferenceTypeFlag.Value);</span>
+        <span class="s2">this</span><span class="s1">.references.push(ref);</span>
+        <span class="s2">this</span><span class="s1">.leftToResolve?.push(ref);</span>
+    <span class="s1">}</span>
+    <span class="s1">referenceType(node) {</span>
+        <span class="s2">const </span><span class="s1">ref = </span><span class="s2">new </span><span class="s1">Reference_1.Reference(node, </span><span class="s2">this</span><span class="s1">, Reference_1.ReferenceFlag.Read, </span><span class="s2">null</span><span class="s1">, </span><span class="s2">null</span><span class="s1">, </span><span class="s2">false</span><span class="s1">, Reference_1.ReferenceTypeFlag.Type);</span>
+        <span class="s2">this</span><span class="s1">.references.push(ref);</span>
+        <span class="s2">this</span><span class="s1">.leftToResolve?.push(ref);</span>
+    <span class="s1">}</span>
+    <span class="s1">referenceValue(node, assign = Reference_1.ReferenceFlag.Read, writeExpr, maybeImplicitGlobal, init = </span><span class="s2">false</span><span class="s1">) {</span>
+        <span class="s2">const </span><span class="s1">ref = </span><span class="s2">new </span><span class="s1">Reference_1.Reference(node, </span><span class="s2">this</span><span class="s1">, assign, writeExpr, maybeImplicitGlobal, init, Reference_1.ReferenceTypeFlag.Value);</span>
+        <span class="s2">this</span><span class="s1">.references.push(ref);</span>
+        <span class="s2">this</span><span class="s1">.leftToResolve?.push(ref);</span>
+    <span class="s1">}</span>
+<span class="s1">}</span>
+<span class="s1">exports.ScopeBase = ScopeBase;</span>
+</pre>
+</body>
+</html>

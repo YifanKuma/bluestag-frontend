@@ -1,0 +1,141 @@
+<html>
+<head>
+<title>edge-route-module-wrapper.js</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #067d17;}
+.s1 { color: #080808;}
+.s2 { color: #0033b3;}
+.s3 { color: #8c8c8c; font-style: italic;}
+.s4 { color: #8c8c8c; font-style: italic;}
+.s5 { color: #1750eb;}
+</style>
+</head>
+<body bgcolor="#ffffff">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#c0c0c0" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+edge-route-module-wrapper.js</font>
+</center></td></tr></table>
+<pre><span class="s0">&quot;use strict&quot;</span><span class="s1">;</span>
+<span class="s1">Object.defineProperty(exports, </span><span class="s0">&quot;__esModule&quot;</span><span class="s1">, {</span>
+    <span class="s1">value: </span><span class="s2">true</span>
+<span class="s1">});</span>
+<span class="s1">Object.defineProperty(exports, </span><span class="s0">&quot;EdgeRouteModuleWrapper&quot;</span><span class="s1">, {</span>
+    <span class="s1">enumerable: </span><span class="s2">true</span><span class="s1">,</span>
+    <span class="s1">get: </span><span class="s2">function</span><span class="s1">() {</span>
+        <span class="s2">return </span><span class="s1">EdgeRouteModuleWrapper;</span>
+    <span class="s1">}</span>
+<span class="s1">});</span>
+<span class="s1">require(</span><span class="s0">&quot;./globals&quot;</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">_adapter = require(</span><span class="s0">&quot;./adapter&quot;</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">_incrementalcache = require(</span><span class="s0">&quot;../lib/incremental-cache&quot;</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">_routematcher = require(</span><span class="s0">&quot;../route-matchers/route-matcher&quot;</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">_internaledgewaituntil = require(</span><span class="s0">&quot;./internal-edge-wait-until&quot;</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">_serverutils = require(</span><span class="s0">&quot;../server-utils&quot;</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">_querystring = require(</span><span class="s0">&quot;../../shared/lib/router/utils/querystring&quot;</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">_webonclose = require(</span><span class="s0">&quot;./web-on-close&quot;</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">_getedgepreviewprops = require(</span><span class="s0">&quot;./get-edge-preview-props&quot;</span><span class="s1">);</span>
+<span class="s2">class </span><span class="s1">EdgeRouteModuleWrapper {</span>
+    <span class="s3">/**</span>
+   <span class="s3">* The constructor is wrapped with private to ensure that it can only be</span>
+   <span class="s3">* constructed by the static wrap method.</span>
+   <span class="s3">*</span>
+   <span class="s3">* </span><span class="s4">@param </span><span class="s3">routeModule the route module to wrap</span>
+   <span class="s3">*/ </span><span class="s1">constructor(routeModule, nextConfig){</span>
+        <span class="s2">this</span><span class="s1">.routeModule = routeModule;</span>
+        <span class="s2">this</span><span class="s1">.nextConfig = nextConfig;</span>
+        <span class="s3">// TODO: (wyattjoh) possibly allow the module to define it's own matcher</span>
+        <span class="s2">this</span><span class="s1">.matcher = </span><span class="s2">new </span><span class="s1">_routematcher.RouteMatcher(routeModule.definition);</span>
+    <span class="s1">}</span>
+    <span class="s3">/**</span>
+   <span class="s3">* This will wrap a module with the EdgeModuleWrapper and return a function</span>
+   <span class="s3">* that can be used as a handler for the edge runtime.</span>
+   <span class="s3">*</span>
+   <span class="s3">* </span><span class="s4">@param </span><span class="s3">module the module to wrap</span>
+   <span class="s3">* </span><span class="s4">@param </span><span class="s3">options any options that should be passed to the adapter and</span>
+   <span class="s3">*                override the ones passed from the runtime</span>
+   <span class="s3">* </span><span class="s4">@returns </span><span class="s3">a function that can be used as a handler for the edge runtime</span>
+   <span class="s3">*/ </span><span class="s2">static </span><span class="s1">wrap(routeModule, options) {</span>
+        <span class="s3">// Create the module wrapper.</span>
+        <span class="s2">const </span><span class="s1">wrapper = </span><span class="s2">new </span><span class="s1">EdgeRouteModuleWrapper(routeModule, options.nextConfig);</span>
+        <span class="s3">// Return the wrapping function.</span>
+        <span class="s2">return </span><span class="s1">(opts)=&gt;{</span>
+            <span class="s2">return </span><span class="s1">(</span><span class="s5">0</span><span class="s1">, _adapter.adapter)({</span>
+                <span class="s1">...opts,</span>
+                <span class="s1">IncrementalCache: _incrementalcache.IncrementalCache,</span>
+                <span class="s3">// Bind the handler method to the wrapper so it still has context.</span>
+                <span class="s1">handler: wrapper.handler.bind(wrapper)</span>
+            <span class="s1">});</span>
+        <span class="s1">};</span>
+    <span class="s1">}</span>
+    <span class="s1">async handler(request, evt) {</span>
+        <span class="s2">const </span><span class="s1">utils = (</span><span class="s5">0</span><span class="s1">, _serverutils.getServerUtils)({</span>
+            <span class="s1">pageIsDynamic: </span><span class="s2">this</span><span class="s1">.matcher.isDynamic,</span>
+            <span class="s1">page: </span><span class="s2">this</span><span class="s1">.matcher.definition.pathname,</span>
+            <span class="s1">basePath: request.nextUrl.basePath,</span>
+            <span class="s3">// We don't need the `handleRewrite` util, so can just pass an empty object</span>
+            <span class="s1">rewrites: {},</span>
+            <span class="s3">// only used for rewrites, so setting an arbitrary default value here</span>
+            <span class="s1">caseSensitive: </span><span class="s2">false</span>
+        <span class="s1">});</span>
+        <span class="s2">const </span><span class="s1">{ params } = utils.normalizeDynamicRouteParams((</span><span class="s5">0</span><span class="s1">, _querystring.searchParamsToUrlQuery)(request.nextUrl.searchParams), </span><span class="s2">false</span><span class="s1">);</span>
+        <span class="s2">const </span><span class="s1">waitUntil = evt.waitUntil.bind(evt);</span>
+        <span class="s2">const </span><span class="s1">closeController = </span><span class="s2">new </span><span class="s1">_webonclose.CloseController();</span>
+        <span class="s2">const </span><span class="s1">previewProps = (</span><span class="s5">0</span><span class="s1">, _getedgepreviewprops.getEdgePreviewProps)();</span>
+        <span class="s3">// Create the context for the handler. This contains the params from the</span>
+        <span class="s3">// match (if any).</span>
+        <span class="s2">const </span><span class="s1">context = {</span>
+            <span class="s1">params,</span>
+            <span class="s1">prerenderManifest: {</span>
+                <span class="s1">version: </span><span class="s5">4</span><span class="s1">,</span>
+                <span class="s1">routes: {},</span>
+                <span class="s1">dynamicRoutes: {},</span>
+                <span class="s1">preview: previewProps,</span>
+                <span class="s1">notFoundRoutes: []</span>
+            <span class="s1">},</span>
+            <span class="s1">renderOpts: {</span>
+                <span class="s1">supportsDynamicResponse: </span><span class="s2">true</span><span class="s1">,</span>
+                <span class="s1">waitUntil,</span>
+                <span class="s1">onClose: closeController.onClose.bind(closeController),</span>
+                <span class="s1">onAfterTaskError: undefined,</span>
+                <span class="s1">experimental: {</span>
+                    <span class="s1">cacheComponents: !!process.env.__NEXT_CACHE_COMPONENTS,</span>
+                    <span class="s1">authInterrupts: !!process.env.__NEXT_EXPERIMENTAL_AUTH_INTERRUPTS</span>
+                <span class="s1">},</span>
+                <span class="s1">cacheLifeProfiles: </span><span class="s2">this</span><span class="s1">.nextConfig.experimental.cacheLife</span>
+            <span class="s1">},</span>
+            <span class="s1">sharedContext: {</span>
+                <span class="s1">buildId: </span><span class="s0">''</span>
+            <span class="s1">}</span>
+        <span class="s1">};</span>
+        <span class="s3">// Get the response from the handler.</span>
+        <span class="s2">let </span><span class="s1">res = </span><span class="s2">await this</span><span class="s1">.routeModule.handle(request, context);</span>
+        <span class="s2">const </span><span class="s1">waitUntilPromises = [</span>
+            <span class="s1">(</span><span class="s5">0</span><span class="s1">, _internaledgewaituntil.internal_getCurrentFunctionWaitUntil)()</span>
+        <span class="s1">];</span>
+        <span class="s2">if </span><span class="s1">(context.renderOpts.pendingWaitUntil) {</span>
+            <span class="s1">waitUntilPromises.push(context.renderOpts.pendingWaitUntil);</span>
+        <span class="s1">}</span>
+        <span class="s1">evt.waitUntil(Promise.all(waitUntilPromises));</span>
+        <span class="s2">if </span><span class="s1">(!res.body) {</span>
+            <span class="s3">// we can delay running it until a bit later --</span>
+            <span class="s3">// if it's needed, we'll have a `waitUntil` lock anyway.</span>
+            <span class="s1">setTimeout(()=&gt;closeController.dispatchClose(), </span><span class="s5">0</span><span class="s1">);</span>
+        <span class="s1">} </span><span class="s2">else </span><span class="s1">{</span>
+            <span class="s3">// NOTE: if this is a streaming response, onClose may be called later,</span>
+            <span class="s3">// so we can't rely on `closeController.listeners` -- it might be 0 at this point.</span>
+            <span class="s2">const </span><span class="s1">trackedBody = (</span><span class="s5">0</span><span class="s1">, _webonclose.trackStreamConsumed)(res.body, ()=&gt;closeController.dispatchClose());</span>
+            <span class="s1">res = </span><span class="s2">new </span><span class="s1">Response(trackedBody, {</span>
+                <span class="s1">status: res.status,</span>
+                <span class="s1">statusText: res.statusText,</span>
+                <span class="s1">headers: res.headers</span>
+            <span class="s1">});</span>
+        <span class="s1">}</span>
+        <span class="s2">return </span><span class="s1">res;</span>
+    <span class="s1">}</span>
+<span class="s1">}</span>
+
+<span class="s3">//# sourceMappingURL=edge-route-module-wrapper.js.map</span></pre>
+</body>
+</html>

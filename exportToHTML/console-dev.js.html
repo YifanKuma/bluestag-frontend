@@ -1,0 +1,202 @@
+<html>
+<head>
+<title>console-dev.js</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #067d17;}
+.s1 { color: #080808;}
+.s2 { color: #0033b3;}
+.s3 { color: #1750eb;}
+.s4 { color: #8c8c8c; font-style: italic;}
+.s5 { color: #0037a6;}
+</style>
+</head>
+<body bgcolor="#ffffff">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#c0c0c0" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+console-dev.js</font>
+</center></td></tr></table>
+<pre><span class="s0">&quot;use strict&quot;</span><span class="s1">;</span>
+<span class="s1">Object.defineProperty(exports, </span><span class="s0">&quot;__esModule&quot;</span><span class="s1">, {</span>
+    <span class="s1">value: </span><span class="s2">true</span>
+<span class="s1">});</span>
+<span class="s2">const </span><span class="s1">_picocolors = require(</span><span class="s0">&quot;../../lib/picocolors&quot;</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">_workunitasyncstorageexternal = require(</span><span class="s0">&quot;../app-render/work-unit-async-storage.external&quot;</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">isColorSupported = (</span><span class="s3">0</span><span class="s1">, _picocolors.dim)(</span><span class="s0">'test'</span><span class="s1">) !== </span><span class="s0">'test'</span><span class="s1">;</span>
+<span class="s4">// 50% opacity for dimmed text</span>
+<span class="s2">const </span><span class="s1">dimStyle = </span><span class="s0">'color: color(from currentColor xyz x y z / 0.5);'</span><span class="s1">;</span>
+<span class="s2">const </span><span class="s1">reactBadgeFormat = </span><span class="s0">'</span><span class="s5">\x1b</span><span class="s0">[0m</span><span class="s5">\x1b</span><span class="s0">[7m%c%s</span><span class="s5">\x1b</span><span class="s0">[0m%c '</span><span class="s1">;</span>
+<span class="s2">function </span><span class="s1">dimmedConsoleArgs(...inputArgs) {</span>
+    <span class="s2">if </span><span class="s1">(!isColorSupported) {</span>
+        <span class="s2">return </span><span class="s1">inputArgs;</span>
+    <span class="s1">}</span>
+    <span class="s2">const </span><span class="s1">newArgs = inputArgs.slice(</span><span class="s3">0</span><span class="s1">);</span>
+    <span class="s2">let </span><span class="s1">template = </span><span class="s0">''</span><span class="s1">;</span>
+    <span class="s2">let </span><span class="s1">argumentsPointer = </span><span class="s3">0</span><span class="s1">;</span>
+    <span class="s2">if </span><span class="s1">(</span><span class="s2">typeof </span><span class="s1">inputArgs[</span><span class="s3">0</span><span class="s1">] === </span><span class="s0">'string'</span><span class="s1">) {</span>
+        <span class="s2">const </span><span class="s1">originalTemplateString = inputArgs[</span><span class="s3">0</span><span class="s1">];</span>
+        <span class="s4">// Remove the original template string from the args.</span>
+        <span class="s1">newArgs.splice(argumentsPointer, </span><span class="s3">1</span><span class="s1">);</span>
+        <span class="s1">argumentsPointer += </span><span class="s3">1</span><span class="s1">;</span>
+        <span class="s2">let </span><span class="s1">i = </span><span class="s3">0</span><span class="s1">;</span>
+        <span class="s2">if </span><span class="s1">(originalTemplateString.startsWith(reactBadgeFormat)) {</span>
+            <span class="s1">i = reactBadgeFormat.length;</span>
+            <span class="s4">// for `format` we already moved the pointer earlier</span>
+            <span class="s4">// style, badge, reset style</span>
+            <span class="s1">argumentsPointer += </span><span class="s3">3</span><span class="s1">;</span>
+            <span class="s1">template += reactBadgeFormat;</span>
+            <span class="s4">// React's badge reset styles, reapply dimming</span>
+            <span class="s1">template += </span><span class="s0">'</span><span class="s5">\x1b</span><span class="s0">[2m%c'</span><span class="s1">;</span>
+            <span class="s4">// argumentsPointer includes template</span>
+            <span class="s1">newArgs.splice(argumentsPointer - </span><span class="s3">1</span><span class="s1">, </span><span class="s3">0</span><span class="s1">, dimStyle);</span>
+            <span class="s4">// dim the badge</span>
+            <span class="s1">newArgs[</span><span class="s3">0</span><span class="s1">] += </span><span class="s0">`;</span><span class="s1">${dimStyle}</span><span class="s0">`</span><span class="s1">;</span>
+        <span class="s1">}</span>
+        <span class="s2">for</span><span class="s1">(i; i &lt; originalTemplateString.length; i++){</span>
+            <span class="s2">const </span><span class="s1">currentChar = originalTemplateString[i];</span>
+            <span class="s2">if </span><span class="s1">(currentChar !== </span><span class="s0">'%'</span><span class="s1">) {</span>
+                <span class="s1">template += currentChar;</span>
+                <span class="s2">continue</span><span class="s1">;</span>
+            <span class="s1">}</span>
+            <span class="s2">const </span><span class="s1">nextChar = originalTemplateString[i + </span><span class="s3">1</span><span class="s1">];</span>
+            <span class="s1">++i;</span>
+            <span class="s2">switch</span><span class="s1">(nextChar){</span>
+                <span class="s2">case </span><span class="s0">'f'</span><span class="s1">:</span>
+                <span class="s2">case </span><span class="s0">'O'</span><span class="s1">:</span>
+                <span class="s2">case </span><span class="s0">'o'</span><span class="s1">:</span>
+                <span class="s2">case </span><span class="s0">'d'</span><span class="s1">:</span>
+                <span class="s2">case </span><span class="s0">'s'</span><span class="s1">:</span>
+                <span class="s2">case </span><span class="s0">'i'</span><span class="s1">:</span>
+                <span class="s2">case </span><span class="s0">'c'</span><span class="s1">:</span>
+                    <span class="s1">++argumentsPointer;</span>
+                    <span class="s1">template += </span><span class="s0">`%</span><span class="s1">${nextChar}</span><span class="s0">`</span><span class="s1">;</span>
+                    <span class="s2">break</span><span class="s1">;</span>
+                <span class="s2">default</span><span class="s1">:</span>
+                    <span class="s1">template += </span><span class="s0">`%</span><span class="s1">${nextChar}</span><span class="s0">`</span><span class="s1">;</span>
+            <span class="s1">}</span>
+        <span class="s1">}</span>
+    <span class="s1">}</span>
+    <span class="s2">for</span><span class="s1">(argumentsPointer; argumentsPointer &lt; inputArgs.length; ++argumentsPointer){</span>
+        <span class="s2">const </span><span class="s1">arg = inputArgs[argumentsPointer];</span>
+        <span class="s2">const </span><span class="s1">argType = </span><span class="s2">typeof </span><span class="s1">arg;</span>
+        <span class="s2">if </span><span class="s1">(argumentsPointer &gt; </span><span class="s3">0</span><span class="s1">) {</span>
+            <span class="s1">template += </span><span class="s0">' '</span><span class="s1">;</span>
+        <span class="s1">}</span>
+        <span class="s2">switch</span><span class="s1">(argType){</span>
+            <span class="s2">case </span><span class="s0">'boolean'</span><span class="s1">:</span>
+            <span class="s2">case </span><span class="s0">'string'</span><span class="s1">:</span>
+                <span class="s1">template += </span><span class="s0">'%s'</span><span class="s1">;</span>
+                <span class="s2">break</span><span class="s1">;</span>
+            <span class="s2">case </span><span class="s0">'bigint'</span><span class="s1">:</span>
+                <span class="s1">template += </span><span class="s0">'%s'</span><span class="s1">;</span>
+                <span class="s2">break</span><span class="s1">;</span>
+            <span class="s2">case </span><span class="s0">'number'</span><span class="s1">:</span>
+                <span class="s2">if </span><span class="s1">(arg % </span><span class="s3">0</span><span class="s1">) {</span>
+                    <span class="s1">template += </span><span class="s0">'%f'</span><span class="s1">;</span>
+                <span class="s1">} </span><span class="s2">else </span><span class="s1">{</span>
+                    <span class="s1">template += </span><span class="s0">'%d'</span><span class="s1">;</span>
+                <span class="s1">}</span>
+                <span class="s2">break</span><span class="s1">;</span>
+            <span class="s2">case </span><span class="s0">'object'</span><span class="s1">:</span>
+                <span class="s1">template += </span><span class="s0">'%O'</span><span class="s1">;</span>
+                <span class="s2">break</span><span class="s1">;</span>
+            <span class="s2">case </span><span class="s0">'symbol'</span><span class="s1">:</span>
+            <span class="s2">case </span><span class="s0">'undefined'</span><span class="s1">:</span>
+            <span class="s2">case </span><span class="s0">'function'</span><span class="s1">:</span>
+                <span class="s1">template += </span><span class="s0">'%s'</span><span class="s1">;</span>
+                <span class="s2">break</span><span class="s1">;</span>
+            <span class="s2">default</span><span class="s1">:</span>
+                <span class="s4">// deopt to string for new, unknown types</span>
+                <span class="s1">template += </span><span class="s0">'%s'</span><span class="s1">;</span>
+        <span class="s1">}</span>
+    <span class="s1">}</span>
+    <span class="s1">template += </span><span class="s0">'</span><span class="s5">\x1b</span><span class="s0">[22m'</span><span class="s1">;</span>
+    <span class="s2">return </span><span class="s1">[</span>
+        <span class="s1">(</span><span class="s3">0</span><span class="s1">, _picocolors.dim)(</span><span class="s0">`%c</span><span class="s1">${template}</span><span class="s0">`</span><span class="s1">),</span>
+        <span class="s1">dimStyle,</span>
+        <span class="s1">...newArgs</span>
+    <span class="s1">];</span>
+<span class="s1">}</span>
+<span class="s2">function </span><span class="s1">dimConsoleCall(methodName, args) {</span>
+    <span class="s2">switch</span><span class="s1">(methodName){</span>
+        <span class="s2">case </span><span class="s0">'dir'</span><span class="s1">:</span>
+        <span class="s2">case </span><span class="s0">'dirxml'</span><span class="s1">:</span>
+        <span class="s2">case </span><span class="s0">'group'</span><span class="s1">:</span>
+        <span class="s2">case </span><span class="s0">'groupCollapsed'</span><span class="s1">:</span>
+        <span class="s2">case </span><span class="s0">'groupEnd'</span><span class="s1">:</span>
+        <span class="s2">case </span><span class="s0">'table'</span><span class="s1">:</span>
+            <span class="s1">{</span>
+                <span class="s4">// These methods cannot be colorized because they don't take a formatting string.</span>
+                <span class="s2">return </span><span class="s1">args;</span>
+            <span class="s1">}</span>
+        <span class="s2">case </span><span class="s0">'assert'</span><span class="s1">:</span>
+            <span class="s1">{</span>
+                <span class="s4">// assert takes formatting options as the second argument.</span>
+                <span class="s2">return </span><span class="s1">[</span>
+                    <span class="s1">args[</span><span class="s3">0</span><span class="s1">]</span>
+                <span class="s1">].concat(...dimmedConsoleArgs(args[</span><span class="s3">1</span><span class="s1">], ...args.slice(</span><span class="s3">2</span><span class="s1">)));</span>
+            <span class="s1">}</span>
+        <span class="s2">case </span><span class="s0">'error'</span><span class="s1">:</span>
+        <span class="s2">case </span><span class="s0">'debug'</span><span class="s1">:</span>
+        <span class="s2">case </span><span class="s0">'info'</span><span class="s1">:</span>
+        <span class="s2">case </span><span class="s0">'log'</span><span class="s1">:</span>
+        <span class="s2">case </span><span class="s0">'trace'</span><span class="s1">:</span>
+        <span class="s2">case </span><span class="s0">'warn'</span><span class="s1">:</span>
+            <span class="s2">return </span><span class="s1">dimmedConsoleArgs(args[</span><span class="s3">0</span><span class="s1">], ...args.slice(</span><span class="s3">1</span><span class="s1">));</span>
+        <span class="s2">default</span><span class="s1">:</span>
+            <span class="s2">return </span><span class="s1">methodName;</span>
+    <span class="s1">}</span>
+<span class="s1">}</span>
+<span class="s4">// Based on https://github.com/facebook/react/blob/28dc0776be2e1370fe217549d32aee2519f0cf05/packages/react-server/src/ReactFlightServer.js#L248</span>
+<span class="s2">function </span><span class="s1">patchConsoleMethodDEV(methodName) {</span>
+    <span class="s2">const </span><span class="s1">descriptor = Object.getOwnPropertyDescriptor(console, methodName);</span>
+    <span class="s2">if </span><span class="s1">(descriptor &amp;&amp; (descriptor.configurable || descriptor.writable) &amp;&amp; </span><span class="s2">typeof </span><span class="s1">descriptor.value === </span><span class="s0">'function'</span><span class="s1">) {</span>
+        <span class="s2">const </span><span class="s1">originalMethod = descriptor.value;</span>
+        <span class="s2">const </span><span class="s1">originalName = Object.getOwnPropertyDescriptor(originalMethod, </span><span class="s0">'name'</span><span class="s1">);</span>
+        <span class="s2">const </span><span class="s1">wrapperMethod = </span><span class="s2">function</span><span class="s1">(...args) {</span>
+            <span class="s2">const </span><span class="s1">workUnitStore = _workunitasyncstorageexternal.workUnitAsyncStorage.getStore();</span>
+            <span class="s2">switch</span><span class="s1">(workUnitStore == </span><span class="s2">null </span><span class="s1">? </span><span class="s2">void </span><span class="s3">0 </span><span class="s1">: workUnitStore.type){</span>
+                <span class="s2">case </span><span class="s0">'prerender'</span><span class="s1">:</span>
+                <span class="s2">case </span><span class="s0">'prerender-client'</span><span class="s1">:</span>
+                <span class="s2">case </span><span class="s0">'prerender-runtime'</span><span class="s1">:</span>
+                    <span class="s1">originalMethod.apply(</span><span class="s2">this</span><span class="s1">, dimConsoleCall(methodName, args));</span>
+                    <span class="s2">break</span><span class="s1">;</span>
+                <span class="s2">case </span><span class="s0">'prerender-ppr'</span><span class="s1">:</span>
+                <span class="s2">case </span><span class="s0">'prerender-legacy'</span><span class="s1">:</span>
+                <span class="s2">case </span><span class="s0">'request'</span><span class="s1">:</span>
+                <span class="s2">case </span><span class="s0">'cache'</span><span class="s1">:</span>
+                <span class="s2">case </span><span class="s0">'private-cache'</span><span class="s1">:</span>
+                <span class="s2">case </span><span class="s0">'unstable-cache'</span><span class="s1">:</span>
+                <span class="s2">case </span><span class="s1">undefined:</span>
+                    <span class="s1">originalMethod.apply(</span><span class="s2">this</span><span class="s1">, args);</span>
+                    <span class="s2">break</span><span class="s1">;</span>
+                <span class="s2">default</span><span class="s1">:</span>
+                    <span class="s1">workUnitStore;</span>
+            <span class="s1">}</span>
+        <span class="s1">};</span>
+        <span class="s2">if </span><span class="s1">(originalName) {</span>
+            <span class="s1">Object.defineProperty(wrapperMethod, </span><span class="s0">'name'</span><span class="s1">, originalName);</span>
+        <span class="s1">}</span>
+        <span class="s1">Object.defineProperty(console, methodName, {</span>
+            <span class="s1">value: wrapperMethod</span>
+        <span class="s1">});</span>
+    <span class="s1">}</span>
+<span class="s1">}</span>
+<span class="s1">patchConsoleMethodDEV(</span><span class="s0">'error'</span><span class="s1">);</span>
+<span class="s1">patchConsoleMethodDEV(</span><span class="s0">'assert'</span><span class="s1">);</span>
+<span class="s1">patchConsoleMethodDEV(</span><span class="s0">'debug'</span><span class="s1">);</span>
+<span class="s1">patchConsoleMethodDEV(</span><span class="s0">'dir'</span><span class="s1">);</span>
+<span class="s1">patchConsoleMethodDEV(</span><span class="s0">'dirxml'</span><span class="s1">);</span>
+<span class="s1">patchConsoleMethodDEV(</span><span class="s0">'group'</span><span class="s1">);</span>
+<span class="s1">patchConsoleMethodDEV(</span><span class="s0">'groupCollapsed'</span><span class="s1">);</span>
+<span class="s1">patchConsoleMethodDEV(</span><span class="s0">'groupEnd'</span><span class="s1">);</span>
+<span class="s1">patchConsoleMethodDEV(</span><span class="s0">'info'</span><span class="s1">);</span>
+<span class="s1">patchConsoleMethodDEV(</span><span class="s0">'log'</span><span class="s1">);</span>
+<span class="s1">patchConsoleMethodDEV(</span><span class="s0">'table'</span><span class="s1">);</span>
+<span class="s1">patchConsoleMethodDEV(</span><span class="s0">'trace'</span><span class="s1">);</span>
+<span class="s1">patchConsoleMethodDEV(</span><span class="s0">'warn'</span><span class="s1">);</span>
+
+<span class="s4">//# sourceMappingURL=console-dev.js.map</span></pre>
+</body>
+</html>

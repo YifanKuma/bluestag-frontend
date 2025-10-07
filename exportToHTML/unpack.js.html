@@ -1,0 +1,892 @@
+<html>
+<head>
+<title>unpack.js</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #067d17;}
+.s1 { color: #080808;}
+.s2 { color: #8c8c8c; font-style: italic;}
+.s3 { color: #0033b3;}
+.s4 { color: #1750eb;}
+.s5 { color: #264eff;}
+</style>
+</head>
+<body bgcolor="#ffffff">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#c0c0c0" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+unpack.js</font>
+</center></td></tr></table>
+<pre><span class="s0">&quot;use strict&quot;</span><span class="s1">;</span>
+<span class="s2">// the PEND/UNPEND stuff tracks whether we're ready to emit end/close yet.</span>
+<span class="s2">// but the path reservations are required to avoid race conditions where</span>
+<span class="s2">// parallelized unpack ops may mess with one another, due to dependencies</span>
+<span class="s2">// (like a Link depending on its target) or destructive operations (like</span>
+<span class="s2">// clobbering an fs object to create one of a different type.)</span>
+<span class="s3">var </span><span class="s1">__createBinding = (</span><span class="s3">this </span><span class="s1">&amp;&amp; </span><span class="s3">this</span><span class="s1">.__createBinding) || (Object.create ? (</span><span class="s3">function</span><span class="s1">(o, m, k, k2) {</span>
+    <span class="s3">if </span><span class="s1">(k2 === undefined) k2 = k;</span>
+    <span class="s3">var </span><span class="s1">desc = Object.getOwnPropertyDescriptor(m, k);</span>
+    <span class="s3">if </span><span class="s1">(!desc || (</span><span class="s0">&quot;get&quot; </span><span class="s3">in </span><span class="s1">desc ? !m.__esModule : desc.writable || desc.configurable)) {</span>
+      <span class="s1">desc = { enumerable: </span><span class="s3">true</span><span class="s1">, get: </span><span class="s3">function</span><span class="s1">() { </span><span class="s3">return </span><span class="s1">m[k]; } };</span>
+    <span class="s1">}</span>
+    <span class="s1">Object.defineProperty(o, k2, desc);</span>
+<span class="s1">}) : (</span><span class="s3">function</span><span class="s1">(o, m, k, k2) {</span>
+    <span class="s3">if </span><span class="s1">(k2 === undefined) k2 = k;</span>
+    <span class="s1">o[k2] = m[k];</span>
+<span class="s1">}));</span>
+<span class="s3">var </span><span class="s1">__setModuleDefault = (</span><span class="s3">this </span><span class="s1">&amp;&amp; </span><span class="s3">this</span><span class="s1">.__setModuleDefault) || (Object.create ? (</span><span class="s3">function</span><span class="s1">(o, v) {</span>
+    <span class="s1">Object.defineProperty(o, </span><span class="s0">&quot;default&quot;</span><span class="s1">, { enumerable: </span><span class="s3">true</span><span class="s1">, value: v });</span>
+<span class="s1">}) : </span><span class="s3">function</span><span class="s1">(o, v) {</span>
+    <span class="s1">o[</span><span class="s0">&quot;default&quot;</span><span class="s1">] = v;</span>
+<span class="s1">});</span>
+<span class="s3">var </span><span class="s1">__importStar = (</span><span class="s3">this </span><span class="s1">&amp;&amp; </span><span class="s3">this</span><span class="s1">.__importStar) || </span><span class="s3">function </span><span class="s1">(mod) {</span>
+    <span class="s3">if </span><span class="s1">(mod &amp;&amp; mod.__esModule) </span><span class="s3">return </span><span class="s1">mod;</span>
+    <span class="s3">var </span><span class="s1">result = {};</span>
+    <span class="s3">if </span><span class="s1">(mod != </span><span class="s3">null</span><span class="s1">) </span><span class="s3">for </span><span class="s1">(</span><span class="s3">var </span><span class="s1">k </span><span class="s3">in </span><span class="s1">mod) </span><span class="s3">if </span><span class="s1">(k !== </span><span class="s0">&quot;default&quot; </span><span class="s1">&amp;&amp; Object.prototype.hasOwnProperty.call(mod, k)) __createBinding(result, mod, k);</span>
+    <span class="s1">__setModuleDefault(result, mod);</span>
+    <span class="s3">return </span><span class="s1">result;</span>
+<span class="s1">};</span>
+<span class="s3">var </span><span class="s1">__importDefault = (</span><span class="s3">this </span><span class="s1">&amp;&amp; </span><span class="s3">this</span><span class="s1">.__importDefault) || </span><span class="s3">function </span><span class="s1">(mod) {</span>
+    <span class="s3">return </span><span class="s1">(mod &amp;&amp; mod.__esModule) ? mod : { </span><span class="s0">&quot;default&quot;</span><span class="s1">: mod };</span>
+<span class="s1">};</span>
+<span class="s1">Object.defineProperty(exports, </span><span class="s0">&quot;__esModule&quot;</span><span class="s1">, { value: </span><span class="s3">true </span><span class="s1">});</span>
+<span class="s1">exports.UnpackSync = exports.Unpack = </span><span class="s3">void </span><span class="s4">0</span><span class="s1">;</span>
+<span class="s3">const </span><span class="s1">fsm = __importStar(require(</span><span class="s0">&quot;@isaacs/fs-minipass&quot;</span><span class="s1">));</span>
+<span class="s3">const </span><span class="s1">node_assert_1 = __importDefault(require(</span><span class="s0">&quot;node:assert&quot;</span><span class="s1">));</span>
+<span class="s3">const </span><span class="s1">node_crypto_1 = require(</span><span class="s0">&quot;node:crypto&quot;</span><span class="s1">);</span>
+<span class="s3">const </span><span class="s1">node_fs_1 = __importDefault(require(</span><span class="s0">&quot;node:fs&quot;</span><span class="s1">));</span>
+<span class="s3">const </span><span class="s1">node_path_1 = __importDefault(require(</span><span class="s0">&quot;node:path&quot;</span><span class="s1">));</span>
+<span class="s3">const </span><span class="s1">get_write_flag_js_1 = require(</span><span class="s0">&quot;./get-write-flag.js&quot;</span><span class="s1">);</span>
+<span class="s3">const </span><span class="s1">mkdir_js_1 = require(</span><span class="s0">&quot;./mkdir.js&quot;</span><span class="s1">);</span>
+<span class="s3">const </span><span class="s1">normalize_windows_path_js_1 = require(</span><span class="s0">&quot;./normalize-windows-path.js&quot;</span><span class="s1">);</span>
+<span class="s3">const </span><span class="s1">parse_js_1 = require(</span><span class="s0">&quot;./parse.js&quot;</span><span class="s1">);</span>
+<span class="s3">const </span><span class="s1">strip_absolute_path_js_1 = require(</span><span class="s0">&quot;./strip-absolute-path.js&quot;</span><span class="s1">);</span>
+<span class="s3">const </span><span class="s1">wc = __importStar(require(</span><span class="s0">&quot;./winchars.js&quot;</span><span class="s1">));</span>
+<span class="s3">const </span><span class="s1">path_reservations_js_1 = require(</span><span class="s0">&quot;./path-reservations.js&quot;</span><span class="s1">);</span>
+<span class="s3">const </span><span class="s1">ONENTRY = Symbol(</span><span class="s0">'onEntry'</span><span class="s1">);</span>
+<span class="s3">const </span><span class="s1">CHECKFS = Symbol(</span><span class="s0">'checkFs'</span><span class="s1">);</span>
+<span class="s3">const </span><span class="s1">CHECKFS2 = Symbol(</span><span class="s0">'checkFs2'</span><span class="s1">);</span>
+<span class="s3">const </span><span class="s1">ISREUSABLE = Symbol(</span><span class="s0">'isReusable'</span><span class="s1">);</span>
+<span class="s3">const </span><span class="s1">MAKEFS = Symbol(</span><span class="s0">'makeFs'</span><span class="s1">);</span>
+<span class="s3">const </span><span class="s1">FILE = Symbol(</span><span class="s0">'file'</span><span class="s1">);</span>
+<span class="s3">const </span><span class="s1">DIRECTORY = Symbol(</span><span class="s0">'directory'</span><span class="s1">);</span>
+<span class="s3">const </span><span class="s1">LINK = Symbol(</span><span class="s0">'link'</span><span class="s1">);</span>
+<span class="s3">const </span><span class="s1">SYMLINK = Symbol(</span><span class="s0">'symlink'</span><span class="s1">);</span>
+<span class="s3">const </span><span class="s1">HARDLINK = Symbol(</span><span class="s0">'hardlink'</span><span class="s1">);</span>
+<span class="s3">const </span><span class="s1">UNSUPPORTED = Symbol(</span><span class="s0">'unsupported'</span><span class="s1">);</span>
+<span class="s3">const </span><span class="s1">CHECKPATH = Symbol(</span><span class="s0">'checkPath'</span><span class="s1">);</span>
+<span class="s3">const </span><span class="s1">MKDIR = Symbol(</span><span class="s0">'mkdir'</span><span class="s1">);</span>
+<span class="s3">const </span><span class="s1">ONERROR = Symbol(</span><span class="s0">'onError'</span><span class="s1">);</span>
+<span class="s3">const </span><span class="s1">PENDING = Symbol(</span><span class="s0">'pending'</span><span class="s1">);</span>
+<span class="s3">const </span><span class="s1">PEND = Symbol(</span><span class="s0">'pend'</span><span class="s1">);</span>
+<span class="s3">const </span><span class="s1">UNPEND = Symbol(</span><span class="s0">'unpend'</span><span class="s1">);</span>
+<span class="s3">const </span><span class="s1">ENDED = Symbol(</span><span class="s0">'ended'</span><span class="s1">);</span>
+<span class="s3">const </span><span class="s1">MAYBECLOSE = Symbol(</span><span class="s0">'maybeClose'</span><span class="s1">);</span>
+<span class="s3">const </span><span class="s1">SKIP = Symbol(</span><span class="s0">'skip'</span><span class="s1">);</span>
+<span class="s3">const </span><span class="s1">DOCHOWN = Symbol(</span><span class="s0">'doChown'</span><span class="s1">);</span>
+<span class="s3">const </span><span class="s1">UID = Symbol(</span><span class="s0">'uid'</span><span class="s1">);</span>
+<span class="s3">const </span><span class="s1">GID = Symbol(</span><span class="s0">'gid'</span><span class="s1">);</span>
+<span class="s3">const </span><span class="s1">CHECKED_CWD = Symbol(</span><span class="s0">'checkedCwd'</span><span class="s1">);</span>
+<span class="s3">const </span><span class="s1">platform = process.env.TESTING_TAR_FAKE_PLATFORM || process.platform;</span>
+<span class="s3">const </span><span class="s1">isWindows = platform === </span><span class="s0">'win32'</span><span class="s1">;</span>
+<span class="s3">const </span><span class="s1">DEFAULT_MAX_DEPTH = </span><span class="s4">1024</span><span class="s1">;</span>
+<span class="s2">// Unlinks on Windows are not atomic.</span>
+<span class="s2">//</span>
+<span class="s2">// This means that if you have a file entry, followed by another</span>
+<span class="s2">// file entry with an identical name, and you cannot re-use the file</span>
+<span class="s2">// (because it's a hardlink, or because unlink:true is set, or it's</span>
+<span class="s2">// Windows, which does not have useful nlink values), then the unlink</span>
+<span class="s2">// will be committed to the disk AFTER the new file has been written</span>
+<span class="s2">// over the old one, deleting the new file.</span>
+<span class="s2">//</span>
+<span class="s2">// To work around this, on Windows systems, we rename the file and then</span>
+<span class="s2">// delete the renamed file.  It's a sloppy kludge, but frankly, I do not</span>
+<span class="s2">// know of a better way to do this, given windows' non-atomic unlink</span>
+<span class="s2">// semantics.</span>
+<span class="s2">//</span>
+<span class="s2">// See: https://github.com/npm/node-tar/issues/183</span>
+<span class="s2">/* c8 ignore start */</span>
+<span class="s3">const </span><span class="s1">unlinkFile = (path, cb) =&gt; {</span>
+    <span class="s3">if </span><span class="s1">(!isWindows) {</span>
+        <span class="s3">return </span><span class="s1">node_fs_1.default.unlink(path, cb);</span>
+    <span class="s1">}</span>
+    <span class="s3">const </span><span class="s1">name = path + </span><span class="s0">'.DELETE.' </span><span class="s1">+ (</span><span class="s4">0</span><span class="s1">, node_crypto_1.randomBytes)(</span><span class="s4">16</span><span class="s1">).toString(</span><span class="s0">'hex'</span><span class="s1">);</span>
+    <span class="s1">node_fs_1.default.rename(path, name, er =&gt; {</span>
+        <span class="s3">if </span><span class="s1">(er) {</span>
+            <span class="s3">return </span><span class="s1">cb(er);</span>
+        <span class="s1">}</span>
+        <span class="s1">node_fs_1.default.unlink(name, cb);</span>
+    <span class="s1">});</span>
+<span class="s1">};</span>
+<span class="s2">/* c8 ignore stop */</span>
+<span class="s2">/* c8 ignore start */</span>
+<span class="s3">const </span><span class="s1">unlinkFileSync = (path) =&gt; {</span>
+    <span class="s3">if </span><span class="s1">(!isWindows) {</span>
+        <span class="s3">return </span><span class="s1">node_fs_1.default.unlinkSync(path);</span>
+    <span class="s1">}</span>
+    <span class="s3">const </span><span class="s1">name = path + </span><span class="s0">'.DELETE.' </span><span class="s1">+ (</span><span class="s4">0</span><span class="s1">, node_crypto_1.randomBytes)(</span><span class="s4">16</span><span class="s1">).toString(</span><span class="s0">'hex'</span><span class="s1">);</span>
+    <span class="s1">node_fs_1.default.renameSync(path, name);</span>
+    <span class="s1">node_fs_1.default.unlinkSync(name);</span>
+<span class="s1">};</span>
+<span class="s2">/* c8 ignore stop */</span>
+<span class="s2">// this.gid, entry.gid, this.processUid</span>
+<span class="s3">const </span><span class="s1">uint32 = (a, b, c) =&gt; a !== undefined &amp;&amp; a === a &gt;&gt;&gt; </span><span class="s4">0 </span><span class="s1">? a</span>
+    <span class="s1">: b !== undefined &amp;&amp; b === b &gt;&gt;&gt; </span><span class="s4">0 </span><span class="s1">? b</span>
+        <span class="s1">: c;</span>
+<span class="s3">class </span><span class="s1">Unpack </span><span class="s3">extends </span><span class="s1">parse_js_1.Parser {</span>
+    <span class="s1">[ENDED] = </span><span class="s3">false</span><span class="s1">;</span>
+    <span class="s1">[CHECKED_CWD] = </span><span class="s3">false</span><span class="s1">;</span>
+    <span class="s1">[PENDING] = </span><span class="s4">0</span><span class="s1">;</span>
+    <span class="s1">reservations = </span><span class="s3">new </span><span class="s1">path_reservations_js_1.PathReservations();</span>
+    <span class="s1">transform;</span>
+    <span class="s1">writable = </span><span class="s3">true</span><span class="s1">;</span>
+    <span class="s1">readable = </span><span class="s3">false</span><span class="s1">;</span>
+    <span class="s1">uid;</span>
+    <span class="s1">gid;</span>
+    <span class="s1">setOwner;</span>
+    <span class="s1">preserveOwner;</span>
+    <span class="s1">processGid;</span>
+    <span class="s1">processUid;</span>
+    <span class="s1">maxDepth;</span>
+    <span class="s1">forceChown;</span>
+    <span class="s1">win32;</span>
+    <span class="s1">newer;</span>
+    <span class="s1">keep;</span>
+    <span class="s1">noMtime;</span>
+    <span class="s1">preservePaths;</span>
+    <span class="s1">unlink;</span>
+    <span class="s1">cwd;</span>
+    <span class="s1">strip;</span>
+    <span class="s1">processUmask;</span>
+    <span class="s1">umask;</span>
+    <span class="s1">dmode;</span>
+    <span class="s1">fmode;</span>
+    <span class="s1">chmod;</span>
+    <span class="s1">constructor(opt = {}) {</span>
+        <span class="s1">opt.ondone = () =&gt; {</span>
+            <span class="s3">this</span><span class="s1">[ENDED] = </span><span class="s3">true</span><span class="s1">;</span>
+            <span class="s3">this</span><span class="s1">[MAYBECLOSE]();</span>
+        <span class="s1">};</span>
+        <span class="s3">super</span><span class="s1">(opt);</span>
+        <span class="s3">this</span><span class="s1">.transform = opt.transform;</span>
+        <span class="s3">this</span><span class="s1">.chmod = !!opt.chmod;</span>
+        <span class="s3">if </span><span class="s1">(</span><span class="s3">typeof </span><span class="s1">opt.uid === </span><span class="s0">'number' </span><span class="s1">|| </span><span class="s3">typeof </span><span class="s1">opt.gid === </span><span class="s0">'number'</span><span class="s1">) {</span>
+            <span class="s2">// need both or neither</span>
+            <span class="s3">if </span><span class="s1">(</span><span class="s3">typeof </span><span class="s1">opt.uid !== </span><span class="s0">'number' </span><span class="s1">||</span>
+                <span class="s3">typeof </span><span class="s1">opt.gid !== </span><span class="s0">'number'</span><span class="s1">) {</span>
+                <span class="s3">throw new </span><span class="s1">TypeError(</span><span class="s0">'cannot set owner without number uid and gid'</span><span class="s1">);</span>
+            <span class="s1">}</span>
+            <span class="s3">if </span><span class="s1">(opt.preserveOwner) {</span>
+                <span class="s3">throw new </span><span class="s1">TypeError(</span><span class="s0">'cannot preserve owner in archive and also set owner explicitly'</span><span class="s1">);</span>
+            <span class="s1">}</span>
+            <span class="s3">this</span><span class="s1">.uid = opt.uid;</span>
+            <span class="s3">this</span><span class="s1">.gid = opt.gid;</span>
+            <span class="s3">this</span><span class="s1">.setOwner = </span><span class="s3">true</span><span class="s1">;</span>
+        <span class="s1">}</span>
+        <span class="s3">else </span><span class="s1">{</span>
+            <span class="s3">this</span><span class="s1">.uid = undefined;</span>
+            <span class="s3">this</span><span class="s1">.gid = undefined;</span>
+            <span class="s3">this</span><span class="s1">.setOwner = </span><span class="s3">false</span><span class="s1">;</span>
+        <span class="s1">}</span>
+        <span class="s2">// default true for root</span>
+        <span class="s3">if </span><span class="s1">(opt.preserveOwner === undefined &amp;&amp;</span>
+            <span class="s3">typeof </span><span class="s1">opt.uid !== </span><span class="s0">'number'</span><span class="s1">) {</span>
+            <span class="s3">this</span><span class="s1">.preserveOwner = !!(process.getuid &amp;&amp; process.getuid() === </span><span class="s4">0</span><span class="s1">);</span>
+        <span class="s1">}</span>
+        <span class="s3">else </span><span class="s1">{</span>
+            <span class="s3">this</span><span class="s1">.preserveOwner = !!opt.preserveOwner;</span>
+        <span class="s1">}</span>
+        <span class="s3">this</span><span class="s1">.processUid =</span>
+            <span class="s1">(</span><span class="s3">this</span><span class="s1">.preserveOwner || </span><span class="s3">this</span><span class="s1">.setOwner) &amp;&amp; process.getuid ?</span>
+                <span class="s1">process.getuid()</span>
+                <span class="s1">: undefined;</span>
+        <span class="s3">this</span><span class="s1">.processGid =</span>
+            <span class="s1">(</span><span class="s3">this</span><span class="s1">.preserveOwner || </span><span class="s3">this</span><span class="s1">.setOwner) &amp;&amp; process.getgid ?</span>
+                <span class="s1">process.getgid()</span>
+                <span class="s1">: undefined;</span>
+        <span class="s2">// prevent excessively deep nesting of subfolders</span>
+        <span class="s2">// set to `Infinity` to remove this restriction</span>
+        <span class="s3">this</span><span class="s1">.maxDepth =</span>
+            <span class="s3">typeof </span><span class="s1">opt.maxDepth === </span><span class="s0">'number' </span><span class="s1">?</span>
+                <span class="s1">opt.maxDepth</span>
+                <span class="s1">: DEFAULT_MAX_DEPTH;</span>
+        <span class="s2">// mostly just for testing, but useful in some cases.</span>
+        <span class="s2">// Forcibly trigger a chown on every entry, no matter what</span>
+        <span class="s3">this</span><span class="s1">.forceChown = opt.forceChown === </span><span class="s3">true</span><span class="s1">;</span>
+        <span class="s2">// turn &gt;&lt;?| in filenames into 0xf000-higher encoded forms</span>
+        <span class="s3">this</span><span class="s1">.win32 = !!opt.win32 || isWindows;</span>
+        <span class="s2">// do not unpack over files that are newer than what's in the archive</span>
+        <span class="s3">this</span><span class="s1">.newer = !!opt.newer;</span>
+        <span class="s2">// do not unpack over ANY files</span>
+        <span class="s3">this</span><span class="s1">.keep = !!opt.keep;</span>
+        <span class="s2">// do not set mtime/atime of extracted entries</span>
+        <span class="s3">this</span><span class="s1">.noMtime = !!opt.noMtime;</span>
+        <span class="s2">// allow .., absolute path entries, and unpacking through symlinks</span>
+        <span class="s2">// without this, warn and skip .., relativize absolutes, and error</span>
+        <span class="s2">// on symlinks in extraction path</span>
+        <span class="s3">this</span><span class="s1">.preservePaths = !!opt.preservePaths;</span>
+        <span class="s2">// unlink files and links before writing. This breaks existing hard</span>
+        <span class="s2">// links, and removes symlink directories rather than erroring</span>
+        <span class="s3">this</span><span class="s1">.unlink = !!opt.unlink;</span>
+        <span class="s3">this</span><span class="s1">.cwd = (</span><span class="s4">0</span><span class="s1">, normalize_windows_path_js_1.normalizeWindowsPath)(node_path_1.default.resolve(opt.cwd || process.cwd()));</span>
+        <span class="s3">this</span><span class="s1">.strip = Number(opt.strip) || </span><span class="s4">0</span><span class="s1">;</span>
+        <span class="s2">// if we're not chmodding, then we don't need the process umask</span>
+        <span class="s3">this</span><span class="s1">.processUmask =</span>
+            <span class="s1">!</span><span class="s3">this</span><span class="s1">.chmod ? </span><span class="s4">0</span>
+                <span class="s1">: </span><span class="s3">typeof </span><span class="s1">opt.processUmask === </span><span class="s0">'number' </span><span class="s1">? opt.processUmask</span>
+                    <span class="s1">: process.umask();</span>
+        <span class="s3">this</span><span class="s1">.umask =</span>
+            <span class="s3">typeof </span><span class="s1">opt.umask === </span><span class="s0">'number' </span><span class="s1">? opt.umask : </span><span class="s3">this</span><span class="s1">.processUmask;</span>
+        <span class="s2">// default mode for dirs created as parents</span>
+        <span class="s3">this</span><span class="s1">.dmode = opt.dmode || </span><span class="s4">0o0777 </span><span class="s1">&amp; ~</span><span class="s3">this</span><span class="s1">.umask;</span>
+        <span class="s3">this</span><span class="s1">.fmode = opt.fmode || </span><span class="s4">0o0666 </span><span class="s1">&amp; ~</span><span class="s3">this</span><span class="s1">.umask;</span>
+        <span class="s3">this</span><span class="s1">.on(</span><span class="s0">'entry'</span><span class="s1">, entry =&gt; </span><span class="s3">this</span><span class="s1">[ONENTRY](entry));</span>
+    <span class="s1">}</span>
+    <span class="s2">// a bad or damaged archive is a warning for Parser, but an error</span>
+    <span class="s2">// when extracting.  Mark those errors as unrecoverable, because</span>
+    <span class="s2">// the Unpack contract cannot be met.</span>
+    <span class="s1">warn(code, msg, data = {}) {</span>
+        <span class="s3">if </span><span class="s1">(code === </span><span class="s0">'TAR_BAD_ARCHIVE' </span><span class="s1">|| code === </span><span class="s0">'TAR_ABORT'</span><span class="s1">) {</span>
+            <span class="s1">data.recoverable = </span><span class="s3">false</span><span class="s1">;</span>
+        <span class="s1">}</span>
+        <span class="s3">return super</span><span class="s1">.warn(code, msg, data);</span>
+    <span class="s1">}</span>
+    <span class="s1">[MAYBECLOSE]() {</span>
+        <span class="s3">if </span><span class="s1">(</span><span class="s3">this</span><span class="s1">[ENDED] &amp;&amp; </span><span class="s3">this</span><span class="s1">[PENDING] === </span><span class="s4">0</span><span class="s1">) {</span>
+            <span class="s3">this</span><span class="s1">.emit(</span><span class="s0">'prefinish'</span><span class="s1">);</span>
+            <span class="s3">this</span><span class="s1">.emit(</span><span class="s0">'finish'</span><span class="s1">);</span>
+            <span class="s3">this</span><span class="s1">.emit(</span><span class="s0">'end'</span><span class="s1">);</span>
+        <span class="s1">}</span>
+    <span class="s1">}</span>
+    <span class="s1">[CHECKPATH](entry) {</span>
+        <span class="s3">const </span><span class="s1">p = (</span><span class="s4">0</span><span class="s1">, normalize_windows_path_js_1.normalizeWindowsPath)(entry.path);</span>
+        <span class="s3">const </span><span class="s1">parts = p.split(</span><span class="s0">'/'</span><span class="s1">);</span>
+        <span class="s3">if </span><span class="s1">(</span><span class="s3">this</span><span class="s1">.strip) {</span>
+            <span class="s3">if </span><span class="s1">(parts.length &lt; </span><span class="s3">this</span><span class="s1">.strip) {</span>
+                <span class="s3">return false</span><span class="s1">;</span>
+            <span class="s1">}</span>
+            <span class="s3">if </span><span class="s1">(entry.type === </span><span class="s0">'Link'</span><span class="s1">) {</span>
+                <span class="s3">const </span><span class="s1">linkparts = (</span><span class="s4">0</span><span class="s1">, normalize_windows_path_js_1.normalizeWindowsPath)(String(entry.linkpath)).split(</span><span class="s0">'/'</span><span class="s1">);</span>
+                <span class="s3">if </span><span class="s1">(linkparts.length &gt;= </span><span class="s3">this</span><span class="s1">.strip) {</span>
+                    <span class="s1">entry.linkpath = linkparts.slice(</span><span class="s3">this</span><span class="s1">.strip).join(</span><span class="s0">'/'</span><span class="s1">);</span>
+                <span class="s1">}</span>
+                <span class="s3">else </span><span class="s1">{</span>
+                    <span class="s3">return false</span><span class="s1">;</span>
+                <span class="s1">}</span>
+            <span class="s1">}</span>
+            <span class="s1">parts.splice(</span><span class="s4">0</span><span class="s1">, </span><span class="s3">this</span><span class="s1">.strip);</span>
+            <span class="s1">entry.path = parts.join(</span><span class="s0">'/'</span><span class="s1">);</span>
+        <span class="s1">}</span>
+        <span class="s3">if </span><span class="s1">(isFinite(</span><span class="s3">this</span><span class="s1">.maxDepth) &amp;&amp; parts.length &gt; </span><span class="s3">this</span><span class="s1">.maxDepth) {</span>
+            <span class="s3">this</span><span class="s1">.warn(</span><span class="s0">'TAR_ENTRY_ERROR'</span><span class="s1">, </span><span class="s0">'path excessively deep'</span><span class="s1">, {</span>
+                <span class="s1">entry,</span>
+                <span class="s1">path: p,</span>
+                <span class="s1">depth: parts.length,</span>
+                <span class="s1">maxDepth: </span><span class="s3">this</span><span class="s1">.maxDepth,</span>
+            <span class="s1">});</span>
+            <span class="s3">return false</span><span class="s1">;</span>
+        <span class="s1">}</span>
+        <span class="s3">if </span><span class="s1">(!</span><span class="s3">this</span><span class="s1">.preservePaths) {</span>
+            <span class="s3">if </span><span class="s1">(parts.includes(</span><span class="s0">'..'</span><span class="s1">) ||</span>
+                <span class="s2">/* c8 ignore next */</span>
+                <span class="s1">(isWindows &amp;&amp; </span><span class="s5">/^[a-z]:\.\.$/i</span><span class="s1">.test(parts[</span><span class="s4">0</span><span class="s1">] ?? </span><span class="s0">''</span><span class="s1">))) {</span>
+                <span class="s3">this</span><span class="s1">.warn(</span><span class="s0">'TAR_ENTRY_ERROR'</span><span class="s1">, </span><span class="s0">`path contains '..'`</span><span class="s1">, {</span>
+                    <span class="s1">entry,</span>
+                    <span class="s1">path: p,</span>
+                <span class="s1">});</span>
+                <span class="s3">return false</span><span class="s1">;</span>
+            <span class="s1">}</span>
+            <span class="s2">// strip off the root</span>
+            <span class="s3">const </span><span class="s1">[root, stripped] = (</span><span class="s4">0</span><span class="s1">, strip_absolute_path_js_1.stripAbsolutePath)(p);</span>
+            <span class="s3">if </span><span class="s1">(root) {</span>
+                <span class="s1">entry.path = String(stripped);</span>
+                <span class="s3">this</span><span class="s1">.warn(</span><span class="s0">'TAR_ENTRY_INFO'</span><span class="s1">, </span><span class="s0">`stripping </span><span class="s1">${root} </span><span class="s0">from absolute path`</span><span class="s1">, {</span>
+                    <span class="s1">entry,</span>
+                    <span class="s1">path: p,</span>
+                <span class="s1">});</span>
+            <span class="s1">}</span>
+        <span class="s1">}</span>
+        <span class="s3">if </span><span class="s1">(node_path_1.default.isAbsolute(entry.path)) {</span>
+            <span class="s1">entry.absolute = (</span><span class="s4">0</span><span class="s1">, normalize_windows_path_js_1.normalizeWindowsPath)(node_path_1.default.resolve(entry.path));</span>
+        <span class="s1">}</span>
+        <span class="s3">else </span><span class="s1">{</span>
+            <span class="s1">entry.absolute = (</span><span class="s4">0</span><span class="s1">, normalize_windows_path_js_1.normalizeWindowsPath)(node_path_1.default.resolve(</span><span class="s3">this</span><span class="s1">.cwd, entry.path));</span>
+        <span class="s1">}</span>
+        <span class="s2">// if we somehow ended up with a path that escapes the cwd, and we are</span>
+        <span class="s2">// not in preservePaths mode, then something is fishy!  This should have</span>
+        <span class="s2">// been prevented above, so ignore this for coverage.</span>
+        <span class="s2">/* c8 ignore start - defense in depth */</span>
+        <span class="s3">if </span><span class="s1">(!</span><span class="s3">this</span><span class="s1">.preservePaths &amp;&amp;</span>
+            <span class="s3">typeof </span><span class="s1">entry.absolute === </span><span class="s0">'string' </span><span class="s1">&amp;&amp;</span>
+            <span class="s1">entry.absolute.indexOf(</span><span class="s3">this</span><span class="s1">.cwd + </span><span class="s0">'/'</span><span class="s1">) !== </span><span class="s4">0 </span><span class="s1">&amp;&amp;</span>
+            <span class="s1">entry.absolute !== </span><span class="s3">this</span><span class="s1">.cwd) {</span>
+            <span class="s3">this</span><span class="s1">.warn(</span><span class="s0">'TAR_ENTRY_ERROR'</span><span class="s1">, </span><span class="s0">'path escaped extraction target'</span><span class="s1">, {</span>
+                <span class="s1">entry,</span>
+                <span class="s1">path: (</span><span class="s4">0</span><span class="s1">, normalize_windows_path_js_1.normalizeWindowsPath)(entry.path),</span>
+                <span class="s1">resolvedPath: entry.absolute,</span>
+                <span class="s1">cwd: </span><span class="s3">this</span><span class="s1">.cwd,</span>
+            <span class="s1">});</span>
+            <span class="s3">return false</span><span class="s1">;</span>
+        <span class="s1">}</span>
+        <span class="s2">/* c8 ignore stop */</span>
+        <span class="s2">// an archive can set properties on the extraction directory, but it</span>
+        <span class="s2">// may not replace the cwd with a different kind of thing entirely.</span>
+        <span class="s3">if </span><span class="s1">(entry.absolute === </span><span class="s3">this</span><span class="s1">.cwd &amp;&amp;</span>
+            <span class="s1">entry.type !== </span><span class="s0">'Directory' </span><span class="s1">&amp;&amp;</span>
+            <span class="s1">entry.type !== </span><span class="s0">'GNUDumpDir'</span><span class="s1">) {</span>
+            <span class="s3">return false</span><span class="s1">;</span>
+        <span class="s1">}</span>
+        <span class="s2">// only encode : chars that aren't drive letter indicators</span>
+        <span class="s3">if </span><span class="s1">(</span><span class="s3">this</span><span class="s1">.win32) {</span>
+            <span class="s3">const </span><span class="s1">{ root: aRoot } = node_path_1.default.win32.parse(String(entry.absolute));</span>
+            <span class="s1">entry.absolute =</span>
+                <span class="s1">aRoot + wc.encode(String(entry.absolute).slice(aRoot.length));</span>
+            <span class="s3">const </span><span class="s1">{ root: pRoot } = node_path_1.default.win32.parse(entry.path);</span>
+            <span class="s1">entry.path = pRoot + wc.encode(entry.path.slice(pRoot.length));</span>
+        <span class="s1">}</span>
+        <span class="s3">return true</span><span class="s1">;</span>
+    <span class="s1">}</span>
+    <span class="s1">[ONENTRY](entry) {</span>
+        <span class="s3">if </span><span class="s1">(!</span><span class="s3">this</span><span class="s1">[CHECKPATH](entry)) {</span>
+            <span class="s3">return </span><span class="s1">entry.resume();</span>
+        <span class="s1">}</span>
+        <span class="s1">node_assert_1.default.equal(</span><span class="s3">typeof </span><span class="s1">entry.absolute, </span><span class="s0">'string'</span><span class="s1">);</span>
+        <span class="s3">switch </span><span class="s1">(entry.type) {</span>
+            <span class="s3">case </span><span class="s0">'Directory'</span><span class="s1">:</span>
+            <span class="s3">case </span><span class="s0">'GNUDumpDir'</span><span class="s1">:</span>
+                <span class="s3">if </span><span class="s1">(entry.mode) {</span>
+                    <span class="s1">entry.mode = entry.mode | </span><span class="s4">0o700</span><span class="s1">;</span>
+                <span class="s1">}</span>
+            <span class="s2">// eslint-disable-next-line no-fallthrough</span>
+            <span class="s3">case </span><span class="s0">'File'</span><span class="s1">:</span>
+            <span class="s3">case </span><span class="s0">'OldFile'</span><span class="s1">:</span>
+            <span class="s3">case </span><span class="s0">'ContiguousFile'</span><span class="s1">:</span>
+            <span class="s3">case </span><span class="s0">'Link'</span><span class="s1">:</span>
+            <span class="s3">case </span><span class="s0">'SymbolicLink'</span><span class="s1">:</span>
+                <span class="s3">return this</span><span class="s1">[CHECKFS](entry);</span>
+            <span class="s3">case </span><span class="s0">'CharacterDevice'</span><span class="s1">:</span>
+            <span class="s3">case </span><span class="s0">'BlockDevice'</span><span class="s1">:</span>
+            <span class="s3">case </span><span class="s0">'FIFO'</span><span class="s1">:</span>
+            <span class="s3">default</span><span class="s1">:</span>
+                <span class="s3">return this</span><span class="s1">[UNSUPPORTED](entry);</span>
+        <span class="s1">}</span>
+    <span class="s1">}</span>
+    <span class="s1">[ONERROR](er, entry) {</span>
+        <span class="s2">// Cwd has to exist, or else nothing works. That's serious.</span>
+        <span class="s2">// Other errors are warnings, which raise the error in strict</span>
+        <span class="s2">// mode, but otherwise continue on.</span>
+        <span class="s3">if </span><span class="s1">(er.name === </span><span class="s0">'CwdError'</span><span class="s1">) {</span>
+            <span class="s3">this</span><span class="s1">.emit(</span><span class="s0">'error'</span><span class="s1">, er);</span>
+        <span class="s1">}</span>
+        <span class="s3">else </span><span class="s1">{</span>
+            <span class="s3">this</span><span class="s1">.warn(</span><span class="s0">'TAR_ENTRY_ERROR'</span><span class="s1">, er, { entry });</span>
+            <span class="s3">this</span><span class="s1">[UNPEND]();</span>
+            <span class="s1">entry.resume();</span>
+        <span class="s1">}</span>
+    <span class="s1">}</span>
+    <span class="s1">[MKDIR](dir, mode, cb) {</span>
+        <span class="s1">(</span><span class="s4">0</span><span class="s1">, mkdir_js_1.mkdir)((</span><span class="s4">0</span><span class="s1">, normalize_windows_path_js_1.normalizeWindowsPath)(dir), {</span>
+            <span class="s1">uid: </span><span class="s3">this</span><span class="s1">.uid,</span>
+            <span class="s1">gid: </span><span class="s3">this</span><span class="s1">.gid,</span>
+            <span class="s1">processUid: </span><span class="s3">this</span><span class="s1">.processUid,</span>
+            <span class="s1">processGid: </span><span class="s3">this</span><span class="s1">.processGid,</span>
+            <span class="s1">umask: </span><span class="s3">this</span><span class="s1">.processUmask,</span>
+            <span class="s1">preserve: </span><span class="s3">this</span><span class="s1">.preservePaths,</span>
+            <span class="s1">unlink: </span><span class="s3">this</span><span class="s1">.unlink,</span>
+            <span class="s1">cwd: </span><span class="s3">this</span><span class="s1">.cwd,</span>
+            <span class="s1">mode: mode,</span>
+        <span class="s1">}, cb);</span>
+    <span class="s1">}</span>
+    <span class="s1">[DOCHOWN](entry) {</span>
+        <span class="s2">// in preserve owner mode, chown if the entry doesn't match process</span>
+        <span class="s2">// in set owner mode, chown if setting doesn't match process</span>
+        <span class="s3">return </span><span class="s1">(</span><span class="s3">this</span><span class="s1">.forceChown ||</span>
+            <span class="s1">(</span><span class="s3">this</span><span class="s1">.preserveOwner &amp;&amp;</span>
+                <span class="s1">((</span><span class="s3">typeof </span><span class="s1">entry.uid === </span><span class="s0">'number' </span><span class="s1">&amp;&amp;</span>
+                    <span class="s1">entry.uid !== </span><span class="s3">this</span><span class="s1">.processUid) ||</span>
+                    <span class="s1">(</span><span class="s3">typeof </span><span class="s1">entry.gid === </span><span class="s0">'number' </span><span class="s1">&amp;&amp;</span>
+                        <span class="s1">entry.gid !== </span><span class="s3">this</span><span class="s1">.processGid))) ||</span>
+            <span class="s1">(</span><span class="s3">typeof this</span><span class="s1">.uid === </span><span class="s0">'number' </span><span class="s1">&amp;&amp;</span>
+                <span class="s3">this</span><span class="s1">.uid !== </span><span class="s3">this</span><span class="s1">.processUid) ||</span>
+            <span class="s1">(</span><span class="s3">typeof this</span><span class="s1">.gid === </span><span class="s0">'number' </span><span class="s1">&amp;&amp; </span><span class="s3">this</span><span class="s1">.gid !== </span><span class="s3">this</span><span class="s1">.processGid));</span>
+    <span class="s1">}</span>
+    <span class="s1">[UID](entry) {</span>
+        <span class="s3">return </span><span class="s1">uint32(</span><span class="s3">this</span><span class="s1">.uid, entry.uid, </span><span class="s3">this</span><span class="s1">.processUid);</span>
+    <span class="s1">}</span>
+    <span class="s1">[GID](entry) {</span>
+        <span class="s3">return </span><span class="s1">uint32(</span><span class="s3">this</span><span class="s1">.gid, entry.gid, </span><span class="s3">this</span><span class="s1">.processGid);</span>
+    <span class="s1">}</span>
+    <span class="s1">[FILE](entry, fullyDone) {</span>
+        <span class="s3">const </span><span class="s1">mode = </span><span class="s3">typeof </span><span class="s1">entry.mode === </span><span class="s0">'number' </span><span class="s1">?</span>
+            <span class="s1">entry.mode &amp; </span><span class="s4">0o7777</span>
+            <span class="s1">: </span><span class="s3">this</span><span class="s1">.fmode;</span>
+        <span class="s3">const </span><span class="s1">stream = </span><span class="s3">new </span><span class="s1">fsm.WriteStream(String(entry.absolute), {</span>
+            <span class="s2">// slight lie, but it can be numeric flags</span>
+            <span class="s1">flags: (</span><span class="s4">0</span><span class="s1">, get_write_flag_js_1.getWriteFlag)(entry.size),</span>
+            <span class="s1">mode: mode,</span>
+            <span class="s1">autoClose: </span><span class="s3">false</span><span class="s1">,</span>
+        <span class="s1">});</span>
+        <span class="s1">stream.on(</span><span class="s0">'error'</span><span class="s1">, (er) =&gt; {</span>
+            <span class="s3">if </span><span class="s1">(stream.fd) {</span>
+                <span class="s1">node_fs_1.default.close(stream.fd, () =&gt; { });</span>
+            <span class="s1">}</span>
+            <span class="s2">// flush all the data out so that we aren't left hanging</span>
+            <span class="s2">// if the error wasn't actually fatal.  otherwise the parse</span>
+            <span class="s2">// is blocked, and we never proceed.</span>
+            <span class="s1">stream.write = () =&gt; </span><span class="s3">true</span><span class="s1">;</span>
+            <span class="s3">this</span><span class="s1">[ONERROR](er, entry);</span>
+            <span class="s1">fullyDone();</span>
+        <span class="s1">});</span>
+        <span class="s3">let </span><span class="s1">actions = </span><span class="s4">1</span><span class="s1">;</span>
+        <span class="s3">const </span><span class="s1">done = (er) =&gt; {</span>
+            <span class="s3">if </span><span class="s1">(er) {</span>
+                <span class="s2">/* c8 ignore start - we should always have a fd by now */</span>
+                <span class="s3">if </span><span class="s1">(stream.fd) {</span>
+                    <span class="s1">node_fs_1.default.close(stream.fd, () =&gt; { });</span>
+                <span class="s1">}</span>
+                <span class="s2">/* c8 ignore stop */</span>
+                <span class="s3">this</span><span class="s1">[ONERROR](er, entry);</span>
+                <span class="s1">fullyDone();</span>
+                <span class="s3">return</span><span class="s1">;</span>
+            <span class="s1">}</span>
+            <span class="s3">if </span><span class="s1">(--actions === </span><span class="s4">0</span><span class="s1">) {</span>
+                <span class="s3">if </span><span class="s1">(stream.fd !== undefined) {</span>
+                    <span class="s1">node_fs_1.default.close(stream.fd, er =&gt; {</span>
+                        <span class="s3">if </span><span class="s1">(er) {</span>
+                            <span class="s3">this</span><span class="s1">[ONERROR](er, entry);</span>
+                        <span class="s1">}</span>
+                        <span class="s3">else </span><span class="s1">{</span>
+                            <span class="s3">this</span><span class="s1">[UNPEND]();</span>
+                        <span class="s1">}</span>
+                        <span class="s1">fullyDone();</span>
+                    <span class="s1">});</span>
+                <span class="s1">}</span>
+            <span class="s1">}</span>
+        <span class="s1">};</span>
+        <span class="s1">stream.on(</span><span class="s0">'finish'</span><span class="s1">, () =&gt; {</span>
+            <span class="s2">// if futimes fails, try utimes</span>
+            <span class="s2">// if utimes fails, fail with the original error</span>
+            <span class="s2">// same for fchown/chown</span>
+            <span class="s3">const </span><span class="s1">abs = String(entry.absolute);</span>
+            <span class="s3">const </span><span class="s1">fd = stream.fd;</span>
+            <span class="s3">if </span><span class="s1">(</span><span class="s3">typeof </span><span class="s1">fd === </span><span class="s0">'number' </span><span class="s1">&amp;&amp; entry.mtime &amp;&amp; !</span><span class="s3">this</span><span class="s1">.noMtime) {</span>
+                <span class="s1">actions++;</span>
+                <span class="s3">const </span><span class="s1">atime = entry.atime || </span><span class="s3">new </span><span class="s1">Date();</span>
+                <span class="s3">const </span><span class="s1">mtime = entry.mtime;</span>
+                <span class="s1">node_fs_1.default.futimes(fd, atime, mtime, er =&gt; er ?</span>
+                    <span class="s1">node_fs_1.default.utimes(abs, atime, mtime, er2 =&gt; done(er2 &amp;&amp; er))</span>
+                    <span class="s1">: done());</span>
+            <span class="s1">}</span>
+            <span class="s3">if </span><span class="s1">(</span><span class="s3">typeof </span><span class="s1">fd === </span><span class="s0">'number' </span><span class="s1">&amp;&amp; </span><span class="s3">this</span><span class="s1">[DOCHOWN](entry)) {</span>
+                <span class="s1">actions++;</span>
+                <span class="s3">const </span><span class="s1">uid = </span><span class="s3">this</span><span class="s1">[UID](entry);</span>
+                <span class="s3">const </span><span class="s1">gid = </span><span class="s3">this</span><span class="s1">[GID](entry);</span>
+                <span class="s3">if </span><span class="s1">(</span><span class="s3">typeof </span><span class="s1">uid === </span><span class="s0">'number' </span><span class="s1">&amp;&amp; </span><span class="s3">typeof </span><span class="s1">gid === </span><span class="s0">'number'</span><span class="s1">) {</span>
+                    <span class="s1">node_fs_1.default.fchown(fd, uid, gid, er =&gt; er ?</span>
+                        <span class="s1">node_fs_1.default.chown(abs, uid, gid, er2 =&gt; done(er2 &amp;&amp; er))</span>
+                        <span class="s1">: done());</span>
+                <span class="s1">}</span>
+            <span class="s1">}</span>
+            <span class="s1">done();</span>
+        <span class="s1">});</span>
+        <span class="s3">const </span><span class="s1">tx = </span><span class="s3">this</span><span class="s1">.transform ? </span><span class="s3">this</span><span class="s1">.transform(entry) || entry : entry;</span>
+        <span class="s3">if </span><span class="s1">(tx !== entry) {</span>
+            <span class="s1">tx.on(</span><span class="s0">'error'</span><span class="s1">, (er) =&gt; {</span>
+                <span class="s3">this</span><span class="s1">[ONERROR](er, entry);</span>
+                <span class="s1">fullyDone();</span>
+            <span class="s1">});</span>
+            <span class="s1">entry.pipe(tx);</span>
+        <span class="s1">}</span>
+        <span class="s1">tx.pipe(stream);</span>
+    <span class="s1">}</span>
+    <span class="s1">[DIRECTORY](entry, fullyDone) {</span>
+        <span class="s3">const </span><span class="s1">mode = </span><span class="s3">typeof </span><span class="s1">entry.mode === </span><span class="s0">'number' </span><span class="s1">?</span>
+            <span class="s1">entry.mode &amp; </span><span class="s4">0o7777</span>
+            <span class="s1">: </span><span class="s3">this</span><span class="s1">.dmode;</span>
+        <span class="s3">this</span><span class="s1">[MKDIR](String(entry.absolute), mode, er =&gt; {</span>
+            <span class="s3">if </span><span class="s1">(er) {</span>
+                <span class="s3">this</span><span class="s1">[ONERROR](er, entry);</span>
+                <span class="s1">fullyDone();</span>
+                <span class="s3">return</span><span class="s1">;</span>
+            <span class="s1">}</span>
+            <span class="s3">let </span><span class="s1">actions = </span><span class="s4">1</span><span class="s1">;</span>
+            <span class="s3">const </span><span class="s1">done = () =&gt; {</span>
+                <span class="s3">if </span><span class="s1">(--actions === </span><span class="s4">0</span><span class="s1">) {</span>
+                    <span class="s1">fullyDone();</span>
+                    <span class="s3">this</span><span class="s1">[UNPEND]();</span>
+                    <span class="s1">entry.resume();</span>
+                <span class="s1">}</span>
+            <span class="s1">};</span>
+            <span class="s3">if </span><span class="s1">(entry.mtime &amp;&amp; !</span><span class="s3">this</span><span class="s1">.noMtime) {</span>
+                <span class="s1">actions++;</span>
+                <span class="s1">node_fs_1.default.utimes(String(entry.absolute), entry.atime || </span><span class="s3">new </span><span class="s1">Date(), entry.mtime, done);</span>
+            <span class="s1">}</span>
+            <span class="s3">if </span><span class="s1">(</span><span class="s3">this</span><span class="s1">[DOCHOWN](entry)) {</span>
+                <span class="s1">actions++;</span>
+                <span class="s1">node_fs_1.default.chown(String(entry.absolute), Number(</span><span class="s3">this</span><span class="s1">[UID](entry)), Number(</span><span class="s3">this</span><span class="s1">[GID](entry)), done);</span>
+            <span class="s1">}</span>
+            <span class="s1">done();</span>
+        <span class="s1">});</span>
+    <span class="s1">}</span>
+    <span class="s1">[UNSUPPORTED](entry) {</span>
+        <span class="s1">entry.unsupported = </span><span class="s3">true</span><span class="s1">;</span>
+        <span class="s3">this</span><span class="s1">.warn(</span><span class="s0">'TAR_ENTRY_UNSUPPORTED'</span><span class="s1">, </span><span class="s0">`unsupported entry type: </span><span class="s1">${entry.type}</span><span class="s0">`</span><span class="s1">, { entry });</span>
+        <span class="s1">entry.resume();</span>
+    <span class="s1">}</span>
+    <span class="s1">[SYMLINK](entry, done) {</span>
+        <span class="s3">this</span><span class="s1">[LINK](entry, String(entry.linkpath), </span><span class="s0">'symlink'</span><span class="s1">, done);</span>
+    <span class="s1">}</span>
+    <span class="s1">[HARDLINK](entry, done) {</span>
+        <span class="s3">const </span><span class="s1">linkpath = (</span><span class="s4">0</span><span class="s1">, normalize_windows_path_js_1.normalizeWindowsPath)(node_path_1.default.resolve(</span><span class="s3">this</span><span class="s1">.cwd, String(entry.linkpath)));</span>
+        <span class="s3">this</span><span class="s1">[LINK](entry, linkpath, </span><span class="s0">'link'</span><span class="s1">, done);</span>
+    <span class="s1">}</span>
+    <span class="s1">[PEND]() {</span>
+        <span class="s3">this</span><span class="s1">[PENDING]++;</span>
+    <span class="s1">}</span>
+    <span class="s1">[UNPEND]() {</span>
+        <span class="s3">this</span><span class="s1">[PENDING]--;</span>
+        <span class="s3">this</span><span class="s1">[MAYBECLOSE]();</span>
+    <span class="s1">}</span>
+    <span class="s1">[SKIP](entry) {</span>
+        <span class="s3">this</span><span class="s1">[UNPEND]();</span>
+        <span class="s1">entry.resume();</span>
+    <span class="s1">}</span>
+    <span class="s2">// Check if we can reuse an existing filesystem entry safely and</span>
+    <span class="s2">// overwrite it, rather than unlinking and recreating</span>
+    <span class="s2">// Windows doesn't report a useful nlink, so we just never reuse entries</span>
+    <span class="s1">[ISREUSABLE](entry, st) {</span>
+        <span class="s3">return </span><span class="s1">(entry.type === </span><span class="s0">'File' </span><span class="s1">&amp;&amp;</span>
+            <span class="s1">!</span><span class="s3">this</span><span class="s1">.unlink &amp;&amp;</span>
+            <span class="s1">st.isFile() &amp;&amp;</span>
+            <span class="s1">st.nlink &lt;= </span><span class="s4">1 </span><span class="s1">&amp;&amp;</span>
+            <span class="s1">!isWindows);</span>
+    <span class="s1">}</span>
+    <span class="s2">// check if a thing is there, and if so, try to clobber it</span>
+    <span class="s1">[CHECKFS](entry) {</span>
+        <span class="s3">this</span><span class="s1">[PEND]();</span>
+        <span class="s3">const </span><span class="s1">paths = [entry.path];</span>
+        <span class="s3">if </span><span class="s1">(entry.linkpath) {</span>
+            <span class="s1">paths.push(entry.linkpath);</span>
+        <span class="s1">}</span>
+        <span class="s3">this</span><span class="s1">.reservations.reserve(paths, done =&gt; </span><span class="s3">this</span><span class="s1">[CHECKFS2](entry, done));</span>
+    <span class="s1">}</span>
+    <span class="s1">[CHECKFS2](entry, fullyDone) {</span>
+        <span class="s3">const </span><span class="s1">done = (er) =&gt; {</span>
+            <span class="s1">fullyDone(er);</span>
+        <span class="s1">};</span>
+        <span class="s3">const </span><span class="s1">checkCwd = () =&gt; {</span>
+            <span class="s3">this</span><span class="s1">[MKDIR](</span><span class="s3">this</span><span class="s1">.cwd, </span><span class="s3">this</span><span class="s1">.dmode, er =&gt; {</span>
+                <span class="s3">if </span><span class="s1">(er) {</span>
+                    <span class="s3">this</span><span class="s1">[ONERROR](er, entry);</span>
+                    <span class="s1">done();</span>
+                    <span class="s3">return</span><span class="s1">;</span>
+                <span class="s1">}</span>
+                <span class="s3">this</span><span class="s1">[CHECKED_CWD] = </span><span class="s3">true</span><span class="s1">;</span>
+                <span class="s1">start();</span>
+            <span class="s1">});</span>
+        <span class="s1">};</span>
+        <span class="s3">const </span><span class="s1">start = () =&gt; {</span>
+            <span class="s3">if </span><span class="s1">(entry.absolute !== </span><span class="s3">this</span><span class="s1">.cwd) {</span>
+                <span class="s3">const </span><span class="s1">parent = (</span><span class="s4">0</span><span class="s1">, normalize_windows_path_js_1.normalizeWindowsPath)(node_path_1.default.dirname(String(entry.absolute)));</span>
+                <span class="s3">if </span><span class="s1">(parent !== </span><span class="s3">this</span><span class="s1">.cwd) {</span>
+                    <span class="s3">return this</span><span class="s1">[MKDIR](parent, </span><span class="s3">this</span><span class="s1">.dmode, er =&gt; {</span>
+                        <span class="s3">if </span><span class="s1">(er) {</span>
+                            <span class="s3">this</span><span class="s1">[ONERROR](er, entry);</span>
+                            <span class="s1">done();</span>
+                            <span class="s3">return</span><span class="s1">;</span>
+                        <span class="s1">}</span>
+                        <span class="s1">afterMakeParent();</span>
+                    <span class="s1">});</span>
+                <span class="s1">}</span>
+            <span class="s1">}</span>
+            <span class="s1">afterMakeParent();</span>
+        <span class="s1">};</span>
+        <span class="s3">const </span><span class="s1">afterMakeParent = () =&gt; {</span>
+            <span class="s1">node_fs_1.default.lstat(String(entry.absolute), (lstatEr, st) =&gt; {</span>
+                <span class="s3">if </span><span class="s1">(st &amp;&amp;</span>
+                    <span class="s1">(</span><span class="s3">this</span><span class="s1">.keep ||</span>
+                        <span class="s2">/* c8 ignore next */</span>
+                        <span class="s1">(</span><span class="s3">this</span><span class="s1">.newer &amp;&amp; st.mtime &gt; (entry.mtime ?? st.mtime)))) {</span>
+                    <span class="s3">this</span><span class="s1">[SKIP](entry);</span>
+                    <span class="s1">done();</span>
+                    <span class="s3">return</span><span class="s1">;</span>
+                <span class="s1">}</span>
+                <span class="s3">if </span><span class="s1">(lstatEr || </span><span class="s3">this</span><span class="s1">[ISREUSABLE](entry, st)) {</span>
+                    <span class="s3">return this</span><span class="s1">[MAKEFS](</span><span class="s3">null</span><span class="s1">, entry, done);</span>
+                <span class="s1">}</span>
+                <span class="s3">if </span><span class="s1">(st.isDirectory()) {</span>
+                    <span class="s3">if </span><span class="s1">(entry.type === </span><span class="s0">'Directory'</span><span class="s1">) {</span>
+                        <span class="s3">const </span><span class="s1">needChmod = </span><span class="s3">this</span><span class="s1">.chmod &amp;&amp;</span>
+                            <span class="s1">entry.mode &amp;&amp;</span>
+                            <span class="s1">(st.mode &amp; </span><span class="s4">0o7777</span><span class="s1">) !== entry.mode;</span>
+                        <span class="s3">const </span><span class="s1">afterChmod = (er) =&gt; </span><span class="s3">this</span><span class="s1">[MAKEFS](er ?? </span><span class="s3">null</span><span class="s1">, entry, done);</span>
+                        <span class="s3">if </span><span class="s1">(!needChmod) {</span>
+                            <span class="s3">return </span><span class="s1">afterChmod();</span>
+                        <span class="s1">}</span>
+                        <span class="s3">return </span><span class="s1">node_fs_1.default.chmod(String(entry.absolute), Number(entry.mode), afterChmod);</span>
+                    <span class="s1">}</span>
+                    <span class="s2">// Not a dir entry, have to remove it.</span>
+                    <span class="s2">// NB: the only way to end up with an entry that is the cwd</span>
+                    <span class="s2">// itself, in such a way that == does not detect, is a</span>
+                    <span class="s2">// tricky windows absolute path with UNC or 8.3 parts (and</span>
+                    <span class="s2">// preservePaths:true, or else it will have been stripped).</span>
+                    <span class="s2">// In that case, the user has opted out of path protections</span>
+                    <span class="s2">// explicitly, so if they blow away the cwd, c'est la vie.</span>
+                    <span class="s3">if </span><span class="s1">(entry.absolute !== </span><span class="s3">this</span><span class="s1">.cwd) {</span>
+                        <span class="s3">return </span><span class="s1">node_fs_1.default.rmdir(String(entry.absolute), (er) =&gt; </span><span class="s3">this</span><span class="s1">[MAKEFS](er ?? </span><span class="s3">null</span><span class="s1">, entry, done));</span>
+                    <span class="s1">}</span>
+                <span class="s1">}</span>
+                <span class="s2">// not a dir, and not reusable</span>
+                <span class="s2">// don't remove if the cwd, we want that error</span>
+                <span class="s3">if </span><span class="s1">(entry.absolute === </span><span class="s3">this</span><span class="s1">.cwd) {</span>
+                    <span class="s3">return this</span><span class="s1">[MAKEFS](</span><span class="s3">null</span><span class="s1">, entry, done);</span>
+                <span class="s1">}</span>
+                <span class="s1">unlinkFile(String(entry.absolute), er =&gt; </span><span class="s3">this</span><span class="s1">[MAKEFS](er ?? </span><span class="s3">null</span><span class="s1">, entry, done));</span>
+            <span class="s1">});</span>
+        <span class="s1">};</span>
+        <span class="s3">if </span><span class="s1">(</span><span class="s3">this</span><span class="s1">[CHECKED_CWD]) {</span>
+            <span class="s1">start();</span>
+        <span class="s1">}</span>
+        <span class="s3">else </span><span class="s1">{</span>
+            <span class="s1">checkCwd();</span>
+        <span class="s1">}</span>
+    <span class="s1">}</span>
+    <span class="s1">[MAKEFS](er, entry, done) {</span>
+        <span class="s3">if </span><span class="s1">(er) {</span>
+            <span class="s3">this</span><span class="s1">[ONERROR](er, entry);</span>
+            <span class="s1">done();</span>
+            <span class="s3">return</span><span class="s1">;</span>
+        <span class="s1">}</span>
+        <span class="s3">switch </span><span class="s1">(entry.type) {</span>
+            <span class="s3">case </span><span class="s0">'File'</span><span class="s1">:</span>
+            <span class="s3">case </span><span class="s0">'OldFile'</span><span class="s1">:</span>
+            <span class="s3">case </span><span class="s0">'ContiguousFile'</span><span class="s1">:</span>
+                <span class="s3">return this</span><span class="s1">[FILE](entry, done);</span>
+            <span class="s3">case </span><span class="s0">'Link'</span><span class="s1">:</span>
+                <span class="s3">return this</span><span class="s1">[HARDLINK](entry, done);</span>
+            <span class="s3">case </span><span class="s0">'SymbolicLink'</span><span class="s1">:</span>
+                <span class="s3">return this</span><span class="s1">[SYMLINK](entry, done);</span>
+            <span class="s3">case </span><span class="s0">'Directory'</span><span class="s1">:</span>
+            <span class="s3">case </span><span class="s0">'GNUDumpDir'</span><span class="s1">:</span>
+                <span class="s3">return this</span><span class="s1">[DIRECTORY](entry, done);</span>
+        <span class="s1">}</span>
+    <span class="s1">}</span>
+    <span class="s1">[LINK](entry, linkpath, link, done) {</span>
+        <span class="s2">// XXX: get the type ('symlink' or 'junction') for windows</span>
+        <span class="s1">node_fs_1.default[link](linkpath, String(entry.absolute), er =&gt; {</span>
+            <span class="s3">if </span><span class="s1">(er) {</span>
+                <span class="s3">this</span><span class="s1">[ONERROR](er, entry);</span>
+            <span class="s1">}</span>
+            <span class="s3">else </span><span class="s1">{</span>
+                <span class="s3">this</span><span class="s1">[UNPEND]();</span>
+                <span class="s1">entry.resume();</span>
+            <span class="s1">}</span>
+            <span class="s1">done();</span>
+        <span class="s1">});</span>
+    <span class="s1">}</span>
+<span class="s1">}</span>
+<span class="s1">exports.Unpack = Unpack;</span>
+<span class="s3">const </span><span class="s1">callSync = (fn) =&gt; {</span>
+    <span class="s3">try </span><span class="s1">{</span>
+        <span class="s3">return </span><span class="s1">[</span><span class="s3">null</span><span class="s1">, fn()];</span>
+    <span class="s1">}</span>
+    <span class="s3">catch </span><span class="s1">(er) {</span>
+        <span class="s3">return </span><span class="s1">[er, </span><span class="s3">null</span><span class="s1">];</span>
+    <span class="s1">}</span>
+<span class="s1">};</span>
+<span class="s3">class </span><span class="s1">UnpackSync </span><span class="s3">extends </span><span class="s1">Unpack {</span>
+    <span class="s1">sync = </span><span class="s3">true</span><span class="s1">;</span>
+    <span class="s1">[MAKEFS](er, entry) {</span>
+        <span class="s3">return super</span><span class="s1">[MAKEFS](er, entry, () =&gt; { });</span>
+    <span class="s1">}</span>
+    <span class="s1">[CHECKFS](entry) {</span>
+        <span class="s3">if </span><span class="s1">(!</span><span class="s3">this</span><span class="s1">[CHECKED_CWD]) {</span>
+            <span class="s3">const </span><span class="s1">er = </span><span class="s3">this</span><span class="s1">[MKDIR](</span><span class="s3">this</span><span class="s1">.cwd, </span><span class="s3">this</span><span class="s1">.dmode);</span>
+            <span class="s3">if </span><span class="s1">(er) {</span>
+                <span class="s3">return this</span><span class="s1">[ONERROR](er, entry);</span>
+            <span class="s1">}</span>
+            <span class="s3">this</span><span class="s1">[CHECKED_CWD] = </span><span class="s3">true</span><span class="s1">;</span>
+        <span class="s1">}</span>
+        <span class="s2">// don't bother to make the parent if the current entry is the cwd,</span>
+        <span class="s2">// we've already checked it.</span>
+        <span class="s3">if </span><span class="s1">(entry.absolute !== </span><span class="s3">this</span><span class="s1">.cwd) {</span>
+            <span class="s3">const </span><span class="s1">parent = (</span><span class="s4">0</span><span class="s1">, normalize_windows_path_js_1.normalizeWindowsPath)(node_path_1.default.dirname(String(entry.absolute)));</span>
+            <span class="s3">if </span><span class="s1">(parent !== </span><span class="s3">this</span><span class="s1">.cwd) {</span>
+                <span class="s3">const </span><span class="s1">mkParent = </span><span class="s3">this</span><span class="s1">[MKDIR](parent, </span><span class="s3">this</span><span class="s1">.dmode);</span>
+                <span class="s3">if </span><span class="s1">(mkParent) {</span>
+                    <span class="s3">return this</span><span class="s1">[ONERROR](mkParent, entry);</span>
+                <span class="s1">}</span>
+            <span class="s1">}</span>
+        <span class="s1">}</span>
+        <span class="s3">const </span><span class="s1">[lstatEr, st] = callSync(() =&gt; node_fs_1.default.lstatSync(String(entry.absolute)));</span>
+        <span class="s3">if </span><span class="s1">(st &amp;&amp;</span>
+            <span class="s1">(</span><span class="s3">this</span><span class="s1">.keep ||</span>
+                <span class="s2">/* c8 ignore next */</span>
+                <span class="s1">(</span><span class="s3">this</span><span class="s1">.newer &amp;&amp; st.mtime &gt; (entry.mtime ?? st.mtime)))) {</span>
+            <span class="s3">return this</span><span class="s1">[SKIP](entry);</span>
+        <span class="s1">}</span>
+        <span class="s3">if </span><span class="s1">(lstatEr || </span><span class="s3">this</span><span class="s1">[ISREUSABLE](entry, st)) {</span>
+            <span class="s3">return this</span><span class="s1">[MAKEFS](</span><span class="s3">null</span><span class="s1">, entry);</span>
+        <span class="s1">}</span>
+        <span class="s3">if </span><span class="s1">(st.isDirectory()) {</span>
+            <span class="s3">if </span><span class="s1">(entry.type === </span><span class="s0">'Directory'</span><span class="s1">) {</span>
+                <span class="s3">const </span><span class="s1">needChmod = </span><span class="s3">this</span><span class="s1">.chmod &amp;&amp;</span>
+                    <span class="s1">entry.mode &amp;&amp;</span>
+                    <span class="s1">(st.mode &amp; </span><span class="s4">0o7777</span><span class="s1">) !== entry.mode;</span>
+                <span class="s3">const </span><span class="s1">[er] = needChmod ?</span>
+                    <span class="s1">callSync(() =&gt; {</span>
+                        <span class="s1">node_fs_1.default.chmodSync(String(entry.absolute), Number(entry.mode));</span>
+                    <span class="s1">})</span>
+                    <span class="s1">: [];</span>
+                <span class="s3">return this</span><span class="s1">[MAKEFS](er, entry);</span>
+            <span class="s1">}</span>
+            <span class="s2">// not a dir entry, have to remove it</span>
+            <span class="s3">const </span><span class="s1">[er] = callSync(() =&gt; node_fs_1.default.rmdirSync(String(entry.absolute)));</span>
+            <span class="s3">this</span><span class="s1">[MAKEFS](er, entry);</span>
+        <span class="s1">}</span>
+        <span class="s2">// not a dir, and not reusable.</span>
+        <span class="s2">// don't remove if it's the cwd, since we want that error.</span>
+        <span class="s3">const </span><span class="s1">[er] = entry.absolute === </span><span class="s3">this</span><span class="s1">.cwd ?</span>
+            <span class="s1">[]</span>
+            <span class="s1">: callSync(() =&gt; unlinkFileSync(String(entry.absolute)));</span>
+        <span class="s3">this</span><span class="s1">[MAKEFS](er, entry);</span>
+    <span class="s1">}</span>
+    <span class="s1">[FILE](entry, done) {</span>
+        <span class="s3">const </span><span class="s1">mode = </span><span class="s3">typeof </span><span class="s1">entry.mode === </span><span class="s0">'number' </span><span class="s1">?</span>
+            <span class="s1">entry.mode &amp; </span><span class="s4">0o7777</span>
+            <span class="s1">: </span><span class="s3">this</span><span class="s1">.fmode;</span>
+        <span class="s3">const </span><span class="s1">oner = (er) =&gt; {</span>
+            <span class="s3">let </span><span class="s1">closeError;</span>
+            <span class="s3">try </span><span class="s1">{</span>
+                <span class="s1">node_fs_1.default.closeSync(fd);</span>
+            <span class="s1">}</span>
+            <span class="s3">catch </span><span class="s1">(e) {</span>
+                <span class="s1">closeError = e;</span>
+            <span class="s1">}</span>
+            <span class="s3">if </span><span class="s1">(er || closeError) {</span>
+                <span class="s3">this</span><span class="s1">[ONERROR](er || closeError, entry);</span>
+            <span class="s1">}</span>
+            <span class="s1">done();</span>
+        <span class="s1">};</span>
+        <span class="s3">let </span><span class="s1">fd;</span>
+        <span class="s3">try </span><span class="s1">{</span>
+            <span class="s1">fd = node_fs_1.default.openSync(String(entry.absolute), (</span><span class="s4">0</span><span class="s1">, get_write_flag_js_1.getWriteFlag)(entry.size), mode);</span>
+            <span class="s2">/* c8 ignore start - This is only a problem if the file was successfully 
+             * statted, BUT failed to open. Testing this is annoying, and we 
+             * already have ample testint for other uses of oner() methods. 
+             */</span>
+        <span class="s1">}</span>
+        <span class="s3">catch </span><span class="s1">(er) {</span>
+            <span class="s3">return </span><span class="s1">oner(er);</span>
+        <span class="s1">}</span>
+        <span class="s2">/* c8 ignore stop */</span>
+        <span class="s3">const </span><span class="s1">tx = </span><span class="s3">this</span><span class="s1">.transform ? </span><span class="s3">this</span><span class="s1">.transform(entry) || entry : entry;</span>
+        <span class="s3">if </span><span class="s1">(tx !== entry) {</span>
+            <span class="s1">tx.on(</span><span class="s0">'error'</span><span class="s1">, (er) =&gt; </span><span class="s3">this</span><span class="s1">[ONERROR](er, entry));</span>
+            <span class="s1">entry.pipe(tx);</span>
+        <span class="s1">}</span>
+        <span class="s1">tx.on(</span><span class="s0">'data'</span><span class="s1">, (chunk) =&gt; {</span>
+            <span class="s3">try </span><span class="s1">{</span>
+                <span class="s1">node_fs_1.default.writeSync(fd, chunk, </span><span class="s4">0</span><span class="s1">, chunk.length);</span>
+            <span class="s1">}</span>
+            <span class="s3">catch </span><span class="s1">(er) {</span>
+                <span class="s1">oner(er);</span>
+            <span class="s1">}</span>
+        <span class="s1">});</span>
+        <span class="s1">tx.on(</span><span class="s0">'end'</span><span class="s1">, () =&gt; {</span>
+            <span class="s3">let </span><span class="s1">er = </span><span class="s3">null</span><span class="s1">;</span>
+            <span class="s2">// try both, falling futimes back to utimes</span>
+            <span class="s2">// if either fails, handle the first error</span>
+            <span class="s3">if </span><span class="s1">(entry.mtime &amp;&amp; !</span><span class="s3">this</span><span class="s1">.noMtime) {</span>
+                <span class="s3">const </span><span class="s1">atime = entry.atime || </span><span class="s3">new </span><span class="s1">Date();</span>
+                <span class="s3">const </span><span class="s1">mtime = entry.mtime;</span>
+                <span class="s3">try </span><span class="s1">{</span>
+                    <span class="s1">node_fs_1.default.futimesSync(fd, atime, mtime);</span>
+                <span class="s1">}</span>
+                <span class="s3">catch </span><span class="s1">(futimeser) {</span>
+                    <span class="s3">try </span><span class="s1">{</span>
+                        <span class="s1">node_fs_1.default.utimesSync(String(entry.absolute), atime, mtime);</span>
+                    <span class="s1">}</span>
+                    <span class="s3">catch </span><span class="s1">(utimeser) {</span>
+                        <span class="s1">er = futimeser;</span>
+                    <span class="s1">}</span>
+                <span class="s1">}</span>
+            <span class="s1">}</span>
+            <span class="s3">if </span><span class="s1">(</span><span class="s3">this</span><span class="s1">[DOCHOWN](entry)) {</span>
+                <span class="s3">const </span><span class="s1">uid = </span><span class="s3">this</span><span class="s1">[UID](entry);</span>
+                <span class="s3">const </span><span class="s1">gid = </span><span class="s3">this</span><span class="s1">[GID](entry);</span>
+                <span class="s3">try </span><span class="s1">{</span>
+                    <span class="s1">node_fs_1.default.fchownSync(fd, Number(uid), Number(gid));</span>
+                <span class="s1">}</span>
+                <span class="s3">catch </span><span class="s1">(fchowner) {</span>
+                    <span class="s3">try </span><span class="s1">{</span>
+                        <span class="s1">node_fs_1.default.chownSync(String(entry.absolute), Number(uid), Number(gid));</span>
+                    <span class="s1">}</span>
+                    <span class="s3">catch </span><span class="s1">(chowner) {</span>
+                        <span class="s1">er = er || fchowner;</span>
+                    <span class="s1">}</span>
+                <span class="s1">}</span>
+            <span class="s1">}</span>
+            <span class="s1">oner(er);</span>
+        <span class="s1">});</span>
+    <span class="s1">}</span>
+    <span class="s1">[DIRECTORY](entry, done) {</span>
+        <span class="s3">const </span><span class="s1">mode = </span><span class="s3">typeof </span><span class="s1">entry.mode === </span><span class="s0">'number' </span><span class="s1">?</span>
+            <span class="s1">entry.mode &amp; </span><span class="s4">0o7777</span>
+            <span class="s1">: </span><span class="s3">this</span><span class="s1">.dmode;</span>
+        <span class="s3">const </span><span class="s1">er = </span><span class="s3">this</span><span class="s1">[MKDIR](String(entry.absolute), mode);</span>
+        <span class="s3">if </span><span class="s1">(er) {</span>
+            <span class="s3">this</span><span class="s1">[ONERROR](er, entry);</span>
+            <span class="s1">done();</span>
+            <span class="s3">return</span><span class="s1">;</span>
+        <span class="s1">}</span>
+        <span class="s3">if </span><span class="s1">(entry.mtime &amp;&amp; !</span><span class="s3">this</span><span class="s1">.noMtime) {</span>
+            <span class="s3">try </span><span class="s1">{</span>
+                <span class="s1">node_fs_1.default.utimesSync(String(entry.absolute), entry.atime || </span><span class="s3">new </span><span class="s1">Date(), entry.mtime);</span>
+                <span class="s2">/* c8 ignore next */</span>
+            <span class="s1">}</span>
+            <span class="s3">catch </span><span class="s1">(er) { }</span>
+        <span class="s1">}</span>
+        <span class="s3">if </span><span class="s1">(</span><span class="s3">this</span><span class="s1">[DOCHOWN](entry)) {</span>
+            <span class="s3">try </span><span class="s1">{</span>
+                <span class="s1">node_fs_1.default.chownSync(String(entry.absolute), Number(</span><span class="s3">this</span><span class="s1">[UID](entry)), Number(</span><span class="s3">this</span><span class="s1">[GID](entry)));</span>
+            <span class="s1">}</span>
+            <span class="s3">catch </span><span class="s1">(er) { }</span>
+        <span class="s1">}</span>
+        <span class="s1">done();</span>
+        <span class="s1">entry.resume();</span>
+    <span class="s1">}</span>
+    <span class="s1">[MKDIR](dir, mode) {</span>
+        <span class="s3">try </span><span class="s1">{</span>
+            <span class="s3">return </span><span class="s1">(</span><span class="s4">0</span><span class="s1">, mkdir_js_1.mkdirSync)((</span><span class="s4">0</span><span class="s1">, normalize_windows_path_js_1.normalizeWindowsPath)(dir), {</span>
+                <span class="s1">uid: </span><span class="s3">this</span><span class="s1">.uid,</span>
+                <span class="s1">gid: </span><span class="s3">this</span><span class="s1">.gid,</span>
+                <span class="s1">processUid: </span><span class="s3">this</span><span class="s1">.processUid,</span>
+                <span class="s1">processGid: </span><span class="s3">this</span><span class="s1">.processGid,</span>
+                <span class="s1">umask: </span><span class="s3">this</span><span class="s1">.processUmask,</span>
+                <span class="s1">preserve: </span><span class="s3">this</span><span class="s1">.preservePaths,</span>
+                <span class="s1">unlink: </span><span class="s3">this</span><span class="s1">.unlink,</span>
+                <span class="s1">cwd: </span><span class="s3">this</span><span class="s1">.cwd,</span>
+                <span class="s1">mode: mode,</span>
+            <span class="s1">});</span>
+        <span class="s1">}</span>
+        <span class="s3">catch </span><span class="s1">(er) {</span>
+            <span class="s3">return </span><span class="s1">er;</span>
+        <span class="s1">}</span>
+    <span class="s1">}</span>
+    <span class="s1">[LINK](entry, linkpath, link, done) {</span>
+        <span class="s3">const </span><span class="s1">ls = </span><span class="s0">`</span><span class="s1">${link}</span><span class="s0">Sync`</span><span class="s1">;</span>
+        <span class="s3">try </span><span class="s1">{</span>
+            <span class="s1">node_fs_1.default[ls](linkpath, String(entry.absolute));</span>
+            <span class="s1">done();</span>
+            <span class="s1">entry.resume();</span>
+        <span class="s1">}</span>
+        <span class="s3">catch </span><span class="s1">(er) {</span>
+            <span class="s3">return this</span><span class="s1">[ONERROR](er, entry);</span>
+        <span class="s1">}</span>
+    <span class="s1">}</span>
+<span class="s1">}</span>
+<span class="s1">exports.UnpackSync = UnpackSync;</span>
+<span class="s2">//# sourceMappingURL=unpack.js.map</span></pre>
+</body>
+</html>

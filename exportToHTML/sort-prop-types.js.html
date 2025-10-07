@@ -1,0 +1,338 @@
+<html>
+<head>
+<title>sort-prop-types.js</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #8c8c8c; font-style: italic;}
+.s1 { color: #8c8c8c; font-style: italic;}
+.s2 { color: #080808;}
+.s3 { color: #067d17;}
+.s4 { color: #0033b3;}
+.s5 { color: #1750eb;}
+</style>
+</head>
+<body bgcolor="#ffffff">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#c0c0c0" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+sort-prop-types.js</font>
+</center></td></tr></table>
+<pre><span class="s0">/**</span>
+ <span class="s0">* </span><span class="s1">@fileoverview </span><span class="s0">Enforce propTypes declarations alphabetical sorting</span>
+ <span class="s0">*/</span>
+
+<span class="s3">'use strict'</span><span class="s2">;</span>
+
+<span class="s4">const </span><span class="s2">astUtil = require(</span><span class="s3">'../util/ast'</span><span class="s2">);</span>
+<span class="s4">const </span><span class="s2">variableUtil = require(</span><span class="s3">'../util/variable'</span><span class="s2">);</span>
+<span class="s4">const </span><span class="s2">propsUtil = require(</span><span class="s3">'../util/props'</span><span class="s2">);</span>
+<span class="s4">const </span><span class="s2">docsUrl = require(</span><span class="s3">'../util/docsUrl'</span><span class="s2">);</span>
+<span class="s4">const </span><span class="s2">propWrapperUtil = require(</span><span class="s3">'../util/propWrapper'</span><span class="s2">);</span>
+<span class="s4">const </span><span class="s2">propTypesSortUtil = require(</span><span class="s3">'../util/propTypesSort'</span><span class="s2">);</span>
+<span class="s4">const </span><span class="s2">report = require(</span><span class="s3">'../util/report'</span><span class="s2">);</span>
+<span class="s4">const </span><span class="s2">eslintUtil = require(</span><span class="s3">'../util/eslint'</span><span class="s2">);</span>
+
+<span class="s4">const </span><span class="s2">getSourceCode = eslintUtil.getSourceCode;</span>
+<span class="s4">const </span><span class="s2">getText = eslintUtil.getText;</span>
+
+<span class="s0">// ------------------------------------------------------------------------------</span>
+<span class="s0">// Rule Definition</span>
+<span class="s0">// ------------------------------------------------------------------------------</span>
+
+<span class="s4">const </span><span class="s2">messages = {</span>
+  <span class="s2">requiredPropsFirst: </span><span class="s3">'Required prop types must be listed before all other prop types'</span><span class="s2">,</span>
+  <span class="s2">callbackPropsLast: </span><span class="s3">'Callback prop types must be listed after all other prop types'</span><span class="s2">,</span>
+  <span class="s2">propsNotSorted: </span><span class="s3">'Prop types declarations should be sorted alphabetically'</span><span class="s2">,</span>
+<span class="s2">};</span>
+
+<span class="s4">function </span><span class="s2">getKey(context, node) {</span>
+  <span class="s4">if </span><span class="s2">(node.type === </span><span class="s3">'ObjectTypeProperty'</span><span class="s2">) {</span>
+    <span class="s4">return </span><span class="s2">getSourceCode(context).getFirstToken(node).value;</span>
+  <span class="s2">}</span>
+  <span class="s4">if </span><span class="s2">(node.key &amp;&amp; node.key.value) {</span>
+    <span class="s4">return </span><span class="s2">node.key.value;</span>
+  <span class="s2">}</span>
+  <span class="s4">return </span><span class="s2">getText(context, node.key || node.argument);</span>
+<span class="s2">}</span>
+
+<span class="s0">/** </span><span class="s1">@type </span><span class="s0">{import('eslint').Rule.RuleModule} */</span>
+<span class="s2">module.exports = {</span>
+  <span class="s2">meta: {</span>
+    <span class="s2">docs: {</span>
+      <span class="s2">description: </span><span class="s3">'Enforce propTypes declarations alphabetical sorting'</span><span class="s2">,</span>
+      <span class="s2">category: </span><span class="s3">'Stylistic Issues'</span><span class="s2">,</span>
+      <span class="s2">recommended: </span><span class="s4">false</span><span class="s2">,</span>
+      <span class="s2">url: docsUrl(</span><span class="s3">'sort-prop-types'</span><span class="s2">),</span>
+    <span class="s2">},</span>
+    <span class="s2">fixable: </span><span class="s3">'code'</span><span class="s2">,</span>
+
+    <span class="s2">messages,</span>
+
+    <span class="s2">schema: [{</span>
+      <span class="s2">type: </span><span class="s3">'object'</span><span class="s2">,</span>
+      <span class="s2">properties: {</span>
+        <span class="s2">requiredFirst: {</span>
+          <span class="s2">type: </span><span class="s3">'boolean'</span><span class="s2">,</span>
+        <span class="s2">},</span>
+        <span class="s2">callbacksLast: {</span>
+          <span class="s2">type: </span><span class="s3">'boolean'</span><span class="s2">,</span>
+        <span class="s2">},</span>
+        <span class="s2">ignoreCase: {</span>
+          <span class="s2">type: </span><span class="s3">'boolean'</span><span class="s2">,</span>
+        <span class="s2">},</span>
+        <span class="s0">// Whether alphabetical sorting should be enforced</span>
+        <span class="s2">noSortAlphabetically: {</span>
+          <span class="s2">type: </span><span class="s3">'boolean'</span><span class="s2">,</span>
+        <span class="s2">},</span>
+        <span class="s2">sortShapeProp: {</span>
+          <span class="s2">type: </span><span class="s3">'boolean'</span><span class="s2">,</span>
+        <span class="s2">},</span>
+        <span class="s2">checkTypes: {</span>
+          <span class="s2">type: </span><span class="s3">'boolean'</span><span class="s2">,</span>
+        <span class="s2">},</span>
+      <span class="s2">},</span>
+      <span class="s2">additionalProperties: </span><span class="s4">false</span><span class="s2">,</span>
+    <span class="s2">}],</span>
+  <span class="s2">},</span>
+
+  <span class="s2">create(context) {</span>
+    <span class="s4">const </span><span class="s2">configuration = context.options[</span><span class="s5">0</span><span class="s2">] || {};</span>
+    <span class="s4">const </span><span class="s2">requiredFirst = configuration.requiredFirst || </span><span class="s4">false</span><span class="s2">;</span>
+    <span class="s4">const </span><span class="s2">callbacksLast = configuration.callbacksLast || </span><span class="s4">false</span><span class="s2">;</span>
+    <span class="s4">const </span><span class="s2">ignoreCase = configuration.ignoreCase || </span><span class="s4">false</span><span class="s2">;</span>
+    <span class="s4">const </span><span class="s2">noSortAlphabetically = configuration.noSortAlphabetically || </span><span class="s4">false</span><span class="s2">;</span>
+    <span class="s4">const </span><span class="s2">sortShapeProp = configuration.sortShapeProp || </span><span class="s4">false</span><span class="s2">;</span>
+    <span class="s4">const </span><span class="s2">checkTypes = configuration.checkTypes || </span><span class="s4">false</span><span class="s2">;</span>
+
+    <span class="s4">const </span><span class="s2">typeAnnotations = </span><span class="s4">new </span><span class="s2">Map();</span>
+
+    <span class="s0">/**</span>
+     <span class="s0">* Checks if propTypes declarations are sorted</span>
+     <span class="s0">* </span><span class="s1">@param </span><span class="s0">{Array} declarations The array of AST nodes being checked.</span>
+     <span class="s0">* </span><span class="s1">@returns </span><span class="s0">{void}</span>
+     <span class="s0">*/</span>
+    <span class="s4">function </span><span class="s2">checkSorted(declarations) {</span>
+      <span class="s0">// Declarations will be `undefined` if the `shape` is not a literal. For</span>
+      <span class="s0">// example, if it is a propType imported from another file.</span>
+      <span class="s4">if </span><span class="s2">(!declarations) {</span>
+        <span class="s4">return</span><span class="s2">;</span>
+      <span class="s2">}</span>
+
+      <span class="s4">function </span><span class="s2">fix(fixer) {</span>
+        <span class="s4">return </span><span class="s2">propTypesSortUtil.fixPropTypesSort(</span>
+          <span class="s2">context,</span>
+          <span class="s2">fixer,</span>
+          <span class="s2">declarations,</span>
+          <span class="s2">ignoreCase,</span>
+          <span class="s2">requiredFirst,</span>
+          <span class="s2">callbacksLast,</span>
+          <span class="s2">noSortAlphabetically,</span>
+          <span class="s2">sortShapeProp,</span>
+          <span class="s2">checkTypes</span>
+        <span class="s2">);</span>
+      <span class="s2">}</span>
+
+      <span class="s4">const </span><span class="s2">callbackPropsLastSeen = </span><span class="s4">new </span><span class="s2">WeakSet();</span>
+      <span class="s4">const </span><span class="s2">requiredPropsFirstSeen = </span><span class="s4">new </span><span class="s2">WeakSet();</span>
+      <span class="s4">const </span><span class="s2">propsNotSortedSeen = </span><span class="s4">new </span><span class="s2">WeakSet();</span>
+
+      <span class="s2">declarations.reduce((prev, curr, idx, decls) =&gt; {</span>
+        <span class="s4">if </span><span class="s2">(curr.type === </span><span class="s3">'ExperimentalSpreadProperty' </span><span class="s2">|| curr.type === </span><span class="s3">'SpreadElement'</span><span class="s2">) {</span>
+          <span class="s4">return </span><span class="s2">decls[idx + </span><span class="s5">1</span><span class="s2">];</span>
+        <span class="s2">}</span>
+
+        <span class="s4">let </span><span class="s2">prevPropName = getKey(context, prev);</span>
+        <span class="s4">let </span><span class="s2">currentPropName = getKey(context, curr);</span>
+        <span class="s4">const </span><span class="s2">previousIsRequired = propTypesSortUtil.isRequiredProp(prev);</span>
+        <span class="s4">const </span><span class="s2">currentIsRequired = propTypesSortUtil.isRequiredProp(curr);</span>
+        <span class="s4">const </span><span class="s2">previousIsCallback = propTypesSortUtil.isCallbackPropName(prevPropName);</span>
+        <span class="s4">const </span><span class="s2">currentIsCallback = propTypesSortUtil.isCallbackPropName(currentPropName);</span>
+
+        <span class="s4">if </span><span class="s2">(ignoreCase) {</span>
+          <span class="s2">prevPropName = String(prevPropName).toLowerCase();</span>
+          <span class="s2">currentPropName = String(currentPropName).toLowerCase();</span>
+        <span class="s2">}</span>
+
+        <span class="s4">if </span><span class="s2">(requiredFirst) {</span>
+          <span class="s4">if </span><span class="s2">(previousIsRequired &amp;&amp; !currentIsRequired) {</span>
+            <span class="s0">// Transition between required and non-required. Don't compare for alphabetical.</span>
+            <span class="s4">return </span><span class="s2">curr;</span>
+          <span class="s2">}</span>
+          <span class="s4">if </span><span class="s2">(!previousIsRequired &amp;&amp; currentIsRequired) {</span>
+            <span class="s0">// Encountered a non-required prop after a required prop</span>
+            <span class="s4">if </span><span class="s2">(!requiredPropsFirstSeen.has(curr)) {</span>
+              <span class="s2">requiredPropsFirstSeen.add(curr);</span>
+              <span class="s2">report(context, messages.requiredPropsFirst, </span><span class="s3">'requiredPropsFirst'</span><span class="s2">, {</span>
+                <span class="s2">node: curr,</span>
+                <span class="s2">fix,</span>
+              <span class="s2">});</span>
+            <span class="s2">}</span>
+            <span class="s4">return </span><span class="s2">curr;</span>
+          <span class="s2">}</span>
+        <span class="s2">}</span>
+
+        <span class="s4">if </span><span class="s2">(callbacksLast) {</span>
+          <span class="s4">if </span><span class="s2">(!previousIsCallback &amp;&amp; currentIsCallback) {</span>
+            <span class="s0">// Entering the callback prop section</span>
+            <span class="s4">return </span><span class="s2">curr;</span>
+          <span class="s2">}</span>
+          <span class="s4">if </span><span class="s2">(previousIsCallback &amp;&amp; !currentIsCallback) {</span>
+            <span class="s0">// Encountered a non-callback prop after a callback prop</span>
+            <span class="s4">if </span><span class="s2">(!callbackPropsLastSeen.has(prev)) {</span>
+              <span class="s2">callbackPropsLastSeen.add(prev);</span>
+              <span class="s2">report(context, messages.callbackPropsLast, </span><span class="s3">'callbackPropsLast'</span><span class="s2">, {</span>
+                <span class="s2">node: prev,</span>
+                <span class="s2">fix,</span>
+              <span class="s2">});</span>
+            <span class="s2">}</span>
+            <span class="s4">return </span><span class="s2">prev;</span>
+          <span class="s2">}</span>
+        <span class="s2">}</span>
+
+        <span class="s4">if </span><span class="s2">(!noSortAlphabetically &amp;&amp; currentPropName &lt; prevPropName) {</span>
+          <span class="s4">if </span><span class="s2">(!propsNotSortedSeen.has(curr)) {</span>
+            <span class="s2">propsNotSortedSeen.add(curr);</span>
+            <span class="s2">report(context, messages.propsNotSorted, </span><span class="s3">'propsNotSorted'</span><span class="s2">, {</span>
+              <span class="s2">node: curr,</span>
+              <span class="s2">fix,</span>
+            <span class="s2">});</span>
+          <span class="s2">}</span>
+          <span class="s4">return </span><span class="s2">prev;</span>
+        <span class="s2">}</span>
+
+        <span class="s4">return </span><span class="s2">curr;</span>
+      <span class="s2">}, declarations[</span><span class="s5">0</span><span class="s2">]);</span>
+    <span class="s2">}</span>
+
+    <span class="s4">function </span><span class="s2">checkNode(node) {</span>
+      <span class="s4">if </span><span class="s2">(!node) {</span>
+        <span class="s4">return</span><span class="s2">;</span>
+      <span class="s2">}</span>
+
+      <span class="s4">if </span><span class="s2">(node.type === </span><span class="s3">'ObjectExpression'</span><span class="s2">) {</span>
+        <span class="s2">checkSorted(node.properties);</span>
+      <span class="s2">} </span><span class="s4">else if </span><span class="s2">(node.type === </span><span class="s3">'Identifier'</span><span class="s2">) {</span>
+        <span class="s4">const </span><span class="s2">propTypesObject = variableUtil.findVariableByName(context, node, node.name);</span>
+        <span class="s4">if </span><span class="s2">(propTypesObject &amp;&amp; propTypesObject.properties) {</span>
+          <span class="s2">checkSorted(propTypesObject.properties);</span>
+        <span class="s2">}</span>
+      <span class="s2">} </span><span class="s4">else if </span><span class="s2">(astUtil.isCallExpression(node)) {</span>
+        <span class="s4">const </span><span class="s2">innerNode = node.arguments &amp;&amp; node.arguments[</span><span class="s5">0</span><span class="s2">];</span>
+        <span class="s4">if </span><span class="s2">(propWrapperUtil.isPropWrapperFunction(context, node.callee.name) &amp;&amp; innerNode) {</span>
+          <span class="s2">checkNode(innerNode);</span>
+        <span class="s2">}</span>
+      <span class="s2">}</span>
+    <span class="s2">}</span>
+
+    <span class="s4">function </span><span class="s2">handleFunctionComponent(node) {</span>
+      <span class="s4">const </span><span class="s2">firstArg = node.params</span>
+        <span class="s2">&amp;&amp; node.params.length &gt; </span><span class="s5">0</span>
+        <span class="s2">&amp;&amp; node.params[</span><span class="s5">0</span><span class="s2">].typeAnnotation</span>
+        <span class="s2">&amp;&amp; node.params[</span><span class="s5">0</span><span class="s2">].typeAnnotation.typeAnnotation;</span>
+      <span class="s4">if </span><span class="s2">(firstArg &amp;&amp; firstArg.type === </span><span class="s3">'TSTypeReference'</span><span class="s2">) {</span>
+        <span class="s4">const </span><span class="s2">propType = typeAnnotations.get(firstArg.typeName.name)</span>
+          <span class="s2">&amp;&amp; typeAnnotations.get(firstArg.typeName.name)[</span><span class="s5">0</span><span class="s2">];</span>
+        <span class="s4">if </span><span class="s2">(propType &amp;&amp; propType.members) {</span>
+          <span class="s2">checkSorted(propType.members);</span>
+        <span class="s2">}</span>
+      <span class="s2">} </span><span class="s4">else if </span><span class="s2">(firstArg &amp;&amp; firstArg.type === </span><span class="s3">'TSTypeLiteral'</span><span class="s2">) {</span>
+        <span class="s4">if </span><span class="s2">(firstArg.members) {</span>
+          <span class="s2">checkSorted(firstArg.members);</span>
+        <span class="s2">}</span>
+      <span class="s2">} </span><span class="s4">else if </span><span class="s2">(firstArg &amp;&amp; firstArg.type === </span><span class="s3">'GenericTypeAnnotation'</span><span class="s2">) {</span>
+        <span class="s4">const </span><span class="s2">propType = typeAnnotations.get(firstArg.id.name)</span>
+          <span class="s2">&amp;&amp; typeAnnotations.get(firstArg.id.name)[</span><span class="s5">0</span><span class="s2">];</span>
+        <span class="s4">if </span><span class="s2">(propType &amp;&amp; propType.properties) {</span>
+          <span class="s2">checkSorted(propType.properties);</span>
+        <span class="s2">}</span>
+      <span class="s2">} </span><span class="s4">else if </span><span class="s2">(firstArg &amp;&amp; firstArg.type === </span><span class="s3">'ObjectTypeAnnotation'</span><span class="s2">) {</span>
+        <span class="s4">if </span><span class="s2">(firstArg.properties) {</span>
+          <span class="s2">checkSorted(firstArg.properties);</span>
+        <span class="s2">}</span>
+      <span class="s2">}</span>
+    <span class="s2">}</span>
+
+    <span class="s4">return </span><span class="s2">Object.assign({</span>
+      <span class="s2">CallExpression(node) {</span>
+        <span class="s4">if </span><span class="s2">(!sortShapeProp || !propTypesSortUtil.isShapeProp(node) || !(node.arguments &amp;&amp; node.arguments[</span><span class="s5">0</span><span class="s2">])) {</span>
+          <span class="s4">return</span><span class="s2">;</span>
+        <span class="s2">}</span>
+
+        <span class="s4">const </span><span class="s2">firstArg = node.arguments[</span><span class="s5">0</span><span class="s2">];</span>
+        <span class="s4">if </span><span class="s2">(firstArg.properties) {</span>
+          <span class="s2">checkSorted(firstArg.properties);</span>
+        <span class="s2">} </span><span class="s4">else if </span><span class="s2">(firstArg.type === </span><span class="s3">'Identifier'</span><span class="s2">) {</span>
+          <span class="s4">const </span><span class="s2">variable = variableUtil.findVariableByName(context, node, firstArg.name);</span>
+          <span class="s4">if </span><span class="s2">(variable &amp;&amp; variable.properties) {</span>
+            <span class="s2">checkSorted(variable.properties);</span>
+          <span class="s2">}</span>
+        <span class="s2">}</span>
+      <span class="s2">},</span>
+
+      <span class="s3">'ClassProperty, PropertyDefinition'</span><span class="s2">(node) {</span>
+        <span class="s4">if </span><span class="s2">(!propsUtil.isPropTypesDeclaration(node)) {</span>
+          <span class="s4">return</span><span class="s2">;</span>
+        <span class="s2">}</span>
+        <span class="s2">checkNode(node.value);</span>
+      <span class="s2">},</span>
+
+      <span class="s2">MemberExpression(node) {</span>
+        <span class="s4">if </span><span class="s2">(!propsUtil.isPropTypesDeclaration(node)) {</span>
+          <span class="s4">return</span><span class="s2">;</span>
+        <span class="s2">}</span>
+
+        <span class="s2">checkNode(node.parent.right);</span>
+      <span class="s2">},</span>
+
+      <span class="s2">ObjectExpression(node) {</span>
+        <span class="s2">node.properties.forEach((property) =&gt; {</span>
+          <span class="s4">if </span><span class="s2">(!property.key) {</span>
+            <span class="s4">return</span><span class="s2">;</span>
+          <span class="s2">}</span>
+
+          <span class="s4">if </span><span class="s2">(!propsUtil.isPropTypesDeclaration(property)) {</span>
+            <span class="s4">return</span><span class="s2">;</span>
+          <span class="s2">}</span>
+          <span class="s4">if </span><span class="s2">(property.value.type === </span><span class="s3">'ObjectExpression'</span><span class="s2">) {</span>
+            <span class="s2">checkSorted(property.value.properties);</span>
+          <span class="s2">}</span>
+        <span class="s2">});</span>
+      <span class="s2">},</span>
+    <span class="s2">}, checkTypes ? {</span>
+      <span class="s2">TSTypeLiteral(node) {</span>
+        <span class="s4">if </span><span class="s2">(node &amp;&amp; node.parent.id) {</span>
+          <span class="s4">const </span><span class="s2">currentNode = [].concat(</span>
+            <span class="s2">typeAnnotations.get(node.parent.id.name) || [],</span>
+            <span class="s2">node</span>
+          <span class="s2">);</span>
+          <span class="s2">typeAnnotations.set(node.parent.id.name, currentNode);</span>
+        <span class="s2">}</span>
+      <span class="s2">},</span>
+
+      <span class="s2">TypeAlias(node) {</span>
+        <span class="s4">if </span><span class="s2">(node.right.type === </span><span class="s3">'ObjectTypeAnnotation'</span><span class="s2">) {</span>
+          <span class="s4">const </span><span class="s2">currentNode = [].concat(</span>
+            <span class="s2">typeAnnotations.get(node.id.name) || [],</span>
+            <span class="s2">node.right</span>
+          <span class="s2">);</span>
+          <span class="s2">typeAnnotations.set(node.id.name, currentNode);</span>
+        <span class="s2">}</span>
+      <span class="s2">},</span>
+
+      <span class="s2">TSTypeAliasDeclaration(node) {</span>
+        <span class="s4">if </span><span class="s2">(node.typeAnnotation.type === </span><span class="s3">'TSTypeLiteral' </span><span class="s2">|| node.typeAnnotation.type === </span><span class="s3">'ObjectTypeAnnotation'</span><span class="s2">) {</span>
+          <span class="s4">const </span><span class="s2">currentNode = [].concat(</span>
+            <span class="s2">typeAnnotations.get(node.id.name) || [],</span>
+            <span class="s2">node.typeAnnotation</span>
+          <span class="s2">);</span>
+          <span class="s2">typeAnnotations.set(node.id.name, currentNode);</span>
+        <span class="s2">}</span>
+      <span class="s2">},</span>
+      <span class="s2">FunctionDeclaration: handleFunctionComponent,</span>
+      <span class="s2">ArrowFunctionExpression: handleFunctionComponent,</span>
+    <span class="s2">} : </span><span class="s4">null</span><span class="s2">);</span>
+  <span class="s2">},</span>
+<span class="s2">};</span>
+</pre>
+</body>
+</html>

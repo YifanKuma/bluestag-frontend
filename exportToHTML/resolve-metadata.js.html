@@ -1,0 +1,788 @@
+<html>
+<head>
+<title>resolve-metadata.js</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #067d17;}
+.s1 { color: #080808;}
+.s2 { color: #0033b3;}
+.s3 { color: #1750eb;}
+.s4 { color: #8c8c8c; font-style: italic;}
+.s5 { color: #0037a6;}
+</style>
+</head>
+<body bgcolor="#ffffff">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#c0c0c0" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+resolve-metadata.js</font>
+</center></td></tr></table>
+<pre><span class="s0">&quot;use strict&quot;</span><span class="s1">;</span>
+<span class="s1">Object.defineProperty(exports, </span><span class="s0">&quot;__esModule&quot;</span><span class="s1">, {</span>
+    <span class="s1">value: </span><span class="s2">true</span>
+<span class="s1">});</span>
+<span class="s3">0 </span><span class="s1">&amp;&amp; (module.exports = {</span>
+    <span class="s1">accumulateMetadata: </span><span class="s2">null</span><span class="s1">,</span>
+    <span class="s1">accumulateViewport: </span><span class="s2">null</span><span class="s1">,</span>
+    <span class="s1">resolveMetadata: </span><span class="s2">null</span><span class="s1">,</span>
+    <span class="s1">resolveViewport: </span><span class="s2">null</span>
+<span class="s1">});</span>
+<span class="s2">function </span><span class="s1">_export(target, all) {</span>
+    <span class="s2">for</span><span class="s1">(</span><span class="s2">var </span><span class="s1">name </span><span class="s2">in </span><span class="s1">all)Object.defineProperty(target, name, {</span>
+        <span class="s1">enumerable: </span><span class="s2">true</span><span class="s1">,</span>
+        <span class="s1">get: all[name]</span>
+    <span class="s1">});</span>
+<span class="s1">}</span>
+<span class="s1">_export(exports, {</span>
+    <span class="s1">accumulateMetadata: </span><span class="s2">function</span><span class="s1">() {</span>
+        <span class="s2">return </span><span class="s1">accumulateMetadata;</span>
+    <span class="s1">},</span>
+    <span class="s1">accumulateViewport: </span><span class="s2">function</span><span class="s1">() {</span>
+        <span class="s2">return </span><span class="s1">accumulateViewport;</span>
+    <span class="s1">},</span>
+    <span class="s1">resolveMetadata: </span><span class="s2">function</span><span class="s1">() {</span>
+        <span class="s2">return </span><span class="s1">resolveMetadata;</span>
+    <span class="s1">},</span>
+    <span class="s1">resolveViewport: </span><span class="s2">function</span><span class="s1">() {</span>
+        <span class="s2">return </span><span class="s1">resolveViewport;</span>
+    <span class="s1">}</span>
+<span class="s1">});</span>
+<span class="s1">require(</span><span class="s0">&quot;server-only&quot;</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">_react = require(</span><span class="s0">&quot;react&quot;</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">_defaultmetadata = require(</span><span class="s0">&quot;./default-metadata&quot;</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">_resolveopengraph = require(</span><span class="s0">&quot;./resolvers/resolve-opengraph&quot;</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">_resolvetitle = require(</span><span class="s0">&quot;./resolvers/resolve-title&quot;</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">_utils = require(</span><span class="s0">&quot;./generate/utils&quot;</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">_appdirmodule = require(</span><span class="s0">&quot;../../server/lib/app-dir-module&quot;</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">_interopdefault = require(</span><span class="s0">&quot;../interop-default&quot;</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">_resolvebasics = require(</span><span class="s0">&quot;./resolvers/resolve-basics&quot;</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">_resolveicons = require(</span><span class="s0">&quot;./resolvers/resolve-icons&quot;</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">_tracer = require(</span><span class="s0">&quot;../../server/lib/trace/tracer&quot;</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">_constants = require(</span><span class="s0">&quot;../../server/lib/trace/constants&quot;</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">_segment = require(</span><span class="s0">&quot;../../shared/lib/segment&quot;</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">_log = </span><span class="s4">/*#__PURE__*/ </span><span class="s1">_interop_require_wildcard(require(</span><span class="s0">&quot;../../build/output/log&quot;</span><span class="s1">));</span>
+<span class="s2">const </span><span class="s1">_params = require(</span><span class="s0">&quot;../../server/request/params&quot;</span><span class="s1">);</span>
+<span class="s2">function </span><span class="s1">_getRequireWildcardCache(nodeInterop) {</span>
+    <span class="s2">if </span><span class="s1">(</span><span class="s2">typeof </span><span class="s1">WeakMap !== </span><span class="s0">&quot;function&quot;</span><span class="s1">) </span><span class="s2">return null</span><span class="s1">;</span>
+    <span class="s2">var </span><span class="s1">cacheBabelInterop = </span><span class="s2">new </span><span class="s1">WeakMap();</span>
+    <span class="s2">var </span><span class="s1">cacheNodeInterop = </span><span class="s2">new </span><span class="s1">WeakMap();</span>
+    <span class="s2">return </span><span class="s1">(_getRequireWildcardCache = </span><span class="s2">function</span><span class="s1">(nodeInterop) {</span>
+        <span class="s2">return </span><span class="s1">nodeInterop ? cacheNodeInterop : cacheBabelInterop;</span>
+    <span class="s1">})(nodeInterop);</span>
+<span class="s1">}</span>
+<span class="s2">function </span><span class="s1">_interop_require_wildcard(obj, nodeInterop) {</span>
+    <span class="s2">if </span><span class="s1">(!nodeInterop &amp;&amp; obj &amp;&amp; obj.__esModule) {</span>
+        <span class="s2">return </span><span class="s1">obj;</span>
+    <span class="s1">}</span>
+    <span class="s2">if </span><span class="s1">(obj === </span><span class="s2">null </span><span class="s1">|| </span><span class="s2">typeof </span><span class="s1">obj !== </span><span class="s0">&quot;object&quot; </span><span class="s1">&amp;&amp; </span><span class="s2">typeof </span><span class="s1">obj !== </span><span class="s0">&quot;function&quot;</span><span class="s1">) {</span>
+        <span class="s2">return </span><span class="s1">{</span>
+            <span class="s2">default</span><span class="s1">: obj</span>
+        <span class="s1">};</span>
+    <span class="s1">}</span>
+    <span class="s2">var </span><span class="s1">cache = _getRequireWildcardCache(nodeInterop);</span>
+    <span class="s2">if </span><span class="s1">(cache &amp;&amp; cache.has(obj)) {</span>
+        <span class="s2">return </span><span class="s1">cache.get(obj);</span>
+    <span class="s1">}</span>
+    <span class="s2">var </span><span class="s1">newObj = {</span>
+        <span class="s1">__proto__: </span><span class="s2">null</span>
+    <span class="s1">};</span>
+    <span class="s2">var </span><span class="s1">hasPropertyDescriptor = Object.defineProperty &amp;&amp; Object.getOwnPropertyDescriptor;</span>
+    <span class="s2">for</span><span class="s1">(</span><span class="s2">var </span><span class="s1">key </span><span class="s2">in </span><span class="s1">obj){</span>
+        <span class="s2">if </span><span class="s1">(key !== </span><span class="s0">&quot;default&quot; </span><span class="s1">&amp;&amp; Object.prototype.hasOwnProperty.call(obj, key)) {</span>
+            <span class="s2">var </span><span class="s1">desc = hasPropertyDescriptor ? Object.getOwnPropertyDescriptor(obj, key) : </span><span class="s2">null</span><span class="s1">;</span>
+            <span class="s2">if </span><span class="s1">(desc &amp;&amp; (desc.get || desc.set)) {</span>
+                <span class="s1">Object.defineProperty(newObj, key, desc);</span>
+            <span class="s1">} </span><span class="s2">else </span><span class="s1">{</span>
+                <span class="s1">newObj[key] = obj[key];</span>
+            <span class="s1">}</span>
+        <span class="s1">}</span>
+    <span class="s1">}</span>
+    <span class="s1">newObj.default = obj;</span>
+    <span class="s2">if </span><span class="s1">(cache) {</span>
+        <span class="s1">cache.set(obj, newObj);</span>
+    <span class="s1">}</span>
+    <span class="s2">return </span><span class="s1">newObj;</span>
+<span class="s1">}</span>
+<span class="s2">function </span><span class="s1">isFavicon(icon) {</span>
+    <span class="s2">if </span><span class="s1">(!icon) {</span>
+        <span class="s2">return false</span><span class="s1">;</span>
+    <span class="s1">}</span>
+    <span class="s4">// turbopack appends a hash to all images</span>
+    <span class="s2">return </span><span class="s1">(icon.url === </span><span class="s0">'/favicon.ico' </span><span class="s1">|| icon.url.toString().startsWith(</span><span class="s0">'/favicon.ico?'</span><span class="s1">)) &amp;&amp; icon.type === </span><span class="s0">'image/x-icon'</span><span class="s1">;</span>
+<span class="s1">}</span>
+<span class="s1">async </span><span class="s2">function </span><span class="s1">mergeStaticMetadata(source, target, staticFilesMetadata, metadataContext, titleTemplates, leafSegmentStaticIcons, pathname) {</span>
+    <span class="s2">var </span><span class="s1">_source_twitter, _source_openGraph;</span>
+    <span class="s2">if </span><span class="s1">(!staticFilesMetadata) </span><span class="s2">return </span><span class="s1">target;</span>
+    <span class="s2">const </span><span class="s1">{ icon, apple, openGraph, twitter, manifest } = staticFilesMetadata;</span>
+    <span class="s4">// Keep updating the static icons in the most leaf node</span>
+    <span class="s2">if </span><span class="s1">(icon) {</span>
+        <span class="s1">leafSegmentStaticIcons.icon = icon;</span>
+    <span class="s1">}</span>
+    <span class="s2">if </span><span class="s1">(apple) {</span>
+        <span class="s1">leafSegmentStaticIcons.apple = apple;</span>
+    <span class="s1">}</span>
+    <span class="s4">// file based metadata is specified and current level metadata twitter.images is not specified</span>
+    <span class="s2">if </span><span class="s1">(twitter &amp;&amp; !(source == </span><span class="s2">null </span><span class="s1">? </span><span class="s2">void </span><span class="s3">0 </span><span class="s1">: (_source_twitter = source.twitter) == </span><span class="s2">null </span><span class="s1">? </span><span class="s2">void </span><span class="s3">0 </span><span class="s1">: _source_twitter.hasOwnProperty(</span><span class="s0">'images'</span><span class="s1">))) {</span>
+        <span class="s2">const </span><span class="s1">resolvedTwitter = (</span><span class="s3">0</span><span class="s1">, _resolveopengraph.resolveTwitter)({</span>
+            <span class="s1">...target.twitter,</span>
+            <span class="s1">images: twitter</span>
+        <span class="s1">}, target.metadataBase, {</span>
+            <span class="s1">...metadataContext,</span>
+            <span class="s1">isStaticMetadataRouteFile: </span><span class="s2">true</span>
+        <span class="s1">}, titleTemplates.twitter);</span>
+        <span class="s1">target.twitter = resolvedTwitter;</span>
+    <span class="s1">}</span>
+    <span class="s4">// file based metadata is specified and current level metadata openGraph.images is not specified</span>
+    <span class="s2">if </span><span class="s1">(openGraph &amp;&amp; !(source == </span><span class="s2">null </span><span class="s1">? </span><span class="s2">void </span><span class="s3">0 </span><span class="s1">: (_source_openGraph = source.openGraph) == </span><span class="s2">null </span><span class="s1">? </span><span class="s2">void </span><span class="s3">0 </span><span class="s1">: _source_openGraph.hasOwnProperty(</span><span class="s0">'images'</span><span class="s1">))) {</span>
+        <span class="s2">const </span><span class="s1">resolvedOpenGraph = </span><span class="s2">await </span><span class="s1">(</span><span class="s3">0</span><span class="s1">, _resolveopengraph.resolveOpenGraph)({</span>
+            <span class="s1">...target.openGraph,</span>
+            <span class="s1">images: openGraph</span>
+        <span class="s1">}, target.metadataBase, pathname, {</span>
+            <span class="s1">...metadataContext,</span>
+            <span class="s1">isStaticMetadataRouteFile: </span><span class="s2">true</span>
+        <span class="s1">}, titleTemplates.openGraph);</span>
+        <span class="s1">target.openGraph = resolvedOpenGraph;</span>
+    <span class="s1">}</span>
+    <span class="s2">if </span><span class="s1">(manifest) {</span>
+        <span class="s1">target.manifest = manifest;</span>
+    <span class="s1">}</span>
+    <span class="s2">return </span><span class="s1">target;</span>
+<span class="s1">}</span>
+<span class="s4">// Merge the source metadata into the resolved target metadata.</span>
+<span class="s1">async </span><span class="s2">function </span><span class="s1">mergeMetadata(route, pathname, { source, target, staticFilesMetadata, titleTemplates, metadataContext, buildState, leafSegmentStaticIcons }) {</span>
+    <span class="s4">// If there's override metadata, prefer it otherwise fallback to the default metadata.</span>
+    <span class="s2">const </span><span class="s1">metadataBase = </span><span class="s2">typeof </span><span class="s1">(source == </span><span class="s2">null </span><span class="s1">? </span><span class="s2">void </span><span class="s3">0 </span><span class="s1">: source.metadataBase) !== </span><span class="s0">'undefined' </span><span class="s1">? source.metadataBase : target.metadataBase;</span>
+    <span class="s2">for</span><span class="s1">(</span><span class="s2">const </span><span class="s1">key_ </span><span class="s2">in </span><span class="s1">source){</span>
+        <span class="s2">const </span><span class="s1">key = key_;</span>
+        <span class="s2">switch</span><span class="s1">(key){</span>
+            <span class="s2">case </span><span class="s0">'title'</span><span class="s1">:</span>
+                <span class="s1">{</span>
+                    <span class="s1">target.title = (</span><span class="s3">0</span><span class="s1">, _resolvetitle.resolveTitle)(source.title, titleTemplates.title);</span>
+                    <span class="s2">break</span><span class="s1">;</span>
+                <span class="s1">}</span>
+            <span class="s2">case </span><span class="s0">'alternates'</span><span class="s1">:</span>
+                <span class="s1">{</span>
+                    <span class="s1">target.alternates = </span><span class="s2">await </span><span class="s1">(</span><span class="s3">0</span><span class="s1">, _resolvebasics.resolveAlternates)(source.alternates, metadataBase, pathname, metadataContext);</span>
+                    <span class="s2">break</span><span class="s1">;</span>
+                <span class="s1">}</span>
+            <span class="s2">case </span><span class="s0">'openGraph'</span><span class="s1">:</span>
+                <span class="s1">{</span>
+                    <span class="s1">target.openGraph = </span><span class="s2">await </span><span class="s1">(</span><span class="s3">0</span><span class="s1">, _resolveopengraph.resolveOpenGraph)(source.openGraph, metadataBase, pathname, metadataContext, titleTemplates.openGraph);</span>
+                    <span class="s2">break</span><span class="s1">;</span>
+                <span class="s1">}</span>
+            <span class="s2">case </span><span class="s0">'twitter'</span><span class="s1">:</span>
+                <span class="s1">{</span>
+                    <span class="s1">target.twitter = (</span><span class="s3">0</span><span class="s1">, _resolveopengraph.resolveTwitter)(source.twitter, metadataBase, metadataContext, titleTemplates.twitter);</span>
+                    <span class="s2">break</span><span class="s1">;</span>
+                <span class="s1">}</span>
+            <span class="s2">case </span><span class="s0">'facebook'</span><span class="s1">:</span>
+                <span class="s1">target.facebook = (</span><span class="s3">0</span><span class="s1">, _resolvebasics.resolveFacebook)(source.facebook);</span>
+                <span class="s2">break</span><span class="s1">;</span>
+            <span class="s2">case </span><span class="s0">'verification'</span><span class="s1">:</span>
+                <span class="s1">target.verification = (</span><span class="s3">0</span><span class="s1">, _resolvebasics.resolveVerification)(source.verification);</span>
+                <span class="s2">break</span><span class="s1">;</span>
+            <span class="s2">case </span><span class="s0">'icons'</span><span class="s1">:</span>
+                <span class="s1">{</span>
+                    <span class="s1">target.icons = (</span><span class="s3">0</span><span class="s1">, _resolveicons.resolveIcons)(source.icons);</span>
+                    <span class="s2">break</span><span class="s1">;</span>
+                <span class="s1">}</span>
+            <span class="s2">case </span><span class="s0">'appleWebApp'</span><span class="s1">:</span>
+                <span class="s1">target.appleWebApp = (</span><span class="s3">0</span><span class="s1">, _resolvebasics.resolveAppleWebApp)(source.appleWebApp);</span>
+                <span class="s2">break</span><span class="s1">;</span>
+            <span class="s2">case </span><span class="s0">'appLinks'</span><span class="s1">:</span>
+                <span class="s1">target.appLinks = (</span><span class="s3">0</span><span class="s1">, _resolvebasics.resolveAppLinks)(source.appLinks);</span>
+                <span class="s2">break</span><span class="s1">;</span>
+            <span class="s2">case </span><span class="s0">'robots'</span><span class="s1">:</span>
+                <span class="s1">{</span>
+                    <span class="s1">target.robots = (</span><span class="s3">0</span><span class="s1">, _resolvebasics.resolveRobots)(source.robots);</span>
+                    <span class="s2">break</span><span class="s1">;</span>
+                <span class="s1">}</span>
+            <span class="s2">case </span><span class="s0">'archives'</span><span class="s1">:</span>
+            <span class="s2">case </span><span class="s0">'assets'</span><span class="s1">:</span>
+            <span class="s2">case </span><span class="s0">'bookmarks'</span><span class="s1">:</span>
+            <span class="s2">case </span><span class="s0">'keywords'</span><span class="s1">:</span>
+                <span class="s1">{</span>
+                    <span class="s1">target[key] = (</span><span class="s3">0</span><span class="s1">, _utils.resolveAsArrayOrUndefined)(source[key]);</span>
+                    <span class="s2">break</span><span class="s1">;</span>
+                <span class="s1">}</span>
+            <span class="s2">case </span><span class="s0">'authors'</span><span class="s1">:</span>
+                <span class="s1">{</span>
+                    <span class="s1">target[key] = (</span><span class="s3">0</span><span class="s1">, _utils.resolveAsArrayOrUndefined)(source.authors);</span>
+                    <span class="s2">break</span><span class="s1">;</span>
+                <span class="s1">}</span>
+            <span class="s2">case </span><span class="s0">'itunes'</span><span class="s1">:</span>
+                <span class="s1">{</span>
+                    <span class="s1">target[key] = </span><span class="s2">await </span><span class="s1">(</span><span class="s3">0</span><span class="s1">, _resolvebasics.resolveItunes)(source.itunes, metadataBase, pathname, metadataContext);</span>
+                    <span class="s2">break</span><span class="s1">;</span>
+                <span class="s1">}</span>
+            <span class="s2">case </span><span class="s0">'pagination'</span><span class="s1">:</span>
+                <span class="s1">{</span>
+                    <span class="s1">target.pagination = </span><span class="s2">await </span><span class="s1">(</span><span class="s3">0</span><span class="s1">, _resolvebasics.resolvePagination)(source.pagination, metadataBase, pathname, metadataContext);</span>
+                    <span class="s2">break</span><span class="s1">;</span>
+                <span class="s1">}</span>
+            <span class="s4">// directly assign fields that fallback to null</span>
+            <span class="s2">case </span><span class="s0">'abstract'</span><span class="s1">:</span>
+            <span class="s2">case </span><span class="s0">'applicationName'</span><span class="s1">:</span>
+            <span class="s2">case </span><span class="s0">'description'</span><span class="s1">:</span>
+            <span class="s2">case </span><span class="s0">'generator'</span><span class="s1">:</span>
+            <span class="s2">case </span><span class="s0">'creator'</span><span class="s1">:</span>
+            <span class="s2">case </span><span class="s0">'publisher'</span><span class="s1">:</span>
+            <span class="s2">case </span><span class="s0">'category'</span><span class="s1">:</span>
+            <span class="s2">case </span><span class="s0">'classification'</span><span class="s1">:</span>
+            <span class="s2">case </span><span class="s0">'referrer'</span><span class="s1">:</span>
+            <span class="s2">case </span><span class="s0">'formatDetection'</span><span class="s1">:</span>
+            <span class="s2">case </span><span class="s0">'manifest'</span><span class="s1">:</span>
+            <span class="s2">case </span><span class="s0">'pinterest'</span><span class="s1">:</span>
+                <span class="s4">// @ts-ignore TODO: support inferring</span>
+                <span class="s1">target[key] = source[key] || </span><span class="s2">null</span><span class="s1">;</span>
+                <span class="s2">break</span><span class="s1">;</span>
+            <span class="s2">case </span><span class="s0">'other'</span><span class="s1">:</span>
+                <span class="s1">target.other = Object.assign({}, target.other, source.other);</span>
+                <span class="s2">break</span><span class="s1">;</span>
+            <span class="s2">case </span><span class="s0">'metadataBase'</span><span class="s1">:</span>
+                <span class="s1">target.metadataBase = metadataBase;</span>
+                <span class="s2">break</span><span class="s1">;</span>
+            <span class="s2">case </span><span class="s0">'apple-touch-fullscreen'</span><span class="s1">:</span>
+                <span class="s1">{</span>
+                    <span class="s1">buildState.warnings.add(</span><span class="s0">`Use appleWebApp instead</span><span class="s5">\n</span><span class="s0">Read more: https://nextjs.org/docs/app/api-reference/functions/generate-metadata`</span><span class="s1">);</span>
+                    <span class="s2">break</span><span class="s1">;</span>
+                <span class="s1">}</span>
+            <span class="s2">case </span><span class="s0">'apple-touch-icon-precomposed'</span><span class="s1">:</span>
+                <span class="s1">{</span>
+                    <span class="s1">buildState.warnings.add(</span><span class="s0">`Use icons.apple instead</span><span class="s5">\n</span><span class="s0">Read more: https://nextjs.org/docs/app/api-reference/functions/generate-metadata`</span><span class="s1">);</span>
+                    <span class="s2">break</span><span class="s1">;</span>
+                <span class="s1">}</span>
+            <span class="s2">case </span><span class="s0">'themeColor'</span><span class="s1">:</span>
+            <span class="s2">case </span><span class="s0">'colorScheme'</span><span class="s1">:</span>
+            <span class="s2">case </span><span class="s0">'viewport'</span><span class="s1">:</span>
+                <span class="s2">if </span><span class="s1">(source[key] != </span><span class="s2">null</span><span class="s1">) {</span>
+                    <span class="s1">buildState.warnings.add(</span><span class="s0">`Unsupported metadata </span><span class="s1">${key} </span><span class="s0">is configured in metadata export in </span><span class="s1">${route}</span><span class="s0">. Please move it to viewport export instead.</span><span class="s5">\n</span><span class="s0">Read more: https://nextjs.org/docs/app/api-reference/functions/generate-viewport`</span><span class="s1">);</span>
+                <span class="s1">}</span>
+                <span class="s2">break</span><span class="s1">;</span>
+            <span class="s2">default</span><span class="s1">:</span>
+                <span class="s1">{</span>
+                    <span class="s1">key;</span>
+                <span class="s1">}</span>
+        <span class="s1">}</span>
+    <span class="s1">}</span>
+    <span class="s2">return </span><span class="s1">mergeStaticMetadata(source, target, staticFilesMetadata, metadataContext, titleTemplates, leafSegmentStaticIcons, pathname);</span>
+<span class="s1">}</span>
+<span class="s2">function </span><span class="s1">mergeViewport({ target, source }) {</span>
+    <span class="s2">if </span><span class="s1">(!source) </span><span class="s2">return</span><span class="s1">;</span>
+    <span class="s2">for</span><span class="s1">(</span><span class="s2">const </span><span class="s1">key_ </span><span class="s2">in </span><span class="s1">source){</span>
+        <span class="s2">const </span><span class="s1">key = key_;</span>
+        <span class="s2">switch</span><span class="s1">(key){</span>
+            <span class="s2">case </span><span class="s0">'themeColor'</span><span class="s1">:</span>
+                <span class="s1">{</span>
+                    <span class="s1">target.themeColor = (</span><span class="s3">0</span><span class="s1">, _resolvebasics.resolveThemeColor)(source.themeColor);</span>
+                    <span class="s2">break</span><span class="s1">;</span>
+                <span class="s1">}</span>
+            <span class="s2">case </span><span class="s0">'colorScheme'</span><span class="s1">:</span>
+                <span class="s1">target.colorScheme = source.colorScheme || </span><span class="s2">null</span><span class="s1">;</span>
+                <span class="s2">break</span><span class="s1">;</span>
+            <span class="s2">case </span><span class="s0">'width'</span><span class="s1">:</span>
+            <span class="s2">case </span><span class="s0">'height'</span><span class="s1">:</span>
+            <span class="s2">case </span><span class="s0">'initialScale'</span><span class="s1">:</span>
+            <span class="s2">case </span><span class="s0">'minimumScale'</span><span class="s1">:</span>
+            <span class="s2">case </span><span class="s0">'maximumScale'</span><span class="s1">:</span>
+            <span class="s2">case </span><span class="s0">'userScalable'</span><span class="s1">:</span>
+            <span class="s2">case </span><span class="s0">'viewportFit'</span><span class="s1">:</span>
+            <span class="s2">case </span><span class="s0">'interactiveWidget'</span><span class="s1">:</span>
+                <span class="s4">// always override the target with the source</span>
+                <span class="s4">// @ts-ignore viewport properties</span>
+                <span class="s1">target[key] = source[key];</span>
+                <span class="s2">break</span><span class="s1">;</span>
+            <span class="s2">default</span><span class="s1">:</span>
+                <span class="s1">key;</span>
+        <span class="s1">}</span>
+    <span class="s1">}</span>
+<span class="s1">}</span>
+<span class="s2">function </span><span class="s1">getDefinedViewport(mod, props, tracingProps) {</span>
+    <span class="s2">if </span><span class="s1">(</span><span class="s2">typeof </span><span class="s1">mod.generateViewport === </span><span class="s0">'function'</span><span class="s1">) {</span>
+        <span class="s2">const </span><span class="s1">{ route } = tracingProps;</span>
+        <span class="s2">return </span><span class="s1">(parent)=&gt;(</span><span class="s3">0</span><span class="s1">, _tracer.getTracer)().trace(_constants.ResolveMetadataSpan.generateViewport, {</span>
+                <span class="s1">spanName: </span><span class="s0">`generateViewport </span><span class="s1">${route}</span><span class="s0">`</span><span class="s1">,</span>
+                <span class="s1">attributes: {</span>
+                    <span class="s0">'next.page'</span><span class="s1">: route</span>
+                <span class="s1">}</span>
+            <span class="s1">}, ()=&gt;mod.generateViewport(props, parent));</span>
+    <span class="s1">}</span>
+    <span class="s2">return </span><span class="s1">mod.viewport || </span><span class="s2">null</span><span class="s1">;</span>
+<span class="s1">}</span>
+<span class="s2">function </span><span class="s1">getDefinedMetadata(mod, props, tracingProps) {</span>
+    <span class="s2">if </span><span class="s1">(</span><span class="s2">typeof </span><span class="s1">mod.generateMetadata === </span><span class="s0">'function'</span><span class="s1">) {</span>
+        <span class="s2">const </span><span class="s1">{ route } = tracingProps;</span>
+        <span class="s2">return </span><span class="s1">(parent)=&gt;(</span><span class="s3">0</span><span class="s1">, _tracer.getTracer)().trace(_constants.ResolveMetadataSpan.generateMetadata, {</span>
+                <span class="s1">spanName: </span><span class="s0">`generateMetadata </span><span class="s1">${route}</span><span class="s0">`</span><span class="s1">,</span>
+                <span class="s1">attributes: {</span>
+                    <span class="s0">'next.page'</span><span class="s1">: route</span>
+                <span class="s1">}</span>
+            <span class="s1">}, ()=&gt;mod.generateMetadata(props, parent));</span>
+    <span class="s1">}</span>
+    <span class="s2">return </span><span class="s1">mod.metadata || </span><span class="s2">null</span><span class="s1">;</span>
+<span class="s1">}</span>
+<span class="s1">async </span><span class="s2">function </span><span class="s1">collectStaticImagesFiles(metadata, props, type) {</span>
+    <span class="s2">var </span><span class="s1">_this;</span>
+    <span class="s2">if </span><span class="s1">(!(metadata == </span><span class="s2">null </span><span class="s1">? </span><span class="s2">void </span><span class="s3">0 </span><span class="s1">: metadata[type])) </span><span class="s2">return </span><span class="s1">undefined;</span>
+    <span class="s2">const </span><span class="s1">iconPromises = metadata[type].map(async (imageModule)=&gt;(</span><span class="s3">0</span><span class="s1">, _interopdefault.interopDefault)(</span><span class="s2">await </span><span class="s1">imageModule(props)));</span>
+    <span class="s2">return </span><span class="s1">(iconPromises == </span><span class="s2">null </span><span class="s1">? </span><span class="s2">void </span><span class="s3">0 </span><span class="s1">: iconPromises.length) &gt; </span><span class="s3">0 </span><span class="s1">? (_this = </span><span class="s2">await </span><span class="s1">Promise.all(iconPromises)) == </span><span class="s2">null </span><span class="s1">? </span><span class="s2">void </span><span class="s3">0 </span><span class="s1">: _this.flat() : undefined;</span>
+<span class="s1">}</span>
+<span class="s1">async </span><span class="s2">function </span><span class="s1">resolveStaticMetadata(modules, props) {</span>
+    <span class="s2">const </span><span class="s1">{ metadata } = modules;</span>
+    <span class="s2">if </span><span class="s1">(!metadata) </span><span class="s2">return null</span><span class="s1">;</span>
+    <span class="s2">const </span><span class="s1">[icon, apple, openGraph, twitter] = </span><span class="s2">await </span><span class="s1">Promise.all([</span>
+        <span class="s1">collectStaticImagesFiles(metadata, props, </span><span class="s0">'icon'</span><span class="s1">),</span>
+        <span class="s1">collectStaticImagesFiles(metadata, props, </span><span class="s0">'apple'</span><span class="s1">),</span>
+        <span class="s1">collectStaticImagesFiles(metadata, props, </span><span class="s0">'openGraph'</span><span class="s1">),</span>
+        <span class="s1">collectStaticImagesFiles(metadata, props, </span><span class="s0">'twitter'</span><span class="s1">)</span>
+    <span class="s1">]);</span>
+    <span class="s2">const </span><span class="s1">staticMetadata = {</span>
+        <span class="s1">icon,</span>
+        <span class="s1">apple,</span>
+        <span class="s1">openGraph,</span>
+        <span class="s1">twitter,</span>
+        <span class="s1">manifest: metadata.manifest</span>
+    <span class="s1">};</span>
+    <span class="s2">return </span><span class="s1">staticMetadata;</span>
+<span class="s1">}</span>
+<span class="s4">// [layout.metadata, static files metadata] -&gt; ... -&gt; [page.metadata, static files metadata]</span>
+<span class="s1">async </span><span class="s2">function </span><span class="s1">collectMetadata({ tree, metadataItems, errorMetadataItem, props, route, errorConvention }) {</span>
+    <span class="s2">let </span><span class="s1">mod;</span>
+    <span class="s2">let </span><span class="s1">modType;</span>
+    <span class="s2">const </span><span class="s1">hasErrorConventionComponent = Boolean(errorConvention &amp;&amp; tree[</span><span class="s3">2</span><span class="s1">][errorConvention]);</span>
+    <span class="s2">if </span><span class="s1">(errorConvention) {</span>
+        <span class="s1">mod = </span><span class="s2">await </span><span class="s1">(</span><span class="s3">0</span><span class="s1">, _appdirmodule.getComponentTypeModule)(tree, </span><span class="s0">'layout'</span><span class="s1">);</span>
+        <span class="s1">modType = errorConvention;</span>
+    <span class="s1">} </span><span class="s2">else </span><span class="s1">{</span>
+        <span class="s2">const </span><span class="s1">{ mod: layoutOrPageMod, modType: layoutOrPageModType } = </span><span class="s2">await </span><span class="s1">(</span><span class="s3">0</span><span class="s1">, _appdirmodule.getLayoutOrPageModule)(tree);</span>
+        <span class="s1">mod = layoutOrPageMod;</span>
+        <span class="s1">modType = layoutOrPageModType;</span>
+    <span class="s1">}</span>
+    <span class="s2">if </span><span class="s1">(modType) {</span>
+        <span class="s1">route += </span><span class="s0">`/</span><span class="s1">${modType}</span><span class="s0">`</span><span class="s1">;</span>
+    <span class="s1">}</span>
+    <span class="s2">const </span><span class="s1">staticFilesMetadata = </span><span class="s2">await </span><span class="s1">resolveStaticMetadata(tree[</span><span class="s3">2</span><span class="s1">], props);</span>
+    <span class="s2">const </span><span class="s1">metadataExport = mod ? getDefinedMetadata(mod, props, {</span>
+        <span class="s1">route</span>
+    <span class="s1">}) : </span><span class="s2">null</span><span class="s1">;</span>
+    <span class="s1">metadataItems.push([</span>
+        <span class="s1">metadataExport,</span>
+        <span class="s1">staticFilesMetadata</span>
+    <span class="s1">]);</span>
+    <span class="s2">if </span><span class="s1">(hasErrorConventionComponent &amp;&amp; errorConvention) {</span>
+        <span class="s2">const </span><span class="s1">errorMod = </span><span class="s2">await </span><span class="s1">(</span><span class="s3">0</span><span class="s1">, _appdirmodule.getComponentTypeModule)(tree, errorConvention);</span>
+        <span class="s2">const </span><span class="s1">errorMetadataExport = errorMod ? getDefinedMetadata(errorMod, props, {</span>
+            <span class="s1">route</span>
+        <span class="s1">}) : </span><span class="s2">null</span><span class="s1">;</span>
+        <span class="s1">errorMetadataItem[</span><span class="s3">0</span><span class="s1">] = errorMetadataExport;</span>
+        <span class="s1">errorMetadataItem[</span><span class="s3">1</span><span class="s1">] = staticFilesMetadata;</span>
+    <span class="s1">}</span>
+<span class="s1">}</span>
+<span class="s4">// [layout.metadata, static files metadata] -&gt; ... -&gt; [page.metadata, static files metadata]</span>
+<span class="s1">async </span><span class="s2">function </span><span class="s1">collectViewport({ tree, viewportItems, errorViewportItemRef, props, route, errorConvention }) {</span>
+    <span class="s2">let </span><span class="s1">mod;</span>
+    <span class="s2">let </span><span class="s1">modType;</span>
+    <span class="s2">const </span><span class="s1">hasErrorConventionComponent = Boolean(errorConvention &amp;&amp; tree[</span><span class="s3">2</span><span class="s1">][errorConvention]);</span>
+    <span class="s2">if </span><span class="s1">(errorConvention) {</span>
+        <span class="s1">mod = </span><span class="s2">await </span><span class="s1">(</span><span class="s3">0</span><span class="s1">, _appdirmodule.getComponentTypeModule)(tree, </span><span class="s0">'layout'</span><span class="s1">);</span>
+        <span class="s1">modType = errorConvention;</span>
+    <span class="s1">} </span><span class="s2">else </span><span class="s1">{</span>
+        <span class="s2">const </span><span class="s1">{ mod: layoutOrPageMod, modType: layoutOrPageModType } = </span><span class="s2">await </span><span class="s1">(</span><span class="s3">0</span><span class="s1">, _appdirmodule.getLayoutOrPageModule)(tree);</span>
+        <span class="s1">mod = layoutOrPageMod;</span>
+        <span class="s1">modType = layoutOrPageModType;</span>
+    <span class="s1">}</span>
+    <span class="s2">if </span><span class="s1">(modType) {</span>
+        <span class="s1">route += </span><span class="s0">`/</span><span class="s1">${modType}</span><span class="s0">`</span><span class="s1">;</span>
+    <span class="s1">}</span>
+    <span class="s2">const </span><span class="s1">viewportExport = mod ? getDefinedViewport(mod, props, {</span>
+        <span class="s1">route</span>
+    <span class="s1">}) : </span><span class="s2">null</span><span class="s1">;</span>
+    <span class="s1">viewportItems.push(viewportExport);</span>
+    <span class="s2">if </span><span class="s1">(hasErrorConventionComponent &amp;&amp; errorConvention) {</span>
+        <span class="s2">const </span><span class="s1">errorMod = </span><span class="s2">await </span><span class="s1">(</span><span class="s3">0</span><span class="s1">, _appdirmodule.getComponentTypeModule)(tree, errorConvention);</span>
+        <span class="s2">const </span><span class="s1">errorViewportExport = errorMod ? getDefinedViewport(errorMod, props, {</span>
+            <span class="s1">route</span>
+        <span class="s1">}) : </span><span class="s2">null</span><span class="s1">;</span>
+        <span class="s1">errorViewportItemRef.current = errorViewportExport;</span>
+    <span class="s1">}</span>
+<span class="s1">}</span>
+<span class="s2">const </span><span class="s1">resolveMetadataItems = (</span><span class="s3">0</span><span class="s1">, _react.cache)(async </span><span class="s2">function</span><span class="s1">(tree, searchParams, errorConvention, getDynamicParamFromSegment, workStore) {</span>
+    <span class="s2">const </span><span class="s1">parentParams = {};</span>
+    <span class="s2">const </span><span class="s1">metadataItems = [];</span>
+    <span class="s2">const </span><span class="s1">errorMetadataItem = [</span>
+        <span class="s2">null</span><span class="s1">,</span>
+        <span class="s2">null</span>
+    <span class="s1">];</span>
+    <span class="s2">const </span><span class="s1">treePrefix = undefined;</span>
+    <span class="s2">return </span><span class="s1">resolveMetadataItemsImpl(metadataItems, tree, treePrefix, parentParams, searchParams, errorConvention, errorMetadataItem, getDynamicParamFromSegment, workStore);</span>
+<span class="s1">});</span>
+<span class="s1">async </span><span class="s2">function </span><span class="s1">resolveMetadataItemsImpl(metadataItems, tree, </span><span class="s4">/** Provided tree can be nested subtree, this argument says what is the path of such subtree */ </span><span class="s1">treePrefix, parentParams, searchParams, errorConvention, errorMetadataItem, getDynamicParamFromSegment, workStore) {</span>
+    <span class="s2">const </span><span class="s1">[segment, parallelRoutes, { page }] = tree;</span>
+    <span class="s2">const </span><span class="s1">currentTreePrefix = treePrefix &amp;&amp; treePrefix.length ? [</span>
+        <span class="s1">...treePrefix,</span>
+        <span class="s1">segment</span>
+    <span class="s1">] : [</span>
+        <span class="s1">segment</span>
+    <span class="s1">];</span>
+    <span class="s2">const </span><span class="s1">isPage = </span><span class="s2">typeof </span><span class="s1">page !== </span><span class="s0">'undefined'</span><span class="s1">;</span>
+    <span class="s4">// Handle dynamic segment params.</span>
+    <span class="s2">const </span><span class="s1">segmentParam = getDynamicParamFromSegment(segment);</span>
+    <span class="s4">/**</span>
+   <span class="s4">* Create object holding the parent params and current params</span>
+   <span class="s4">*/ </span><span class="s2">let </span><span class="s1">currentParams = parentParams;</span>
+    <span class="s2">if </span><span class="s1">(segmentParam &amp;&amp; segmentParam.value !== </span><span class="s2">null</span><span class="s1">) {</span>
+        <span class="s1">currentParams = {</span>
+            <span class="s1">...parentParams,</span>
+            <span class="s1">[segmentParam.param]: segmentParam.value</span>
+        <span class="s1">};</span>
+    <span class="s1">}</span>
+    <span class="s2">const </span><span class="s1">params = (</span><span class="s3">0</span><span class="s1">, _params.createServerParamsForMetadata)(currentParams, workStore);</span>
+    <span class="s2">let </span><span class="s1">layerProps;</span>
+    <span class="s2">if </span><span class="s1">(isPage) {</span>
+        <span class="s1">layerProps = {</span>
+            <span class="s1">params,</span>
+            <span class="s1">searchParams</span>
+        <span class="s1">};</span>
+    <span class="s1">} </span><span class="s2">else </span><span class="s1">{</span>
+        <span class="s1">layerProps = {</span>
+            <span class="s1">params</span>
+        <span class="s1">};</span>
+    <span class="s1">}</span>
+    <span class="s2">await </span><span class="s1">collectMetadata({</span>
+        <span class="s1">tree,</span>
+        <span class="s1">metadataItems,</span>
+        <span class="s1">errorMetadataItem,</span>
+        <span class="s1">errorConvention,</span>
+        <span class="s1">props: layerProps,</span>
+        <span class="s1">route: currentTreePrefix</span><span class="s4">// __PAGE__ shouldn't be shown in a route</span>
+        <span class="s1">.filter((s)=&gt;s !== _segment.PAGE_SEGMENT_KEY).join(</span><span class="s0">'/'</span><span class="s1">)</span>
+    <span class="s1">});</span>
+    <span class="s2">for</span><span class="s1">(</span><span class="s2">const </span><span class="s1">key </span><span class="s2">in </span><span class="s1">parallelRoutes){</span>
+        <span class="s2">const </span><span class="s1">childTree = parallelRoutes[key];</span>
+        <span class="s2">await </span><span class="s1">resolveMetadataItemsImpl(metadataItems, childTree, currentTreePrefix, currentParams, searchParams, errorConvention, errorMetadataItem, getDynamicParamFromSegment, workStore);</span>
+    <span class="s1">}</span>
+    <span class="s2">if </span><span class="s1">(Object.keys(parallelRoutes).length === </span><span class="s3">0 </span><span class="s1">&amp;&amp; errorConvention) {</span>
+        <span class="s4">// If there are no parallel routes, place error metadata as the last item.</span>
+        <span class="s4">// e.g. layout -&gt; layout -&gt; not-found</span>
+        <span class="s1">metadataItems.push(errorMetadataItem);</span>
+    <span class="s1">}</span>
+    <span class="s2">return </span><span class="s1">metadataItems;</span>
+<span class="s1">}</span>
+<span class="s2">const </span><span class="s1">resolveViewportItems = (</span><span class="s3">0</span><span class="s1">, _react.cache)(async </span><span class="s2">function</span><span class="s1">(tree, searchParams, errorConvention, getDynamicParamFromSegment, workStore) {</span>
+    <span class="s2">const </span><span class="s1">parentParams = {};</span>
+    <span class="s2">const </span><span class="s1">viewportItems = [];</span>
+    <span class="s2">const </span><span class="s1">errorViewportItemRef = {</span>
+        <span class="s1">current: </span><span class="s2">null</span>
+    <span class="s1">};</span>
+    <span class="s2">const </span><span class="s1">treePrefix = undefined;</span>
+    <span class="s2">return </span><span class="s1">resolveViewportItemsImpl(viewportItems, tree, treePrefix, parentParams, searchParams, errorConvention, errorViewportItemRef, getDynamicParamFromSegment, workStore);</span>
+<span class="s1">});</span>
+<span class="s1">async </span><span class="s2">function </span><span class="s1">resolveViewportItemsImpl(viewportItems, tree, </span><span class="s4">/** Provided tree can be nested subtree, this argument says what is the path of such subtree */ </span><span class="s1">treePrefix, parentParams, searchParams, errorConvention, errorViewportItemRef, getDynamicParamFromSegment, workStore) {</span>
+    <span class="s2">const </span><span class="s1">[segment, parallelRoutes, { page }] = tree;</span>
+    <span class="s2">const </span><span class="s1">currentTreePrefix = treePrefix &amp;&amp; treePrefix.length ? [</span>
+        <span class="s1">...treePrefix,</span>
+        <span class="s1">segment</span>
+    <span class="s1">] : [</span>
+        <span class="s1">segment</span>
+    <span class="s1">];</span>
+    <span class="s2">const </span><span class="s1">isPage = </span><span class="s2">typeof </span><span class="s1">page !== </span><span class="s0">'undefined'</span><span class="s1">;</span>
+    <span class="s4">// Handle dynamic segment params.</span>
+    <span class="s2">const </span><span class="s1">segmentParam = getDynamicParamFromSegment(segment);</span>
+    <span class="s4">/**</span>
+   <span class="s4">* Create object holding the parent params and current params</span>
+   <span class="s4">*/ </span><span class="s2">let </span><span class="s1">currentParams = parentParams;</span>
+    <span class="s2">if </span><span class="s1">(segmentParam &amp;&amp; segmentParam.value !== </span><span class="s2">null</span><span class="s1">) {</span>
+        <span class="s1">currentParams = {</span>
+            <span class="s1">...parentParams,</span>
+            <span class="s1">[segmentParam.param]: segmentParam.value</span>
+        <span class="s1">};</span>
+    <span class="s1">}</span>
+    <span class="s2">const </span><span class="s1">params = (</span><span class="s3">0</span><span class="s1">, _params.createServerParamsForMetadata)(currentParams, workStore);</span>
+    <span class="s2">let </span><span class="s1">layerProps;</span>
+    <span class="s2">if </span><span class="s1">(isPage) {</span>
+        <span class="s1">layerProps = {</span>
+            <span class="s1">params,</span>
+            <span class="s1">searchParams</span>
+        <span class="s1">};</span>
+    <span class="s1">} </span><span class="s2">else </span><span class="s1">{</span>
+        <span class="s1">layerProps = {</span>
+            <span class="s1">params</span>
+        <span class="s1">};</span>
+    <span class="s1">}</span>
+    <span class="s2">await </span><span class="s1">collectViewport({</span>
+        <span class="s1">tree,</span>
+        <span class="s1">viewportItems,</span>
+        <span class="s1">errorViewportItemRef,</span>
+        <span class="s1">errorConvention,</span>
+        <span class="s1">props: layerProps,</span>
+        <span class="s1">route: currentTreePrefix</span><span class="s4">// __PAGE__ shouldn't be shown in a route</span>
+        <span class="s1">.filter((s)=&gt;s !== _segment.PAGE_SEGMENT_KEY).join(</span><span class="s0">'/'</span><span class="s1">)</span>
+    <span class="s1">});</span>
+    <span class="s2">for</span><span class="s1">(</span><span class="s2">const </span><span class="s1">key </span><span class="s2">in </span><span class="s1">parallelRoutes){</span>
+        <span class="s2">const </span><span class="s1">childTree = parallelRoutes[key];</span>
+        <span class="s2">await </span><span class="s1">resolveViewportItemsImpl(viewportItems, childTree, currentTreePrefix, currentParams, searchParams, errorConvention, errorViewportItemRef, getDynamicParamFromSegment, workStore);</span>
+    <span class="s1">}</span>
+    <span class="s2">if </span><span class="s1">(Object.keys(parallelRoutes).length === </span><span class="s3">0 </span><span class="s1">&amp;&amp; errorConvention) {</span>
+        <span class="s4">// If there are no parallel routes, place error metadata as the last item.</span>
+        <span class="s4">// e.g. layout -&gt; layout -&gt; not-found</span>
+        <span class="s1">viewportItems.push(errorViewportItemRef.current);</span>
+    <span class="s1">}</span>
+    <span class="s2">return </span><span class="s1">viewportItems;</span>
+<span class="s1">}</span>
+<span class="s2">const </span><span class="s1">isTitleTruthy = (title)=&gt;!!(title == </span><span class="s2">null </span><span class="s1">? </span><span class="s2">void </span><span class="s3">0 </span><span class="s1">: title.absolute);</span>
+<span class="s2">const </span><span class="s1">hasTitle = (metadata)=&gt;isTitleTruthy(metadata == </span><span class="s2">null </span><span class="s1">? </span><span class="s2">void </span><span class="s3">0 </span><span class="s1">: metadata.title);</span>
+<span class="s2">function </span><span class="s1">inheritFromMetadata(target, metadata) {</span>
+    <span class="s2">if </span><span class="s1">(target) {</span>
+        <span class="s2">if </span><span class="s1">(!hasTitle(target) &amp;&amp; hasTitle(metadata)) {</span>
+            <span class="s1">target.title = metadata.title;</span>
+        <span class="s1">}</span>
+        <span class="s2">if </span><span class="s1">(!target.description &amp;&amp; metadata.description) {</span>
+            <span class="s1">target.description = metadata.description;</span>
+        <span class="s1">}</span>
+    <span class="s1">}</span>
+<span class="s1">}</span>
+<span class="s4">// eslint-disable-next-line @typescript-eslint/no-unused-vars</span>
+<span class="s2">const </span><span class="s1">commonOgKeys = [</span>
+    <span class="s0">'title'</span><span class="s1">,</span>
+    <span class="s0">'description'</span><span class="s1">,</span>
+    <span class="s0">'images'</span>
+<span class="s1">];</span>
+<span class="s2">function </span><span class="s1">postProcessMetadata(metadata, favicon, titleTemplates, metadataContext) {</span>
+    <span class="s2">const </span><span class="s1">{ openGraph, twitter } = metadata;</span>
+    <span class="s2">if </span><span class="s1">(openGraph) {</span>
+        <span class="s4">// If there's openGraph information but not configured in twitter,</span>
+        <span class="s4">// inherit them from openGraph metadata.</span>
+        <span class="s2">let </span><span class="s1">autoFillProps = {};</span>
+        <span class="s2">const </span><span class="s1">hasTwTitle = hasTitle(twitter);</span>
+        <span class="s2">const </span><span class="s1">hasTwDescription = twitter == </span><span class="s2">null </span><span class="s1">? </span><span class="s2">void </span><span class="s3">0 </span><span class="s1">: twitter.description;</span>
+        <span class="s2">const </span><span class="s1">hasTwImages = Boolean((twitter == </span><span class="s2">null </span><span class="s1">? </span><span class="s2">void </span><span class="s3">0 </span><span class="s1">: twitter.hasOwnProperty(</span><span class="s0">'images'</span><span class="s1">)) &amp;&amp; twitter.images);</span>
+        <span class="s2">if </span><span class="s1">(!hasTwTitle) {</span>
+            <span class="s2">if </span><span class="s1">(isTitleTruthy(openGraph.title)) {</span>
+                <span class="s1">autoFillProps.title = openGraph.title;</span>
+            <span class="s1">} </span><span class="s2">else if </span><span class="s1">(metadata.title &amp;&amp; isTitleTruthy(metadata.title)) {</span>
+                <span class="s1">autoFillProps.title = metadata.title;</span>
+            <span class="s1">}</span>
+        <span class="s1">}</span>
+        <span class="s2">if </span><span class="s1">(!hasTwDescription) autoFillProps.description = openGraph.description || metadata.description || undefined;</span>
+        <span class="s2">if </span><span class="s1">(!hasTwImages) autoFillProps.images = openGraph.images;</span>
+        <span class="s2">if </span><span class="s1">(Object.keys(autoFillProps).length &gt; </span><span class="s3">0</span><span class="s1">) {</span>
+            <span class="s2">const </span><span class="s1">partialTwitter = (</span><span class="s3">0</span><span class="s1">, _resolveopengraph.resolveTwitter)(autoFillProps, metadata.metadataBase, metadataContext, titleTemplates.twitter);</span>
+            <span class="s2">if </span><span class="s1">(metadata.twitter) {</span>
+                <span class="s1">metadata.twitter = Object.assign({}, metadata.twitter, {</span>
+                    <span class="s1">...!hasTwTitle &amp;&amp; {</span>
+                        <span class="s1">title: partialTwitter == </span><span class="s2">null </span><span class="s1">? </span><span class="s2">void </span><span class="s3">0 </span><span class="s1">: partialTwitter.title</span>
+                    <span class="s1">},</span>
+                    <span class="s1">...!hasTwDescription &amp;&amp; {</span>
+                        <span class="s1">description: partialTwitter == </span><span class="s2">null </span><span class="s1">? </span><span class="s2">void </span><span class="s3">0 </span><span class="s1">: partialTwitter.description</span>
+                    <span class="s1">},</span>
+                    <span class="s1">...!hasTwImages &amp;&amp; {</span>
+                        <span class="s1">images: partialTwitter == </span><span class="s2">null </span><span class="s1">? </span><span class="s2">void </span><span class="s3">0 </span><span class="s1">: partialTwitter.images</span>
+                    <span class="s1">}</span>
+                <span class="s1">});</span>
+            <span class="s1">} </span><span class="s2">else </span><span class="s1">{</span>
+                <span class="s1">metadata.twitter = partialTwitter;</span>
+            <span class="s1">}</span>
+        <span class="s1">}</span>
+    <span class="s1">}</span>
+    <span class="s4">// If there's no title and description configured in openGraph or twitter,</span>
+    <span class="s4">// use the title and description from metadata.</span>
+    <span class="s1">inheritFromMetadata(openGraph, metadata);</span>
+    <span class="s1">inheritFromMetadata(twitter, metadata);</span>
+    <span class="s2">if </span><span class="s1">(favicon) {</span>
+        <span class="s2">if </span><span class="s1">(!metadata.icons) {</span>
+            <span class="s1">metadata.icons = {</span>
+                <span class="s1">icon: [],</span>
+                <span class="s1">apple: []</span>
+            <span class="s1">};</span>
+        <span class="s1">}</span>
+        <span class="s1">metadata.icons.icon.unshift(favicon);</span>
+    <span class="s1">}</span>
+    <span class="s2">return </span><span class="s1">metadata;</span>
+<span class="s1">}</span>
+<span class="s2">function </span><span class="s1">prerenderMetadata(metadataItems) {</span>
+    <span class="s4">// If the index is a function then it is a resolver and the next slot</span>
+    <span class="s4">// is the corresponding result. If the index is not a function it is the result</span>
+    <span class="s4">// itself.</span>
+    <span class="s2">const </span><span class="s1">resolversAndResults = [];</span>
+    <span class="s2">for</span><span class="s1">(</span><span class="s2">let </span><span class="s1">i = </span><span class="s3">0</span><span class="s1">; i &lt; metadataItems.length; i++){</span>
+        <span class="s2">const </span><span class="s1">metadataExport = metadataItems[i][</span><span class="s3">0</span><span class="s1">];</span>
+        <span class="s1">getResult(resolversAndResults, metadataExport);</span>
+    <span class="s1">}</span>
+    <span class="s2">return </span><span class="s1">resolversAndResults;</span>
+<span class="s1">}</span>
+<span class="s2">function </span><span class="s1">prerenderViewport(viewportItems) {</span>
+    <span class="s4">// If the index is a function then it is a resolver and the next slot</span>
+    <span class="s4">// is the corresponding result. If the index is not a function it is the result</span>
+    <span class="s4">// itself.</span>
+    <span class="s2">const </span><span class="s1">resolversAndResults = [];</span>
+    <span class="s2">for</span><span class="s1">(</span><span class="s2">let </span><span class="s1">i = </span><span class="s3">0</span><span class="s1">; i &lt; viewportItems.length; i++){</span>
+        <span class="s2">const </span><span class="s1">viewportExport = viewportItems[i];</span>
+        <span class="s1">getResult(resolversAndResults, viewportExport);</span>
+    <span class="s1">}</span>
+    <span class="s2">return </span><span class="s1">resolversAndResults;</span>
+<span class="s1">}</span>
+<span class="s2">function </span><span class="s1">getResult(resolversAndResults, exportForResult) {</span>
+    <span class="s2">if </span><span class="s1">(</span><span class="s2">typeof </span><span class="s1">exportForResult === </span><span class="s0">'function'</span><span class="s1">) {</span>
+        <span class="s2">const </span><span class="s1">result = exportForResult(</span><span class="s2">new </span><span class="s1">Promise((resolve)=&gt;resolversAndResults.push(resolve)));</span>
+        <span class="s1">resolversAndResults.push(result);</span>
+        <span class="s2">if </span><span class="s1">(result </span><span class="s2">instanceof </span><span class="s1">Promise) {</span>
+            <span class="s4">// since we eager execute generateMetadata and</span>
+            <span class="s4">// they can reject at anytime we need to ensure</span>
+            <span class="s4">// we attach the catch handler right away to</span>
+            <span class="s4">// prevent unhandled rejections crashing the process</span>
+            <span class="s1">result.catch((err)=&gt;{</span>
+                <span class="s2">return </span><span class="s1">{</span>
+                    <span class="s1">__nextError: err</span>
+                <span class="s1">};</span>
+            <span class="s1">});</span>
+        <span class="s1">}</span>
+    <span class="s1">} </span><span class="s2">else if </span><span class="s1">(</span><span class="s2">typeof </span><span class="s1">exportForResult === </span><span class="s0">'object'</span><span class="s1">) {</span>
+        <span class="s1">resolversAndResults.push(exportForResult);</span>
+    <span class="s1">} </span><span class="s2">else </span><span class="s1">{</span>
+        <span class="s1">resolversAndResults.push(</span><span class="s2">null</span><span class="s1">);</span>
+    <span class="s1">}</span>
+<span class="s1">}</span>
+<span class="s2">function </span><span class="s1">resolvePendingResult(parentResult, resolveParentResult) {</span>
+    <span class="s4">// In dev we clone and freeze to prevent relying on mutating resolvedMetadata directly.</span>
+    <span class="s4">// In prod we just pass resolvedMetadata through without any copying.</span>
+    <span class="s2">if </span><span class="s1">(process.env.NODE_ENV === </span><span class="s0">'development'</span><span class="s1">) {</span>
+        <span class="s4">// @ts-expect-error -- DeepReadonly&lt;T&gt; is by definition not assignable to T</span>
+        <span class="s4">// Instead, we should only accept DeepReadonly&lt;ResolvedType&gt;</span>
+        <span class="s1">parentResult = require(</span><span class="s0">'../../shared/lib/deep-freeze'</span><span class="s1">).deepFreeze(require(</span><span class="s0">'./clone-metadata'</span><span class="s1">).cloneMetadata(parentResult));</span>
+    <span class="s1">}</span>
+    <span class="s1">resolveParentResult(parentResult);</span>
+<span class="s1">}</span>
+<span class="s1">async </span><span class="s2">function </span><span class="s1">accumulateMetadata(route, metadataItems, pathname, metadataContext) {</span>
+    <span class="s2">let </span><span class="s1">resolvedMetadata = (</span><span class="s3">0</span><span class="s1">, _defaultmetadata.createDefaultMetadata)();</span>
+    <span class="s2">let </span><span class="s1">titleTemplates = {</span>
+        <span class="s1">title: </span><span class="s2">null</span><span class="s1">,</span>
+        <span class="s1">twitter: </span><span class="s2">null</span><span class="s1">,</span>
+        <span class="s1">openGraph: </span><span class="s2">null</span>
+    <span class="s1">};</span>
+    <span class="s2">const </span><span class="s1">buildState = {</span>
+        <span class="s1">warnings: </span><span class="s2">new </span><span class="s1">Set()</span>
+    <span class="s1">};</span>
+    <span class="s2">let </span><span class="s1">favicon;</span>
+    <span class="s4">// Collect the static icons in the most leaf node,</span>
+    <span class="s4">// since we don't collect all the static metadata icons in the parent segments.</span>
+    <span class="s2">const </span><span class="s1">leafSegmentStaticIcons = {</span>
+        <span class="s1">icon: [],</span>
+        <span class="s1">apple: []</span>
+    <span class="s1">};</span>
+    <span class="s2">const </span><span class="s1">resolversAndResults = prerenderMetadata(metadataItems);</span>
+    <span class="s2">let </span><span class="s1">resultIndex = </span><span class="s3">0</span><span class="s1">;</span>
+    <span class="s2">for</span><span class="s1">(</span><span class="s2">let </span><span class="s1">i = </span><span class="s3">0</span><span class="s1">; i &lt; metadataItems.length; i++){</span>
+        <span class="s2">var </span><span class="s1">_staticFilesMetadata_icon;</span>
+        <span class="s2">const </span><span class="s1">staticFilesMetadata = metadataItems[i][</span><span class="s3">1</span><span class="s1">];</span>
+        <span class="s4">// Treat favicon as special case, it should be the first icon in the list</span>
+        <span class="s4">// i &lt;= 1 represents root layout, and if current page is also at root</span>
+        <span class="s2">if </span><span class="s1">(i &lt;= </span><span class="s3">1 </span><span class="s1">&amp;&amp; isFavicon(staticFilesMetadata == </span><span class="s2">null </span><span class="s1">? </span><span class="s2">void </span><span class="s3">0 </span><span class="s1">: (_staticFilesMetadata_icon = staticFilesMetadata.icon) == </span><span class="s2">null </span><span class="s1">? </span><span class="s2">void </span><span class="s3">0 </span><span class="s1">: _staticFilesMetadata_icon[</span><span class="s3">0</span><span class="s1">])) {</span>
+            <span class="s2">var </span><span class="s1">_staticFilesMetadata_icon1;</span>
+            <span class="s2">const </span><span class="s1">iconMod = staticFilesMetadata == </span><span class="s2">null </span><span class="s1">? </span><span class="s2">void </span><span class="s3">0 </span><span class="s1">: (_staticFilesMetadata_icon1 = staticFilesMetadata.icon) == </span><span class="s2">null </span><span class="s1">? </span><span class="s2">void </span><span class="s3">0 </span><span class="s1">: _staticFilesMetadata_icon1.shift();</span>
+            <span class="s2">if </span><span class="s1">(i === </span><span class="s3">0</span><span class="s1">) favicon = iconMod;</span>
+        <span class="s1">}</span>
+        <span class="s2">let </span><span class="s1">pendingMetadata = resolversAndResults[resultIndex++];</span>
+        <span class="s2">if </span><span class="s1">(</span><span class="s2">typeof </span><span class="s1">pendingMetadata === </span><span class="s0">'function'</span><span class="s1">) {</span>
+            <span class="s4">// This metadata item had a `generateMetadata` and</span>
+            <span class="s4">// we need to provide the currently resolved metadata</span>
+            <span class="s4">// to it before we continue;</span>
+            <span class="s2">const </span><span class="s1">resolveParentMetadata = pendingMetadata;</span>
+            <span class="s4">// we know that the next item is a result if this item</span>
+            <span class="s4">// was a resolver</span>
+            <span class="s1">pendingMetadata = resolversAndResults[resultIndex++];</span>
+            <span class="s1">resolvePendingResult(resolvedMetadata, resolveParentMetadata);</span>
+        <span class="s1">}</span>
+        <span class="s4">// Otherwise the item was either null or a static export</span>
+        <span class="s2">let </span><span class="s1">metadata;</span>
+        <span class="s2">if </span><span class="s1">(isPromiseLike(pendingMetadata)) {</span>
+            <span class="s1">metadata = </span><span class="s2">await </span><span class="s1">pendingMetadata;</span>
+        <span class="s1">} </span><span class="s2">else </span><span class="s1">{</span>
+            <span class="s1">metadata = pendingMetadata;</span>
+        <span class="s1">}</span>
+        <span class="s1">resolvedMetadata = </span><span class="s2">await </span><span class="s1">mergeMetadata(route, pathname, {</span>
+            <span class="s1">target: resolvedMetadata,</span>
+            <span class="s1">source: metadata,</span>
+            <span class="s1">metadataContext,</span>
+            <span class="s1">staticFilesMetadata,</span>
+            <span class="s1">titleTemplates,</span>
+            <span class="s1">buildState,</span>
+            <span class="s1">leafSegmentStaticIcons</span>
+        <span class="s1">});</span>
+        <span class="s4">// If the layout is the same layer with page, skip the leaf layout and leaf page</span>
+        <span class="s4">// The leaf layout and page are the last two items</span>
+        <span class="s2">if </span><span class="s1">(i &lt; metadataItems.length - </span><span class="s3">2</span><span class="s1">) {</span>
+            <span class="s2">var </span><span class="s1">_resolvedMetadata_title, _resolvedMetadata_openGraph, _resolvedMetadata_twitter;</span>
+            <span class="s1">titleTemplates = {</span>
+                <span class="s1">title: ((_resolvedMetadata_title = resolvedMetadata.title) == </span><span class="s2">null </span><span class="s1">? </span><span class="s2">void </span><span class="s3">0 </span><span class="s1">: _resolvedMetadata_title.template) || </span><span class="s2">null</span><span class="s1">,</span>
+                <span class="s1">openGraph: ((_resolvedMetadata_openGraph = resolvedMetadata.openGraph) == </span><span class="s2">null </span><span class="s1">? </span><span class="s2">void </span><span class="s3">0 </span><span class="s1">: _resolvedMetadata_openGraph.title.template) || </span><span class="s2">null</span><span class="s1">,</span>
+                <span class="s1">twitter: ((_resolvedMetadata_twitter = resolvedMetadata.twitter) == </span><span class="s2">null </span><span class="s1">? </span><span class="s2">void </span><span class="s3">0 </span><span class="s1">: _resolvedMetadata_twitter.title.template) || </span><span class="s2">null</span>
+            <span class="s1">};</span>
+        <span class="s1">}</span>
+    <span class="s1">}</span>
+    <span class="s2">if </span><span class="s1">(leafSegmentStaticIcons.icon.length &gt; </span><span class="s3">0 </span><span class="s1">|| leafSegmentStaticIcons.apple.length &gt; </span><span class="s3">0</span><span class="s1">) {</span>
+        <span class="s2">if </span><span class="s1">(!resolvedMetadata.icons) {</span>
+            <span class="s1">resolvedMetadata.icons = {</span>
+                <span class="s1">icon: [],</span>
+                <span class="s1">apple: []</span>
+            <span class="s1">};</span>
+            <span class="s2">if </span><span class="s1">(leafSegmentStaticIcons.icon.length &gt; </span><span class="s3">0</span><span class="s1">) {</span>
+                <span class="s1">resolvedMetadata.icons.icon.unshift(...leafSegmentStaticIcons.icon);</span>
+            <span class="s1">}</span>
+            <span class="s2">if </span><span class="s1">(leafSegmentStaticIcons.apple.length &gt; </span><span class="s3">0</span><span class="s1">) {</span>
+                <span class="s1">resolvedMetadata.icons.apple.unshift(...leafSegmentStaticIcons.apple);</span>
+            <span class="s1">}</span>
+        <span class="s1">}</span>
+    <span class="s1">}</span>
+    <span class="s4">// Only log warnings if there are any, and only once after the metadata resolving process is finished</span>
+    <span class="s2">if </span><span class="s1">(buildState.warnings.size &gt; </span><span class="s3">0</span><span class="s1">) {</span>
+        <span class="s2">for </span><span class="s1">(</span><span class="s2">const </span><span class="s1">warning of buildState.warnings){</span>
+            <span class="s1">_log.warn(warning);</span>
+        <span class="s1">}</span>
+    <span class="s1">}</span>
+    <span class="s2">return </span><span class="s1">postProcessMetadata(resolvedMetadata, favicon, titleTemplates, metadataContext);</span>
+<span class="s1">}</span>
+<span class="s1">async </span><span class="s2">function </span><span class="s1">accumulateViewport(viewportItems) {</span>
+    <span class="s2">const </span><span class="s1">resolvedViewport = (</span><span class="s3">0</span><span class="s1">, _defaultmetadata.createDefaultViewport)();</span>
+    <span class="s2">const </span><span class="s1">resolversAndResults = prerenderViewport(viewportItems);</span>
+    <span class="s2">let </span><span class="s1">i = </span><span class="s3">0</span><span class="s1">;</span>
+    <span class="s2">while</span><span class="s1">(i &lt; resolversAndResults.length){</span>
+        <span class="s2">let </span><span class="s1">pendingViewport = resolversAndResults[i++];</span>
+        <span class="s2">if </span><span class="s1">(</span><span class="s2">typeof </span><span class="s1">pendingViewport === </span><span class="s0">'function'</span><span class="s1">) {</span>
+            <span class="s4">// this viewport item had a `generateViewport` and</span>
+            <span class="s4">// we need to provide the currently resolved viewport</span>
+            <span class="s4">// to it before we continue;</span>
+            <span class="s2">const </span><span class="s1">resolveParentViewport = pendingViewport;</span>
+            <span class="s4">// we know that the next item is a result if this item</span>
+            <span class="s4">// was a resolver</span>
+            <span class="s1">pendingViewport = resolversAndResults[i++];</span>
+            <span class="s1">resolvePendingResult(resolvedViewport, resolveParentViewport);</span>
+        <span class="s1">}</span>
+        <span class="s4">// Otherwise the item was either null or a static export</span>
+        <span class="s2">let </span><span class="s1">viewport;</span>
+        <span class="s2">if </span><span class="s1">(isPromiseLike(pendingViewport)) {</span>
+            <span class="s1">viewport = </span><span class="s2">await </span><span class="s1">pendingViewport;</span>
+        <span class="s1">} </span><span class="s2">else </span><span class="s1">{</span>
+            <span class="s1">viewport = pendingViewport;</span>
+        <span class="s1">}</span>
+        <span class="s1">mergeViewport({</span>
+            <span class="s1">target: resolvedViewport,</span>
+            <span class="s1">source: viewport</span>
+        <span class="s1">});</span>
+    <span class="s1">}</span>
+    <span class="s2">return </span><span class="s1">resolvedViewport;</span>
+<span class="s1">}</span>
+<span class="s1">async </span><span class="s2">function </span><span class="s1">resolveMetadata(tree, pathname, searchParams, errorConvention, getDynamicParamFromSegment, workStore, metadataContext) {</span>
+    <span class="s2">const </span><span class="s1">metadataItems = </span><span class="s2">await </span><span class="s1">resolveMetadataItems(tree, searchParams, errorConvention, getDynamicParamFromSegment, workStore);</span>
+    <span class="s2">return </span><span class="s1">accumulateMetadata(workStore.route, metadataItems, pathname, metadataContext);</span>
+<span class="s1">}</span>
+<span class="s1">async </span><span class="s2">function </span><span class="s1">resolveViewport(tree, searchParams, errorConvention, getDynamicParamFromSegment, workStore) {</span>
+    <span class="s2">const </span><span class="s1">viewportItems = </span><span class="s2">await </span><span class="s1">resolveViewportItems(tree, searchParams, errorConvention, getDynamicParamFromSegment, workStore);</span>
+    <span class="s2">return </span><span class="s1">accumulateViewport(viewportItems);</span>
+<span class="s1">}</span>
+<span class="s2">function </span><span class="s1">isPromiseLike(value) {</span>
+    <span class="s2">return typeof </span><span class="s1">value === </span><span class="s0">'object' </span><span class="s1">&amp;&amp; value !== </span><span class="s2">null </span><span class="s1">&amp;&amp; </span><span class="s2">typeof </span><span class="s1">value.then === </span><span class="s0">'function'</span><span class="s1">;</span>
+<span class="s1">}</span>
+
+<span class="s4">//# sourceMappingURL=resolve-metadata.js.map</span></pre>
+</body>
+</html>

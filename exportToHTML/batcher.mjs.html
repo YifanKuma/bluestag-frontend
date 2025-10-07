@@ -1,0 +1,92 @@
+<html>
+<head>
+<title>batcher.mjs</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #0033b3;}
+.s1 { color: #080808;}
+.s2 { color: #067d17;}
+.s3 { color: #1750eb;}
+.s4 { color: #8c8c8c; font-style: italic;}
+</style>
+</head>
+<body bgcolor="#ffffff">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#c0c0c0" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+batcher.mjs</font>
+</center></td></tr></table>
+<pre><span class="s0">import </span><span class="s1">{ MotionGlobalConfig } from </span><span class="s2">'motion-utils'</span><span class="s1">;</span>
+<span class="s0">import </span><span class="s1">{ stepsOrder } from </span><span class="s2">'./order.mjs'</span><span class="s1">;</span>
+<span class="s0">import </span><span class="s1">{ createRenderStep } from </span><span class="s2">'./render-step.mjs'</span><span class="s1">;</span>
+
+<span class="s0">const </span><span class="s1">maxElapsed = </span><span class="s3">40</span><span class="s1">;</span>
+<span class="s0">function </span><span class="s1">createRenderBatcher(scheduleNextBatch, allowKeepAlive) {</span>
+    <span class="s0">let </span><span class="s1">runNextFrame = </span><span class="s0">false</span><span class="s1">;</span>
+    <span class="s0">let </span><span class="s1">useDefaultElapsed = </span><span class="s0">true</span><span class="s1">;</span>
+    <span class="s0">const </span><span class="s1">state = {</span>
+        <span class="s1">delta: </span><span class="s3">0.0</span><span class="s1">,</span>
+        <span class="s1">timestamp: </span><span class="s3">0.0</span><span class="s1">,</span>
+        <span class="s1">isProcessing: </span><span class="s0">false</span><span class="s1">,</span>
+    <span class="s1">};</span>
+    <span class="s0">const </span><span class="s1">flagRunNextFrame = () =&gt; (runNextFrame = </span><span class="s0">true</span><span class="s1">);</span>
+    <span class="s0">const </span><span class="s1">steps = stepsOrder.reduce((acc, key) =&gt; {</span>
+        <span class="s1">acc[key] = createRenderStep(flagRunNextFrame, allowKeepAlive ? key : undefined);</span>
+        <span class="s0">return </span><span class="s1">acc;</span>
+    <span class="s1">}, {});</span>
+    <span class="s0">const </span><span class="s1">{ setup, read, resolveKeyframes, preUpdate, update, preRender, render, postRender, } = steps;</span>
+    <span class="s0">const </span><span class="s1">processBatch = () =&gt; {</span>
+        <span class="s0">const </span><span class="s1">timestamp = MotionGlobalConfig.useManualTiming</span>
+            <span class="s1">? state.timestamp</span>
+            <span class="s1">: performance.now();</span>
+        <span class="s1">runNextFrame = </span><span class="s0">false</span><span class="s1">;</span>
+        <span class="s0">if </span><span class="s1">(!MotionGlobalConfig.useManualTiming) {</span>
+            <span class="s1">state.delta = useDefaultElapsed</span>
+                <span class="s1">? </span><span class="s3">1000 </span><span class="s1">/ </span><span class="s3">60</span>
+                <span class="s1">: Math.max(Math.min(timestamp - state.timestamp, maxElapsed), </span><span class="s3">1</span><span class="s1">);</span>
+        <span class="s1">}</span>
+        <span class="s1">state.timestamp = timestamp;</span>
+        <span class="s1">state.isProcessing = </span><span class="s0">true</span><span class="s1">;</span>
+        <span class="s4">// Unrolled render loop for better per-frame performance</span>
+        <span class="s1">setup.process(state);</span>
+        <span class="s1">read.process(state);</span>
+        <span class="s1">resolveKeyframes.process(state);</span>
+        <span class="s1">preUpdate.process(state);</span>
+        <span class="s1">update.process(state);</span>
+        <span class="s1">preRender.process(state);</span>
+        <span class="s1">render.process(state);</span>
+        <span class="s1">postRender.process(state);</span>
+        <span class="s1">state.isProcessing = </span><span class="s0">false</span><span class="s1">;</span>
+        <span class="s0">if </span><span class="s1">(runNextFrame &amp;&amp; allowKeepAlive) {</span>
+            <span class="s1">useDefaultElapsed = </span><span class="s0">false</span><span class="s1">;</span>
+            <span class="s1">scheduleNextBatch(processBatch);</span>
+        <span class="s1">}</span>
+    <span class="s1">};</span>
+    <span class="s0">const </span><span class="s1">wake = () =&gt; {</span>
+        <span class="s1">runNextFrame = </span><span class="s0">true</span><span class="s1">;</span>
+        <span class="s1">useDefaultElapsed = </span><span class="s0">true</span><span class="s1">;</span>
+        <span class="s0">if </span><span class="s1">(!state.isProcessing) {</span>
+            <span class="s1">scheduleNextBatch(processBatch);</span>
+        <span class="s1">}</span>
+    <span class="s1">};</span>
+    <span class="s0">const </span><span class="s1">schedule = stepsOrder.reduce((acc, key) =&gt; {</span>
+        <span class="s0">const </span><span class="s1">step = steps[key];</span>
+        <span class="s1">acc[key] = (process, keepAlive = </span><span class="s0">false</span><span class="s1">, immediate = </span><span class="s0">false</span><span class="s1">) =&gt; {</span>
+            <span class="s0">if </span><span class="s1">(!runNextFrame)</span>
+                <span class="s1">wake();</span>
+            <span class="s0">return </span><span class="s1">step.schedule(process, keepAlive, immediate);</span>
+        <span class="s1">};</span>
+        <span class="s0">return </span><span class="s1">acc;</span>
+    <span class="s1">}, {});</span>
+    <span class="s0">const </span><span class="s1">cancel = (process) =&gt; {</span>
+        <span class="s0">for </span><span class="s1">(</span><span class="s0">let </span><span class="s1">i = </span><span class="s3">0</span><span class="s1">; i &lt; stepsOrder.length; i++) {</span>
+            <span class="s1">steps[stepsOrder[i]].cancel(process);</span>
+        <span class="s1">}</span>
+    <span class="s1">};</span>
+    <span class="s0">return </span><span class="s1">{ schedule, cancel, state, steps };</span>
+<span class="s1">}</span>
+
+<span class="s0">export </span><span class="s1">{ createRenderBatcher };</span>
+</pre>
+</body>
+</html>

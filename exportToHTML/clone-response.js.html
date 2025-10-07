@@ -1,0 +1,96 @@
+<html>
+<head>
+<title>clone-response.js</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #067d17;}
+.s1 { color: #080808;}
+.s2 { color: #0033b3;}
+.s3 { color: #8c8c8c; font-style: italic;}
+</style>
+</head>
+<body bgcolor="#ffffff">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#c0c0c0" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+clone-response.js</font>
+</center></td></tr></table>
+<pre><span class="s0">&quot;use strict&quot;</span><span class="s1">;</span>
+<span class="s1">Object.defineProperty(exports, </span><span class="s0">&quot;__esModule&quot;</span><span class="s1">, {</span>
+    <span class="s1">value: </span><span class="s2">true</span>
+<span class="s1">});</span>
+<span class="s1">Object.defineProperty(exports, </span><span class="s0">&quot;cloneResponse&quot;</span><span class="s1">, {</span>
+    <span class="s1">enumerable: </span><span class="s2">true</span><span class="s1">,</span>
+    <span class="s1">get: </span><span class="s2">function</span><span class="s1">() {</span>
+        <span class="s2">return </span><span class="s1">cloneResponse;</span>
+    <span class="s1">}</span>
+<span class="s1">});</span>
+<span class="s2">const </span><span class="s1">noop = ()=&gt;{};</span>
+<span class="s2">let </span><span class="s1">registry;</span>
+<span class="s2">if </span><span class="s1">(globalThis.FinalizationRegistry) {</span>
+    <span class="s1">registry = </span><span class="s2">new </span><span class="s1">FinalizationRegistry((weakRef)=&gt;{</span>
+        <span class="s2">const </span><span class="s1">stream = weakRef.deref();</span>
+        <span class="s2">if </span><span class="s1">(stream &amp;&amp; !stream.locked) {</span>
+            <span class="s1">stream.cancel(</span><span class="s0">'Response object has been garbage collected'</span><span class="s1">).then(noop);</span>
+        <span class="s1">}</span>
+    <span class="s1">});</span>
+<span class="s1">}</span>
+<span class="s2">function </span><span class="s1">cloneResponse(original) {</span>
+    <span class="s3">// If the response has no body, then we can just return the original response</span>
+    <span class="s3">// twice because it's immutable.</span>
+    <span class="s2">if </span><span class="s1">(!original.body) {</span>
+        <span class="s2">return </span><span class="s1">[</span>
+            <span class="s1">original,</span>
+            <span class="s1">original</span>
+        <span class="s1">];</span>
+    <span class="s1">}</span>
+    <span class="s2">const </span><span class="s1">[body1, body2] = original.body.tee();</span>
+    <span class="s2">const </span><span class="s1">cloned1 = </span><span class="s2">new </span><span class="s1">Response(body1, {</span>
+        <span class="s1">status: original.status,</span>
+        <span class="s1">statusText: original.statusText,</span>
+        <span class="s1">headers: original.headers</span>
+    <span class="s1">});</span>
+    <span class="s1">Object.defineProperty(cloned1, </span><span class="s0">'url'</span><span class="s1">, {</span>
+        <span class="s1">value: original.url,</span>
+        <span class="s3">// How the original response.url behaves</span>
+        <span class="s1">configurable: </span><span class="s2">true</span><span class="s1">,</span>
+        <span class="s1">enumerable: </span><span class="s2">true</span><span class="s1">,</span>
+        <span class="s1">writable: </span><span class="s2">false</span>
+    <span class="s1">});</span>
+    <span class="s3">// The Fetch Standard allows users to skip consuming the response body by</span>
+    <span class="s3">// relying on garbage collection to release connection resources.</span>
+    <span class="s3">// https://github.com/nodejs/undici?tab=readme-ov-file#garbage-collection</span>
+    <span class="s3">//</span>
+    <span class="s3">// To cancel the stream you then need to cancel both resulting branches.</span>
+    <span class="s3">// Teeing a stream will generally lock it for the duration, preventing other</span>
+    <span class="s3">// readers from locking it.</span>
+    <span class="s3">// https://developer.mozilla.org/en-US/docs/Web/API/ReadableStream/tee</span>
+    <span class="s3">// cloned2 is stored in a react cache and cloned for subsequent requests.</span>
+    <span class="s3">// It is the original request, and is is garbage collected by a</span>
+    <span class="s3">// FinalizationRegistry in Undici, but since we're tee-ing the stream</span>
+    <span class="s3">// ourselves, we need to cancel clone1's stream (the response returned from</span>
+    <span class="s3">// our dedupe fetch) when clone1 is reclaimed, otherwise we leak memory.</span>
+    <span class="s2">if </span><span class="s1">(registry &amp;&amp; cloned1.body) {</span>
+        <span class="s1">registry.register(cloned1, </span><span class="s2">new </span><span class="s1">WeakRef(cloned1.body));</span>
+    <span class="s1">}</span>
+    <span class="s2">const </span><span class="s1">cloned2 = </span><span class="s2">new </span><span class="s1">Response(body2, {</span>
+        <span class="s1">status: original.status,</span>
+        <span class="s1">statusText: original.statusText,</span>
+        <span class="s1">headers: original.headers</span>
+    <span class="s1">});</span>
+    <span class="s1">Object.defineProperty(cloned2, </span><span class="s0">'url'</span><span class="s1">, {</span>
+        <span class="s1">value: original.url,</span>
+        <span class="s3">// How the original response.url behaves</span>
+        <span class="s1">configurable: </span><span class="s2">true</span><span class="s1">,</span>
+        <span class="s1">enumerable: </span><span class="s2">true</span><span class="s1">,</span>
+        <span class="s1">writable: </span><span class="s2">false</span>
+    <span class="s1">});</span>
+    <span class="s2">return </span><span class="s1">[</span>
+        <span class="s1">cloned1,</span>
+        <span class="s1">cloned2</span>
+    <span class="s1">];</span>
+<span class="s1">}</span>
+
+<span class="s3">//# sourceMappingURL=clone-response.js.map</span></pre>
+</body>
+</html>

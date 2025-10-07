@@ -1,0 +1,131 @@
+<html>
+<head>
+<title>fill-cache-with-new-subtree-data.js</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #067d17;}
+.s1 { color: #080808;}
+.s2 { color: #0033b3;}
+.s3 { color: #1750eb;}
+.s4 { color: #8c8c8c; font-style: italic;}
+</style>
+</head>
+<body bgcolor="#ffffff">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#c0c0c0" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+fill-cache-with-new-subtree-data.js</font>
+</center></td></tr></table>
+<pre><span class="s0">&quot;use strict&quot;</span><span class="s1">;</span>
+<span class="s1">Object.defineProperty(exports, </span><span class="s0">&quot;__esModule&quot;</span><span class="s1">, {</span>
+    <span class="s1">value: </span><span class="s2">true</span>
+<span class="s1">});</span>
+<span class="s3">0 </span><span class="s1">&amp;&amp; (module.exports = {</span>
+    <span class="s1">fillCacheWithNewSubTreeData: </span><span class="s2">null</span><span class="s1">,</span>
+    <span class="s1">fillCacheWithNewSubTreeDataButOnlyLoading: </span><span class="s2">null</span>
+<span class="s1">});</span>
+<span class="s2">function </span><span class="s1">_export(target, all) {</span>
+    <span class="s2">for</span><span class="s1">(</span><span class="s2">var </span><span class="s1">name </span><span class="s2">in </span><span class="s1">all)Object.defineProperty(target, name, {</span>
+        <span class="s1">enumerable: </span><span class="s2">true</span><span class="s1">,</span>
+        <span class="s1">get: all[name]</span>
+    <span class="s1">});</span>
+<span class="s1">}</span>
+<span class="s1">_export(exports, {</span>
+    <span class="s1">fillCacheWithNewSubTreeData: </span><span class="s2">function</span><span class="s1">() {</span>
+        <span class="s2">return </span><span class="s1">fillCacheWithNewSubTreeData;</span>
+    <span class="s1">},</span>
+    <span class="s1">fillCacheWithNewSubTreeDataButOnlyLoading: </span><span class="s2">function</span><span class="s1">() {</span>
+        <span class="s2">return </span><span class="s1">fillCacheWithNewSubTreeDataButOnlyLoading;</span>
+    <span class="s1">}</span>
+<span class="s1">});</span>
+<span class="s2">const </span><span class="s1">_invalidatecachebyrouterstate = require(</span><span class="s0">&quot;./invalidate-cache-by-router-state&quot;</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">_filllazyitemstillleafwithhead = require(</span><span class="s0">&quot;./fill-lazy-items-till-leaf-with-head&quot;</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">_createroutercachekey = require(</span><span class="s0">&quot;./create-router-cache-key&quot;</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">_segment = require(</span><span class="s0">&quot;../../../shared/lib/segment&quot;</span><span class="s1">);</span>
+<span class="s4">/**</span>
+ <span class="s4">* Common logic for filling cache with new sub tree data.</span>
+ <span class="s4">*/ </span><span class="s2">function </span><span class="s1">fillCacheHelper(navigatedAt, newCache, existingCache, flightData, prefetchEntry, fillLazyItems) {</span>
+    <span class="s2">const </span><span class="s1">{ segmentPath, seedData: cacheNodeSeedData, tree: treePatch, head } = flightData;</span>
+    <span class="s2">let </span><span class="s1">newCacheNode = newCache;</span>
+    <span class="s2">let </span><span class="s1">existingCacheNode = existingCache;</span>
+    <span class="s2">for</span><span class="s1">(</span><span class="s2">let </span><span class="s1">i = </span><span class="s3">0</span><span class="s1">; i &lt; segmentPath.length; i += </span><span class="s3">2</span><span class="s1">){</span>
+        <span class="s2">const </span><span class="s1">parallelRouteKey = segmentPath[i];</span>
+        <span class="s2">const </span><span class="s1">segment = segmentPath[i + </span><span class="s3">1</span><span class="s1">];</span>
+        <span class="s4">// segmentPath is a repeating tuple of parallelRouteKey and segment</span>
+        <span class="s4">// we know we've hit the last entry we've reached our final pair</span>
+        <span class="s2">const </span><span class="s1">isLastEntry = i === segmentPath.length - </span><span class="s3">2</span><span class="s1">;</span>
+        <span class="s2">const </span><span class="s1">cacheKey = (</span><span class="s3">0</span><span class="s1">, _createroutercachekey.createRouterCacheKey)(segment);</span>
+        <span class="s2">const </span><span class="s1">existingChildSegmentMap = existingCacheNode.parallelRoutes.get(parallelRouteKey);</span>
+        <span class="s2">if </span><span class="s1">(!existingChildSegmentMap) {</span>
+            <span class="s2">continue</span><span class="s1">;</span>
+        <span class="s1">}</span>
+        <span class="s2">let </span><span class="s1">childSegmentMap = newCacheNode.parallelRoutes.get(parallelRouteKey);</span>
+        <span class="s2">if </span><span class="s1">(!childSegmentMap || childSegmentMap === existingChildSegmentMap) {</span>
+            <span class="s1">childSegmentMap = </span><span class="s2">new </span><span class="s1">Map(existingChildSegmentMap);</span>
+            <span class="s1">newCacheNode.parallelRoutes.set(parallelRouteKey, childSegmentMap);</span>
+        <span class="s1">}</span>
+        <span class="s2">const </span><span class="s1">existingChildCacheNode = existingChildSegmentMap.get(cacheKey);</span>
+        <span class="s2">let </span><span class="s1">childCacheNode = childSegmentMap.get(cacheKey);</span>
+        <span class="s2">if </span><span class="s1">(isLastEntry) {</span>
+            <span class="s2">if </span><span class="s1">(cacheNodeSeedData &amp;&amp; (!childCacheNode || !childCacheNode.lazyData || childCacheNode === existingChildCacheNode)) {</span>
+                <span class="s2">const </span><span class="s1">incomingSegment = cacheNodeSeedData[</span><span class="s3">0</span><span class="s1">];</span>
+                <span class="s2">const </span><span class="s1">rsc = cacheNodeSeedData[</span><span class="s3">1</span><span class="s1">];</span>
+                <span class="s2">const </span><span class="s1">loading = cacheNodeSeedData[</span><span class="s3">3</span><span class="s1">];</span>
+                <span class="s1">childCacheNode = {</span>
+                    <span class="s1">lazyData: </span><span class="s2">null</span><span class="s1">,</span>
+                    <span class="s4">// When `fillLazyItems` is false, we only want to fill the RSC data for the layout,</span>
+                    <span class="s4">// not the page segment.</span>
+                    <span class="s1">rsc: fillLazyItems || incomingSegment !== _segment.PAGE_SEGMENT_KEY ? rsc : </span><span class="s2">null</span><span class="s1">,</span>
+                    <span class="s1">prefetchRsc: </span><span class="s2">null</span><span class="s1">,</span>
+                    <span class="s1">head: </span><span class="s2">null</span><span class="s1">,</span>
+                    <span class="s1">prefetchHead: </span><span class="s2">null</span><span class="s1">,</span>
+                    <span class="s1">loading,</span>
+                    <span class="s1">parallelRoutes: fillLazyItems &amp;&amp; existingChildCacheNode ? </span><span class="s2">new </span><span class="s1">Map(existingChildCacheNode.parallelRoutes) : </span><span class="s2">new </span><span class="s1">Map(),</span>
+                    <span class="s1">navigatedAt</span>
+                <span class="s1">};</span>
+                <span class="s2">if </span><span class="s1">(existingChildCacheNode &amp;&amp; fillLazyItems) {</span>
+                    <span class="s1">(</span><span class="s3">0</span><span class="s1">, _invalidatecachebyrouterstate.invalidateCacheByRouterState)(childCacheNode, existingChildCacheNode, treePatch);</span>
+                <span class="s1">}</span>
+                <span class="s2">if </span><span class="s1">(fillLazyItems) {</span>
+                    <span class="s1">(</span><span class="s3">0</span><span class="s1">, _filllazyitemstillleafwithhead.fillLazyItemsTillLeafWithHead)(navigatedAt, childCacheNode, existingChildCacheNode, treePatch, cacheNodeSeedData, head, prefetchEntry);</span>
+                <span class="s1">}</span>
+                <span class="s1">childSegmentMap.set(cacheKey, childCacheNode);</span>
+            <span class="s1">}</span>
+            <span class="s2">continue</span><span class="s1">;</span>
+        <span class="s1">}</span>
+        <span class="s2">if </span><span class="s1">(!childCacheNode || !existingChildCacheNode) {</span>
+            <span class="s2">continue</span><span class="s1">;</span>
+        <span class="s1">}</span>
+        <span class="s2">if </span><span class="s1">(childCacheNode === existingChildCacheNode) {</span>
+            <span class="s1">childCacheNode = {</span>
+                <span class="s1">lazyData: childCacheNode.lazyData,</span>
+                <span class="s1">rsc: childCacheNode.rsc,</span>
+                <span class="s1">prefetchRsc: childCacheNode.prefetchRsc,</span>
+                <span class="s1">head: childCacheNode.head,</span>
+                <span class="s1">prefetchHead: childCacheNode.prefetchHead,</span>
+                <span class="s1">parallelRoutes: </span><span class="s2">new </span><span class="s1">Map(childCacheNode.parallelRoutes),</span>
+                <span class="s1">loading: childCacheNode.loading</span>
+            <span class="s1">};</span>
+            <span class="s1">childSegmentMap.set(cacheKey, childCacheNode);</span>
+        <span class="s1">}</span>
+        <span class="s4">// Move deeper into the cache nodes</span>
+        <span class="s1">newCacheNode = childCacheNode;</span>
+        <span class="s1">existingCacheNode = existingChildCacheNode;</span>
+    <span class="s1">}</span>
+<span class="s1">}</span>
+<span class="s2">function </span><span class="s1">fillCacheWithNewSubTreeData(navigatedAt, newCache, existingCache, flightData, prefetchEntry) {</span>
+    <span class="s1">fillCacheHelper(navigatedAt, newCache, existingCache, flightData, prefetchEntry, </span><span class="s2">true</span><span class="s1">);</span>
+<span class="s1">}</span>
+<span class="s2">function </span><span class="s1">fillCacheWithNewSubTreeDataButOnlyLoading(navigatedAt, newCache, existingCache, flightData, prefetchEntry) {</span>
+    <span class="s1">fillCacheHelper(navigatedAt, newCache, existingCache, flightData, prefetchEntry, </span><span class="s2">false</span><span class="s1">);</span>
+<span class="s1">}</span>
+
+<span class="s2">if </span><span class="s1">((</span><span class="s2">typeof </span><span class="s1">exports.default === </span><span class="s0">'function' </span><span class="s1">|| (</span><span class="s2">typeof </span><span class="s1">exports.default === </span><span class="s0">'object' </span><span class="s1">&amp;&amp; exports.default !== </span><span class="s2">null</span><span class="s1">)) &amp;&amp; </span><span class="s2">typeof </span><span class="s1">exports.default.__esModule === </span><span class="s0">'undefined'</span><span class="s1">) {</span>
+  <span class="s1">Object.defineProperty(exports.default, </span><span class="s0">'__esModule'</span><span class="s1">, { value: </span><span class="s2">true </span><span class="s1">});</span>
+  <span class="s1">Object.assign(exports.default, exports);</span>
+  <span class="s1">module.exports = exports.default;</span>
+<span class="s1">}</span>
+
+<span class="s4">//# sourceMappingURL=fill-cache-with-new-subtree-data.js.map</span></pre>
+</body>
+</html>

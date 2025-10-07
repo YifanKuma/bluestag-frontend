@@ -1,0 +1,113 @@
+<html>
+<head>
+<title>render-step.mjs</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #0033b3;}
+.s1 { color: #080808;}
+.s2 { color: #067d17;}
+.s3 { color: #8c8c8c; font-style: italic;}
+.s4 { color: #1750eb;}
+</style>
+</head>
+<body bgcolor="#ffffff">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#c0c0c0" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+render-step.mjs</font>
+</center></td></tr></table>
+<pre><span class="s0">import </span><span class="s1">{ statsBuffer } from </span><span class="s2">'../stats/buffer.mjs'</span><span class="s1">;</span>
+
+<span class="s0">function </span><span class="s1">createRenderStep(runNextFrame, stepName) {</span>
+    <span class="s3">/**</span>
+     <span class="s3">* We create and reuse two queues, one to queue jobs for the current frame</span>
+     <span class="s3">* and one for the next. We reuse to avoid triggering GC after x frames.</span>
+     <span class="s3">*/</span>
+    <span class="s0">let </span><span class="s1">thisFrame = </span><span class="s0">new </span><span class="s1">Set();</span>
+    <span class="s0">let </span><span class="s1">nextFrame = </span><span class="s0">new </span><span class="s1">Set();</span>
+    <span class="s3">/**</span>
+     <span class="s3">* Track whether we're currently processing jobs in this step. This way</span>
+     <span class="s3">* we can decide whether to schedule new jobs for this frame or next.</span>
+     <span class="s3">*/</span>
+    <span class="s0">let </span><span class="s1">isProcessing = </span><span class="s0">false</span><span class="s1">;</span>
+    <span class="s0">let </span><span class="s1">flushNextFrame = </span><span class="s0">false</span><span class="s1">;</span>
+    <span class="s3">/**</span>
+     <span class="s3">* A set of processes which were marked keepAlive when scheduled.</span>
+     <span class="s3">*/</span>
+    <span class="s0">const </span><span class="s1">toKeepAlive = </span><span class="s0">new </span><span class="s1">WeakSet();</span>
+    <span class="s0">let </span><span class="s1">latestFrameData = {</span>
+        <span class="s1">delta: </span><span class="s4">0.0</span><span class="s1">,</span>
+        <span class="s1">timestamp: </span><span class="s4">0.0</span><span class="s1">,</span>
+        <span class="s1">isProcessing: </span><span class="s0">false</span><span class="s1">,</span>
+    <span class="s1">};</span>
+    <span class="s0">let </span><span class="s1">numCalls = </span><span class="s4">0</span><span class="s1">;</span>
+    <span class="s0">function </span><span class="s1">triggerCallback(callback) {</span>
+        <span class="s0">if </span><span class="s1">(toKeepAlive.has(callback)) {</span>
+            <span class="s1">step.schedule(callback);</span>
+            <span class="s1">runNextFrame();</span>
+        <span class="s1">}</span>
+        <span class="s1">numCalls++;</span>
+        <span class="s1">callback(latestFrameData);</span>
+    <span class="s1">}</span>
+    <span class="s0">const </span><span class="s1">step = {</span>
+        <span class="s3">/**</span>
+         <span class="s3">* Schedule a process to run on the next frame.</span>
+         <span class="s3">*/</span>
+        <span class="s1">schedule: (callback, keepAlive = </span><span class="s0">false</span><span class="s1">, immediate = </span><span class="s0">false</span><span class="s1">) =&gt; {</span>
+            <span class="s0">const </span><span class="s1">addToCurrentFrame = immediate &amp;&amp; isProcessing;</span>
+            <span class="s0">const </span><span class="s1">queue = addToCurrentFrame ? thisFrame : nextFrame;</span>
+            <span class="s0">if </span><span class="s1">(keepAlive)</span>
+                <span class="s1">toKeepAlive.add(callback);</span>
+            <span class="s0">if </span><span class="s1">(!queue.has(callback))</span>
+                <span class="s1">queue.add(callback);</span>
+            <span class="s0">return </span><span class="s1">callback;</span>
+        <span class="s1">},</span>
+        <span class="s3">/**</span>
+         <span class="s3">* Cancel the provided callback from running on the next frame.</span>
+         <span class="s3">*/</span>
+        <span class="s1">cancel: (callback) =&gt; {</span>
+            <span class="s1">nextFrame.delete(callback);</span>
+            <span class="s1">toKeepAlive.delete(callback);</span>
+        <span class="s1">},</span>
+        <span class="s3">/**</span>
+         <span class="s3">* Execute all schedule callbacks.</span>
+         <span class="s3">*/</span>
+        <span class="s1">process: (frameData) =&gt; {</span>
+            <span class="s1">latestFrameData = frameData;</span>
+            <span class="s3">/**</span>
+             <span class="s3">* If we're already processing we've probably been triggered by a flushSync</span>
+             <span class="s3">* inside an existing process. Instead of executing, mark flushNextFrame</span>
+             <span class="s3">* as true and ensure we flush the following frame at the end of this one.</span>
+             <span class="s3">*/</span>
+            <span class="s0">if </span><span class="s1">(isProcessing) {</span>
+                <span class="s1">flushNextFrame = </span><span class="s0">true</span><span class="s1">;</span>
+                <span class="s0">return</span><span class="s1">;</span>
+            <span class="s1">}</span>
+            <span class="s1">isProcessing = </span><span class="s0">true</span><span class="s1">;</span>
+            <span class="s1">[thisFrame, nextFrame] = [nextFrame, thisFrame];</span>
+            <span class="s3">// Execute this frame</span>
+            <span class="s1">thisFrame.forEach(triggerCallback);</span>
+            <span class="s3">/**</span>
+             <span class="s3">* If we're recording stats then</span>
+             <span class="s3">*/</span>
+            <span class="s0">if </span><span class="s1">(stepName &amp;&amp; statsBuffer.value) {</span>
+                <span class="s1">statsBuffer.value.frameloop[stepName].push(numCalls);</span>
+            <span class="s1">}</span>
+            <span class="s1">numCalls = </span><span class="s4">0</span><span class="s1">;</span>
+            <span class="s3">// Clear the frame so no callbacks remain. This is to avoid</span>
+            <span class="s3">// memory leaks should this render step not run for a while.</span>
+            <span class="s1">thisFrame.clear();</span>
+            <span class="s1">isProcessing = </span><span class="s0">false</span><span class="s1">;</span>
+            <span class="s0">if </span><span class="s1">(flushNextFrame) {</span>
+                <span class="s1">flushNextFrame = </span><span class="s0">false</span><span class="s1">;</span>
+                <span class="s1">step.process(frameData);</span>
+            <span class="s1">}</span>
+        <span class="s1">},</span>
+    <span class="s1">};</span>
+    <span class="s0">return </span><span class="s1">step;</span>
+<span class="s1">}</span>
+
+<span class="s0">export </span><span class="s1">{ createRenderStep };</span>
+</pre>
+</body>
+</html>

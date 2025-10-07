@@ -1,0 +1,221 @@
+<html>
+<head>
+<title>prefer-named-capture-group.js</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #8c8c8c; font-style: italic;}
+.s1 { color: #8c8c8c; font-style: italic;}
+.s2 { color: #080808;}
+.s3 { color: #067d17;}
+.s4 { color: #0033b3;}
+.s5 { color: #0037a6;}
+.s6 { color: #1750eb;}
+.s7 { color: #264eff;}
+</style>
+</head>
+<body bgcolor="#ffffff">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#c0c0c0" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+prefer-named-capture-group.js</font>
+</center></td></tr></table>
+<pre><span class="s0">/**</span>
+ <span class="s0">* </span><span class="s1">@fileoverview </span><span class="s0">Rule to enforce requiring named capture groups in regular expression.</span>
+ <span class="s0">* </span><span class="s1">@author </span><span class="s0">Pig Fang &lt;https://github.com/g-plane&gt;</span>
+ <span class="s0">*/</span>
+
+<span class="s3">&quot;use strict&quot;</span><span class="s2">;</span>
+
+<span class="s0">//------------------------------------------------------------------------------</span>
+<span class="s0">// Requirements</span>
+<span class="s0">//------------------------------------------------------------------------------</span>
+
+<span class="s4">const </span><span class="s2">{</span>
+	<span class="s2">CALL,</span>
+	<span class="s2">CONSTRUCT,</span>
+	<span class="s2">ReferenceTracker,</span>
+	<span class="s2">getStringIfConstant,</span>
+<span class="s2">} = require(</span><span class="s3">&quot;@eslint-community/eslint-utils&quot;</span><span class="s2">);</span>
+<span class="s4">const </span><span class="s2">regexpp = require(</span><span class="s3">&quot;@eslint-community/regexpp&quot;</span><span class="s2">);</span>
+
+<span class="s0">//------------------------------------------------------------------------------</span>
+<span class="s0">// Typedefs</span>
+<span class="s0">//------------------------------------------------------------------------------</span>
+
+<span class="s0">/** </span><span class="s1">@import </span><span class="s0">{ SuggestedEdit } from &quot;@eslint/core&quot;; */</span>
+
+<span class="s0">//------------------------------------------------------------------------------</span>
+<span class="s0">// Helpers</span>
+<span class="s0">//------------------------------------------------------------------------------</span>
+
+<span class="s4">const </span><span class="s2">parser = </span><span class="s4">new </span><span class="s2">regexpp.RegExpParser();</span>
+
+<span class="s0">/**</span>
+ <span class="s0">* Creates fixer suggestions for the regex, if statically determinable.</span>
+ <span class="s0">* </span><span class="s1">@param </span><span class="s0">{number} groupStart Starting index of the regex group.</span>
+ <span class="s0">* </span><span class="s1">@param </span><span class="s0">{string} pattern The regular expression pattern to be checked.</span>
+ <span class="s0">* </span><span class="s1">@param </span><span class="s0">{string} rawText Source text of the regexNode.</span>
+ <span class="s0">* </span><span class="s1">@param </span><span class="s0">{ASTNode} regexNode AST node which contains the regular expression.</span>
+ <span class="s0">* </span><span class="s1">@returns </span><span class="s0">{Array&lt;SuggestedEdit&gt;} Fixer suggestions for the regex, if statically determinable.</span>
+ <span class="s0">*/</span>
+<span class="s4">function </span><span class="s2">suggestIfPossible(groupStart, pattern, rawText, regexNode) {</span>
+	<span class="s4">switch </span><span class="s2">(regexNode.type) {</span>
+		<span class="s4">case </span><span class="s3">&quot;Literal&quot;</span><span class="s2">:</span>
+			<span class="s4">if </span><span class="s2">(</span><span class="s4">typeof </span><span class="s2">regexNode.value === </span><span class="s3">&quot;string&quot; </span><span class="s2">&amp;&amp; rawText.includes(</span><span class="s3">&quot;</span><span class="s5">\\</span><span class="s3">&quot;</span><span class="s2">)) {</span>
+				<span class="s4">return null</span><span class="s2">;</span>
+			<span class="s2">}</span>
+			<span class="s4">break</span><span class="s2">;</span>
+		<span class="s4">case </span><span class="s3">&quot;TemplateLiteral&quot;</span><span class="s2">:</span>
+			<span class="s4">if </span><span class="s2">(</span>
+				<span class="s2">regexNode.expressions.length ||</span>
+				<span class="s2">rawText.slice(</span><span class="s6">1</span><span class="s2">, -</span><span class="s6">1</span><span class="s2">) !== pattern</span>
+			<span class="s2">) {</span>
+				<span class="s4">return null</span><span class="s2">;</span>
+			<span class="s2">}</span>
+			<span class="s4">break</span><span class="s2">;</span>
+		<span class="s4">default</span><span class="s2">:</span>
+			<span class="s4">return null</span><span class="s2">;</span>
+	<span class="s2">}</span>
+
+	<span class="s4">const </span><span class="s2">start = regexNode.range[</span><span class="s6">0</span><span class="s2">] + groupStart + </span><span class="s6">2</span><span class="s2">;</span>
+
+	<span class="s4">return </span><span class="s2">[</span>
+		<span class="s2">{</span>
+			<span class="s2">fix(fixer) {</span>
+				<span class="s4">const </span><span class="s2">existingTemps = pattern.match(</span><span class="s7">/temp\d+/gu</span><span class="s2">) || [];</span>
+				<span class="s4">const </span><span class="s2">highestTempCount = existingTemps.reduce(</span>
+					<span class="s2">(previous, next) =&gt;</span>
+						<span class="s2">Math.max(previous, Number(next.slice(</span><span class="s3">&quot;temp&quot;</span><span class="s2">.length))),</span>
+					<span class="s6">0</span><span class="s2">,</span>
+				<span class="s2">);</span>
+
+				<span class="s4">return </span><span class="s2">fixer.insertTextBeforeRange(</span>
+					<span class="s2">[start, start],</span>
+					<span class="s3">`?&lt;temp</span><span class="s2">${highestTempCount + </span><span class="s6">1</span><span class="s2">}</span><span class="s3">&gt;`</span><span class="s2">,</span>
+				<span class="s2">);</span>
+			<span class="s2">},</span>
+			<span class="s2">messageId: </span><span class="s3">&quot;addGroupName&quot;</span><span class="s2">,</span>
+		<span class="s2">},</span>
+		<span class="s2">{</span>
+			<span class="s2">fix(fixer) {</span>
+				<span class="s4">return </span><span class="s2">fixer.insertTextBeforeRange([start, start], </span><span class="s3">&quot;?:&quot;</span><span class="s2">);</span>
+			<span class="s2">},</span>
+			<span class="s2">messageId: </span><span class="s3">&quot;addNonCapture&quot;</span><span class="s2">,</span>
+		<span class="s2">},</span>
+	<span class="s2">];</span>
+<span class="s2">}</span>
+
+<span class="s0">//------------------------------------------------------------------------------</span>
+<span class="s0">// Rule Definition</span>
+<span class="s0">//------------------------------------------------------------------------------</span>
+
+<span class="s0">/** </span><span class="s1">@type </span><span class="s0">{import('../types').Rule.RuleModule} */</span>
+<span class="s2">module.exports = {</span>
+	<span class="s2">meta: {</span>
+		<span class="s2">type: </span><span class="s3">&quot;suggestion&quot;</span><span class="s2">,</span>
+
+		<span class="s2">docs: {</span>
+			<span class="s2">description:</span>
+				<span class="s3">&quot;Enforce using named capture group in regular expression&quot;</span><span class="s2">,</span>
+			<span class="s2">recommended: </span><span class="s4">false</span><span class="s2">,</span>
+			<span class="s2">url: </span><span class="s3">&quot;https://eslint.org/docs/latest/rules/prefer-named-capture-group&quot;</span><span class="s2">,</span>
+		<span class="s2">},</span>
+
+		<span class="s2">hasSuggestions: </span><span class="s4">true</span><span class="s2">,</span>
+
+		<span class="s2">schema: [],</span>
+
+		<span class="s2">messages: {</span>
+			<span class="s2">addGroupName: </span><span class="s3">&quot;Add name to capture group.&quot;</span><span class="s2">,</span>
+			<span class="s2">addNonCapture: </span><span class="s3">&quot;Convert group to non-capturing.&quot;</span><span class="s2">,</span>
+			<span class="s2">required:</span>
+				<span class="s3">&quot;Capture group '{{group}}' should be converted to a named or non-capturing group.&quot;</span><span class="s2">,</span>
+		<span class="s2">},</span>
+	<span class="s2">},</span>
+
+	<span class="s2">create(context) {</span>
+		<span class="s4">const </span><span class="s2">sourceCode = context.sourceCode;</span>
+
+		<span class="s0">/**</span>
+		 <span class="s0">* Function to check regular expression.</span>
+		 <span class="s0">* </span><span class="s1">@param </span><span class="s0">{string} pattern The regular expression pattern to be checked.</span>
+		 <span class="s0">* </span><span class="s1">@param </span><span class="s0">{ASTNode} node AST node which contains the regular expression or a call/new expression.</span>
+		 <span class="s0">* </span><span class="s1">@param </span><span class="s0">{ASTNode} regexNode AST node which contains the regular expression.</span>
+		 <span class="s0">* </span><span class="s1">@param </span><span class="s0">{string|null} flags The regular expression flags to be checked.</span>
+		 <span class="s0">* </span><span class="s1">@returns </span><span class="s0">{void}</span>
+		 <span class="s0">*/</span>
+		<span class="s4">function </span><span class="s2">checkRegex(pattern, node, regexNode, flags) {</span>
+			<span class="s4">let </span><span class="s2">ast;</span>
+
+			<span class="s4">try </span><span class="s2">{</span>
+				<span class="s2">ast = parser.parsePattern(pattern, </span><span class="s6">0</span><span class="s2">, pattern.length, {</span>
+					<span class="s2">unicode: Boolean(flags &amp;&amp; flags.includes(</span><span class="s3">&quot;u&quot;</span><span class="s2">)),</span>
+					<span class="s2">unicodeSets: Boolean(flags &amp;&amp; flags.includes(</span><span class="s3">&quot;v&quot;</span><span class="s2">)),</span>
+				<span class="s2">});</span>
+			<span class="s2">} </span><span class="s4">catch </span><span class="s2">{</span>
+				<span class="s0">// ignore regex syntax errors</span>
+				<span class="s4">return</span><span class="s2">;</span>
+			<span class="s2">}</span>
+
+			<span class="s2">regexpp.visitRegExpAST(ast, {</span>
+				<span class="s2">onCapturingGroupEnter(group) {</span>
+					<span class="s4">if </span><span class="s2">(!group.name) {</span>
+						<span class="s4">const </span><span class="s2">rawText = sourceCode.getText(regexNode);</span>
+						<span class="s4">const </span><span class="s2">suggest = suggestIfPossible(</span>
+							<span class="s2">group.start,</span>
+							<span class="s2">pattern,</span>
+							<span class="s2">rawText,</span>
+							<span class="s2">regexNode,</span>
+						<span class="s2">);</span>
+
+						<span class="s2">context.report({</span>
+							<span class="s2">node,</span>
+							<span class="s2">messageId: </span><span class="s3">&quot;required&quot;</span><span class="s2">,</span>
+							<span class="s2">data: {</span>
+								<span class="s2">group: group.raw,</span>
+							<span class="s2">},</span>
+							<span class="s2">suggest,</span>
+						<span class="s2">});</span>
+					<span class="s2">}</span>
+				<span class="s2">},</span>
+			<span class="s2">});</span>
+		<span class="s2">}</span>
+
+		<span class="s4">return </span><span class="s2">{</span>
+			<span class="s2">Literal(node) {</span>
+				<span class="s4">if </span><span class="s2">(node.regex) {</span>
+					<span class="s2">checkRegex(</span>
+						<span class="s2">node.regex.pattern,</span>
+						<span class="s2">node,</span>
+						<span class="s2">node,</span>
+						<span class="s2">node.regex.flags,</span>
+					<span class="s2">);</span>
+				<span class="s2">}</span>
+			<span class="s2">},</span>
+			<span class="s2">Program(node) {</span>
+				<span class="s4">const </span><span class="s2">scope = sourceCode.getScope(node);</span>
+				<span class="s4">const </span><span class="s2">tracker = </span><span class="s4">new </span><span class="s2">ReferenceTracker(scope);</span>
+				<span class="s4">const </span><span class="s2">traceMap = {</span>
+					<span class="s2">RegExp: {</span>
+						<span class="s2">[CALL]: </span><span class="s4">true</span><span class="s2">,</span>
+						<span class="s2">[CONSTRUCT]: </span><span class="s4">true</span><span class="s2">,</span>
+					<span class="s2">},</span>
+				<span class="s2">};</span>
+
+				<span class="s4">for </span><span class="s2">(</span><span class="s4">const </span><span class="s2">{ node: refNode } of tracker.iterateGlobalReferences(</span>
+					<span class="s2">traceMap,</span>
+				<span class="s2">)) {</span>
+					<span class="s4">const </span><span class="s2">regex = getStringIfConstant(refNode.arguments[</span><span class="s6">0</span><span class="s2">]);</span>
+					<span class="s4">const </span><span class="s2">flags = getStringIfConstant(refNode.arguments[</span><span class="s6">1</span><span class="s2">]);</span>
+
+					<span class="s4">if </span><span class="s2">(regex) {</span>
+						<span class="s2">checkRegex(regex, refNode, refNode.arguments[</span><span class="s6">0</span><span class="s2">], flags);</span>
+					<span class="s2">}</span>
+				<span class="s2">}</span>
+			<span class="s2">},</span>
+		<span class="s2">};</span>
+	<span class="s2">},</span>
+<span class="s2">};</span>
+</pre>
+</body>
+</html>

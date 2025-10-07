@@ -1,0 +1,157 @@
+<html>
+<head>
+<title>templates.js</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #067d17;}
+.s1 { color: #080808;}
+.s2 { color: #0033b3;}
+.s3 { color: #264eff;}
+.s4 { color: #0037a6;}
+.s5 { color: #1750eb;}
+.s6 { color: #8c8c8c; font-style: italic;}
+</style>
+</head>
+<body bgcolor="#ffffff">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#c0c0c0" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+templates.js</font>
+</center></td></tr></table>
+<pre><span class="s0">'use strict'</span><span class="s1">;</span>
+<span class="s2">const </span><span class="s1">TEMPLATE_REGEX = </span><span class="s3">/(?:\\(u(?:[a-f\d]{4}|\{[a-f\d]{1,6}\})|x[a-f\d]{2}|.))|(?:\{(~)?(\w+(?:\([^)]*\))?(?:\.\w+(?:\([^)]*\))?)*)(?:[ \t]|(?=\r?\n)))|(\})|((?:.|[\r\n\f])+?)/gi</span><span class="s1">;</span>
+<span class="s2">const </span><span class="s1">STYLE_REGEX = </span><span class="s3">/(?:^|\.)(\w+)(?:\(([^)]*)\))?/g</span><span class="s1">;</span>
+<span class="s2">const </span><span class="s1">STRING_REGEX = </span><span class="s3">/^(['&quot;])((?:\\.|(?!\1)[^\\])*)\1$/</span><span class="s1">;</span>
+<span class="s2">const </span><span class="s1">ESCAPE_REGEX = </span><span class="s3">/\\(u(?:[a-f\d]{4}|{[a-f\d]{1,6}})|x[a-f\d]{2}|.)|([^\\])/gi</span><span class="s1">;</span>
+
+<span class="s2">const </span><span class="s1">ESCAPES = </span><span class="s2">new </span><span class="s1">Map([</span>
+	<span class="s1">[</span><span class="s0">'n'</span><span class="s1">, </span><span class="s0">'</span><span class="s4">\n</span><span class="s0">'</span><span class="s1">],</span>
+	<span class="s1">[</span><span class="s0">'r'</span><span class="s1">, </span><span class="s0">'</span><span class="s4">\r</span><span class="s0">'</span><span class="s1">],</span>
+	<span class="s1">[</span><span class="s0">'t'</span><span class="s1">, </span><span class="s0">'</span><span class="s4">\t</span><span class="s0">'</span><span class="s1">],</span>
+	<span class="s1">[</span><span class="s0">'b'</span><span class="s1">, </span><span class="s0">'</span><span class="s4">\b</span><span class="s0">'</span><span class="s1">],</span>
+	<span class="s1">[</span><span class="s0">'f'</span><span class="s1">, </span><span class="s0">'</span><span class="s4">\f</span><span class="s0">'</span><span class="s1">],</span>
+	<span class="s1">[</span><span class="s0">'v'</span><span class="s1">, </span><span class="s0">'</span><span class="s4">\v</span><span class="s0">'</span><span class="s1">],</span>
+	<span class="s1">[</span><span class="s0">'0'</span><span class="s1">, </span><span class="s0">'</span><span class="s4">\0</span><span class="s0">'</span><span class="s1">],</span>
+	<span class="s1">[</span><span class="s0">'</span><span class="s4">\\</span><span class="s0">'</span><span class="s1">, </span><span class="s0">'</span><span class="s4">\\</span><span class="s0">'</span><span class="s1">],</span>
+	<span class="s1">[</span><span class="s0">'e'</span><span class="s1">, </span><span class="s0">'</span><span class="s4">\u001B</span><span class="s0">'</span><span class="s1">],</span>
+	<span class="s1">[</span><span class="s0">'a'</span><span class="s1">, </span><span class="s0">'</span><span class="s4">\u0007</span><span class="s0">'</span><span class="s1">]</span>
+<span class="s1">]);</span>
+
+<span class="s2">function </span><span class="s1">unescape(c) {</span>
+	<span class="s2">const </span><span class="s1">u = c[</span><span class="s5">0</span><span class="s1">] === </span><span class="s0">'u'</span><span class="s1">;</span>
+	<span class="s2">const </span><span class="s1">bracket = c[</span><span class="s5">1</span><span class="s1">] === </span><span class="s0">'{'</span><span class="s1">;</span>
+
+	<span class="s2">if </span><span class="s1">((u &amp;&amp; !bracket &amp;&amp; c.length === </span><span class="s5">5</span><span class="s1">) || (c[</span><span class="s5">0</span><span class="s1">] === </span><span class="s0">'x' </span><span class="s1">&amp;&amp; c.length === </span><span class="s5">3</span><span class="s1">)) {</span>
+		<span class="s2">return </span><span class="s1">String.fromCharCode(parseInt(c.slice(</span><span class="s5">1</span><span class="s1">), </span><span class="s5">16</span><span class="s1">));</span>
+	<span class="s1">}</span>
+
+	<span class="s2">if </span><span class="s1">(u &amp;&amp; bracket) {</span>
+		<span class="s2">return </span><span class="s1">String.fromCodePoint(parseInt(c.slice(</span><span class="s5">2</span><span class="s1">, -</span><span class="s5">1</span><span class="s1">), </span><span class="s5">16</span><span class="s1">));</span>
+	<span class="s1">}</span>
+
+	<span class="s2">return </span><span class="s1">ESCAPES.get(c) || c;</span>
+<span class="s1">}</span>
+
+<span class="s2">function </span><span class="s1">parseArguments(name, arguments_) {</span>
+	<span class="s2">const </span><span class="s1">results = [];</span>
+	<span class="s2">const </span><span class="s1">chunks = arguments_.trim().split(</span><span class="s3">/\s*,\s*/g</span><span class="s1">);</span>
+	<span class="s2">let </span><span class="s1">matches;</span>
+
+	<span class="s2">for </span><span class="s1">(</span><span class="s2">const </span><span class="s1">chunk of chunks) {</span>
+		<span class="s2">const </span><span class="s1">number = Number(chunk);</span>
+		<span class="s2">if </span><span class="s1">(!Number.isNaN(number)) {</span>
+			<span class="s1">results.push(number);</span>
+		<span class="s1">} </span><span class="s2">else if </span><span class="s1">((matches = chunk.match(STRING_REGEX))) {</span>
+			<span class="s1">results.push(matches[</span><span class="s5">2</span><span class="s1">].replace(ESCAPE_REGEX, (m, escape, character) =&gt; escape ? unescape(escape) : character));</span>
+		<span class="s1">} </span><span class="s2">else </span><span class="s1">{</span>
+			<span class="s2">throw new </span><span class="s1">Error(</span><span class="s0">`Invalid Chalk template style argument: </span><span class="s1">${chunk} </span><span class="s0">(in style '</span><span class="s1">${name}</span><span class="s0">')`</span><span class="s1">);</span>
+		<span class="s1">}</span>
+	<span class="s1">}</span>
+
+	<span class="s2">return </span><span class="s1">results;</span>
+<span class="s1">}</span>
+
+<span class="s2">function </span><span class="s1">parseStyle(style) {</span>
+	<span class="s1">STYLE_REGEX.lastIndex = </span><span class="s5">0</span><span class="s1">;</span>
+
+	<span class="s2">const </span><span class="s1">results = [];</span>
+	<span class="s2">let </span><span class="s1">matches;</span>
+
+	<span class="s2">while </span><span class="s1">((matches = STYLE_REGEX.exec(style)) !== </span><span class="s2">null</span><span class="s1">) {</span>
+		<span class="s2">const </span><span class="s1">name = matches[</span><span class="s5">1</span><span class="s1">];</span>
+
+		<span class="s2">if </span><span class="s1">(matches[</span><span class="s5">2</span><span class="s1">]) {</span>
+			<span class="s2">const </span><span class="s1">args = parseArguments(name, matches[</span><span class="s5">2</span><span class="s1">]);</span>
+			<span class="s1">results.push([name].concat(args));</span>
+		<span class="s1">} </span><span class="s2">else </span><span class="s1">{</span>
+			<span class="s1">results.push([name]);</span>
+		<span class="s1">}</span>
+	<span class="s1">}</span>
+
+	<span class="s2">return </span><span class="s1">results;</span>
+<span class="s1">}</span>
+
+<span class="s2">function </span><span class="s1">buildStyle(chalk, styles) {</span>
+	<span class="s2">const </span><span class="s1">enabled = {};</span>
+
+	<span class="s2">for </span><span class="s1">(</span><span class="s2">const </span><span class="s1">layer of styles) {</span>
+		<span class="s2">for </span><span class="s1">(</span><span class="s2">const </span><span class="s1">style of layer.styles) {</span>
+			<span class="s1">enabled[style[</span><span class="s5">0</span><span class="s1">]] = layer.inverse ? </span><span class="s2">null </span><span class="s1">: style.slice(</span><span class="s5">1</span><span class="s1">);</span>
+		<span class="s1">}</span>
+	<span class="s1">}</span>
+
+	<span class="s2">let </span><span class="s1">current = chalk;</span>
+	<span class="s2">for </span><span class="s1">(</span><span class="s2">const </span><span class="s1">[styleName, styles] of Object.entries(enabled)) {</span>
+		<span class="s2">if </span><span class="s1">(!Array.isArray(styles)) {</span>
+			<span class="s2">continue</span><span class="s1">;</span>
+		<span class="s1">}</span>
+
+		<span class="s2">if </span><span class="s1">(!(styleName </span><span class="s2">in </span><span class="s1">current)) {</span>
+			<span class="s2">throw new </span><span class="s1">Error(</span><span class="s0">`Unknown Chalk style: </span><span class="s1">${styleName}</span><span class="s0">`</span><span class="s1">);</span>
+		<span class="s1">}</span>
+
+		<span class="s1">current = styles.length &gt; </span><span class="s5">0 </span><span class="s1">? current[styleName](...styles) : current[styleName];</span>
+	<span class="s1">}</span>
+
+	<span class="s2">return </span><span class="s1">current;</span>
+<span class="s1">}</span>
+
+<span class="s1">module.exports = (chalk, temporary) =&gt; {</span>
+	<span class="s2">const </span><span class="s1">styles = [];</span>
+	<span class="s2">const </span><span class="s1">chunks = [];</span>
+	<span class="s2">let </span><span class="s1">chunk = [];</span>
+
+	<span class="s6">// eslint-disable-next-line max-params</span>
+	<span class="s1">temporary.replace(TEMPLATE_REGEX, (m, escapeCharacter, inverse, style, close, character) =&gt; {</span>
+		<span class="s2">if </span><span class="s1">(escapeCharacter) {</span>
+			<span class="s1">chunk.push(unescape(escapeCharacter));</span>
+		<span class="s1">} </span><span class="s2">else if </span><span class="s1">(style) {</span>
+			<span class="s2">const </span><span class="s1">string = chunk.join(</span><span class="s0">''</span><span class="s1">);</span>
+			<span class="s1">chunk = [];</span>
+			<span class="s1">chunks.push(styles.length === </span><span class="s5">0 </span><span class="s1">? string : buildStyle(chalk, styles)(string));</span>
+			<span class="s1">styles.push({inverse, styles: parseStyle(style)});</span>
+		<span class="s1">} </span><span class="s2">else if </span><span class="s1">(close) {</span>
+			<span class="s2">if </span><span class="s1">(styles.length === </span><span class="s5">0</span><span class="s1">) {</span>
+				<span class="s2">throw new </span><span class="s1">Error(</span><span class="s0">'Found extraneous } in Chalk template literal'</span><span class="s1">);</span>
+			<span class="s1">}</span>
+
+			<span class="s1">chunks.push(buildStyle(chalk, styles)(chunk.join(</span><span class="s0">''</span><span class="s1">)));</span>
+			<span class="s1">chunk = [];</span>
+			<span class="s1">styles.pop();</span>
+		<span class="s1">} </span><span class="s2">else </span><span class="s1">{</span>
+			<span class="s1">chunk.push(character);</span>
+		<span class="s1">}</span>
+	<span class="s1">});</span>
+
+	<span class="s1">chunks.push(chunk.join(</span><span class="s0">''</span><span class="s1">));</span>
+
+	<span class="s2">if </span><span class="s1">(styles.length &gt; </span><span class="s5">0</span><span class="s1">) {</span>
+		<span class="s2">const </span><span class="s1">errMessage = </span><span class="s0">`Chalk template literal is missing </span><span class="s1">${styles.length} </span><span class="s0">closing bracket</span><span class="s1">${styles.length === </span><span class="s5">1 </span><span class="s1">? </span><span class="s0">'' </span><span class="s1">: </span><span class="s0">'s'</span><span class="s1">} </span><span class="s0">(</span><span class="s4">\`</span><span class="s0">}</span><span class="s4">\`</span><span class="s0">)`</span><span class="s1">;</span>
+		<span class="s2">throw new </span><span class="s1">Error(errMessage);</span>
+	<span class="s1">}</span>
+
+	<span class="s2">return </span><span class="s1">chunks.join(</span><span class="s0">''</span><span class="s1">);</span>
+<span class="s1">};</span>
+</pre>
+</body>
+</html>

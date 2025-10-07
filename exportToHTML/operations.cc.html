@@ -1,0 +1,520 @@
+<html>
+<head>
+<title>operations.cc</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #8c8c8c; font-style: italic;}
+.s1 { color: #080808;}
+.s2 { color: #0033b3;}
+.s3 { color: #067d17;}
+.s4 { color: #000000;}
+.s5 { color: #00627a;}
+.s6 { color: #1750eb; font-style: italic;}
+</style>
+</head>
+<body bgcolor="#ffffff">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#c0c0c0" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+operations.cc</font>
+</center></td></tr></table>
+<pre><span class="s0">// Copyright 2013 Lovell Fuller and others.</span>
+<span class="s0">// SPDX-License-Identifier: Apache-2.0</span>
+
+<span class="s2">#include </span><span class="s3">&lt;algorithm&gt;</span>
+<span class="s2">#include </span><span class="s3">&lt;functional&gt;</span>
+<span class="s2">#include </span><span class="s3">&lt;memory&gt;</span>
+<span class="s2">#include </span><span class="s3">&lt;tuple&gt;</span>
+<span class="s2">#include </span><span class="s3">&lt;vector&gt;</span>
+<span class="s2">#include </span><span class="s3">&lt;vips/vips8&gt;</span>
+
+<span class="s2">#include </span><span class="s3">&quot;common.h&quot;</span>
+<span class="s2">#include </span><span class="s3">&quot;operations.h&quot;</span>
+
+<span class="s2">using </span>vips<span class="s1">::VImage;</span>
+<span class="s2">using </span>vips<span class="s1">::VError;</span>
+
+<span class="s2">namespace </span>sharp <span class="s1">{</span>
+  <span class="s0">/*</span>
+   <span class="s0">* Tint an image using the provided RGB. 
+   */</span>
+  <span class="s1">VImage </span><span class="s5">Tint</span><span class="s1">(</span>VImage image<span class="s1">, </span>std<span class="s1">::</span>vector<span class="s1">&lt;</span><span class="s2">double</span><span class="s1">&gt; </span><span class="s2">const </span>tint<span class="s1">) {</span>
+    std<span class="s1">::vector</span><span class="s2">&lt;double&gt; const </span><span class="s1">tintLab </span><span class="s2">= </span><span class="s1">(</span>VImage<span class="s1">::</span><span class="s5">black</span><span class="s1">(</span><span class="s6">1</span><span class="s1">, </span><span class="s6">1</span><span class="s1">) </span><span class="s2">+ </span><span class="s1">tint)</span>
+      <span class="s1">.</span><span class="s5">colourspace</span><span class="s1">(VIPS_INTERPRETATION_LAB, </span>VImage<span class="s1">::</span><span class="s5">option</span><span class="s1">()-&gt;</span><span class="s5">set</span><span class="s1">(</span><span class="s3">&quot;source_space&quot;</span><span class="s1">, VIPS_INTERPRETATION_sRGB))</span>
+      <span class="s1">.</span><span class="s5">getpoint</span><span class="s1">(</span><span class="s6">0</span><span class="s1">, </span><span class="s6">0</span><span class="s1">);</span>
+    <span class="s0">// LAB identity function</span>
+    <span class="s1">VImage identityLab </span><span class="s2">= </span>VImage<span class="s1">::</span><span class="s5">identity</span><span class="s1">(</span>VImage<span class="s1">::</span><span class="s5">option</span><span class="s1">()-&gt;</span><span class="s5">set</span><span class="s1">(</span><span class="s3">&quot;bands&quot;</span><span class="s1">, </span><span class="s6">3</span><span class="s1">))</span>
+      <span class="s1">.</span><span class="s5">colourspace</span><span class="s1">(VIPS_INTERPRETATION_LAB, </span>VImage<span class="s1">::</span><span class="s5">option</span><span class="s1">()-&gt;</span><span class="s5">set</span><span class="s1">(</span><span class="s3">&quot;source_space&quot;</span><span class="s1">, VIPS_INTERPRETATION_sRGB));</span>
+    <span class="s0">// Scale luminance range, 0.0 to 1.0</span>
+    <span class="s1">VImage l </span><span class="s2">= </span>identityLab<span class="s1">[</span><span class="s6">0</span><span class="s1">] </span><span class="s2">/ </span><span class="s6">100</span><span class="s1">;</span>
+    <span class="s0">// Weighting functions</span>
+    <span class="s1">VImage weightL </span><span class="s2">= </span><span class="s6">1.0 </span><span class="s2">- </span><span class="s6">4.0 </span><span class="s2">* </span><span class="s1">((l </span><span class="s2">- </span><span class="s6">0.5</span><span class="s1">) </span><span class="s2">* </span><span class="s1">(l </span><span class="s2">- </span><span class="s6">0.5</span><span class="s1">));</span>
+    <span class="s1">VImage weightAB </span><span class="s2">= </span><span class="s1">(weightL </span><span class="s2">* </span><span class="s1">tintLab).</span><span class="s5">extract_band</span><span class="s1">(</span><span class="s6">1</span><span class="s1">, </span>VImage<span class="s1">::</span><span class="s5">option</span><span class="s1">()-&gt;</span><span class="s5">set</span><span class="s1">(</span><span class="s3">&quot;n&quot;</span><span class="s1">, </span><span class="s6">2</span><span class="s1">));</span>
+    <span class="s1">identityLab </span><span class="s2">= </span>identityLab<span class="s1">[</span><span class="s6">0</span><span class="s1">].</span><span class="s5">bandjoin</span><span class="s1">(weightAB);</span>
+    <span class="s0">// Convert lookup table to sRGB</span>
+    <span class="s1">VImage lut </span><span class="s2">= </span>identityLab<span class="s1">.</span><span class="s5">colourspace</span><span class="s1">(VIPS_INTERPRETATION_sRGB,</span>
+      VImage<span class="s1">::</span><span class="s5">option</span><span class="s1">()-&gt;</span><span class="s5">set</span><span class="s1">(</span><span class="s3">&quot;source_space&quot;</span><span class="s1">, VIPS_INTERPRETATION_LAB));</span>
+    <span class="s0">// Original colourspace</span>
+    <span class="s1">VipsInterpretation typeBeforeTint </span><span class="s2">= </span>image<span class="s1">.</span><span class="s5">interpretation</span><span class="s1">();</span>
+    <span class="s2">if </span><span class="s1">(typeBeforeTint </span><span class="s2">== </span><span class="s1">VIPS_INTERPRETATION_RGB) {</span>
+      <span class="s1">typeBeforeTint </span><span class="s2">= </span><span class="s1">VIPS_INTERPRETATION_sRGB;</span>
+    <span class="s1">}</span>
+    <span class="s0">// Apply lookup table</span>
+    <span class="s2">if </span><span class="s1">(</span>image<span class="s1">.</span><span class="s5">has_alpha</span><span class="s1">()) {</span>
+      <span class="s1">VImage alpha </span><span class="s2">= </span>image<span class="s1">[</span>image<span class="s1">.</span><span class="s5">bands</span><span class="s1">() </span><span class="s2">- </span><span class="s6">1</span><span class="s1">];</span>
+      <span class="s1">image </span><span class="s2">= </span><span class="s5">RemoveAlpha</span><span class="s1">(image)</span>
+        <span class="s1">.</span><span class="s5">colourspace</span><span class="s1">(VIPS_INTERPRETATION_B_W)</span>
+        <span class="s1">.</span><span class="s5">maplut</span><span class="s1">(lut)</span>
+        <span class="s1">.</span><span class="s5">colourspace</span><span class="s1">(typeBeforeTint)</span>
+        <span class="s1">.</span><span class="s5">bandjoin</span><span class="s1">(alpha);</span>
+    <span class="s1">} </span><span class="s2">else </span><span class="s1">{</span>
+      <span class="s1">image </span><span class="s2">= </span><span class="s1">image 
+        .</span><span class="s5">colourspace</span><span class="s1">(VIPS_INTERPRETATION_B_W)</span>
+        <span class="s1">.</span><span class="s5">maplut</span><span class="s1">(lut)</span>
+        <span class="s1">.</span><span class="s5">colourspace</span><span class="s1">(typeBeforeTint);</span>
+    <span class="s1">}</span>
+    <span class="s2">return </span><span class="s1">image;</span>
+  <span class="s1">}</span>
+
+  <span class="s0">/*</span>
+   <span class="s0">* Stretch luminance to cover full dynamic range. 
+   */</span>
+  <span class="s1">VImage </span><span class="s5">Normalise</span><span class="s1">(</span>VImage image<span class="s1">, </span><span class="s2">int const </span>lower<span class="s1">, </span><span class="s2">int const </span>upper<span class="s1">) {</span>
+    <span class="s0">// Get original colourspace</span>
+    <span class="s1">VipsInterpretation typeBeforeNormalize </span><span class="s2">= </span>image<span class="s1">.</span><span class="s5">interpretation</span><span class="s1">();</span>
+    <span class="s2">if </span><span class="s1">(typeBeforeNormalize </span><span class="s2">== </span><span class="s1">VIPS_INTERPRETATION_RGB) {</span>
+      <span class="s1">typeBeforeNormalize </span><span class="s2">= </span><span class="s1">VIPS_INTERPRETATION_sRGB;</span>
+    <span class="s1">}</span>
+    <span class="s0">// Convert to LAB colourspace</span>
+    <span class="s1">VImage lab </span><span class="s2">= </span>image<span class="s1">.</span><span class="s5">colourspace</span><span class="s1">(VIPS_INTERPRETATION_LAB);</span>
+    <span class="s0">// Extract luminance</span>
+    <span class="s1">VImage luminance </span><span class="s2">= </span>lab<span class="s1">[</span><span class="s6">0</span><span class="s1">];</span>
+
+    <span class="s0">// Find luminance range</span>
+    <span class="s2">int const </span><span class="s1">min </span><span class="s2">= </span><span class="s1">lower </span><span class="s2">== </span><span class="s6">0 </span><span class="s2">? </span>luminance<span class="s1">.</span><span class="s5">min</span><span class="s1">() </span><span class="s2">: </span>luminance<span class="s1">.</span><span class="s5">percent</span><span class="s1">(lower);</span>
+    <span class="s2">int const </span><span class="s1">max </span><span class="s2">= </span><span class="s1">upper </span><span class="s2">== </span><span class="s6">100 </span><span class="s2">? </span>luminance<span class="s1">.</span><span class="s5">max</span><span class="s1">() </span><span class="s2">: </span>luminance<span class="s1">.</span><span class="s5">percent</span><span class="s1">(upper);</span>
+
+    <span class="s2">if </span><span class="s1">(</span>std<span class="s1">::</span><span class="s5">abs</span><span class="s1">(max </span><span class="s2">- </span><span class="s1">min) </span><span class="s2">&gt; </span><span class="s6">1</span><span class="s1">) {</span>
+      <span class="s0">// Extract chroma</span>
+      <span class="s1">VImage chroma </span><span class="s2">= </span>lab<span class="s1">.</span><span class="s5">extract_band</span><span class="s1">(</span><span class="s6">1</span><span class="s1">, </span>VImage<span class="s1">::</span><span class="s5">option</span><span class="s1">()-&gt;</span><span class="s5">set</span><span class="s1">(</span><span class="s3">&quot;n&quot;</span><span class="s1">, </span><span class="s6">2</span><span class="s1">));</span>
+      <span class="s0">// Calculate multiplication factor and addition</span>
+      <span class="s2">double </span><span class="s1">f </span><span class="s2">= </span><span class="s6">100.0 </span><span class="s2">/ </span><span class="s1">(max </span><span class="s2">- </span><span class="s1">min);</span>
+      <span class="s2">double </span><span class="s1">a </span><span class="s2">= -</span><span class="s1">(min </span><span class="s2">* </span><span class="s1">f);</span>
+      <span class="s0">// Scale luminance, join to chroma, convert back to original colourspace</span>
+      <span class="s1">VImage normalized </span><span class="s2">= </span>luminance<span class="s1">.</span><span class="s5">linear</span><span class="s1">(f, a).</span><span class="s5">bandjoin</span><span class="s1">(chroma).</span><span class="s5">colourspace</span><span class="s1">(typeBeforeNormalize);</span>
+      <span class="s0">// Attach original alpha channel, if any</span>
+      <span class="s2">if </span><span class="s1">(</span>image<span class="s1">.</span><span class="s5">has_alpha</span><span class="s1">()) {</span>
+        <span class="s0">// Extract original alpha channel</span>
+        <span class="s1">VImage alpha </span><span class="s2">= </span>image<span class="s1">[</span>image<span class="s1">.</span><span class="s5">bands</span><span class="s1">() </span><span class="s2">- </span><span class="s6">1</span><span class="s1">];</span>
+        <span class="s0">// Join alpha channel to normalised image</span>
+        <span class="s2">return </span>normalized<span class="s1">.</span><span class="s5">bandjoin</span><span class="s1">(alpha);</span>
+      <span class="s1">} </span><span class="s2">else </span><span class="s1">{</span>
+        <span class="s2">return </span><span class="s1">normalized;</span>
+      <span class="s1">}</span>
+    <span class="s1">}</span>
+    <span class="s2">return </span><span class="s1">image;</span>
+  <span class="s1">}</span>
+
+  <span class="s0">/*</span>
+   <span class="s0">* Contrast limiting adapative histogram equalization (CLAHE) 
+   */</span>
+  <span class="s1">VImage </span><span class="s5">Clahe</span><span class="s1">(</span>VImage image<span class="s1">, </span><span class="s2">int const </span>width<span class="s1">, </span><span class="s2">int const </span>height<span class="s1">, </span><span class="s2">int const </span>maxSlope<span class="s1">) {</span>
+    <span class="s2">return </span>image<span class="s1">.</span><span class="s5">hist_local</span><span class="s1">(width, height, </span>VImage<span class="s1">::</span><span class="s5">option</span><span class="s1">()-&gt;</span><span class="s5">set</span><span class="s1">(</span><span class="s3">&quot;max_slope&quot;</span><span class="s1">, maxSlope));</span>
+  <span class="s1">}</span>
+
+  <span class="s0">/*</span>
+   <span class="s0">* Gamma encoding/decoding 
+   */</span>
+  <span class="s1">VImage </span><span class="s5">Gamma</span><span class="s1">(</span>VImage image<span class="s1">, </span><span class="s2">double const </span>exponent<span class="s1">) {</span>
+    <span class="s2">if </span><span class="s1">(</span>image<span class="s1">.</span><span class="s5">has_alpha</span><span class="s1">()) {</span>
+      <span class="s0">// Separate alpha channel</span>
+      <span class="s1">VImage alpha </span><span class="s2">= </span>image<span class="s1">[</span>image<span class="s1">.</span><span class="s5">bands</span><span class="s1">() </span><span class="s2">- </span><span class="s6">1</span><span class="s1">];</span>
+      <span class="s2">return </span><span class="s5">RemoveAlpha</span><span class="s1">(image).</span><span class="s5">gamma</span><span class="s1">(</span>VImage<span class="s1">::</span><span class="s5">option</span><span class="s1">()-&gt;</span><span class="s5">set</span><span class="s1">(</span><span class="s3">&quot;exponent&quot;</span><span class="s1">, exponent)).</span><span class="s5">bandjoin</span><span class="s1">(alpha);</span>
+    <span class="s1">} </span><span class="s2">else </span><span class="s1">{</span>
+      <span class="s2">return </span>image<span class="s1">.</span><span class="s5">gamma</span><span class="s1">(</span>VImage<span class="s1">::</span><span class="s5">option</span><span class="s1">()-&gt;</span><span class="s5">set</span><span class="s1">(</span><span class="s3">&quot;exponent&quot;</span><span class="s1">, exponent));</span>
+    <span class="s1">}</span>
+  <span class="s1">}</span>
+
+  <span class="s0">/*</span>
+   <span class="s0">* Flatten image to remove alpha channel 
+   */</span>
+  <span class="s1">VImage </span><span class="s5">Flatten</span><span class="s1">(</span>VImage image<span class="s1">, </span>std<span class="s1">::</span>vector<span class="s1">&lt;</span><span class="s2">double</span><span class="s1">&gt; </span>flattenBackground<span class="s1">) {</span>
+    <span class="s2">double const </span><span class="s1">multiplier </span><span class="s2">= </span>sharp<span class="s1">::</span><span class="s5">Is16Bit</span><span class="s1">(</span>image<span class="s1">.</span><span class="s5">interpretation</span><span class="s1">()) </span><span class="s2">? </span><span class="s6">256.0 </span><span class="s2">: </span><span class="s6">1.0</span><span class="s1">;</span>
+    std<span class="s1">::vector</span><span class="s2">&lt;double&gt; </span><span class="s1">background {</span>
+      flattenBackground<span class="s1">[</span><span class="s6">0</span><span class="s1">] </span><span class="s2">* </span><span class="s1">multiplier,</span>
+      flattenBackground<span class="s1">[</span><span class="s6">1</span><span class="s1">] </span><span class="s2">* </span><span class="s1">multiplier,</span>
+      flattenBackground<span class="s1">[</span><span class="s6">2</span><span class="s1">] </span><span class="s2">* </span><span class="s1">multiplier 
+    };</span>
+    <span class="s2">return </span>image<span class="s1">.</span><span class="s5">flatten</span><span class="s1">(</span>VImage<span class="s1">::</span><span class="s5">option</span><span class="s1">()-&gt;</span><span class="s5">set</span><span class="s1">(</span><span class="s3">&quot;background&quot;</span><span class="s1">, background));</span>
+  <span class="s1">}</span>
+
+  <span class="s0">/** 
+   * Produce the &quot;negative&quot; of the image. 
+   */</span>
+  <span class="s1">VImage </span><span class="s5">Negate</span><span class="s1">(</span>VImage image<span class="s1">, </span><span class="s2">bool const </span>negateAlpha<span class="s1">) {</span>
+    <span class="s2">if </span><span class="s1">(</span>image<span class="s1">.</span><span class="s5">has_alpha</span><span class="s1">() </span><span class="s2">&amp;&amp; !</span><span class="s1">negateAlpha) {</span>
+      <span class="s0">// Separate alpha channel</span>
+      <span class="s1">VImage alpha </span><span class="s2">= </span>image<span class="s1">[</span>image<span class="s1">.</span><span class="s5">bands</span><span class="s1">() </span><span class="s2">- </span><span class="s6">1</span><span class="s1">];</span>
+      <span class="s2">return </span><span class="s5">RemoveAlpha</span><span class="s1">(image).</span><span class="s5">invert</span><span class="s1">().</span><span class="s5">bandjoin</span><span class="s1">(alpha);</span>
+    <span class="s1">} </span><span class="s2">else </span><span class="s1">{</span>
+      <span class="s2">return </span>image<span class="s1">.</span><span class="s5">invert</span><span class="s1">();</span>
+    <span class="s1">}</span>
+  <span class="s1">}</span>
+
+  <span class="s0">/*</span>
+   <span class="s0">* Gaussian blur. Use sigma of -1.0 for fast blur. 
+   */</span>
+  <span class="s1">VImage </span><span class="s5">Blur</span><span class="s1">(</span>VImage image<span class="s1">, </span><span class="s2">double const </span>sigma<span class="s1">, </span>VipsPrecision precision<span class="s1">, </span><span class="s2">double const </span>minAmpl<span class="s1">) {</span>
+    <span class="s2">if </span><span class="s1">(sigma </span><span class="s2">== -</span><span class="s6">1.0</span><span class="s1">) {</span>
+      <span class="s0">// Fast, mild blur - averages neighbouring pixels</span>
+      <span class="s1">VImage blur </span><span class="s2">= </span>VImage<span class="s1">::</span><span class="s5">new_matrixv</span><span class="s1">(</span><span class="s6">3</span><span class="s1">, </span><span class="s6">3</span><span class="s1">,</span>
+        <span class="s6">1.0</span><span class="s1">, </span><span class="s6">1.0</span><span class="s1">, </span><span class="s6">1.0</span><span class="s1">,</span>
+        <span class="s6">1.0</span><span class="s1">, </span><span class="s6">1.0</span><span class="s1">, </span><span class="s6">1.0</span><span class="s1">,</span>
+        <span class="s6">1.0</span><span class="s1">, </span><span class="s6">1.0</span><span class="s1">, </span><span class="s6">1.0</span><span class="s1">);</span>
+      blur<span class="s1">.</span><span class="s5">set</span><span class="s1">(</span><span class="s3">&quot;scale&quot;</span><span class="s1">, </span><span class="s6">9.0</span><span class="s1">);</span>
+      <span class="s2">return </span>image<span class="s1">.</span><span class="s5">conv</span><span class="s1">(blur);</span>
+    <span class="s1">} </span><span class="s2">else </span><span class="s1">{</span>
+      <span class="s0">// Slower, accurate Gaussian blur</span>
+      <span class="s2">return </span><span class="s5">StaySequential</span><span class="s1">(image).</span><span class="s5">gaussblur</span><span class="s1">(sigma, </span>VImage<span class="s1">::</span><span class="s5">option</span><span class="s1">()</span>
+        <span class="s2">-&gt;</span><span class="s5">set</span><span class="s1">(</span><span class="s3">&quot;precision&quot;</span><span class="s1">, precision)</span>
+        <span class="s2">-&gt;</span><span class="s5">set</span><span class="s1">(</span><span class="s3">&quot;min_ampl&quot;</span><span class="s1">, minAmpl));</span>
+    <span class="s1">}</span>
+  <span class="s1">}</span>
+
+  <span class="s0">/*</span>
+   <span class="s0">* Convolution with a kernel. 
+   */</span>
+  <span class="s1">VImage </span><span class="s5">Convolve</span><span class="s1">(</span>VImage image<span class="s1">, </span><span class="s2">int const </span>width<span class="s1">, </span><span class="s2">int const </span>height<span class="s1">,</span>
+    <span class="s2">double const </span>scale<span class="s1">, </span><span class="s2">double const </span>offset<span class="s1">,</span>
+    std<span class="s1">::</span>vector<span class="s1">&lt;</span><span class="s2">double</span><span class="s1">&gt; </span><span class="s2">const &amp;</span>kernel_v
+  <span class="s1">) {</span>
+    <span class="s1">VImage kernel </span><span class="s2">= </span>VImage<span class="s1">::</span><span class="s5">new_from_memory</span><span class="s1">(</span>
+      <span class="s2">static_cast&lt;void*&gt;</span><span class="s1">(</span><span class="s2">const_cast&lt;double*&gt;</span><span class="s1">(</span>kernel_v<span class="s1">.</span><span class="s5">data</span><span class="s1">())),</span>
+      <span class="s1">width </span><span class="s2">* </span><span class="s1">height </span><span class="s2">* sizeof</span><span class="s1">(</span><span class="s2">double</span><span class="s1">),</span>
+      <span class="s1">width,</span>
+      <span class="s1">height,</span>
+      <span class="s6">1</span><span class="s1">,</span>
+      <span class="s1">VIPS_FORMAT_DOUBLE);</span>
+    kernel<span class="s1">.</span><span class="s5">set</span><span class="s1">(</span><span class="s3">&quot;scale&quot;</span><span class="s1">, scale);</span>
+    kernel<span class="s1">.</span><span class="s5">set</span><span class="s1">(</span><span class="s3">&quot;offset&quot;</span><span class="s1">, offset);</span>
+
+    <span class="s2">return </span>image<span class="s1">.</span><span class="s5">conv</span><span class="s1">(kernel);</span>
+  <span class="s1">}</span>
+
+  <span class="s0">/*</span>
+   <span class="s0">* Recomb with a Matrix of the given bands/channel size. 
+   * Eg. RGB will be a 3x3 matrix. 
+   */</span>
+  <span class="s1">VImage </span><span class="s5">Recomb</span><span class="s1">(</span>VImage image<span class="s1">, </span>std<span class="s1">::</span>vector<span class="s1">&lt;</span><span class="s2">double</span><span class="s1">&gt; </span><span class="s2">const&amp; </span>matrix<span class="s1">) {</span>
+    <span class="s2">double* </span><span class="s1">m </span><span class="s2">= const_cast&lt;double*&gt;</span><span class="s1">(</span>matrix<span class="s1">.</span><span class="s5">data</span><span class="s1">());</span>
+    <span class="s1">image </span><span class="s2">= </span>image<span class="s1">.</span><span class="s5">colourspace</span><span class="s1">(VIPS_INTERPRETATION_sRGB);</span>
+    <span class="s2">if </span><span class="s1">(</span>matrix<span class="s1">.</span><span class="s5">size</span><span class="s1">() </span><span class="s2">== </span><span class="s6">9</span><span class="s1">) {</span>
+      <span class="s2">return </span><span class="s1">image 
+        .</span><span class="s5">recomb</span><span class="s1">(</span>image<span class="s1">.</span><span class="s5">bands</span><span class="s1">() </span><span class="s2">== </span><span class="s6">3</span>
+          <span class="s2">? </span>VImage<span class="s1">::</span><span class="s5">new_matrix</span><span class="s1">(</span><span class="s6">3</span><span class="s1">, </span><span class="s6">3</span><span class="s1">, m, </span><span class="s6">9</span><span class="s1">)</span>
+          <span class="s2">: </span>VImage<span class="s1">::</span><span class="s5">new_matrixv</span><span class="s1">(</span><span class="s6">4</span><span class="s1">, </span><span class="s6">4</span><span class="s1">,</span>
+            m<span class="s1">[</span><span class="s6">0</span><span class="s1">], </span>m<span class="s1">[</span><span class="s6">1</span><span class="s1">], </span>m<span class="s1">[</span><span class="s6">2</span><span class="s1">], </span><span class="s6">0.0</span><span class="s1">,</span>
+            m<span class="s1">[</span><span class="s6">3</span><span class="s1">], </span>m<span class="s1">[</span><span class="s6">4</span><span class="s1">], </span>m<span class="s1">[</span><span class="s6">5</span><span class="s1">], </span><span class="s6">0.0</span><span class="s1">,</span>
+            m<span class="s1">[</span><span class="s6">6</span><span class="s1">], </span>m<span class="s1">[</span><span class="s6">7</span><span class="s1">], </span>m<span class="s1">[</span><span class="s6">8</span><span class="s1">], </span><span class="s6">0.0</span><span class="s1">,</span>
+            <span class="s6">0.0</span><span class="s1">, </span><span class="s6">0.0</span><span class="s1">, </span><span class="s6">0.0</span><span class="s1">, </span><span class="s6">1.0</span><span class="s1">));</span>
+    <span class="s1">} </span><span class="s2">else </span><span class="s1">{</span>
+      <span class="s2">return </span>image<span class="s1">.</span><span class="s5">recomb</span><span class="s1">(</span>VImage<span class="s1">::</span><span class="s5">new_matrix</span><span class="s1">(</span><span class="s6">4</span><span class="s1">, </span><span class="s6">4</span><span class="s1">, m, </span><span class="s6">16</span><span class="s1">));</span>
+    <span class="s1">}</span>
+  <span class="s1">}</span>
+
+  <span class="s1">VImage </span><span class="s5">Modulate</span><span class="s1">(</span>VImage image<span class="s1">, </span><span class="s2">double const </span>brightness<span class="s1">, </span><span class="s2">double const </span>saturation<span class="s1">,</span>
+                  <span class="s2">int const </span>hue<span class="s1">, </span><span class="s2">double const </span>lightness<span class="s1">) {</span>
+    <span class="s1">VipsInterpretation colourspaceBeforeModulate </span><span class="s2">= </span>image<span class="s1">.</span><span class="s5">interpretation</span><span class="s1">();</span>
+    <span class="s2">if </span><span class="s1">(</span>image<span class="s1">.</span><span class="s5">has_alpha</span><span class="s1">()) {</span>
+      <span class="s0">// Separate alpha channel</span>
+      <span class="s1">VImage alpha </span><span class="s2">= </span>image<span class="s1">[</span>image<span class="s1">.</span><span class="s5">bands</span><span class="s1">() </span><span class="s2">- </span><span class="s6">1</span><span class="s1">];</span>
+      <span class="s2">return </span><span class="s5">RemoveAlpha</span><span class="s1">(image)</span>
+        <span class="s1">.</span><span class="s5">colourspace</span><span class="s1">(VIPS_INTERPRETATION_LCH)</span>
+        <span class="s1">.</span><span class="s5">linear</span><span class="s1">(</span>
+          <span class="s1">{ brightness, saturation, </span><span class="s6">1</span><span class="s1">},</span>
+          <span class="s1">{ lightness, </span><span class="s6">0.0</span><span class="s1">, </span><span class="s2">static_cast&lt;double&gt;</span><span class="s1">(hue) } 
+        )</span>
+        <span class="s1">.</span><span class="s5">colourspace</span><span class="s1">(colourspaceBeforeModulate)</span>
+        <span class="s1">.</span><span class="s5">bandjoin</span><span class="s1">(alpha);</span>
+    <span class="s1">} </span><span class="s2">else </span><span class="s1">{</span>
+      <span class="s2">return </span><span class="s1">image 
+        .</span><span class="s5">colourspace</span><span class="s1">(VIPS_INTERPRETATION_LCH)</span>
+        <span class="s1">.</span><span class="s5">linear</span><span class="s1">(</span>
+          <span class="s1">{ brightness, saturation, </span><span class="s6">1 </span><span class="s1">},</span>
+          <span class="s1">{ lightness, </span><span class="s6">0.0</span><span class="s1">, </span><span class="s2">static_cast&lt;double&gt;</span><span class="s1">(hue) } 
+        )</span>
+        <span class="s1">.</span><span class="s5">colourspace</span><span class="s1">(colourspaceBeforeModulate);</span>
+    <span class="s1">}</span>
+  <span class="s1">}</span>
+
+  <span class="s0">/*</span>
+   <span class="s0">* Sharpen flat and jagged areas. Use sigma of -1.0 for fast sharpen. 
+   */</span>
+  <span class="s1">VImage </span><span class="s5">Sharpen</span><span class="s1">(</span>VImage image<span class="s1">, </span><span class="s2">double const </span>sigma<span class="s1">, </span><span class="s2">double const </span>m1<span class="s1">, </span><span class="s2">double const </span>m2<span class="s1">,</span>
+    <span class="s2">double const </span>x1<span class="s1">, </span><span class="s2">double const </span>y2<span class="s1">, </span><span class="s2">double const </span>y3<span class="s1">) {</span>
+    <span class="s2">if </span><span class="s1">(sigma </span><span class="s2">== -</span><span class="s6">1.0</span><span class="s1">) {</span>
+      <span class="s0">// Fast, mild sharpen</span>
+      <span class="s1">VImage sharpen </span><span class="s2">= </span>VImage<span class="s1">::</span><span class="s5">new_matrixv</span><span class="s1">(</span><span class="s6">3</span><span class="s1">, </span><span class="s6">3</span><span class="s1">,</span>
+        <span class="s2">-</span><span class="s6">1.0</span><span class="s1">, </span><span class="s2">-</span><span class="s6">1.0</span><span class="s1">, </span><span class="s2">-</span><span class="s6">1.0</span><span class="s1">,</span>
+        <span class="s2">-</span><span class="s6">1.0</span><span class="s1">, </span><span class="s6">32.0</span><span class="s1">, </span><span class="s2">-</span><span class="s6">1.0</span><span class="s1">,</span>
+        <span class="s2">-</span><span class="s6">1.0</span><span class="s1">, </span><span class="s2">-</span><span class="s6">1.0</span><span class="s1">, </span><span class="s2">-</span><span class="s6">1.0</span><span class="s1">);</span>
+      sharpen<span class="s1">.</span><span class="s5">set</span><span class="s1">(</span><span class="s3">&quot;scale&quot;</span><span class="s1">, </span><span class="s6">24.0</span><span class="s1">);</span>
+      <span class="s2">return </span>image<span class="s1">.</span><span class="s5">conv</span><span class="s1">(sharpen);</span>
+    <span class="s1">} </span><span class="s2">else </span><span class="s1">{</span>
+      <span class="s0">// Slow, accurate sharpen in LAB colour space, with control over flat vs jagged areas</span>
+      <span class="s1">VipsInterpretation colourspaceBeforeSharpen </span><span class="s2">= </span>image<span class="s1">.</span><span class="s5">interpretation</span><span class="s1">();</span>
+      <span class="s2">if </span><span class="s1">(colourspaceBeforeSharpen </span><span class="s2">== </span><span class="s1">VIPS_INTERPRETATION_RGB) {</span>
+        <span class="s1">colourspaceBeforeSharpen </span><span class="s2">= </span><span class="s1">VIPS_INTERPRETATION_sRGB;</span>
+      <span class="s1">}</span>
+      <span class="s2">return </span><span class="s1">image 
+        .</span><span class="s5">sharpen</span><span class="s1">(</span>VImage<span class="s1">::</span><span class="s5">option</span><span class="s1">()</span>
+          <span class="s2">-&gt;</span><span class="s5">set</span><span class="s1">(</span><span class="s3">&quot;sigma&quot;</span><span class="s1">, sigma)</span>
+          <span class="s2">-&gt;</span><span class="s5">set</span><span class="s1">(</span><span class="s3">&quot;m1&quot;</span><span class="s1">, m1)</span>
+          <span class="s2">-&gt;</span><span class="s5">set</span><span class="s1">(</span><span class="s3">&quot;m2&quot;</span><span class="s1">, m2)</span>
+          <span class="s2">-&gt;</span><span class="s5">set</span><span class="s1">(</span><span class="s3">&quot;x1&quot;</span><span class="s1">, x1)</span>
+          <span class="s2">-&gt;</span><span class="s5">set</span><span class="s1">(</span><span class="s3">&quot;y2&quot;</span><span class="s1">, y2)</span>
+          <span class="s2">-&gt;</span><span class="s5">set</span><span class="s1">(</span><span class="s3">&quot;y3&quot;</span><span class="s1">, y3))</span>
+        <span class="s1">.</span><span class="s5">colourspace</span><span class="s1">(colourspaceBeforeSharpen);</span>
+    <span class="s1">}</span>
+  <span class="s1">}</span>
+
+  <span class="s1">VImage </span><span class="s5">Threshold</span><span class="s1">(</span>VImage image<span class="s1">, </span><span class="s2">double const </span>threshold<span class="s1">, </span><span class="s2">bool const </span>thresholdGrayscale<span class="s1">) {</span>
+    <span class="s2">if </span><span class="s1">(</span><span class="s2">!</span><span class="s1">thresholdGrayscale) {</span>
+      <span class="s2">return </span><span class="s1">image </span><span class="s2">&gt;= </span><span class="s1">threshold;</span>
+    <span class="s1">}</span>
+    <span class="s2">return </span>image<span class="s1">.</span><span class="s5">colourspace</span><span class="s1">(VIPS_INTERPRETATION_B_W) </span><span class="s2">&gt;= </span><span class="s1">threshold;</span>
+  <span class="s1">}</span>
+
+  <span class="s0">/*</span>
+    <span class="s0">Perform boolean/bitwise operation on image color channels - results in one channel image 
+  */</span>
+  <span class="s1">VImage </span><span class="s5">Bandbool</span><span class="s1">(</span>VImage image<span class="s1">, </span>VipsOperationBoolean <span class="s2">const </span>boolean<span class="s1">) {</span>
+    <span class="s1">image </span><span class="s2">= </span>image<span class="s1">.</span><span class="s5">bandbool</span><span class="s1">(boolean);</span>
+    <span class="s2">return </span>image<span class="s1">.</span><span class="s5">copy</span><span class="s1">(</span>VImage<span class="s1">::</span><span class="s5">option</span><span class="s1">()-&gt;</span><span class="s5">set</span><span class="s1">(</span><span class="s3">&quot;interpretation&quot;</span><span class="s1">, VIPS_INTERPRETATION_B_W));</span>
+  <span class="s1">}</span>
+
+  <span class="s0">/*</span>
+    <span class="s0">Perform bitwise boolean operation between images 
+  */</span>
+  <span class="s1">VImage </span><span class="s5">Boolean</span><span class="s1">(</span>VImage image<span class="s1">, </span>VImage imageR<span class="s1">, </span>VipsOperationBoolean <span class="s2">const </span>boolean<span class="s1">) {</span>
+    <span class="s2">return </span>image<span class="s1">.</span><span class="s5">boolean</span><span class="s1">(imageR, boolean);</span>
+  <span class="s1">}</span>
+
+  <span class="s0">/*</span>
+    <span class="s0">Trim an image 
+  */</span>
+  <span class="s1">VImage </span><span class="s5">Trim</span><span class="s1">(</span>VImage image<span class="s1">, </span>std<span class="s1">::</span>vector<span class="s1">&lt;</span><span class="s2">double</span><span class="s1">&gt; </span>background<span class="s1">, </span><span class="s2">double </span>threshold<span class="s1">, </span><span class="s2">bool const </span>lineArt<span class="s1">) {</span>
+    <span class="s2">if </span><span class="s1">(</span>image<span class="s1">.</span><span class="s5">width</span><span class="s1">() </span><span class="s2">&lt; </span><span class="s6">3 </span><span class="s2">&amp;&amp; </span>image<span class="s1">.</span><span class="s5">height</span><span class="s1">() </span><span class="s2">&lt; </span><span class="s6">3</span><span class="s1">) {</span>
+      <span class="s2">throw </span><span class="s5">VError</span><span class="s1">(</span><span class="s3">&quot;Image to trim must be at least 3x3 pixels&quot;</span><span class="s1">);</span>
+    <span class="s1">}</span>
+    <span class="s2">if </span><span class="s1">(</span>background<span class="s1">.</span><span class="s5">size</span><span class="s1">() </span><span class="s2">== </span><span class="s6">0</span><span class="s1">) {</span>
+      <span class="s0">// Top-left pixel provides the default background colour if none is given</span>
+      <span class="s1">background </span><span class="s2">= </span>image<span class="s1">.</span><span class="s5">extract_area</span><span class="s1">(</span><span class="s6">0</span><span class="s1">, </span><span class="s6">0</span><span class="s1">, </span><span class="s6">1</span><span class="s1">, </span><span class="s6">1</span><span class="s1">)(</span><span class="s6">0</span><span class="s1">, </span><span class="s6">0</span><span class="s1">);</span>
+    <span class="s1">} </span><span class="s2">else if </span><span class="s1">(</span>sharp<span class="s1">::</span><span class="s5">Is16Bit</span><span class="s1">(</span>image<span class="s1">.</span><span class="s5">interpretation</span><span class="s1">())) {</span>
+      <span class="s2">for </span><span class="s1">(</span><span class="s2">size_t </span><span class="s1">i </span><span class="s2">= </span><span class="s6">0</span><span class="s1">; i </span><span class="s2">&lt; </span>background<span class="s1">.</span><span class="s5">size</span><span class="s1">(); i</span><span class="s2">++</span><span class="s1">) {</span>
+        background<span class="s1">[i] </span><span class="s2">*= </span><span class="s6">256.0</span><span class="s1">;</span>
+      <span class="s1">}</span>
+      <span class="s1">threshold </span><span class="s2">*= </span><span class="s6">256.0</span><span class="s1">;</span>
+    <span class="s1">}</span>
+    std<span class="s1">::vector</span><span class="s2">&lt;double&gt; </span><span class="s5">backgroundAlpha</span><span class="s1">({ </span>background<span class="s1">.</span><span class="s5">back</span><span class="s1">() });</span>
+    <span class="s2">if </span><span class="s1">(</span>image<span class="s1">.</span><span class="s5">has_alpha</span><span class="s1">()) {</span>
+      background<span class="s1">.</span><span class="s5">pop_back</span><span class="s1">();</span>
+    <span class="s1">} </span><span class="s2">else </span><span class="s1">{</span>
+      background<span class="s1">.</span><span class="s5">resize</span><span class="s1">(</span>image<span class="s1">.</span><span class="s5">bands</span><span class="s1">());</span>
+    <span class="s1">}</span>
+    <span class="s2">int </span><span class="s1">left, top, width, height;</span>
+    <span class="s1">left </span><span class="s2">= </span>image<span class="s1">.</span><span class="s5">find_trim</span><span class="s1">(</span><span class="s2">&amp;</span><span class="s1">top, </span><span class="s2">&amp;</span><span class="s1">width, </span><span class="s2">&amp;</span><span class="s1">height, </span>VImage<span class="s1">::</span><span class="s5">option</span><span class="s1">()</span>
+      <span class="s2">-&gt;</span><span class="s5">set</span><span class="s1">(</span><span class="s3">&quot;background&quot;</span><span class="s1">, background)</span>
+      <span class="s2">-&gt;</span><span class="s5">set</span><span class="s1">(</span><span class="s3">&quot;line_art&quot;</span><span class="s1">, lineArt)</span>
+      <span class="s2">-&gt;</span><span class="s5">set</span><span class="s1">(</span><span class="s3">&quot;threshold&quot;</span><span class="s1">, threshold));</span>
+    <span class="s2">if </span><span class="s1">(</span>image<span class="s1">.</span><span class="s5">has_alpha</span><span class="s1">()) {</span>
+      <span class="s0">// Search alpha channel (A)</span>
+      <span class="s2">int </span><span class="s1">leftA, topA, widthA, heightA;</span>
+      <span class="s1">VImage alpha </span><span class="s2">= </span>image<span class="s1">[</span>image<span class="s1">.</span><span class="s5">bands</span><span class="s1">() </span><span class="s2">- </span><span class="s6">1</span><span class="s1">];</span>
+      <span class="s1">leftA </span><span class="s2">= </span>alpha<span class="s1">.</span><span class="s5">find_trim</span><span class="s1">(</span><span class="s2">&amp;</span><span class="s1">topA, </span><span class="s2">&amp;</span><span class="s1">widthA, </span><span class="s2">&amp;</span><span class="s1">heightA, </span>VImage<span class="s1">::</span><span class="s5">option</span><span class="s1">()</span>
+        <span class="s2">-&gt;</span><span class="s5">set</span><span class="s1">(</span><span class="s3">&quot;background&quot;</span><span class="s1">, backgroundAlpha)</span>
+        <span class="s2">-&gt;</span><span class="s5">set</span><span class="s1">(</span><span class="s3">&quot;line_art&quot;</span><span class="s1">, lineArt)</span>
+        <span class="s2">-&gt;</span><span class="s5">set</span><span class="s1">(</span><span class="s3">&quot;threshold&quot;</span><span class="s1">, threshold));</span>
+      <span class="s2">if </span><span class="s1">(widthA </span><span class="s2">&gt; </span><span class="s6">0 </span><span class="s2">&amp;&amp; </span><span class="s1">heightA </span><span class="s2">&gt; </span><span class="s6">0</span><span class="s1">) {</span>
+        <span class="s2">if </span><span class="s1">(width </span><span class="s2">&gt; </span><span class="s6">0 </span><span class="s2">&amp;&amp; </span><span class="s1">height </span><span class="s2">&gt; </span><span class="s6">0</span><span class="s1">) {</span>
+          <span class="s0">// Combined bounding box (B)</span>
+          <span class="s2">int const </span><span class="s1">leftB </span><span class="s2">= </span>std<span class="s1">::</span><span class="s5">min</span><span class="s1">(left, leftA);</span>
+          <span class="s2">int const </span><span class="s1">topB </span><span class="s2">= </span>std<span class="s1">::</span><span class="s5">min</span><span class="s1">(top, topA);</span>
+          <span class="s2">int const </span><span class="s1">widthB </span><span class="s2">= </span>std<span class="s1">::</span><span class="s5">max</span><span class="s1">(left </span><span class="s2">+ </span><span class="s1">width, leftA </span><span class="s2">+ </span><span class="s1">widthA) </span><span class="s2">- </span><span class="s1">leftB;</span>
+          <span class="s2">int const </span><span class="s1">heightB </span><span class="s2">= </span>std<span class="s1">::</span><span class="s5">max</span><span class="s1">(top </span><span class="s2">+ </span><span class="s1">height, topA </span><span class="s2">+ </span><span class="s1">heightA) </span><span class="s2">- </span><span class="s1">topB;</span>
+          <span class="s2">return </span>image<span class="s1">.</span><span class="s5">extract_area</span><span class="s1">(leftB, topB, widthB, heightB);</span>
+        <span class="s1">} </span><span class="s2">else </span><span class="s1">{</span>
+          <span class="s0">// Use alpha only</span>
+          <span class="s2">return </span>image<span class="s1">.</span><span class="s5">extract_area</span><span class="s1">(leftA, topA, widthA, heightA);</span>
+        <span class="s1">}</span>
+      <span class="s1">}</span>
+    <span class="s1">}</span>
+    <span class="s2">if </span><span class="s1">(width </span><span class="s2">&gt; </span><span class="s6">0 </span><span class="s2">&amp;&amp; </span><span class="s1">height </span><span class="s2">&gt; </span><span class="s6">0</span><span class="s1">) {</span>
+      <span class="s2">return </span>image<span class="s1">.</span><span class="s5">extract_area</span><span class="s1">(left, top, width, height);</span>
+    <span class="s1">}</span>
+    <span class="s2">return </span><span class="s1">image;</span>
+  <span class="s1">}</span>
+
+  <span class="s0">/*</span>
+   <span class="s0">* Calculate (a * in + b) 
+   */</span>
+  <span class="s1">VImage </span><span class="s5">Linear</span><span class="s1">(</span>VImage image<span class="s1">, </span>std<span class="s1">::</span>vector<span class="s1">&lt;</span><span class="s2">double</span><span class="s1">&gt; </span><span class="s2">const </span>a<span class="s1">, </span>std<span class="s1">::</span>vector<span class="s1">&lt;</span><span class="s2">double</span><span class="s1">&gt; </span><span class="s2">const </span>b<span class="s1">) {</span>
+    <span class="s2">size_t const </span><span class="s1">bands </span><span class="s2">= static_cast&lt;size_t&gt;</span><span class="s1">(</span>image<span class="s1">.</span><span class="s5">bands</span><span class="s1">());</span>
+    <span class="s2">if </span><span class="s1">(</span>a<span class="s1">.</span><span class="s5">size</span><span class="s1">() </span><span class="s2">&gt; </span><span class="s1">bands) {</span>
+      <span class="s2">throw </span><span class="s5">VError</span><span class="s1">(</span><span class="s3">&quot;Band expansion using linear is unsupported&quot;</span><span class="s1">);</span>
+    <span class="s1">}</span>
+    <span class="s2">bool const </span><span class="s1">uchar </span><span class="s2">= !</span><span class="s5">Is16Bit</span><span class="s1">(</span>image<span class="s1">.</span><span class="s5">interpretation</span><span class="s1">());</span>
+    <span class="s2">if </span><span class="s1">(</span>image<span class="s1">.</span><span class="s5">has_alpha</span><span class="s1">() </span><span class="s2">&amp;&amp; </span>a<span class="s1">.</span><span class="s5">size</span><span class="s1">() </span><span class="s2">!= </span><span class="s1">bands </span><span class="s2">&amp;&amp; </span><span class="s1">(</span>a<span class="s1">.</span><span class="s5">size</span><span class="s1">() </span><span class="s2">== </span><span class="s6">1 </span><span class="s2">|| </span>a<span class="s1">.</span><span class="s5">size</span><span class="s1">() </span><span class="s2">== </span><span class="s1">bands </span><span class="s2">- </span><span class="s6">1 </span><span class="s2">|| </span><span class="s1">bands </span><span class="s2">- </span><span class="s6">1 </span><span class="s2">== </span><span class="s6">1</span><span class="s1">)) {</span>
+      <span class="s0">// Separate alpha channel</span>
+      <span class="s1">VImage alpha </span><span class="s2">= </span>image<span class="s1">[bands </span><span class="s2">- </span><span class="s6">1</span><span class="s1">];</span>
+      <span class="s2">return </span><span class="s5">RemoveAlpha</span><span class="s1">(image).</span><span class="s5">linear</span><span class="s1">(a, b, </span>VImage<span class="s1">::</span><span class="s5">option</span><span class="s1">()-&gt;</span><span class="s5">set</span><span class="s1">(</span><span class="s3">&quot;uchar&quot;</span><span class="s1">, uchar)).</span><span class="s5">bandjoin</span><span class="s1">(alpha);</span>
+    <span class="s1">} </span><span class="s2">else </span><span class="s1">{</span>
+      <span class="s2">return </span>image<span class="s1">.</span><span class="s5">linear</span><span class="s1">(a, b, </span>VImage<span class="s1">::</span><span class="s5">option</span><span class="s1">()-&gt;</span><span class="s5">set</span><span class="s1">(</span><span class="s3">&quot;uchar&quot;</span><span class="s1">, uchar));</span>
+    <span class="s1">}</span>
+  <span class="s1">}</span>
+
+  <span class="s0">/*</span>
+   <span class="s0">* Unflatten 
+   */</span>
+  <span class="s1">VImage </span><span class="s5">Unflatten</span><span class="s1">(</span>VImage image<span class="s1">) {</span>
+    <span class="s2">if </span><span class="s1">(</span>image<span class="s1">.</span><span class="s5">has_alpha</span><span class="s1">()) {</span>
+      <span class="s1">VImage alpha </span><span class="s2">= </span>image<span class="s1">[</span>image<span class="s1">.</span><span class="s5">bands</span><span class="s1">() </span><span class="s2">- </span><span class="s6">1</span><span class="s1">];</span>
+      <span class="s1">VImage noAlpha </span><span class="s2">= </span><span class="s5">RemoveAlpha</span><span class="s1">(image);</span>
+      <span class="s2">return </span>noAlpha<span class="s1">.</span><span class="s5">bandjoin</span><span class="s1">(alpha </span><span class="s2">&amp; </span><span class="s1">(</span>noAlpha<span class="s1">.</span><span class="s5">colourspace</span><span class="s1">(VIPS_INTERPRETATION_B_W) </span><span class="s2">&lt; </span><span class="s6">255</span><span class="s1">));</span>
+    <span class="s1">} </span><span class="s2">else </span><span class="s1">{</span>
+      <span class="s2">return </span>image<span class="s1">.</span><span class="s5">bandjoin</span><span class="s1">(</span>image<span class="s1">.</span><span class="s5">colourspace</span><span class="s1">(VIPS_INTERPRETATION_B_W) </span><span class="s2">&lt; </span><span class="s6">255</span><span class="s1">);</span>
+    <span class="s1">}</span>
+  <span class="s1">}</span>
+
+  <span class="s0">/*</span>
+   <span class="s0">* Ensure the image is in a given colourspace 
+   */</span>
+  <span class="s1">VImage </span><span class="s5">EnsureColourspace</span><span class="s1">(</span>VImage image<span class="s1">, </span>VipsInterpretation colourspace<span class="s1">) {</span>
+    <span class="s2">if </span><span class="s1">(colourspace </span><span class="s2">!= </span><span class="s1">VIPS_INTERPRETATION_LAST </span><span class="s2">&amp;&amp; </span>image<span class="s1">.</span><span class="s5">interpretation</span><span class="s1">() </span><span class="s2">!= </span><span class="s1">colourspace) {</span>
+      <span class="s1">image </span><span class="s2">= </span>image<span class="s1">.</span><span class="s5">colourspace</span><span class="s1">(colourspace,</span>
+        VImage<span class="s1">::</span><span class="s5">option</span><span class="s1">()-&gt;</span><span class="s5">set</span><span class="s1">(</span><span class="s3">&quot;source_space&quot;</span><span class="s1">, </span>image<span class="s1">.</span><span class="s5">interpretation</span><span class="s1">()));</span>
+    <span class="s1">}</span>
+    <span class="s2">return </span><span class="s1">image;</span>
+  <span class="s1">}</span>
+
+  <span class="s0">/*</span>
+   <span class="s0">* Split and crop each frame, reassemble, and update pageHeight. 
+   */</span>
+  <span class="s1">VImage </span><span class="s5">CropMultiPage</span><span class="s1">(</span>VImage image<span class="s1">, </span><span class="s2">int </span>left<span class="s1">, </span><span class="s2">int </span>top<span class="s1">, </span><span class="s2">int </span>width<span class="s1">, </span><span class="s2">int </span>height<span class="s1">,</span>
+                       <span class="s2">int </span>nPages<span class="s1">, </span><span class="s2">int *</span>pageHeight<span class="s1">) {</span>
+    <span class="s2">if </span><span class="s1">(top </span><span class="s2">== </span><span class="s6">0 </span><span class="s2">&amp;&amp; </span><span class="s1">height </span><span class="s2">== *</span><span class="s1">pageHeight) {</span>
+      <span class="s0">// Fast path; no need to adjust the height of the multi-page image</span>
+      <span class="s2">return </span>image<span class="s1">.</span><span class="s5">extract_area</span><span class="s1">(left, </span><span class="s6">0</span><span class="s1">, width, </span>image<span class="s1">.</span><span class="s5">height</span><span class="s1">());</span>
+    <span class="s1">} </span><span class="s2">else </span><span class="s1">{</span>
+      std<span class="s1">::vector</span><span class="s2">&lt;</span><span class="s1">VImage</span><span class="s2">&gt; </span><span class="s1">pages;</span>
+      pages<span class="s1">.</span><span class="s5">reserve</span><span class="s1">(nPages);</span>
+
+      <span class="s0">// Split the image into cropped frames</span>
+      <span class="s1">image </span><span class="s2">= </span><span class="s5">StaySequential</span><span class="s1">(image);</span>
+      <span class="s2">for </span><span class="s1">(</span><span class="s2">int </span><span class="s1">i </span><span class="s2">= </span><span class="s6">0</span><span class="s1">; i </span><span class="s2">&lt; </span><span class="s1">nPages; i</span><span class="s2">++</span><span class="s1">) {</span>
+        pages<span class="s1">.</span><span class="s5">push_back</span><span class="s1">(</span>
+          image<span class="s1">.</span><span class="s5">extract_area</span><span class="s1">(left, </span><span class="s2">*</span><span class="s1">pageHeight </span><span class="s2">* </span><span class="s1">i </span><span class="s2">+ </span><span class="s1">top, width, height));</span>
+      <span class="s1">}</span>
+
+      <span class="s0">// Reassemble the frames into a tall, thin image</span>
+      <span class="s1">VImage assembled </span><span class="s2">= </span>VImage<span class="s1">::</span><span class="s5">arrayjoin</span><span class="s1">(pages,</span>
+        VImage<span class="s1">::</span><span class="s5">option</span><span class="s1">()-&gt;</span><span class="s5">set</span><span class="s1">(</span><span class="s3">&quot;across&quot;</span><span class="s1">, </span><span class="s6">1</span><span class="s1">));</span>
+
+      <span class="s0">// Update the page height</span>
+      <span class="s2">*</span><span class="s1">pageHeight </span><span class="s2">= </span><span class="s1">height;</span>
+
+      <span class="s2">return </span><span class="s1">assembled;</span>
+    <span class="s1">}</span>
+  <span class="s1">}</span>
+
+  <span class="s0">/*</span>
+   <span class="s0">* Split into frames, embed each frame, reassemble, and update pageHeight. 
+   */</span>
+  <span class="s1">VImage </span><span class="s5">EmbedMultiPage</span><span class="s1">(</span>VImage image<span class="s1">, </span><span class="s2">int </span>left<span class="s1">, </span><span class="s2">int </span>top<span class="s1">, </span><span class="s2">int </span>width<span class="s1">, </span><span class="s2">int </span>height<span class="s1">,</span>
+                        VipsExtend extendWith<span class="s1">, </span>std<span class="s1">::</span>vector<span class="s1">&lt;</span><span class="s2">double</span><span class="s1">&gt; </span>background<span class="s1">, </span><span class="s2">int </span>nPages<span class="s1">, </span><span class="s2">int *</span>pageHeight<span class="s1">) {</span>
+    <span class="s2">if </span><span class="s1">(top </span><span class="s2">== </span><span class="s6">0 </span><span class="s2">&amp;&amp; </span><span class="s1">height </span><span class="s2">== *</span><span class="s1">pageHeight) {</span>
+      <span class="s0">// Fast path; no need to adjust the height of the multi-page image</span>
+      <span class="s2">return </span>image<span class="s1">.</span><span class="s5">embed</span><span class="s1">(left, </span><span class="s6">0</span><span class="s1">, width, </span>image<span class="s1">.</span><span class="s5">height</span><span class="s1">(), </span>VImage<span class="s1">::</span><span class="s5">option</span><span class="s1">()</span>
+        <span class="s2">-&gt;</span><span class="s5">set</span><span class="s1">(</span><span class="s3">&quot;extend&quot;</span><span class="s1">, extendWith)</span>
+        <span class="s2">-&gt;</span><span class="s5">set</span><span class="s1">(</span><span class="s3">&quot;background&quot;</span><span class="s1">, background));</span>
+    <span class="s1">} </span><span class="s2">else if </span><span class="s1">(left </span><span class="s2">== </span><span class="s6">0 </span><span class="s2">&amp;&amp; </span><span class="s1">width </span><span class="s2">== </span>image<span class="s1">.</span><span class="s5">width</span><span class="s1">()) {</span>
+      <span class="s0">// Fast path; no need to adjust the width of the multi-page image</span>
+      std<span class="s1">::vector</span><span class="s2">&lt;</span><span class="s1">VImage</span><span class="s2">&gt; </span><span class="s1">pages;</span>
+      pages<span class="s1">.</span><span class="s5">reserve</span><span class="s1">(nPages);</span>
+
+      <span class="s0">// Rearrange the tall image into a vertical grid</span>
+      <span class="s1">image </span><span class="s2">= </span>image<span class="s1">.</span><span class="s5">grid</span><span class="s1">(</span><span class="s2">*</span><span class="s1">pageHeight, nPages, </span><span class="s6">1</span><span class="s1">);</span>
+
+      <span class="s0">// Do the embed on the wide image</span>
+      <span class="s1">image </span><span class="s2">= </span>image<span class="s1">.</span><span class="s5">embed</span><span class="s1">(</span><span class="s6">0</span><span class="s1">, top, </span>image<span class="s1">.</span><span class="s5">width</span><span class="s1">(), height, </span>VImage<span class="s1">::</span><span class="s5">option</span><span class="s1">()</span>
+        <span class="s2">-&gt;</span><span class="s5">set</span><span class="s1">(</span><span class="s3">&quot;extend&quot;</span><span class="s1">, extendWith)</span>
+        <span class="s2">-&gt;</span><span class="s5">set</span><span class="s1">(</span><span class="s3">&quot;background&quot;</span><span class="s1">, background));</span>
+
+      <span class="s0">// Split the wide image into frames</span>
+      <span class="s2">for </span><span class="s1">(</span><span class="s2">int </span><span class="s1">i </span><span class="s2">= </span><span class="s6">0</span><span class="s1">; i </span><span class="s2">&lt; </span><span class="s1">nPages; i</span><span class="s2">++</span><span class="s1">) {</span>
+        pages<span class="s1">.</span><span class="s5">push_back</span><span class="s1">(</span>
+          image<span class="s1">.</span><span class="s5">extract_area</span><span class="s1">(width </span><span class="s2">* </span><span class="s1">i, </span><span class="s6">0</span><span class="s1">, width, height));</span>
+      <span class="s1">}</span>
+
+      <span class="s0">// Reassemble the frames into a tall, thin image</span>
+      <span class="s1">VImage assembled </span><span class="s2">= </span>VImage<span class="s1">::</span><span class="s5">arrayjoin</span><span class="s1">(pages,</span>
+        VImage<span class="s1">::</span><span class="s5">option</span><span class="s1">()-&gt;</span><span class="s5">set</span><span class="s1">(</span><span class="s3">&quot;across&quot;</span><span class="s1">, </span><span class="s6">1</span><span class="s1">));</span>
+
+      <span class="s0">// Update the page height</span>
+      <span class="s2">*</span><span class="s1">pageHeight </span><span class="s2">= </span><span class="s1">height;</span>
+
+      <span class="s2">return </span><span class="s1">assembled;</span>
+    <span class="s1">} </span><span class="s2">else </span><span class="s1">{</span>
+      std<span class="s1">::vector</span><span class="s2">&lt;</span><span class="s1">VImage</span><span class="s2">&gt; </span><span class="s1">pages;</span>
+      pages<span class="s1">.</span><span class="s5">reserve</span><span class="s1">(nPages);</span>
+
+      <span class="s0">// Split the image into frames</span>
+      <span class="s2">for </span><span class="s1">(</span><span class="s2">int </span><span class="s1">i </span><span class="s2">= </span><span class="s6">0</span><span class="s1">; i </span><span class="s2">&lt; </span><span class="s1">nPages; i</span><span class="s2">++</span><span class="s1">) {</span>
+        pages<span class="s1">.</span><span class="s5">push_back</span><span class="s1">(</span>
+          image<span class="s1">.</span><span class="s5">extract_area</span><span class="s1">(</span><span class="s6">0</span><span class="s1">, </span><span class="s2">*</span><span class="s1">pageHeight </span><span class="s2">* </span><span class="s1">i, </span>image<span class="s1">.</span><span class="s5">width</span><span class="s1">(), </span><span class="s2">*</span><span class="s1">pageHeight));</span>
+      <span class="s1">}</span>
+
+      <span class="s0">// Embed each frame in the target size</span>
+      <span class="s2">for </span><span class="s1">(</span><span class="s2">int </span><span class="s1">i </span><span class="s2">= </span><span class="s6">0</span><span class="s1">; i </span><span class="s2">&lt; </span><span class="s1">nPages; i</span><span class="s2">++</span><span class="s1">) {</span>
+        pages<span class="s1">[i] </span><span class="s2">= </span>pages<span class="s1">[i].</span><span class="s5">embed</span><span class="s1">(left, top, width, height, </span>VImage<span class="s1">::</span><span class="s5">option</span><span class="s1">()</span>
+          <span class="s2">-&gt;</span><span class="s5">set</span><span class="s1">(</span><span class="s3">&quot;extend&quot;</span><span class="s1">, extendWith)</span>
+          <span class="s2">-&gt;</span><span class="s5">set</span><span class="s1">(</span><span class="s3">&quot;background&quot;</span><span class="s1">, background));</span>
+      <span class="s1">}</span>
+
+      <span class="s0">// Reassemble the frames into a tall, thin image</span>
+      <span class="s1">VImage assembled </span><span class="s2">= </span>VImage<span class="s1">::</span><span class="s5">arrayjoin</span><span class="s1">(pages,</span>
+        VImage<span class="s1">::</span><span class="s5">option</span><span class="s1">()-&gt;</span><span class="s5">set</span><span class="s1">(</span><span class="s3">&quot;across&quot;</span><span class="s1">, </span><span class="s6">1</span><span class="s1">));</span>
+
+      <span class="s0">// Update the page height</span>
+      <span class="s2">*</span><span class="s1">pageHeight </span><span class="s2">= </span><span class="s1">height;</span>
+
+      <span class="s2">return </span><span class="s1">assembled;</span>
+    <span class="s1">}</span>
+  <span class="s1">}</span>
+
+  <span class="s0">/*</span>
+   <span class="s0">* Dilate an image 
+   */</span>
+  <span class="s1">VImage </span><span class="s5">Dilate</span><span class="s1">(</span>VImage image<span class="s1">, </span><span class="s2">int const </span>width<span class="s1">) {</span>
+    <span class="s2">int const </span><span class="s1">maskWidth </span><span class="s2">= </span><span class="s6">2 </span><span class="s2">* </span><span class="s1">width </span><span class="s2">+ </span><span class="s6">1</span><span class="s1">;</span>
+    <span class="s1">VImage mask </span><span class="s2">= </span>VImage<span class="s1">::</span><span class="s5">new_matrix</span><span class="s1">(maskWidth, maskWidth);</span>
+    <span class="s2">return </span>image<span class="s1">.</span><span class="s5">morph</span><span class="s1">(</span>
+      <span class="s1">mask,</span>
+      <span class="s1">VIPS_OPERATION_MORPHOLOGY_DILATE).</span><span class="s5">invert</span><span class="s1">();</span>
+  <span class="s1">}</span>
+
+  <span class="s0">/*</span>
+   <span class="s0">* Erode an image 
+   */</span>
+  <span class="s1">VImage </span><span class="s5">Erode</span><span class="s1">(</span>VImage image<span class="s1">, </span><span class="s2">int const </span>width<span class="s1">) {</span>
+    <span class="s2">int const </span><span class="s1">maskWidth </span><span class="s2">= </span><span class="s6">2 </span><span class="s2">* </span><span class="s1">width </span><span class="s2">+ </span><span class="s6">1</span><span class="s1">;</span>
+    <span class="s1">VImage mask </span><span class="s2">= </span>VImage<span class="s1">::</span><span class="s5">new_matrix</span><span class="s1">(maskWidth, maskWidth);</span>
+    <span class="s2">return </span>image<span class="s1">.</span><span class="s5">morph</span><span class="s1">(</span>
+      <span class="s1">mask,</span>
+      <span class="s1">VIPS_OPERATION_MORPHOLOGY_ERODE).</span><span class="s5">invert</span><span class="s1">();</span>
+  <span class="s1">}</span>
+
+<span class="s1">}  </span><span class="s0">// namespace sharp</span>
+</pre>
+</body>
+</html>

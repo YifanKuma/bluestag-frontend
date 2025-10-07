@@ -1,0 +1,445 @@
+<html>
+<head>
+<title>camelcase.js</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #8c8c8c; font-style: italic;}
+.s1 { color: #8c8c8c; font-style: italic;}
+.s2 { color: #080808;}
+.s3 { color: #067d17;}
+.s4 { color: #0033b3;}
+.s5 { color: #1750eb;}
+.s6 { color: #264eff;}
+</style>
+</head>
+<body bgcolor="#ffffff">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#c0c0c0" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+camelcase.js</font>
+</center></td></tr></table>
+<pre><span class="s0">/**</span>
+ <span class="s0">* </span><span class="s1">@fileoverview </span><span class="s0">Rule to flag non-camelcased identifiers</span>
+ <span class="s0">* </span><span class="s1">@author </span><span class="s0">Nicholas C. Zakas</span>
+ <span class="s0">*/</span>
+
+<span class="s3">&quot;use strict&quot;</span><span class="s2">;</span>
+
+<span class="s0">//------------------------------------------------------------------------------</span>
+<span class="s0">// Requirements</span>
+<span class="s0">//------------------------------------------------------------------------------</span>
+
+<span class="s4">const </span><span class="s2">astUtils = require(</span><span class="s3">&quot;./utils/ast-utils&quot;</span><span class="s2">);</span>
+
+<span class="s0">//------------------------------------------------------------------------------</span>
+<span class="s0">// Rule Definition</span>
+<span class="s0">//------------------------------------------------------------------------------</span>
+
+<span class="s0">/** </span><span class="s1">@type </span><span class="s0">{import('../types').Rule.RuleModule} */</span>
+<span class="s2">module.exports = {</span>
+	<span class="s2">meta: {</span>
+		<span class="s2">type: </span><span class="s3">&quot;suggestion&quot;</span><span class="s2">,</span>
+
+		<span class="s2">defaultOptions: [</span>
+			<span class="s2">{</span>
+				<span class="s2">allow: [],</span>
+				<span class="s2">ignoreDestructuring: </span><span class="s4">false</span><span class="s2">,</span>
+				<span class="s2">ignoreGlobals: </span><span class="s4">false</span><span class="s2">,</span>
+				<span class="s2">ignoreImports: </span><span class="s4">false</span><span class="s2">,</span>
+				<span class="s2">properties: </span><span class="s3">&quot;always&quot;</span><span class="s2">,</span>
+			<span class="s2">},</span>
+		<span class="s2">],</span>
+
+		<span class="s2">docs: {</span>
+			<span class="s2">description: </span><span class="s3">&quot;Enforce camelcase naming convention&quot;</span><span class="s2">,</span>
+			<span class="s2">recommended: </span><span class="s4">false</span><span class="s2">,</span>
+			<span class="s2">frozen: </span><span class="s4">true</span><span class="s2">,</span>
+			<span class="s2">url: </span><span class="s3">&quot;https://eslint.org/docs/latest/rules/camelcase&quot;</span><span class="s2">,</span>
+		<span class="s2">},</span>
+
+		<span class="s2">schema: [</span>
+			<span class="s2">{</span>
+				<span class="s2">type: </span><span class="s3">&quot;object&quot;</span><span class="s2">,</span>
+				<span class="s2">properties: {</span>
+					<span class="s2">ignoreDestructuring: {</span>
+						<span class="s2">type: </span><span class="s3">&quot;boolean&quot;</span><span class="s2">,</span>
+					<span class="s2">},</span>
+					<span class="s2">ignoreImports: {</span>
+						<span class="s2">type: </span><span class="s3">&quot;boolean&quot;</span><span class="s2">,</span>
+					<span class="s2">},</span>
+					<span class="s2">ignoreGlobals: {</span>
+						<span class="s2">type: </span><span class="s3">&quot;boolean&quot;</span><span class="s2">,</span>
+					<span class="s2">},</span>
+					<span class="s2">properties: {</span>
+						<span class="s4">enum</span><span class="s2">: [</span><span class="s3">&quot;always&quot;</span><span class="s2">, </span><span class="s3">&quot;never&quot;</span><span class="s2">],</span>
+					<span class="s2">},</span>
+					<span class="s2">allow: {</span>
+						<span class="s2">type: </span><span class="s3">&quot;array&quot;</span><span class="s2">,</span>
+						<span class="s2">items: {</span>
+							<span class="s2">type: </span><span class="s3">&quot;string&quot;</span><span class="s2">,</span>
+						<span class="s2">},</span>
+						<span class="s2">minItems: </span><span class="s5">0</span><span class="s2">,</span>
+						<span class="s2">uniqueItems: </span><span class="s4">true</span><span class="s2">,</span>
+					<span class="s2">},</span>
+				<span class="s2">},</span>
+				<span class="s2">additionalProperties: </span><span class="s4">false</span><span class="s2">,</span>
+			<span class="s2">},</span>
+		<span class="s2">],</span>
+
+		<span class="s2">messages: {</span>
+			<span class="s2">notCamelCase: </span><span class="s3">&quot;Identifier '{{name}}' is not in camel case.&quot;</span><span class="s2">,</span>
+			<span class="s2">notCamelCasePrivate: </span><span class="s3">&quot;#{{name}} is not in camel case.&quot;</span><span class="s2">,</span>
+		<span class="s2">},</span>
+	<span class="s2">},</span>
+
+	<span class="s2">create(context) {</span>
+		<span class="s4">const </span><span class="s2">[</span>
+			<span class="s2">{</span>
+				<span class="s2">allow,</span>
+				<span class="s2">ignoreDestructuring,</span>
+				<span class="s2">ignoreGlobals,</span>
+				<span class="s2">ignoreImports,</span>
+				<span class="s2">properties,</span>
+			<span class="s2">},</span>
+		<span class="s2">] = context.options;</span>
+		<span class="s4">const </span><span class="s2">sourceCode = context.sourceCode;</span>
+
+		<span class="s0">//--------------------------------------------------------------------------</span>
+		<span class="s0">// Helpers</span>
+		<span class="s0">//--------------------------------------------------------------------------</span>
+
+		<span class="s0">// contains reported nodes to avoid reporting twice on destructuring with shorthand notation</span>
+		<span class="s4">const </span><span class="s2">reported = </span><span class="s4">new </span><span class="s2">Set();</span>
+
+		<span class="s0">/**</span>
+		 <span class="s0">* Checks if a string contains an underscore and isn't all upper-case</span>
+		 <span class="s0">* </span><span class="s1">@param </span><span class="s0">{string} name The string to check.</span>
+		 <span class="s0">* </span><span class="s1">@returns </span><span class="s0">{boolean} if the string is underscored</span>
+		 <span class="s0">* </span><span class="s1">@private</span>
+		 <span class="s0">*/</span>
+		<span class="s4">function </span><span class="s2">isUnderscored(name) {</span>
+			<span class="s4">const </span><span class="s2">nameBody = name.replace(</span><span class="s6">/^_+|_+$/gu</span><span class="s2">, </span><span class="s3">&quot;&quot;</span><span class="s2">);</span>
+
+			<span class="s0">// if there's an underscore, it might be A_CONSTANT, which is okay</span>
+			<span class="s4">return </span><span class="s2">(</span>
+				<span class="s2">nameBody.includes(</span><span class="s3">&quot;_&quot;</span><span class="s2">) &amp;&amp; nameBody !== nameBody.toUpperCase()</span>
+			<span class="s2">);</span>
+		<span class="s2">}</span>
+
+		<span class="s0">/**</span>
+		 <span class="s0">* Checks if a string match the ignore list</span>
+		 <span class="s0">* </span><span class="s1">@param </span><span class="s0">{string} name The string to check.</span>
+		 <span class="s0">* </span><span class="s1">@returns </span><span class="s0">{boolean} if the string is ignored</span>
+		 <span class="s0">* </span><span class="s1">@private</span>
+		 <span class="s0">*/</span>
+		<span class="s4">function </span><span class="s2">isAllowed(name) {</span>
+			<span class="s4">return </span><span class="s2">allow.some(</span>
+				<span class="s2">entry =&gt; name === entry || name.match(</span><span class="s4">new </span><span class="s2">RegExp(entry, </span><span class="s3">&quot;u&quot;</span><span class="s2">)),</span>
+			<span class="s2">);</span>
+		<span class="s2">}</span>
+
+		<span class="s0">/**</span>
+		 <span class="s0">* Checks if a given name is good or not.</span>
+		 <span class="s0">* </span><span class="s1">@param </span><span class="s0">{string} name The name to check.</span>
+		 <span class="s0">* </span><span class="s1">@returns </span><span class="s0">{boolean} `true` if the name is good.</span>
+		 <span class="s0">* </span><span class="s1">@private</span>
+		 <span class="s0">*/</span>
+		<span class="s4">function </span><span class="s2">isGoodName(name) {</span>
+			<span class="s4">return </span><span class="s2">!isUnderscored(name) || isAllowed(name);</span>
+		<span class="s2">}</span>
+
+		<span class="s0">/**</span>
+		 <span class="s0">* Checks if a given identifier reference or member expression is an assignment</span>
+		 <span class="s0">* target.</span>
+		 <span class="s0">* </span><span class="s1">@param </span><span class="s0">{ASTNode} node The node to check.</span>
+		 <span class="s0">* </span><span class="s1">@returns </span><span class="s0">{boolean} `true` if the node is an assignment target.</span>
+		 <span class="s0">*/</span>
+		<span class="s4">function </span><span class="s2">isAssignmentTarget(node) {</span>
+			<span class="s4">const </span><span class="s2">parent = node.parent;</span>
+
+			<span class="s4">switch </span><span class="s2">(parent.type) {</span>
+				<span class="s4">case </span><span class="s3">&quot;AssignmentExpression&quot;</span><span class="s2">:</span>
+				<span class="s4">case </span><span class="s3">&quot;AssignmentPattern&quot;</span><span class="s2">:</span>
+					<span class="s4">return </span><span class="s2">parent.left === node;</span>
+
+				<span class="s4">case </span><span class="s3">&quot;Property&quot;</span><span class="s2">:</span>
+					<span class="s4">return </span><span class="s2">(</span>
+						<span class="s2">parent.parent.type === </span><span class="s3">&quot;ObjectPattern&quot; </span><span class="s2">&amp;&amp;</span>
+						<span class="s2">parent.value === node</span>
+					<span class="s2">);</span>
+				<span class="s4">case </span><span class="s3">&quot;ArrayPattern&quot;</span><span class="s2">:</span>
+				<span class="s4">case </span><span class="s3">&quot;RestElement&quot;</span><span class="s2">:</span>
+					<span class="s4">return true</span><span class="s2">;</span>
+
+				<span class="s4">default</span><span class="s2">:</span>
+					<span class="s4">return false</span><span class="s2">;</span>
+			<span class="s2">}</span>
+		<span class="s2">}</span>
+
+		<span class="s0">/**</span>
+		 <span class="s0">* Checks if a given binding identifier uses the original name as-is.</span>
+		 <span class="s0">* - If it's in object destructuring or object expression, the original name is its property name.</span>
+		 <span class="s0">* - If it's in import declaration, the original name is its exported name.</span>
+		 <span class="s0">* </span><span class="s1">@param </span><span class="s0">{ASTNode} node The `Identifier` node to check.</span>
+		 <span class="s0">* </span><span class="s1">@returns </span><span class="s0">{boolean} `true` if the identifier uses the original name as-is.</span>
+		 <span class="s0">*/</span>
+		<span class="s4">function </span><span class="s2">equalsToOriginalName(node) {</span>
+			<span class="s4">const </span><span class="s2">localName = node.name;</span>
+			<span class="s4">const </span><span class="s2">valueNode =</span>
+				<span class="s2">node.parent.type === </span><span class="s3">&quot;AssignmentPattern&quot; </span><span class="s2">? node.parent : node;</span>
+			<span class="s4">const </span><span class="s2">parent = valueNode.parent;</span>
+
+			<span class="s4">switch </span><span class="s2">(parent.type) {</span>
+				<span class="s4">case </span><span class="s3">&quot;Property&quot;</span><span class="s2">:</span>
+					<span class="s4">return </span><span class="s2">(</span>
+						<span class="s2">(parent.parent.type === </span><span class="s3">&quot;ObjectPattern&quot; </span><span class="s2">||</span>
+							<span class="s2">parent.parent.type === </span><span class="s3">&quot;ObjectExpression&quot;</span><span class="s2">) &amp;&amp;</span>
+						<span class="s2">parent.value === valueNode &amp;&amp;</span>
+						<span class="s2">!parent.computed &amp;&amp;</span>
+						<span class="s2">parent.key.type === </span><span class="s3">&quot;Identifier&quot; </span><span class="s2">&amp;&amp;</span>
+						<span class="s2">parent.key.name === localName</span>
+					<span class="s2">);</span>
+
+				<span class="s4">case </span><span class="s3">&quot;ImportSpecifier&quot;</span><span class="s2">:</span>
+					<span class="s4">return </span><span class="s2">(</span>
+						<span class="s2">parent.local === node &amp;&amp;</span>
+						<span class="s2">astUtils.getModuleExportName(parent.imported) ===</span>
+							<span class="s2">localName</span>
+					<span class="s2">);</span>
+
+				<span class="s4">default</span><span class="s2">:</span>
+					<span class="s4">return false</span><span class="s2">;</span>
+			<span class="s2">}</span>
+		<span class="s2">}</span>
+
+		<span class="s0">/**</span>
+		 <span class="s0">* Reports an AST node as a rule violation.</span>
+		 <span class="s0">* </span><span class="s1">@param </span><span class="s0">{ASTNode} node The node to report.</span>
+		 <span class="s0">* </span><span class="s1">@returns </span><span class="s0">{void}</span>
+		 <span class="s0">* </span><span class="s1">@private</span>
+		 <span class="s0">*/</span>
+		<span class="s4">function </span><span class="s2">report(node) {</span>
+			<span class="s4">if </span><span class="s2">(reported.has(node.range[</span><span class="s5">0</span><span class="s2">])) {</span>
+				<span class="s4">return</span><span class="s2">;</span>
+			<span class="s2">}</span>
+			<span class="s2">reported.add(node.range[</span><span class="s5">0</span><span class="s2">]);</span>
+
+			<span class="s0">// Report it.</span>
+			<span class="s2">context.report({</span>
+				<span class="s2">node,</span>
+				<span class="s2">messageId:</span>
+					<span class="s2">node.type === </span><span class="s3">&quot;PrivateIdentifier&quot;</span>
+						<span class="s2">? </span><span class="s3">&quot;notCamelCasePrivate&quot;</span>
+						<span class="s2">: </span><span class="s3">&quot;notCamelCase&quot;</span><span class="s2">,</span>
+				<span class="s2">data: { name: node.name },</span>
+			<span class="s2">});</span>
+		<span class="s2">}</span>
+
+		<span class="s0">/**</span>
+		 <span class="s0">* Reports an identifier reference or a binding identifier.</span>
+		 <span class="s0">* </span><span class="s1">@param </span><span class="s0">{ASTNode} node The `Identifier` node to report.</span>
+		 <span class="s0">* </span><span class="s1">@returns </span><span class="s0">{void}</span>
+		 <span class="s0">*/</span>
+		<span class="s4">function </span><span class="s2">reportReferenceId(node) {</span>
+			<span class="s0">/* 
+             * For backward compatibility, if it's in callings then ignore it. 
+             * Not sure why it is. 
+             */</span>
+			<span class="s4">if </span><span class="s2">(</span>
+				<span class="s2">node.parent.type === </span><span class="s3">&quot;CallExpression&quot; </span><span class="s2">||</span>
+				<span class="s2">node.parent.type === </span><span class="s3">&quot;NewExpression&quot;</span>
+			<span class="s2">) {</span>
+				<span class="s4">return</span><span class="s2">;</span>
+			<span class="s2">}</span>
+
+			<span class="s0">/* 
+             * For backward compatibility, if it's a default value of 
+             * destructuring/parameters then ignore it. 
+             * Not sure why it is. 
+             */</span>
+			<span class="s4">if </span><span class="s2">(</span>
+				<span class="s2">node.parent.type === </span><span class="s3">&quot;AssignmentPattern&quot; </span><span class="s2">&amp;&amp;</span>
+				<span class="s2">node.parent.right === node</span>
+			<span class="s2">) {</span>
+				<span class="s4">return</span><span class="s2">;</span>
+			<span class="s2">}</span>
+
+			<span class="s0">/* 
+             * The `ignoreDestructuring` flag skips the identifiers that uses 
+             * the property name as-is. 
+             */</span>
+			<span class="s4">if </span><span class="s2">(ignoreDestructuring &amp;&amp; equalsToOriginalName(node)) {</span>
+				<span class="s4">return</span><span class="s2">;</span>
+			<span class="s2">}</span>
+
+			<span class="s0">/* 
+             * Import attribute keys are always ignored 
+             */</span>
+			<span class="s4">if </span><span class="s2">(astUtils.isImportAttributeKey(node)) {</span>
+				<span class="s4">return</span><span class="s2">;</span>
+			<span class="s2">}</span>
+
+			<span class="s2">report(node);</span>
+		<span class="s2">}</span>
+
+		<span class="s4">return </span><span class="s2">{</span>
+			<span class="s0">// Report camelcase of global variable references ------------------</span>
+			<span class="s2">Program(node) {</span>
+				<span class="s4">const </span><span class="s2">scope = sourceCode.getScope(node);</span>
+
+				<span class="s4">if </span><span class="s2">(!ignoreGlobals) {</span>
+					<span class="s0">// Defined globals in config files or directive comments.</span>
+					<span class="s4">for </span><span class="s2">(</span><span class="s4">const </span><span class="s2">variable of scope.variables) {</span>
+						<span class="s4">if </span><span class="s2">(</span>
+							<span class="s2">variable.identifiers.length &gt; </span><span class="s5">0 </span><span class="s2">||</span>
+							<span class="s2">isGoodName(variable.name)</span>
+						<span class="s2">) {</span>
+							<span class="s4">continue</span><span class="s2">;</span>
+						<span class="s2">}</span>
+						<span class="s4">for </span><span class="s2">(</span><span class="s4">const </span><span class="s2">reference of variable.references) {</span>
+							<span class="s0">/* 
+                             * For backward compatibility, this rule reports read-only 
+                             * references as well. 
+                             */</span>
+							<span class="s2">reportReferenceId(reference.identifier);</span>
+						<span class="s2">}</span>
+					<span class="s2">}</span>
+				<span class="s2">}</span>
+
+				<span class="s0">// Undefined globals.</span>
+				<span class="s4">for </span><span class="s2">(</span><span class="s4">const </span><span class="s2">reference of scope.through) {</span>
+					<span class="s4">const </span><span class="s2">id = reference.identifier;</span>
+
+					<span class="s4">if </span><span class="s2">(</span>
+						<span class="s2">isGoodName(id.name) ||</span>
+						<span class="s2">astUtils.isImportAttributeKey(id)</span>
+					<span class="s2">) {</span>
+						<span class="s4">continue</span><span class="s2">;</span>
+					<span class="s2">}</span>
+
+					<span class="s0">/* 
+                     * For backward compatibility, this rule reports read-only 
+                     * references as well. 
+                     */</span>
+					<span class="s2">reportReferenceId(id);</span>
+				<span class="s2">}</span>
+			<span class="s2">},</span>
+
+			<span class="s0">// Report camelcase of declared variables --------------------------</span>
+			<span class="s2">[[</span>
+				<span class="s3">&quot;VariableDeclaration&quot;</span><span class="s2">,</span>
+				<span class="s3">&quot;FunctionDeclaration&quot;</span><span class="s2">,</span>
+				<span class="s3">&quot;FunctionExpression&quot;</span><span class="s2">,</span>
+				<span class="s3">&quot;ArrowFunctionExpression&quot;</span><span class="s2">,</span>
+				<span class="s3">&quot;ClassDeclaration&quot;</span><span class="s2">,</span>
+				<span class="s3">&quot;ClassExpression&quot;</span><span class="s2">,</span>
+				<span class="s3">&quot;CatchClause&quot;</span><span class="s2">,</span>
+			<span class="s2">]](node) {</span>
+				<span class="s4">for </span><span class="s2">(</span><span class="s4">const </span><span class="s2">variable of sourceCode.getDeclaredVariables(node)) {</span>
+					<span class="s4">if </span><span class="s2">(isGoodName(variable.name)) {</span>
+						<span class="s4">continue</span><span class="s2">;</span>
+					<span class="s2">}</span>
+					<span class="s4">const </span><span class="s2">id = variable.identifiers[</span><span class="s5">0</span><span class="s2">];</span>
+
+					<span class="s0">// Report declaration.</span>
+					<span class="s4">if </span><span class="s2">(!(ignoreDestructuring &amp;&amp; equalsToOriginalName(id))) {</span>
+						<span class="s2">report(id);</span>
+					<span class="s2">}</span>
+
+					<span class="s0">/* 
+                     * For backward compatibility, report references as well. 
+                     * It looks unnecessary because declarations are reported. 
+                     */</span>
+					<span class="s4">for </span><span class="s2">(</span><span class="s4">const </span><span class="s2">reference of variable.references) {</span>
+						<span class="s4">if </span><span class="s2">(reference.init) {</span>
+							<span class="s4">continue</span><span class="s2">; </span><span class="s0">// Skip the write references of initializers.</span>
+						<span class="s2">}</span>
+						<span class="s2">reportReferenceId(reference.identifier);</span>
+					<span class="s2">}</span>
+				<span class="s2">}</span>
+			<span class="s2">},</span>
+
+			<span class="s0">// Report camelcase in properties ----------------------------------</span>
+			<span class="s2">[[</span>
+				<span class="s3">&quot;ObjectExpression &gt; Property[computed!=true] &gt; Identifier.key&quot;</span><span class="s2">,</span>
+				<span class="s3">&quot;MethodDefinition[computed!=true] &gt; Identifier.key&quot;</span><span class="s2">,</span>
+				<span class="s3">&quot;PropertyDefinition[computed!=true] &gt; Identifier.key&quot;</span><span class="s2">,</span>
+				<span class="s3">&quot;MethodDefinition &gt; PrivateIdentifier.key&quot;</span><span class="s2">,</span>
+				<span class="s3">&quot;PropertyDefinition &gt; PrivateIdentifier.key&quot;</span><span class="s2">,</span>
+			<span class="s2">]](node) {</span>
+				<span class="s4">if </span><span class="s2">(</span>
+					<span class="s2">properties === </span><span class="s3">&quot;never&quot; </span><span class="s2">||</span>
+					<span class="s2">astUtils.isImportAttributeKey(node) ||</span>
+					<span class="s2">isGoodName(node.name)</span>
+				<span class="s2">) {</span>
+					<span class="s4">return</span><span class="s2">;</span>
+				<span class="s2">}</span>
+				<span class="s2">report(node);</span>
+			<span class="s2">},</span>
+			<span class="s3">&quot;MemberExpression[computed!=true] &gt; Identifier.property&quot;</span><span class="s2">(node) {</span>
+				<span class="s4">if </span><span class="s2">(</span>
+					<span class="s2">properties === </span><span class="s3">&quot;never&quot; </span><span class="s2">||</span>
+					<span class="s2">!isAssignmentTarget(node.parent) || </span><span class="s0">// ← ignore read-only references.</span>
+					<span class="s2">isGoodName(node.name)</span>
+				<span class="s2">) {</span>
+					<span class="s4">return</span><span class="s2">;</span>
+				<span class="s2">}</span>
+				<span class="s2">report(node);</span>
+			<span class="s2">},</span>
+
+			<span class="s0">// Report camelcase in import --------------------------------------</span>
+			<span class="s2">ImportDeclaration(node) {</span>
+				<span class="s4">for </span><span class="s2">(</span><span class="s4">const </span><span class="s2">variable of sourceCode.getDeclaredVariables(node)) {</span>
+					<span class="s4">if </span><span class="s2">(isGoodName(variable.name)) {</span>
+						<span class="s4">continue</span><span class="s2">;</span>
+					<span class="s2">}</span>
+					<span class="s4">const </span><span class="s2">id = variable.identifiers[</span><span class="s5">0</span><span class="s2">];</span>
+
+					<span class="s0">// Report declaration.</span>
+					<span class="s4">if </span><span class="s2">(!(ignoreImports &amp;&amp; equalsToOriginalName(id))) {</span>
+						<span class="s2">report(id);</span>
+					<span class="s2">}</span>
+
+					<span class="s0">/* 
+                     * For backward compatibility, report references as well. 
+                     * It looks unnecessary because declarations are reported. 
+                     */</span>
+					<span class="s4">for </span><span class="s2">(</span><span class="s4">const </span><span class="s2">reference of variable.references) {</span>
+						<span class="s2">reportReferenceId(reference.identifier);</span>
+					<span class="s2">}</span>
+				<span class="s2">}</span>
+			<span class="s2">},</span>
+
+			<span class="s0">// Report camelcase in re-export -----------------------------------</span>
+			<span class="s2">[[</span>
+				<span class="s3">&quot;ExportAllDeclaration &gt; Identifier.exported&quot;</span><span class="s2">,</span>
+				<span class="s3">&quot;ExportSpecifier &gt; Identifier.exported&quot;</span><span class="s2">,</span>
+			<span class="s2">]](node) {</span>
+				<span class="s4">if </span><span class="s2">(isGoodName(node.name)) {</span>
+					<span class="s4">return</span><span class="s2">;</span>
+				<span class="s2">}</span>
+				<span class="s2">report(node);</span>
+			<span class="s2">},</span>
+
+			<span class="s0">// Report camelcase in labels --------------------------------------</span>
+			<span class="s2">[[</span>
+				<span class="s3">&quot;LabeledStatement &gt; Identifier.label&quot;</span><span class="s2">,</span>
+
+				<span class="s0">/* 
+                 * For backward compatibility, report references as well. 
+                 * It looks unnecessary because declarations are reported. 
+                 */</span>
+				<span class="s3">&quot;BreakStatement &gt; Identifier.label&quot;</span><span class="s2">,</span>
+				<span class="s3">&quot;ContinueStatement &gt; Identifier.label&quot;</span><span class="s2">,</span>
+			<span class="s2">]](node) {</span>
+				<span class="s4">if </span><span class="s2">(isGoodName(node.name)) {</span>
+					<span class="s4">return</span><span class="s2">;</span>
+				<span class="s2">}</span>
+				<span class="s2">report(node);</span>
+			<span class="s2">},</span>
+		<span class="s2">};</span>
+	<span class="s2">},</span>
+<span class="s2">};</span>
+</pre>
+</body>
+</html>

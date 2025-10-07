@@ -1,0 +1,438 @@
+<html>
+<head>
+<title>forward-logs.js</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #067d17;}
+.s1 { color: #080808;}
+.s2 { color: #0033b3;}
+.s3 { color: #1750eb;}
+.s4 { color: #8c8c8c; font-style: italic;}
+.s5 { color: #0037a6;}
+</style>
+</head>
+<body bgcolor="#ffffff">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#c0c0c0" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+forward-logs.js</font>
+</center></td></tr></table>
+<pre><span class="s0">&quot;use strict&quot;</span><span class="s1">;</span>
+<span class="s1">Object.defineProperty(exports, </span><span class="s0">&quot;__esModule&quot;</span><span class="s1">, {</span>
+    <span class="s1">value: </span><span class="s2">true</span>
+<span class="s1">});</span>
+<span class="s3">0 </span><span class="s1">&amp;&amp; (module.exports = {</span>
+    <span class="s1">PROMISE_MARKER: </span><span class="s2">null</span><span class="s1">,</span>
+    <span class="s1">UNAVAILABLE_MARKER: </span><span class="s2">null</span><span class="s1">,</span>
+    <span class="s1">forwardErrorLog: </span><span class="s2">null</span><span class="s1">,</span>
+    <span class="s1">forwardUnhandledError: </span><span class="s2">null</span><span class="s1">,</span>
+    <span class="s1">initializeDebugLogForwarding: </span><span class="s2">null</span><span class="s1">,</span>
+    <span class="s1">isTerminalLoggingEnabled: </span><span class="s2">null</span><span class="s1">,</span>
+    <span class="s1">logQueue: </span><span class="s2">null</span><span class="s1">,</span>
+    <span class="s1">logStringify: </span><span class="s2">null</span><span class="s1">,</span>
+    <span class="s1">logUnhandledRejection: </span><span class="s2">null</span><span class="s1">,</span>
+    <span class="s1">preLogSerializationClone: </span><span class="s2">null</span>
+<span class="s1">});</span>
+<span class="s2">function </span><span class="s1">_export(target, all) {</span>
+    <span class="s2">for</span><span class="s1">(</span><span class="s2">var </span><span class="s1">name </span><span class="s2">in </span><span class="s1">all)Object.defineProperty(target, name, {</span>
+        <span class="s1">enumerable: </span><span class="s2">true</span><span class="s1">,</span>
+        <span class="s1">get: all[name]</span>
+    <span class="s1">});</span>
+<span class="s1">}</span>
+<span class="s1">_export(exports, {</span>
+    <span class="s1">PROMISE_MARKER: </span><span class="s2">function</span><span class="s1">() {</span>
+        <span class="s2">return </span><span class="s1">PROMISE_MARKER;</span>
+    <span class="s1">},</span>
+    <span class="s1">UNAVAILABLE_MARKER: </span><span class="s2">function</span><span class="s1">() {</span>
+        <span class="s2">return </span><span class="s1">UNAVAILABLE_MARKER;</span>
+    <span class="s1">},</span>
+    <span class="s1">forwardErrorLog: </span><span class="s2">function</span><span class="s1">() {</span>
+        <span class="s2">return </span><span class="s1">forwardErrorLog;</span>
+    <span class="s1">},</span>
+    <span class="s1">forwardUnhandledError: </span><span class="s2">function</span><span class="s1">() {</span>
+        <span class="s2">return </span><span class="s1">forwardUnhandledError;</span>
+    <span class="s1">},</span>
+    <span class="s1">initializeDebugLogForwarding: </span><span class="s2">function</span><span class="s1">() {</span>
+        <span class="s2">return </span><span class="s1">initializeDebugLogForwarding;</span>
+    <span class="s1">},</span>
+    <span class="s1">isTerminalLoggingEnabled: </span><span class="s2">function</span><span class="s1">() {</span>
+        <span class="s2">return </span><span class="s1">isTerminalLoggingEnabled;</span>
+    <span class="s1">},</span>
+    <span class="s1">logQueue: </span><span class="s2">function</span><span class="s1">() {</span>
+        <span class="s2">return </span><span class="s1">logQueue;</span>
+    <span class="s1">},</span>
+    <span class="s1">logStringify: </span><span class="s2">function</span><span class="s1">() {</span>
+        <span class="s2">return </span><span class="s1">logStringify;</span>
+    <span class="s1">},</span>
+    <span class="s1">logUnhandledRejection: </span><span class="s2">function</span><span class="s1">() {</span>
+        <span class="s2">return </span><span class="s1">logUnhandledRejection;</span>
+    <span class="s1">},</span>
+    <span class="s1">preLogSerializationClone: </span><span class="s2">function</span><span class="s1">() {</span>
+        <span class="s2">return </span><span class="s1">preLogSerializationClone;</span>
+    <span class="s1">}</span>
+<span class="s1">});</span>
+<span class="s2">const </span><span class="s1">_safestablestringify = require(</span><span class="s0">&quot;next/dist/compiled/safe-stable-stringify&quot;</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">_stitchederror = require(</span><span class="s0">&quot;./errors/stitched-error&quot;</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">_errorsource = require(</span><span class="s0">&quot;../../../shared/lib/error-source&quot;</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">_terminalloggingconfig = require(</span><span class="s0">&quot;./terminal-logging-config&quot;</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">_forwardlogsshared = require(</span><span class="s0">&quot;../../shared/forward-logs-shared&quot;</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">terminalLoggingConfig = (</span><span class="s3">0</span><span class="s1">, _terminalloggingconfig.getTerminalLoggingConfig)();</span>
+<span class="s2">const </span><span class="s1">PROMISE_MARKER = </span><span class="s0">'Promise {}'</span><span class="s1">;</span>
+<span class="s2">const </span><span class="s1">UNAVAILABLE_MARKER = </span><span class="s0">'[Unable to view]'</span><span class="s1">;</span>
+<span class="s2">const </span><span class="s1">maximumDepth = </span><span class="s2">typeof </span><span class="s1">terminalLoggingConfig === </span><span class="s0">'object' </span><span class="s1">&amp;&amp; terminalLoggingConfig.depthLimit ? terminalLoggingConfig.depthLimit : </span><span class="s3">5</span><span class="s1">;</span>
+<span class="s2">const </span><span class="s1">maximumBreadth = </span><span class="s2">typeof </span><span class="s1">terminalLoggingConfig === </span><span class="s0">'object' </span><span class="s1">&amp;&amp; terminalLoggingConfig.edgeLimit ? terminalLoggingConfig.edgeLimit : </span><span class="s3">100</span><span class="s1">;</span>
+<span class="s2">const </span><span class="s1">stringify = (</span><span class="s3">0</span><span class="s1">, _safestablestringify.configure)({</span>
+    <span class="s1">maximumDepth,</span>
+    <span class="s1">maximumBreadth</span>
+<span class="s1">});</span>
+<span class="s2">const </span><span class="s1">isTerminalLoggingEnabled = (</span><span class="s3">0</span><span class="s1">, _terminalloggingconfig.getIsTerminalLoggingEnabled)();</span>
+<span class="s2">const </span><span class="s1">methods = [</span>
+    <span class="s0">'log'</span><span class="s1">,</span>
+    <span class="s0">'info'</span><span class="s1">,</span>
+    <span class="s0">'warn'</span><span class="s1">,</span>
+    <span class="s0">'debug'</span><span class="s1">,</span>
+    <span class="s0">'table'</span><span class="s1">,</span>
+    <span class="s0">'assert'</span><span class="s1">,</span>
+    <span class="s0">'dir'</span><span class="s1">,</span>
+    <span class="s0">'dirxml'</span><span class="s1">,</span>
+    <span class="s0">'group'</span><span class="s1">,</span>
+    <span class="s0">'groupCollapsed'</span><span class="s1">,</span>
+    <span class="s0">'groupEnd'</span><span class="s1">,</span>
+    <span class="s0">'trace'</span>
+<span class="s1">];</span>
+<span class="s2">function </span><span class="s1">preLogSerializationClone(value, seen) {</span>
+    <span class="s2">if </span><span class="s1">(seen === </span><span class="s2">void </span><span class="s3">0</span><span class="s1">) seen = </span><span class="s2">new </span><span class="s1">WeakMap();</span>
+    <span class="s2">if </span><span class="s1">(value === undefined) </span><span class="s2">return </span><span class="s1">_forwardlogsshared.UNDEFINED_MARKER;</span>
+    <span class="s2">if </span><span class="s1">(value === </span><span class="s2">null </span><span class="s1">|| </span><span class="s2">typeof </span><span class="s1">value !== </span><span class="s0">'object'</span><span class="s1">) </span><span class="s2">return </span><span class="s1">value;</span>
+    <span class="s2">if </span><span class="s1">(seen.has(value)) </span><span class="s2">return </span><span class="s1">seen.get(value);</span>
+    <span class="s2">try </span><span class="s1">{</span>
+        <span class="s1">Object.keys(value);</span>
+    <span class="s1">} </span><span class="s2">catch </span><span class="s1">(e) {</span>
+        <span class="s2">return </span><span class="s1">UNAVAILABLE_MARKER;</span>
+    <span class="s1">}</span>
+    <span class="s2">try </span><span class="s1">{</span>
+        <span class="s2">if </span><span class="s1">(</span><span class="s2">typeof </span><span class="s1">value.then === </span><span class="s0">'function'</span><span class="s1">) </span><span class="s2">return </span><span class="s1">PROMISE_MARKER;</span>
+    <span class="s1">} </span><span class="s2">catch </span><span class="s1">(e) {</span>
+        <span class="s2">return </span><span class="s1">UNAVAILABLE_MARKER;</span>
+    <span class="s1">}</span>
+    <span class="s2">if </span><span class="s1">(Array.isArray(value)) {</span>
+        <span class="s2">const </span><span class="s1">out = [];</span>
+        <span class="s1">seen.set(value, out);</span>
+        <span class="s2">for </span><span class="s1">(</span><span class="s2">const </span><span class="s1">item of value){</span>
+            <span class="s2">try </span><span class="s1">{</span>
+                <span class="s1">out.push(preLogSerializationClone(item, seen));</span>
+            <span class="s1">} </span><span class="s2">catch </span><span class="s1">(e) {</span>
+                <span class="s1">out.push(UNAVAILABLE_MARKER);</span>
+            <span class="s1">}</span>
+        <span class="s1">}</span>
+        <span class="s2">return </span><span class="s1">out;</span>
+    <span class="s1">}</span>
+    <span class="s2">const </span><span class="s1">proto = Object.getPrototypeOf(value);</span>
+    <span class="s2">if </span><span class="s1">(proto === Object.prototype || proto === </span><span class="s2">null</span><span class="s1">) {</span>
+        <span class="s2">const </span><span class="s1">out = {};</span>
+        <span class="s1">seen.set(value, out);</span>
+        <span class="s2">for </span><span class="s1">(</span><span class="s2">const </span><span class="s1">key of Object.keys(value)){</span>
+            <span class="s2">try </span><span class="s1">{</span>
+                <span class="s1">out[key] = preLogSerializationClone(value[key], seen);</span>
+            <span class="s1">} </span><span class="s2">catch </span><span class="s1">(e) {</span>
+                <span class="s1">out[key] = UNAVAILABLE_MARKER;</span>
+            <span class="s1">}</span>
+        <span class="s1">}</span>
+        <span class="s2">return </span><span class="s1">out;</span>
+    <span class="s1">}</span>
+    <span class="s2">return </span><span class="s1">Object.prototype.toString.call(value);</span>
+<span class="s1">}</span>
+<span class="s2">const </span><span class="s1">logStringify = (data)=&gt;{</span>
+    <span class="s2">try </span><span class="s1">{</span>
+        <span class="s2">const </span><span class="s1">result = stringify(data);</span>
+        <span class="s2">return </span><span class="s1">result != </span><span class="s2">null </span><span class="s1">? result : </span><span class="s0">'&quot;' </span><span class="s1">+ UNAVAILABLE_MARKER + </span><span class="s0">'&quot;'</span><span class="s1">;</span>
+    <span class="s1">} </span><span class="s2">catch </span><span class="s1">(e) {</span>
+        <span class="s2">return </span><span class="s0">'&quot;' </span><span class="s1">+ UNAVAILABLE_MARKER + </span><span class="s0">'&quot;'</span><span class="s1">;</span>
+    <span class="s1">}</span>
+<span class="s1">};</span>
+<span class="s2">const </span><span class="s1">afterThisFrame = (cb)=&gt;{</span>
+    <span class="s2">let </span><span class="s1">timeout;</span>
+    <span class="s2">const </span><span class="s1">rafId = requestAnimationFrame(()=&gt;{</span>
+        <span class="s1">timeout = setTimeout(()=&gt;{</span>
+            <span class="s1">cb();</span>
+        <span class="s1">});</span>
+    <span class="s1">});</span>
+    <span class="s2">return </span><span class="s1">()=&gt;{</span>
+        <span class="s1">cancelAnimationFrame(rafId);</span>
+        <span class="s1">clearTimeout(timeout);</span>
+    <span class="s1">};</span>
+<span class="s1">};</span>
+<span class="s2">let </span><span class="s1">isPatched = </span><span class="s2">false</span><span class="s1">;</span>
+<span class="s2">const </span><span class="s1">serializeEntries = (entries)=&gt;entries.map((clientEntry)=&gt;{</span>
+        <span class="s2">switch</span><span class="s1">(clientEntry.kind){</span>
+            <span class="s2">case </span><span class="s0">'any-logged-error'</span><span class="s1">:</span>
+            <span class="s2">case </span><span class="s0">'console'</span><span class="s1">:</span>
+                <span class="s1">{</span>
+                    <span class="s2">return </span><span class="s1">{</span>
+                        <span class="s1">...clientEntry,</span>
+                        <span class="s1">args: clientEntry.args.map(stringifyUserArg)</span>
+                    <span class="s1">};</span>
+                <span class="s1">}</span>
+            <span class="s2">case </span><span class="s0">'formatted-error'</span><span class="s1">:</span>
+                <span class="s1">{</span>
+                    <span class="s2">return </span><span class="s1">clientEntry;</span>
+                <span class="s1">}</span>
+            <span class="s2">default</span><span class="s1">:</span>
+                <span class="s1">{</span>
+                    <span class="s2">return null</span><span class="s1">;</span>
+                <span class="s1">}</span>
+        <span class="s1">}</span>
+    <span class="s1">});</span>
+<span class="s2">const </span><span class="s1">logQueue = {</span>
+    <span class="s1">entries: [],</span>
+    <span class="s1">flushScheduled: </span><span class="s2">false</span><span class="s1">,</span>
+    <span class="s1">cancelFlush: </span><span class="s2">null</span><span class="s1">,</span>
+    <span class="s1">socket: </span><span class="s2">null</span><span class="s1">,</span>
+    <span class="s1">sourceType: undefined,</span>
+    <span class="s1">router: </span><span class="s2">null</span><span class="s1">,</span>
+    <span class="s1">scheduleLogSend: (entry)=&gt;{</span>
+        <span class="s1">logQueue.entries.push(entry);</span>
+        <span class="s2">if </span><span class="s1">(logQueue.flushScheduled) {</span>
+            <span class="s2">return</span><span class="s1">;</span>
+        <span class="s1">}</span>
+        <span class="s4">// safe to deref and use in setTimeout closure since we cancel on new socket</span>
+        <span class="s2">const </span><span class="s1">socket = logQueue.socket;</span>
+        <span class="s2">if </span><span class="s1">(!socket) {</span>
+            <span class="s2">return</span><span class="s1">;</span>
+        <span class="s1">}</span>
+        <span class="s4">// we probably dont need this</span>
+        <span class="s1">logQueue.flushScheduled = </span><span class="s2">true</span><span class="s1">;</span>
+        <span class="s4">// non blocking log flush, runs at most once per frame</span>
+        <span class="s1">logQueue.cancelFlush = afterThisFrame(()=&gt;{</span>
+            <span class="s1">logQueue.flushScheduled = </span><span class="s2">false</span><span class="s1">;</span>
+            <span class="s4">// just incase</span>
+            <span class="s2">try </span><span class="s1">{</span>
+                <span class="s2">const </span><span class="s1">payload = JSON.stringify({</span>
+                    <span class="s1">event: </span><span class="s0">'browser-logs'</span><span class="s1">,</span>
+                    <span class="s1">entries: serializeEntries(logQueue.entries),</span>
+                    <span class="s1">router: logQueue.router,</span>
+                    <span class="s4">// needed for source mapping, we just assign the sourceType from the last error for the whole batch</span>
+                    <span class="s1">sourceType: logQueue.sourceType</span>
+                <span class="s1">});</span>
+                <span class="s1">socket.send(payload);</span>
+                <span class="s1">logQueue.entries = [];</span>
+                <span class="s1">logQueue.sourceType = undefined;</span>
+            <span class="s1">} </span><span class="s2">catch </span><span class="s1">(e) {</span>
+            <span class="s4">// error (make sure u don't infinite loop)</span>
+            <span class="s4">/* noop */ </span><span class="s1">}</span>
+        <span class="s1">});</span>
+    <span class="s1">},</span>
+    <span class="s1">onSocketReady: (socket)=&gt;{</span>
+        <span class="s2">if </span><span class="s1">(socket.readyState !== WebSocket.OPEN) {</span>
+            <span class="s4">// invariant</span>
+            <span class="s2">return</span><span class="s1">;</span>
+        <span class="s1">}</span>
+        <span class="s4">// incase an existing timeout was going to run with a stale socket</span>
+        <span class="s1">logQueue.cancelFlush == </span><span class="s2">null </span><span class="s1">? </span><span class="s2">void </span><span class="s3">0 </span><span class="s1">: logQueue.cancelFlush.call(logQueue);</span>
+        <span class="s1">logQueue.socket = socket;</span>
+        <span class="s2">try </span><span class="s1">{</span>
+            <span class="s2">const </span><span class="s1">payload = JSON.stringify({</span>
+                <span class="s1">event: </span><span class="s0">'browser-logs'</span><span class="s1">,</span>
+                <span class="s1">entries: serializeEntries(logQueue.entries),</span>
+                <span class="s1">router: logQueue.router,</span>
+                <span class="s1">sourceType: logQueue.sourceType</span>
+            <span class="s1">});</span>
+            <span class="s1">socket.send(payload);</span>
+            <span class="s1">logQueue.entries = [];</span>
+            <span class="s1">logQueue.sourceType = undefined;</span>
+        <span class="s1">} </span><span class="s2">catch </span><span class="s1">(e) {</span>
+        <span class="s4">/** noop just incase */ </span><span class="s1">}</span>
+    <span class="s1">}</span>
+<span class="s1">};</span>
+<span class="s2">const </span><span class="s1">stringifyUserArg = (arg)=&gt;{</span>
+    <span class="s2">if </span><span class="s1">(arg.kind !== </span><span class="s0">'arg'</span><span class="s1">) {</span>
+        <span class="s2">return </span><span class="s1">arg;</span>
+    <span class="s1">}</span>
+    <span class="s2">return </span><span class="s1">{</span>
+        <span class="s1">...arg,</span>
+        <span class="s1">data: logStringify(arg.data)</span>
+    <span class="s1">};</span>
+<span class="s1">};</span>
+<span class="s2">const </span><span class="s1">createErrorArg = (error)=&gt;{</span>
+    <span class="s2">const </span><span class="s1">stack = stackWithOwners(error);</span>
+    <span class="s2">return </span><span class="s1">{</span>
+        <span class="s1">kind: </span><span class="s0">'formatted-error-arg'</span><span class="s1">,</span>
+        <span class="s1">prefix: error.message ? error.name + </span><span class="s0">&quot;: &quot; </span><span class="s1">+ error.message : </span><span class="s0">&quot;&quot; </span><span class="s1">+ error.name,</span>
+        <span class="s1">stack</span>
+    <span class="s1">};</span>
+<span class="s1">};</span>
+<span class="s2">const </span><span class="s1">createLogEntry = (level, args)=&gt;{</span>
+    <span class="s4">// do not abstract this, it implicitly relies on which functions call it. forcing the inlined implementation makes you think about callers</span>
+    <span class="s4">// error capture stack trace maybe</span>
+    <span class="s2">const </span><span class="s1">stack = stackWithOwners(</span><span class="s2">new </span><span class="s1">Error());</span>
+    <span class="s2">const </span><span class="s1">stackLines = stack == </span><span class="s2">null </span><span class="s1">? </span><span class="s2">void </span><span class="s3">0 </span><span class="s1">: stack.split(</span><span class="s0">'</span><span class="s5">\n</span><span class="s0">'</span><span class="s1">);</span>
+    <span class="s2">const </span><span class="s1">cleanStack = stackLines == </span><span class="s2">null </span><span class="s1">? </span><span class="s2">void </span><span class="s3">0 </span><span class="s1">: stackLines.slice(</span><span class="s3">3</span><span class="s1">).join(</span><span class="s0">'</span><span class="s5">\n</span><span class="s0">'</span><span class="s1">) </span><span class="s4">// this is probably ignored anyways</span>
+    <span class="s1">;</span>
+    <span class="s2">const </span><span class="s1">entry = {</span>
+        <span class="s1">kind: </span><span class="s0">'console'</span><span class="s1">,</span>
+        <span class="s1">consoleMethodStack: cleanStack != </span><span class="s2">null </span><span class="s1">? cleanStack : </span><span class="s2">null</span><span class="s1">,</span>
+        <span class="s1">method: level,</span>
+        <span class="s1">args: args.map((arg)=&gt;{</span>
+            <span class="s2">if </span><span class="s1">(arg </span><span class="s2">instanceof </span><span class="s1">Error) {</span>
+                <span class="s2">return </span><span class="s1">createErrorArg(arg);</span>
+            <span class="s1">}</span>
+            <span class="s2">return </span><span class="s1">{</span>
+                <span class="s1">kind: </span><span class="s0">'arg'</span><span class="s1">,</span>
+                <span class="s1">data: preLogSerializationClone(arg)</span>
+            <span class="s1">};</span>
+        <span class="s1">})</span>
+    <span class="s1">};</span>
+    <span class="s1">logQueue.scheduleLogSend(entry);</span>
+<span class="s1">};</span>
+<span class="s2">const </span><span class="s1">forwardErrorLog = (args)=&gt;{</span>
+    <span class="s2">const </span><span class="s1">errorObjects = args.filter((arg)=&gt;arg </span><span class="s2">instanceof </span><span class="s1">Error);</span>
+    <span class="s2">const </span><span class="s1">first = errorObjects.at(</span><span class="s3">0</span><span class="s1">);</span>
+    <span class="s2">if </span><span class="s1">(first) {</span>
+        <span class="s2">const </span><span class="s1">source = (</span><span class="s3">0</span><span class="s1">, _errorsource.getErrorSource)(first);</span>
+        <span class="s2">if </span><span class="s1">(source) {</span>
+            <span class="s1">logQueue.sourceType = source;</span>
+        <span class="s1">}</span>
+    <span class="s1">}</span>
+    <span class="s4">/**</span>
+   <span class="s4">* browser shows stack regardless of type of data passed to console.error, so we should do the same</span>
+   <span class="s4">*</span>
+   <span class="s4">* do not abstract this, it implicitly relies on which functions call it. forcing the inlined implementation makes you think about callers</span>
+   <span class="s4">*/ </span><span class="s2">const </span><span class="s1">stack = stackWithOwners(</span><span class="s2">new </span><span class="s1">Error());</span>
+    <span class="s2">const </span><span class="s1">stackLines = stack == </span><span class="s2">null </span><span class="s1">? </span><span class="s2">void </span><span class="s3">0 </span><span class="s1">: stack.split(</span><span class="s0">'</span><span class="s5">\n</span><span class="s0">'</span><span class="s1">);</span>
+    <span class="s2">const </span><span class="s1">cleanStack = stackLines == </span><span class="s2">null </span><span class="s1">? </span><span class="s2">void </span><span class="s3">0 </span><span class="s1">: stackLines.slice(</span><span class="s3">3</span><span class="s1">).join(</span><span class="s0">'</span><span class="s5">\n</span><span class="s0">'</span><span class="s1">);</span>
+    <span class="s2">const </span><span class="s1">entry = {</span>
+        <span class="s1">kind: </span><span class="s0">'any-logged-error'</span><span class="s1">,</span>
+        <span class="s1">method: </span><span class="s0">'error'</span><span class="s1">,</span>
+        <span class="s1">consoleErrorStack: cleanStack != </span><span class="s2">null </span><span class="s1">? cleanStack : </span><span class="s0">''</span><span class="s1">,</span>
+        <span class="s1">args: args.map((arg)=&gt;{</span>
+            <span class="s2">if </span><span class="s1">(arg </span><span class="s2">instanceof </span><span class="s1">Error) {</span>
+                <span class="s2">return </span><span class="s1">createErrorArg(arg);</span>
+            <span class="s1">}</span>
+            <span class="s2">return </span><span class="s1">{</span>
+                <span class="s1">kind: </span><span class="s0">'arg'</span><span class="s1">,</span>
+                <span class="s1">data: preLogSerializationClone(arg)</span>
+            <span class="s1">};</span>
+        <span class="s1">})</span>
+    <span class="s1">};</span>
+    <span class="s1">logQueue.scheduleLogSend(entry);</span>
+<span class="s1">};</span>
+<span class="s2">const </span><span class="s1">createUncaughtErrorEntry = (errorName, errorMessage, fullStack)=&gt;{</span>
+    <span class="s2">const </span><span class="s1">entry = {</span>
+        <span class="s1">kind: </span><span class="s0">'formatted-error'</span><span class="s1">,</span>
+        <span class="s1">prefix: </span><span class="s0">&quot;Uncaught &quot; </span><span class="s1">+ errorName + </span><span class="s0">&quot;: &quot; </span><span class="s1">+ errorMessage,</span>
+        <span class="s1">stack: fullStack,</span>
+        <span class="s1">method: </span><span class="s0">'error'</span>
+    <span class="s1">};</span>
+    <span class="s1">logQueue.scheduleLogSend(entry);</span>
+<span class="s1">};</span>
+<span class="s2">const </span><span class="s1">stackWithOwners = (error)=&gt;{</span>
+    <span class="s2">let </span><span class="s1">ownerStack = </span><span class="s0">''</span><span class="s1">;</span>
+    <span class="s1">(</span><span class="s3">0</span><span class="s1">, _stitchederror.setOwnerStackIfAvailable)(error);</span>
+    <span class="s1">ownerStack = (</span><span class="s3">0</span><span class="s1">, _stitchederror.getOwnerStack)(error) || </span><span class="s0">''</span><span class="s1">;</span>
+    <span class="s2">const </span><span class="s1">stack = (error.stack || </span><span class="s0">''</span><span class="s1">) + ownerStack;</span>
+    <span class="s2">return </span><span class="s1">stack;</span>
+<span class="s1">};</span>
+<span class="s2">function </span><span class="s1">logUnhandledRejection(reason) {</span>
+    <span class="s2">if </span><span class="s1">(reason </span><span class="s2">instanceof </span><span class="s1">Error) {</span>
+        <span class="s1">createUnhandledRejectionErrorEntry(reason, stackWithOwners(reason));</span>
+        <span class="s2">return</span><span class="s1">;</span>
+    <span class="s1">}</span>
+    <span class="s1">createUnhandledRejectionNonErrorEntry(reason);</span>
+<span class="s1">}</span>
+<span class="s2">const </span><span class="s1">createUnhandledRejectionErrorEntry = (error, fullStack)=&gt;{</span>
+    <span class="s2">const </span><span class="s1">source = (</span><span class="s3">0</span><span class="s1">, _errorsource.getErrorSource)(error);</span>
+    <span class="s2">if </span><span class="s1">(source) {</span>
+        <span class="s1">logQueue.sourceType = source;</span>
+    <span class="s1">}</span>
+    <span class="s2">const </span><span class="s1">entry = {</span>
+        <span class="s1">kind: </span><span class="s0">'formatted-error'</span><span class="s1">,</span>
+        <span class="s1">prefix: </span><span class="s0">&quot;⨯ unhandledRejection: &quot; </span><span class="s1">+ error.name + </span><span class="s0">&quot;: &quot; </span><span class="s1">+ error.message,</span>
+        <span class="s1">stack: fullStack,</span>
+        <span class="s1">method: </span><span class="s0">'error'</span>
+    <span class="s1">};</span>
+    <span class="s1">logQueue.scheduleLogSend(entry);</span>
+<span class="s1">};</span>
+<span class="s2">const </span><span class="s1">createUnhandledRejectionNonErrorEntry = (reason)=&gt;{</span>
+    <span class="s2">const </span><span class="s1">entry = {</span>
+        <span class="s1">kind: </span><span class="s0">'any-logged-error'</span><span class="s1">,</span>
+        <span class="s4">// we can't access the stack since the event is dispatched async and creating an inline error would be meaningless</span>
+        <span class="s1">consoleErrorStack: </span><span class="s0">''</span><span class="s1">,</span>
+        <span class="s1">method: </span><span class="s0">'error'</span><span class="s1">,</span>
+        <span class="s1">args: [</span>
+            <span class="s1">{</span>
+                <span class="s1">kind: </span><span class="s0">'arg'</span><span class="s1">,</span>
+                <span class="s1">data: </span><span class="s0">&quot;⨯ unhandledRejection:&quot;</span><span class="s1">,</span>
+                <span class="s1">isRejectionMessage: </span><span class="s2">true</span>
+            <span class="s1">},</span>
+            <span class="s1">{</span>
+                <span class="s1">kind: </span><span class="s0">'arg'</span><span class="s1">,</span>
+                <span class="s1">data: preLogSerializationClone(reason)</span>
+            <span class="s1">}</span>
+        <span class="s1">]</span>
+    <span class="s1">};</span>
+    <span class="s1">logQueue.scheduleLogSend(entry);</span>
+<span class="s1">};</span>
+<span class="s2">const </span><span class="s1">isHMR = (args)=&gt;{</span>
+    <span class="s2">const </span><span class="s1">firstArg = args[</span><span class="s3">0</span><span class="s1">];</span>
+    <span class="s2">if </span><span class="s1">(</span><span class="s2">typeof </span><span class="s1">firstArg !== </span><span class="s0">'string'</span><span class="s1">) {</span>
+        <span class="s2">return false</span><span class="s1">;</span>
+    <span class="s1">}</span>
+    <span class="s2">if </span><span class="s1">(firstArg.startsWith(</span><span class="s0">'[Fast Refresh]'</span><span class="s1">)) {</span>
+        <span class="s2">return true</span><span class="s1">;</span>
+    <span class="s1">}</span>
+    <span class="s2">if </span><span class="s1">(firstArg.startsWith(</span><span class="s0">'[HMR]'</span><span class="s1">)) {</span>
+        <span class="s2">return true</span><span class="s1">;</span>
+    <span class="s1">}</span>
+    <span class="s2">return false</span><span class="s1">;</span>
+<span class="s1">};</span>
+<span class="s2">const </span><span class="s1">isIgnoredLog = (args)=&gt;{</span>
+    <span class="s2">if </span><span class="s1">(args.length &lt; </span><span class="s3">3</span><span class="s1">) {</span>
+        <span class="s2">return false</span><span class="s1">;</span>
+    <span class="s1">}</span>
+    <span class="s2">const </span><span class="s1">[format, styles, label] = args;</span>
+    <span class="s2">if </span><span class="s1">(</span><span class="s2">typeof </span><span class="s1">format !== </span><span class="s0">'string' </span><span class="s1">|| </span><span class="s2">typeof </span><span class="s1">styles !== </span><span class="s0">'string' </span><span class="s1">|| </span><span class="s2">typeof </span><span class="s1">label !== </span><span class="s0">'string'</span><span class="s1">) {</span>
+        <span class="s2">return false</span><span class="s1">;</span>
+    <span class="s1">}</span>
+    <span class="s4">// kinda hacky, we should define a common format for these strings so we can safely ignore</span>
+    <span class="s2">return </span><span class="s1">format.startsWith(</span><span class="s0">'%c%s%c'</span><span class="s1">) &amp;&amp; styles.includes(</span><span class="s0">'background:'</span><span class="s1">);</span>
+<span class="s1">};</span>
+<span class="s2">function </span><span class="s1">forwardUnhandledError(error) {</span>
+    <span class="s1">createUncaughtErrorEntry(error.name, error.message, stackWithOwners(error));</span>
+<span class="s1">}</span>
+<span class="s2">const </span><span class="s1">initializeDebugLogForwarding = (router)=&gt;{</span>
+    <span class="s4">// probably don't need this</span>
+    <span class="s2">if </span><span class="s1">(isPatched) {</span>
+        <span class="s2">return</span><span class="s1">;</span>
+    <span class="s1">}</span>
+    <span class="s4">// TODO(rob): why does this break rendering on server, important to know incase the same bug appears in browser</span>
+    <span class="s2">if </span><span class="s1">(</span><span class="s2">typeof </span><span class="s1">window === </span><span class="s0">'undefined'</span><span class="s1">) {</span>
+        <span class="s2">return</span><span class="s1">;</span>
+    <span class="s1">}</span>
+    <span class="s4">// better to be safe than sorry</span>
+    <span class="s2">try </span><span class="s1">{</span>
+        <span class="s1">methods.forEach((method)=&gt;(</span><span class="s3">0</span><span class="s1">, _forwardlogsshared.patchConsoleMethod)(method, </span><span class="s2">function</span><span class="s1">(_) {</span>
+                <span class="s2">for</span><span class="s1">(</span><span class="s2">var </span><span class="s1">_len = arguments.length, args = </span><span class="s2">new </span><span class="s1">Array(_len &gt; </span><span class="s3">1 </span><span class="s1">? _len - </span><span class="s3">1 </span><span class="s1">: </span><span class="s3">0</span><span class="s1">), _key = </span><span class="s3">1</span><span class="s1">; _key &lt; _len; _key++){</span>
+                    <span class="s1">args[_key - </span><span class="s3">1</span><span class="s1">] = arguments[_key];</span>
+                <span class="s1">}</span>
+                <span class="s2">if </span><span class="s1">(isHMR(args)) {</span>
+                    <span class="s2">return</span><span class="s1">;</span>
+                <span class="s1">}</span>
+                <span class="s2">if </span><span class="s1">(isIgnoredLog(args)) {</span>
+                    <span class="s2">return</span><span class="s1">;</span>
+                <span class="s1">}</span>
+                <span class="s1">createLogEntry(method, args);</span>
+            <span class="s1">}));</span>
+    <span class="s1">} </span><span class="s2">catch </span><span class="s1">(e) {}</span>
+    <span class="s1">logQueue.router = router;</span>
+    <span class="s1">isPatched = </span><span class="s2">true</span><span class="s1">;</span>
+<span class="s1">};</span>
+
+<span class="s2">if </span><span class="s1">((</span><span class="s2">typeof </span><span class="s1">exports.default === </span><span class="s0">'function' </span><span class="s1">|| (</span><span class="s2">typeof </span><span class="s1">exports.default === </span><span class="s0">'object' </span><span class="s1">&amp;&amp; exports.default !== </span><span class="s2">null</span><span class="s1">)) &amp;&amp; </span><span class="s2">typeof </span><span class="s1">exports.default.__esModule === </span><span class="s0">'undefined'</span><span class="s1">) {</span>
+  <span class="s1">Object.defineProperty(exports.default, </span><span class="s0">'__esModule'</span><span class="s1">, { value: </span><span class="s2">true </span><span class="s1">});</span>
+  <span class="s1">Object.assign(exports.default, exports);</span>
+  <span class="s1">module.exports = exports.default;</span>
+<span class="s1">}</span>
+
+<span class="s4">//# sourceMappingURL=forward-logs.js.map</span></pre>
+</body>
+</html>

@@ -1,0 +1,94 @@
+<html>
+<head>
+<title>output-export-prefetch-encoding.js</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #8c8c8c; font-style: italic;}
+.s1 { color: #080808;}
+.s2 { color: #067d17;}
+.s3 { color: #0033b3;}
+.s4 { color: #1750eb;}
+.s5 { color: #264eff;}
+</style>
+</head>
+<body bgcolor="#ffffff">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#c0c0c0" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+output-export-prefetch-encoding.js</font>
+</center></td></tr></table>
+<pre><span class="s0">// In output: export mode, the build id is added to the start of the HTML</span>
+<span class="s0">// document, directly after the doctype declaration. During a prefetch, the</span>
+<span class="s0">// client performs a range request to get the build id, so it can check whether</span>
+<span class="s0">// the target page belongs to the same build.</span>
+<span class="s0">//</span>
+<span class="s0">// The first 64 bytes of the document are requested. The exact number isn't</span>
+<span class="s0">// too important; it must be larger than the build id + doctype + closing and</span>
+<span class="s0">// ending comment markers, but it doesn't need to match the end of the</span>
+<span class="s0">// comment exactly.</span>
+<span class="s0">//</span>
+<span class="s0">// Build ids are 21 bytes long in the default implementation, though this</span>
+<span class="s0">// can be overridden in the Next.js config. For the purposes of this check,</span>
+<span class="s0">// it's OK to only match the start of the id, so we'll truncate it if exceeds</span>
+<span class="s0">// a certain length.</span>
+<span class="s2">&quot;use strict&quot;</span><span class="s1">;</span>
+<span class="s1">Object.defineProperty(exports, </span><span class="s2">&quot;__esModule&quot;</span><span class="s1">, {</span>
+    <span class="s1">value: </span><span class="s3">true</span>
+<span class="s1">});</span>
+<span class="s4">0 </span><span class="s1">&amp;&amp; (module.exports = {</span>
+    <span class="s1">DOC_PREFETCH_RANGE_HEADER_VALUE: </span><span class="s3">null</span><span class="s1">,</span>
+    <span class="s1">doesExportedHtmlMatchBuildId: </span><span class="s3">null</span><span class="s1">,</span>
+    <span class="s1">insertBuildIdComment: </span><span class="s3">null</span>
+<span class="s1">});</span>
+<span class="s3">function </span><span class="s1">_export(target, all) {</span>
+    <span class="s3">for</span><span class="s1">(</span><span class="s3">var </span><span class="s1">name </span><span class="s3">in </span><span class="s1">all)Object.defineProperty(target, name, {</span>
+        <span class="s1">enumerable: </span><span class="s3">true</span><span class="s1">,</span>
+        <span class="s1">get: all[name]</span>
+    <span class="s1">});</span>
+<span class="s1">}</span>
+<span class="s1">_export(exports, {</span>
+    <span class="s1">DOC_PREFETCH_RANGE_HEADER_VALUE: </span><span class="s3">function</span><span class="s1">() {</span>
+        <span class="s3">return </span><span class="s1">DOC_PREFETCH_RANGE_HEADER_VALUE;</span>
+    <span class="s1">},</span>
+    <span class="s1">doesExportedHtmlMatchBuildId: </span><span class="s3">function</span><span class="s1">() {</span>
+        <span class="s3">return </span><span class="s1">doesExportedHtmlMatchBuildId;</span>
+    <span class="s1">},</span>
+    <span class="s1">insertBuildIdComment: </span><span class="s3">function</span><span class="s1">() {</span>
+        <span class="s3">return </span><span class="s1">insertBuildIdComment;</span>
+    <span class="s1">}</span>
+<span class="s1">});</span>
+<span class="s3">const </span><span class="s1">DOCTYPE_PREFIX = </span><span class="s2">'&lt;!DOCTYPE html&gt;' </span><span class="s0">// 15 bytes</span>
+<span class="s1">;</span>
+<span class="s3">const </span><span class="s1">MAX_BUILD_ID_LENGTH = </span><span class="s4">24</span><span class="s1">;</span>
+<span class="s3">const </span><span class="s1">DOC_PREFETCH_RANGE_HEADER_VALUE = </span><span class="s2">'bytes=0-63'</span><span class="s1">;</span>
+<span class="s3">function </span><span class="s1">escapeBuildId(buildId) {</span>
+    <span class="s0">// If the build id is longer than the given limit, it's OK for our purposes</span>
+    <span class="s0">// to only match the beginning.</span>
+    <span class="s3">const </span><span class="s1">truncated = buildId.slice(</span><span class="s4">0</span><span class="s1">, MAX_BUILD_ID_LENGTH);</span>
+    <span class="s0">// Replace hyphens with underscores so it doesn't break the HTML comment.</span>
+    <span class="s0">// (Unlikely, but if this did happen it would break the whole document.)</span>
+    <span class="s3">return </span><span class="s1">truncated.replace(</span><span class="s5">/-/g</span><span class="s1">, </span><span class="s2">'_'</span><span class="s1">);</span>
+<span class="s1">}</span>
+<span class="s3">function </span><span class="s1">insertBuildIdComment(originalHtml, buildId) {</span>
+    <span class="s3">if </span><span class="s1">(</span><span class="s0">// Skip if the build id contains a closing comment marker.</span>
+    <span class="s1">buildId.includes(</span><span class="s2">'--&gt;'</span><span class="s1">) || </span><span class="s0">// React always inserts a doctype at the start of the document. Skip if it</span>
+    <span class="s0">// isn't present. Shouldn't happen; suggests an issue elsewhere.</span>
+    <span class="s1">!originalHtml.startsWith(DOCTYPE_PREFIX)) {</span>
+        <span class="s0">// Return the original HTML unchanged. This means the document will not</span>
+        <span class="s0">// be prefetched.</span>
+        <span class="s0">// TODO: The build id comment is currently only used during prefetches, but</span>
+        <span class="s0">// if we eventually use this mechanism for regular navigations, we may need</span>
+        <span class="s0">// to error during build if we fail to insert it for some reason.</span>
+        <span class="s3">return </span><span class="s1">originalHtml;</span>
+    <span class="s1">}</span>
+    <span class="s0">// The comment must be inserted after the doctype.</span>
+    <span class="s3">return </span><span class="s1">originalHtml.replace(DOCTYPE_PREFIX, DOCTYPE_PREFIX + </span><span class="s2">'&lt;!--' </span><span class="s1">+ escapeBuildId(buildId) + </span><span class="s2">'--&gt;'</span><span class="s1">);</span>
+<span class="s1">}</span>
+<span class="s3">function </span><span class="s1">doesExportedHtmlMatchBuildId(partialHtmlDocument, buildId) {</span>
+    <span class="s0">// Check whether the document starts with the expected buildId.</span>
+    <span class="s3">return </span><span class="s1">partialHtmlDocument.startsWith(DOCTYPE_PREFIX + </span><span class="s2">'&lt;!--' </span><span class="s1">+ escapeBuildId(buildId) + </span><span class="s2">'--&gt;'</span><span class="s1">);</span>
+<span class="s1">}</span>
+
+<span class="s0">//# sourceMappingURL=output-export-prefetch-encoding.js.map</span></pre>
+</body>
+</html>

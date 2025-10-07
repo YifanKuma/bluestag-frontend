@@ -1,0 +1,214 @@
+<html>
+<head>
+<title>componentUtil.js</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #067d17;}
+.s1 { color: #080808;}
+.s2 { color: #0033b3;}
+.s3 { color: #8c8c8c; font-style: italic;}
+.s4 { color: #8c8c8c; font-style: italic;}
+.s5 { color: #1750eb;}
+.s6 { color: #264eff;}
+.s7 { color: #0037a6;}
+</style>
+</head>
+<body bgcolor="#ffffff">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#c0c0c0" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+componentUtil.js</font>
+</center></td></tr></table>
+<pre><span class="s0">'use strict'</span><span class="s1">;</span>
+
+<span class="s2">const </span><span class="s1">doctrine = require(</span><span class="s0">'doctrine'</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">pragmaUtil = require(</span><span class="s0">'./pragma'</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">eslintUtil = require(</span><span class="s0">'./eslint'</span><span class="s1">);</span>
+
+<span class="s2">const </span><span class="s1">getScope = eslintUtil.getScope;</span>
+<span class="s2">const </span><span class="s1">getSourceCode = eslintUtil.getSourceCode;</span>
+<span class="s2">const </span><span class="s1">getText = eslintUtil.getText;</span>
+
+<span class="s3">// eslint-disable-next-line valid-jsdoc</span>
+<span class="s3">/**</span>
+ <span class="s3">* </span><span class="s4">@template </span><span class="s3">{(_: object) =&gt; any} T</span>
+ <span class="s3">* </span><span class="s4">@param </span><span class="s3">{T} fn</span>
+ <span class="s3">* </span><span class="s4">@returns </span><span class="s3">{T}</span>
+ <span class="s3">*/</span>
+<span class="s2">function </span><span class="s1">memoize(fn) {</span>
+  <span class="s2">const </span><span class="s1">cache = </span><span class="s2">new </span><span class="s1">WeakMap();</span>
+  <span class="s3">// @ts-ignore</span>
+  <span class="s2">return function </span><span class="s1">memoizedFn(arg) {</span>
+    <span class="s2">const </span><span class="s1">cachedValue = cache.get(arg);</span>
+    <span class="s2">if </span><span class="s1">(cachedValue !== undefined) {</span>
+      <span class="s2">return </span><span class="s1">cachedValue;</span>
+    <span class="s1">}</span>
+    <span class="s2">const </span><span class="s1">v = fn(arg);</span>
+    <span class="s1">cache.set(arg, v);</span>
+    <span class="s2">return </span><span class="s1">v;</span>
+  <span class="s1">};</span>
+<span class="s1">}</span>
+
+<span class="s2">const </span><span class="s1">getPragma = memoize(pragmaUtil.getFromContext);</span>
+<span class="s2">const </span><span class="s1">getCreateClass = memoize(pragmaUtil.getCreateClassFromContext);</span>
+
+<span class="s3">/**</span>
+ <span class="s3">* </span><span class="s4">@param </span><span class="s3">{ASTNode} node</span>
+ <span class="s3">* </span><span class="s4">@param </span><span class="s3">{Context} context</span>
+ <span class="s3">* </span><span class="s4">@returns </span><span class="s3">{boolean}</span>
+ <span class="s3">*/</span>
+<span class="s2">function </span><span class="s1">isES5Component(node, context) {</span>
+  <span class="s2">const </span><span class="s1">pragma = getPragma(context);</span>
+  <span class="s2">const </span><span class="s1">createClass = getCreateClass(context);</span>
+
+  <span class="s2">if </span><span class="s1">(!node.parent || !node.parent.callee) {</span>
+    <span class="s2">return false</span><span class="s1">;</span>
+  <span class="s1">}</span>
+  <span class="s2">const </span><span class="s1">callee = node.parent.callee;</span>
+  <span class="s3">// React.createClass({})</span>
+  <span class="s2">if </span><span class="s1">(callee.type === </span><span class="s0">'MemberExpression'</span><span class="s1">) {</span>
+    <span class="s2">return </span><span class="s1">callee.object.name === pragma &amp;&amp; callee.property.name === createClass;</span>
+  <span class="s1">}</span>
+  <span class="s3">// createClass({})</span>
+  <span class="s2">if </span><span class="s1">(callee.type === </span><span class="s0">'Identifier'</span><span class="s1">) {</span>
+    <span class="s2">return </span><span class="s1">callee.name === createClass;</span>
+  <span class="s1">}</span>
+  <span class="s2">return false</span><span class="s1">;</span>
+<span class="s1">}</span>
+
+<span class="s3">/**</span>
+ <span class="s3">* Check if the node is explicitly declared as a descendant of a React Component</span>
+ <span class="s3">* </span><span class="s4">@param </span><span class="s3">{any} node</span>
+ <span class="s3">* </span><span class="s4">@param </span><span class="s3">{Context} context</span>
+ <span class="s3">* </span><span class="s4">@returns </span><span class="s3">{boolean}</span>
+ <span class="s3">*/</span>
+<span class="s2">function </span><span class="s1">isExplicitComponent(node, context) {</span>
+  <span class="s2">const </span><span class="s1">sourceCode = getSourceCode(context);</span>
+  <span class="s2">let </span><span class="s1">comment;</span>
+  <span class="s3">// Sometimes the passed node may not have been parsed yet by eslint, and this function call crashes.</span>
+  <span class="s3">// Can be removed when eslint sets &quot;parent&quot; property for all nodes on initial AST traversal: https://github.com/eslint/eslint-scope/issues/27</span>
+  <span class="s3">// eslint-disable-next-line no-warning-comments</span>
+  <span class="s3">// FIXME: Remove try/catch when https://github.com/eslint/eslint-scope/issues/27 is implemented.</span>
+  <span class="s2">try </span><span class="s1">{</span>
+    <span class="s1">comment = sourceCode.getJSDocComment(node);</span>
+  <span class="s1">} </span><span class="s2">catch </span><span class="s1">(e) {</span>
+    <span class="s1">comment = </span><span class="s2">null</span><span class="s1">;</span>
+  <span class="s1">}</span>
+
+  <span class="s2">if </span><span class="s1">(comment === </span><span class="s2">null</span><span class="s1">) {</span>
+    <span class="s2">return false</span><span class="s1">;</span>
+  <span class="s1">}</span>
+
+  <span class="s2">let </span><span class="s1">commentAst;</span>
+  <span class="s2">try </span><span class="s1">{</span>
+    <span class="s1">commentAst = doctrine.parse(comment.value, {</span>
+      <span class="s1">unwrap: </span><span class="s2">true</span><span class="s1">,</span>
+      <span class="s1">tags: [</span><span class="s0">'extends'</span><span class="s1">, </span><span class="s0">'augments'</span><span class="s1">],</span>
+    <span class="s1">});</span>
+  <span class="s1">} </span><span class="s2">catch </span><span class="s1">(e) {</span>
+    <span class="s3">// handle a bug in the archived `doctrine`, see #2596</span>
+    <span class="s2">return false</span><span class="s1">;</span>
+  <span class="s1">}</span>
+
+  <span class="s2">const </span><span class="s1">relevantTags = commentAst.tags.filter((tag) =&gt; tag.name === </span><span class="s0">'React.Component' </span><span class="s1">|| tag.name === </span><span class="s0">'React.PureComponent'</span><span class="s1">);</span>
+
+  <span class="s2">return </span><span class="s1">relevantTags.length &gt; </span><span class="s5">0</span><span class="s1">;</span>
+<span class="s1">}</span>
+
+<span class="s3">/**</span>
+ <span class="s3">* </span><span class="s4">@param </span><span class="s3">{ASTNode} node</span>
+ <span class="s3">* </span><span class="s4">@param </span><span class="s3">{Context} context</span>
+ <span class="s3">* </span><span class="s4">@returns </span><span class="s3">{boolean}</span>
+ <span class="s3">*/</span>
+<span class="s2">function </span><span class="s1">isES6Component(node, context) {</span>
+  <span class="s2">const </span><span class="s1">pragma = getPragma(context);</span>
+  <span class="s2">if </span><span class="s1">(isExplicitComponent(node, context)) {</span>
+    <span class="s2">return true</span><span class="s1">;</span>
+  <span class="s1">}</span>
+
+  <span class="s2">if </span><span class="s1">(!node.superClass) {</span>
+    <span class="s2">return false</span><span class="s1">;</span>
+  <span class="s1">}</span>
+  <span class="s2">if </span><span class="s1">(node.superClass.type === </span><span class="s0">'MemberExpression'</span><span class="s1">) {</span>
+    <span class="s2">return </span><span class="s1">node.superClass.object.name === pragma</span>
+          <span class="s1">&amp;&amp; </span><span class="s6">/^(Pure)?Component$/</span><span class="s1">.test(node.superClass.property.name);</span>
+  <span class="s1">}</span>
+  <span class="s2">if </span><span class="s1">(node.superClass.type === </span><span class="s0">'Identifier'</span><span class="s1">) {</span>
+    <span class="s2">return </span><span class="s6">/^(Pure)?Component$/</span><span class="s1">.test(node.superClass.name);</span>
+  <span class="s1">}</span>
+  <span class="s2">return false</span><span class="s1">;</span>
+<span class="s1">}</span>
+
+<span class="s3">/**</span>
+ <span class="s3">* Get the parent ES5 component node from the current scope</span>
+ <span class="s3">* </span><span class="s4">@param </span><span class="s3">{Context} context</span>
+ <span class="s3">* </span><span class="s4">@param </span><span class="s3">{ASTNode} node</span>
+ <span class="s3">* </span><span class="s4">@returns </span><span class="s3">{ASTNode|null}</span>
+ <span class="s3">*/</span>
+<span class="s2">function </span><span class="s1">getParentES5Component(context, node) {</span>
+  <span class="s2">let </span><span class="s1">scope = getScope(context, node);</span>
+  <span class="s2">while </span><span class="s1">(scope) {</span>
+    <span class="s3">// @ts-ignore</span>
+    <span class="s1">node = scope.block &amp;&amp; scope.block.parent &amp;&amp; scope.block.parent.parent;</span>
+    <span class="s2">if </span><span class="s1">(node &amp;&amp; isES5Component(node, context)) {</span>
+      <span class="s2">return </span><span class="s1">node;</span>
+    <span class="s1">}</span>
+    <span class="s1">scope = scope.upper;</span>
+  <span class="s1">}</span>
+  <span class="s2">return null</span><span class="s1">;</span>
+<span class="s1">}</span>
+
+<span class="s3">/**</span>
+ <span class="s3">* Get the parent ES6 component node from the current scope</span>
+ <span class="s3">* </span><span class="s4">@param </span><span class="s3">{Context} context</span>
+ <span class="s3">* </span><span class="s4">@param </span><span class="s3">{ASTNode} node</span>
+ <span class="s3">* </span><span class="s4">@returns </span><span class="s3">{ASTNode | null}</span>
+ <span class="s3">*/</span>
+<span class="s2">function </span><span class="s1">getParentES6Component(context, node) {</span>
+  <span class="s2">let </span><span class="s1">scope = getScope(context, node);</span>
+  <span class="s2">while </span><span class="s1">(scope &amp;&amp; scope.type !== </span><span class="s0">'class'</span><span class="s1">) {</span>
+    <span class="s1">scope = scope.upper;</span>
+  <span class="s1">}</span>
+  <span class="s1">node = scope &amp;&amp; scope.block;</span>
+  <span class="s2">if </span><span class="s1">(!node || !isES6Component(node, context)) {</span>
+    <span class="s2">return null</span><span class="s1">;</span>
+  <span class="s1">}</span>
+  <span class="s2">return </span><span class="s1">node;</span>
+<span class="s1">}</span>
+
+<span class="s3">/**</span>
+ <span class="s3">* Checks if a component extends React.PureComponent</span>
+ <span class="s3">* </span><span class="s4">@param </span><span class="s3">{ASTNode} node</span>
+ <span class="s3">* </span><span class="s4">@param </span><span class="s3">{Context} context</span>
+ <span class="s3">* </span><span class="s4">@returns </span><span class="s3">{boolean}</span>
+ <span class="s3">*/</span>
+<span class="s2">function </span><span class="s1">isPureComponent(node, context) {</span>
+  <span class="s2">const </span><span class="s1">pragma = getPragma(context);</span>
+  <span class="s2">if </span><span class="s1">(node.superClass) {</span>
+    <span class="s2">return new </span><span class="s1">RegExp(</span><span class="s0">`^(</span><span class="s1">${pragma}</span><span class="s7">\\</span><span class="s0">.)?PureComponent$`</span><span class="s1">).test(getText(context, node.superClass));</span>
+  <span class="s1">}</span>
+  <span class="s2">return false</span><span class="s1">;</span>
+<span class="s1">}</span>
+
+<span class="s3">/**</span>
+ <span class="s3">* </span><span class="s4">@param </span><span class="s3">{ASTNode} node</span>
+ <span class="s3">* </span><span class="s4">@returns </span><span class="s3">{boolean}</span>
+ <span class="s3">*/</span>
+<span class="s2">function </span><span class="s1">isStateMemberExpression(node) {</span>
+  <span class="s2">return </span><span class="s1">node.type === </span><span class="s0">'MemberExpression'</span>
+    <span class="s1">&amp;&amp; node.object.type === </span><span class="s0">'ThisExpression'</span>
+    <span class="s1">&amp;&amp; node.property.name === </span><span class="s0">'state'</span><span class="s1">;</span>
+<span class="s1">}</span>
+
+<span class="s1">module.exports = {</span>
+  <span class="s1">isES5Component,</span>
+  <span class="s1">isES6Component,</span>
+  <span class="s1">getParentES5Component,</span>
+  <span class="s1">getParentES6Component,</span>
+  <span class="s1">isExplicitComponent,</span>
+  <span class="s1">isPureComponent,</span>
+  <span class="s1">isStateMemberExpression,</span>
+<span class="s1">};</span>
+</pre>
+</body>
+</html>

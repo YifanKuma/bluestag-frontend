@@ -1,0 +1,170 @@
+<html>
+<head>
+<title>no-unnecessary-parameter-property-assignment.js</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #067d17;}
+.s1 { color: #080808;}
+.s2 { color: #0033b3;}
+.s3 { color: #1750eb;}
+.s4 { color: #8c8c8c; font-style: italic;}
+</style>
+</head>
+<body bgcolor="#ffffff">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#c0c0c0" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+no-unnecessary-parameter-property-assignment.js</font>
+</center></td></tr></table>
+<pre><span class="s0">&quot;use strict&quot;</span><span class="s1">;</span>
+<span class="s1">Object.defineProperty(exports, </span><span class="s0">&quot;__esModule&quot;</span><span class="s1">, { value: </span><span class="s2">true </span><span class="s1">});</span>
+<span class="s2">const </span><span class="s1">scope_manager_1 = require(</span><span class="s0">&quot;@typescript-eslint/scope-manager&quot;</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">utils_1 = require(</span><span class="s0">&quot;@typescript-eslint/utils&quot;</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">util_1 = require(</span><span class="s0">&quot;../util&quot;</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">UNNECESSARY_OPERATORS = </span><span class="s2">new </span><span class="s1">Set([</span><span class="s0">'??='</span><span class="s1">, </span><span class="s0">'&amp;&amp;='</span><span class="s1">, </span><span class="s0">'='</span><span class="s1">, </span><span class="s0">'||='</span><span class="s1">]);</span>
+<span class="s1">exports.default = (</span><span class="s3">0</span><span class="s1">, util_1.createRule)({</span>
+    <span class="s1">name: </span><span class="s0">'no-unnecessary-parameter-property-assignment'</span><span class="s1">,</span>
+    <span class="s1">meta: {</span>
+        <span class="s1">type: </span><span class="s0">'suggestion'</span><span class="s1">,</span>
+        <span class="s1">docs: {</span>
+            <span class="s1">description: </span><span class="s0">'Disallow unnecessary assignment of constructor property parameter'</span><span class="s1">,</span>
+        <span class="s1">},</span>
+        <span class="s1">messages: {</span>
+            <span class="s1">unnecessaryAssign: </span><span class="s0">'This assignment is unnecessary since it is already assigned by a parameter property.'</span><span class="s1">,</span>
+        <span class="s1">},</span>
+        <span class="s1">schema: [],</span>
+    <span class="s1">},</span>
+    <span class="s1">defaultOptions: [],</span>
+    <span class="s1">create(context) {</span>
+        <span class="s2">const </span><span class="s1">reportInfoStack = [];</span>
+        <span class="s2">function </span><span class="s1">isThisMemberExpression(node) {</span>
+            <span class="s2">return </span><span class="s1">(node.type === utils_1.AST_NODE_TYPES.MemberExpression &amp;&amp;</span>
+                <span class="s1">node.object.type === utils_1.AST_NODE_TYPES.ThisExpression);</span>
+        <span class="s1">}</span>
+        <span class="s2">function </span><span class="s1">getPropertyName(node) {</span>
+            <span class="s2">if </span><span class="s1">(!isThisMemberExpression(node)) {</span>
+                <span class="s2">return null</span><span class="s1">;</span>
+            <span class="s1">}</span>
+            <span class="s2">if </span><span class="s1">(node.property.type === utils_1.AST_NODE_TYPES.Identifier) {</span>
+                <span class="s2">return </span><span class="s1">node.property.name;</span>
+            <span class="s1">}</span>
+            <span class="s2">if </span><span class="s1">(node.computed) {</span>
+                <span class="s2">return </span><span class="s1">(</span><span class="s3">0</span><span class="s1">, util_1.getStaticStringValue)(node.property);</span>
+            <span class="s1">}</span>
+            <span class="s2">return null</span><span class="s1">;</span>
+        <span class="s1">}</span>
+        <span class="s2">function </span><span class="s1">findParentFunction(node) {</span>
+            <span class="s2">if </span><span class="s1">(!node ||</span>
+                <span class="s1">node.type === utils_1.AST_NODE_TYPES.FunctionDeclaration ||</span>
+                <span class="s1">node.type === utils_1.AST_NODE_TYPES.FunctionExpression ||</span>
+                <span class="s1">node.type === utils_1.AST_NODE_TYPES.ArrowFunctionExpression) {</span>
+                <span class="s2">return </span><span class="s1">node;</span>
+            <span class="s1">}</span>
+            <span class="s2">return </span><span class="s1">findParentFunction(node.parent);</span>
+        <span class="s1">}</span>
+        <span class="s2">function </span><span class="s1">findParentPropertyDefinition(node) {</span>
+            <span class="s2">if </span><span class="s1">(!node || node.type === utils_1.AST_NODE_TYPES.PropertyDefinition) {</span>
+                <span class="s2">return </span><span class="s1">node;</span>
+            <span class="s1">}</span>
+            <span class="s2">return </span><span class="s1">findParentPropertyDefinition(node.parent);</span>
+        <span class="s1">}</span>
+        <span class="s2">function </span><span class="s1">isConstructorFunctionExpression(node) {</span>
+            <span class="s2">return </span><span class="s1">(node?.type === utils_1.AST_NODE_TYPES.FunctionExpression &amp;&amp;</span>
+                <span class="s1">utils_1.ASTUtils.isConstructor(node.parent));</span>
+        <span class="s1">}</span>
+        <span class="s2">function </span><span class="s1">isReferenceFromParameter(node) {</span>
+            <span class="s2">const </span><span class="s1">scope = context.sourceCode.getScope(node);</span>
+            <span class="s2">const </span><span class="s1">rightRef = scope.references.find(ref =&gt; ref.identifier.name === node.name);</span>
+            <span class="s2">return </span><span class="s1">rightRef?.resolved?.defs.at(</span><span class="s3">0</span><span class="s1">)?.type === scope_manager_1.DefinitionType.Parameter;</span>
+        <span class="s1">}</span>
+        <span class="s2">function </span><span class="s1">isParameterPropertyWithName(node, name) {</span>
+            <span class="s2">return </span><span class="s1">(node.type === utils_1.AST_NODE_TYPES.TSParameterProperty &amp;&amp;</span>
+                <span class="s1">((node.parameter.type === utils_1.AST_NODE_TYPES.Identifier &amp;&amp; </span><span class="s4">// constructor (public foo) {}</span>
+                    <span class="s1">node.parameter.name === name) ||</span>
+                    <span class="s1">(node.parameter.type === utils_1.AST_NODE_TYPES.AssignmentPattern &amp;&amp; </span><span class="s4">// constructor (public foo = 1) {}</span>
+                        <span class="s1">node.parameter.left.type === utils_1.AST_NODE_TYPES.Identifier &amp;&amp;</span>
+                        <span class="s1">node.parameter.left.name === name)));</span>
+        <span class="s1">}</span>
+        <span class="s2">function </span><span class="s1">getIdentifier(node) {</span>
+            <span class="s2">if </span><span class="s1">(node.type === utils_1.AST_NODE_TYPES.Identifier) {</span>
+                <span class="s2">return </span><span class="s1">node;</span>
+            <span class="s1">}</span>
+            <span class="s2">if </span><span class="s1">(node.type === utils_1.AST_NODE_TYPES.TSAsExpression ||</span>
+                <span class="s1">node.type === utils_1.AST_NODE_TYPES.TSNonNullExpression) {</span>
+                <span class="s2">return </span><span class="s1">getIdentifier(node.expression);</span>
+            <span class="s1">}</span>
+            <span class="s2">return null</span><span class="s1">;</span>
+        <span class="s1">}</span>
+        <span class="s2">function </span><span class="s1">isArrowIIFE(node) {</span>
+            <span class="s2">return </span><span class="s1">(node.type === utils_1.AST_NODE_TYPES.ArrowFunctionExpression &amp;&amp;</span>
+                <span class="s1">node.parent.type === utils_1.AST_NODE_TYPES.CallExpression);</span>
+        <span class="s1">}</span>
+        <span class="s2">return </span><span class="s1">{</span>
+            <span class="s1">ClassBody() {</span>
+                <span class="s1">reportInfoStack.push({</span>
+                    <span class="s1">assignedBeforeConstructor: </span><span class="s2">new </span><span class="s1">Set(),</span>
+                    <span class="s1">assignedBeforeUnnecessary: </span><span class="s2">new </span><span class="s1">Set(),</span>
+                    <span class="s1">unnecessaryAssignments: [],</span>
+                <span class="s1">});</span>
+            <span class="s1">},</span>
+            <span class="s0">'ClassBody:exit'</span><span class="s1">() {</span>
+                <span class="s2">const </span><span class="s1">{ assignedBeforeConstructor, unnecessaryAssignments } = (</span><span class="s3">0</span><span class="s1">, util_1.nullThrows)(reportInfoStack.pop(), </span><span class="s0">'The top stack should exist'</span><span class="s1">);</span>
+                <span class="s1">unnecessaryAssignments.forEach(({ name, node }) =&gt; {</span>
+                    <span class="s2">if </span><span class="s1">(assignedBeforeConstructor.has(name)) {</span>
+                        <span class="s2">return</span><span class="s1">;</span>
+                    <span class="s1">}</span>
+                    <span class="s1">context.report({</span>
+                        <span class="s1">node,</span>
+                        <span class="s1">messageId: </span><span class="s0">'unnecessaryAssign'</span><span class="s1">,</span>
+                    <span class="s1">});</span>
+                <span class="s1">});</span>
+            <span class="s1">},</span>
+            <span class="s0">&quot;MethodDefinition[kind='constructor'] &gt; FunctionExpression AssignmentExpression&quot;</span><span class="s1">(node) {</span>
+                <span class="s2">const </span><span class="s1">leftName = getPropertyName(node.left);</span>
+                <span class="s2">if </span><span class="s1">(!leftName) {</span>
+                    <span class="s2">return</span><span class="s1">;</span>
+                <span class="s1">}</span>
+                <span class="s2">let </span><span class="s1">functionNode = findParentFunction(node);</span>
+                <span class="s2">if </span><span class="s1">(functionNode &amp;&amp; isArrowIIFE(functionNode)) {</span>
+                    <span class="s1">functionNode = findParentFunction(functionNode.parent);</span>
+                <span class="s1">}</span>
+                <span class="s2">if </span><span class="s1">(!isConstructorFunctionExpression(functionNode)) {</span>
+                    <span class="s2">return</span><span class="s1">;</span>
+                <span class="s1">}</span>
+                <span class="s2">const </span><span class="s1">{ assignedBeforeUnnecessary, unnecessaryAssignments } = (</span><span class="s3">0</span><span class="s1">, util_1.nullThrows)(reportInfoStack.at(reportInfoStack.length - </span><span class="s3">1</span><span class="s1">), </span><span class="s0">'The top of stack should exist'</span><span class="s1">);</span>
+                <span class="s2">if </span><span class="s1">(!UNNECESSARY_OPERATORS.has(node.operator)) {</span>
+                    <span class="s1">assignedBeforeUnnecessary.add(leftName);</span>
+                    <span class="s2">return</span><span class="s1">;</span>
+                <span class="s1">}</span>
+                <span class="s2">const </span><span class="s1">rightId = getIdentifier(node.right);</span>
+                <span class="s2">if </span><span class="s1">(leftName !== rightId?.name || !isReferenceFromParameter(rightId)) {</span>
+                    <span class="s2">return</span><span class="s1">;</span>
+                <span class="s1">}</span>
+                <span class="s2">const </span><span class="s1">hasParameterProperty = functionNode.params.some(param =&gt; isParameterPropertyWithName(param, rightId.name));</span>
+                <span class="s2">if </span><span class="s1">(hasParameterProperty &amp;&amp; !assignedBeforeUnnecessary.has(leftName)) {</span>
+                    <span class="s1">unnecessaryAssignments.push({</span>
+                        <span class="s1">name: leftName,</span>
+                        <span class="s1">node,</span>
+                    <span class="s1">});</span>
+                <span class="s1">}</span>
+            <span class="s1">},</span>
+            <span class="s0">'PropertyDefinition AssignmentExpression'</span><span class="s1">(node) {</span>
+                <span class="s2">const </span><span class="s1">name = getPropertyName(node.left);</span>
+                <span class="s2">if </span><span class="s1">(!name) {</span>
+                    <span class="s2">return</span><span class="s1">;</span>
+                <span class="s1">}</span>
+                <span class="s2">const </span><span class="s1">functionNode = findParentFunction(node);</span>
+                <span class="s2">if </span><span class="s1">(functionNode &amp;&amp;</span>
+                    <span class="s1">!(isArrowIIFE(functionNode) &amp;&amp;</span>
+                        <span class="s1">findParentPropertyDefinition(node)?.value === functionNode.parent)) {</span>
+                    <span class="s2">return</span><span class="s1">;</span>
+                <span class="s1">}</span>
+                <span class="s2">const </span><span class="s1">{ assignedBeforeConstructor } = (</span><span class="s3">0</span><span class="s1">, util_1.nullThrows)(reportInfoStack.at(-</span><span class="s3">1</span><span class="s1">), </span><span class="s0">'The top stack should exist'</span><span class="s1">);</span>
+                <span class="s1">assignedBeforeConstructor.add(name);</span>
+            <span class="s1">},</span>
+        <span class="s1">};</span>
+    <span class="s1">},</span>
+<span class="s1">});</span>
+</pre>
+</body>
+</html>

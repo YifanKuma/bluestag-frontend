@@ -1,0 +1,250 @@
+<html>
+<head>
+<title>no-import-assign.js</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #8c8c8c; font-style: italic;}
+.s1 { color: #8c8c8c; font-style: italic;}
+.s2 { color: #080808;}
+.s3 { color: #067d17;}
+.s4 { color: #0033b3;}
+.s5 { color: #264eff;}
+.s6 { color: #1750eb;}
+</style>
+</head>
+<body bgcolor="#ffffff">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#c0c0c0" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+no-import-assign.js</font>
+</center></td></tr></table>
+<pre><span class="s0">/**</span>
+ <span class="s0">* </span><span class="s1">@fileoverview </span><span class="s0">Rule to flag updates of imported bindings.</span>
+ <span class="s0">* </span><span class="s1">@author </span><span class="s0">Toru Nagashima &lt;https://github.com/mysticatea&gt;</span>
+ <span class="s0">*/</span>
+
+<span class="s3">&quot;use strict&quot;</span><span class="s2">;</span>
+
+<span class="s0">//------------------------------------------------------------------------------</span>
+<span class="s0">// Helpers</span>
+<span class="s0">//------------------------------------------------------------------------------</span>
+
+<span class="s4">const </span><span class="s2">{ findVariable } = require(</span><span class="s3">&quot;@eslint-community/eslint-utils&quot;</span><span class="s2">);</span>
+<span class="s4">const </span><span class="s2">astUtils = require(</span><span class="s3">&quot;./utils/ast-utils&quot;</span><span class="s2">);</span>
+
+<span class="s4">const </span><span class="s2">WellKnownMutationFunctions = {</span>
+	<span class="s2">Object: </span><span class="s5">/^(?:assign|definePropert(?:y|ies)|freeze|setPrototypeOf)$/u</span><span class="s2">,</span>
+	<span class="s2">Reflect: </span><span class="s5">/^(?:(?:define|delete)Property|set(?:PrototypeOf)?)$/u</span><span class="s2">,</span>
+<span class="s2">};</span>
+
+<span class="s0">/**</span>
+ <span class="s0">* Check if a given node is LHS of an assignment node.</span>
+ <span class="s0">* </span><span class="s1">@param </span><span class="s0">{ASTNode} node The node to check.</span>
+ <span class="s0">* </span><span class="s1">@returns </span><span class="s0">{boolean} `true` if the node is LHS.</span>
+ <span class="s0">*/</span>
+<span class="s4">function </span><span class="s2">isAssignmentLeft(node) {</span>
+	<span class="s4">const </span><span class="s2">{ parent } = node;</span>
+
+	<span class="s4">return </span><span class="s2">(</span>
+		<span class="s2">(parent.type === </span><span class="s3">&quot;AssignmentExpression&quot; </span><span class="s2">&amp;&amp; parent.left === node) ||</span>
+		<span class="s0">// Destructuring assignments</span>
+		<span class="s2">parent.type === </span><span class="s3">&quot;ArrayPattern&quot; </span><span class="s2">||</span>
+		<span class="s2">(parent.type === </span><span class="s3">&quot;Property&quot; </span><span class="s2">&amp;&amp;</span>
+			<span class="s2">parent.value === node &amp;&amp;</span>
+			<span class="s2">parent.parent.type === </span><span class="s3">&quot;ObjectPattern&quot;</span><span class="s2">) ||</span>
+		<span class="s2">parent.type === </span><span class="s3">&quot;RestElement&quot; </span><span class="s2">||</span>
+		<span class="s2">(parent.type === </span><span class="s3">&quot;AssignmentPattern&quot; </span><span class="s2">&amp;&amp; parent.left === node)</span>
+	<span class="s2">);</span>
+<span class="s2">}</span>
+
+<span class="s0">/**</span>
+ <span class="s0">* Check if a given node is the operand of mutation unary operator.</span>
+ <span class="s0">* </span><span class="s1">@param </span><span class="s0">{ASTNode} node The node to check.</span>
+ <span class="s0">* </span><span class="s1">@returns </span><span class="s0">{boolean} `true` if the node is the operand of mutation unary operator.</span>
+ <span class="s0">*/</span>
+<span class="s4">function </span><span class="s2">isOperandOfMutationUnaryOperator(node) {</span>
+	<span class="s4">const </span><span class="s2">argumentNode =</span>
+		<span class="s2">node.parent.type === </span><span class="s3">&quot;ChainExpression&quot; </span><span class="s2">? node.parent : node;</span>
+	<span class="s4">const </span><span class="s2">{ parent } = argumentNode;</span>
+
+	<span class="s4">return </span><span class="s2">(</span>
+		<span class="s2">(parent.type === </span><span class="s3">&quot;UpdateExpression&quot; </span><span class="s2">&amp;&amp;</span>
+			<span class="s2">parent.argument === argumentNode) ||</span>
+		<span class="s2">(parent.type === </span><span class="s3">&quot;UnaryExpression&quot; </span><span class="s2">&amp;&amp;</span>
+			<span class="s2">parent.operator === </span><span class="s3">&quot;delete&quot; </span><span class="s2">&amp;&amp;</span>
+			<span class="s2">parent.argument === argumentNode)</span>
+	<span class="s2">);</span>
+<span class="s2">}</span>
+
+<span class="s0">/**</span>
+ <span class="s0">* Check if a given node is the iteration variable of `for-in`/`for-of` syntax.</span>
+ <span class="s0">* </span><span class="s1">@param </span><span class="s0">{ASTNode} node The node to check.</span>
+ <span class="s0">* </span><span class="s1">@returns </span><span class="s0">{boolean} `true` if the node is the iteration variable.</span>
+ <span class="s0">*/</span>
+<span class="s4">function </span><span class="s2">isIterationVariable(node) {</span>
+	<span class="s4">const </span><span class="s2">{ parent } = node;</span>
+
+	<span class="s4">return </span><span class="s2">(</span>
+		<span class="s2">(parent.type === </span><span class="s3">&quot;ForInStatement&quot; </span><span class="s2">&amp;&amp; parent.left === node) ||</span>
+		<span class="s2">(parent.type === </span><span class="s3">&quot;ForOfStatement&quot; </span><span class="s2">&amp;&amp; parent.left === node)</span>
+	<span class="s2">);</span>
+<span class="s2">}</span>
+
+<span class="s0">/**</span>
+ <span class="s0">* Check if a given node is at the first argument of a well-known mutation function.</span>
+ <span class="s0">* - `Object.assign`</span>
+ <span class="s0">* - `Object.defineProperty`</span>
+ <span class="s0">* - `Object.defineProperties`</span>
+ <span class="s0">* - `Object.freeze`</span>
+ <span class="s0">* - `Object.setPrototypeOf`</span>
+ <span class="s0">* - `Reflect.defineProperty`</span>
+ <span class="s0">* - `Reflect.deleteProperty`</span>
+ <span class="s0">* - `Reflect.set`</span>
+ <span class="s0">* - `Reflect.setPrototypeOf`</span>
+ <span class="s0">* </span><span class="s1">@param </span><span class="s0">{ASTNode} node The node to check.</span>
+ <span class="s0">* </span><span class="s1">@param </span><span class="s0">{Scope} scope A `escope.Scope` object to find variable (whichever).</span>
+ <span class="s0">* </span><span class="s1">@returns </span><span class="s0">{boolean} `true` if the node is at the first argument of a well-known mutation function.</span>
+ <span class="s0">*/</span>
+<span class="s4">function </span><span class="s2">isArgumentOfWellKnownMutationFunction(node, scope) {</span>
+	<span class="s4">const </span><span class="s2">{ parent } = node;</span>
+
+	<span class="s4">if </span><span class="s2">(parent.type !== </span><span class="s3">&quot;CallExpression&quot; </span><span class="s2">|| parent.arguments[</span><span class="s6">0</span><span class="s2">] !== node) {</span>
+		<span class="s4">return false</span><span class="s2">;</span>
+	<span class="s2">}</span>
+	<span class="s4">const </span><span class="s2">callee = astUtils.skipChainExpression(parent.callee);</span>
+
+	<span class="s4">if </span><span class="s2">(</span>
+		<span class="s2">!astUtils.isSpecificMemberAccess(</span>
+			<span class="s2">callee,</span>
+			<span class="s3">&quot;Object&quot;</span><span class="s2">,</span>
+			<span class="s2">WellKnownMutationFunctions.Object,</span>
+		<span class="s2">) &amp;&amp;</span>
+		<span class="s2">!astUtils.isSpecificMemberAccess(</span>
+			<span class="s2">callee,</span>
+			<span class="s3">&quot;Reflect&quot;</span><span class="s2">,</span>
+			<span class="s2">WellKnownMutationFunctions.Reflect,</span>
+		<span class="s2">)</span>
+	<span class="s2">) {</span>
+		<span class="s4">return false</span><span class="s2">;</span>
+	<span class="s2">}</span>
+	<span class="s4">const </span><span class="s2">variable = findVariable(scope, callee.object);</span>
+
+	<span class="s4">return </span><span class="s2">variable !== </span><span class="s4">null </span><span class="s2">&amp;&amp; variable.scope.type === </span><span class="s3">&quot;global&quot;</span><span class="s2">;</span>
+<span class="s2">}</span>
+
+<span class="s0">/**</span>
+ <span class="s0">* Check if the identifier node is placed at to update members.</span>
+ <span class="s0">* </span><span class="s1">@param </span><span class="s0">{ASTNode} id The Identifier node to check.</span>
+ <span class="s0">* </span><span class="s1">@param </span><span class="s0">{Scope} scope A `escope.Scope` object to find variable (whichever).</span>
+ <span class="s0">* </span><span class="s1">@returns </span><span class="s0">{boolean} `true` if the member of `id` was updated.</span>
+ <span class="s0">*/</span>
+<span class="s4">function </span><span class="s2">isMemberWrite(id, scope) {</span>
+	<span class="s4">const </span><span class="s2">{ parent } = id;</span>
+
+	<span class="s4">return </span><span class="s2">(</span>
+		<span class="s2">(parent.type === </span><span class="s3">&quot;MemberExpression&quot; </span><span class="s2">&amp;&amp;</span>
+			<span class="s2">parent.object === id &amp;&amp;</span>
+			<span class="s2">(isAssignmentLeft(parent) ||</span>
+				<span class="s2">isOperandOfMutationUnaryOperator(parent) ||</span>
+				<span class="s2">isIterationVariable(parent))) ||</span>
+		<span class="s2">isArgumentOfWellKnownMutationFunction(id, scope)</span>
+	<span class="s2">);</span>
+<span class="s2">}</span>
+
+<span class="s0">/**</span>
+ <span class="s0">* Get the mutation node.</span>
+ <span class="s0">* </span><span class="s1">@param </span><span class="s0">{ASTNode} id The Identifier node to get.</span>
+ <span class="s0">* </span><span class="s1">@returns </span><span class="s0">{ASTNode} The mutation node.</span>
+ <span class="s0">*/</span>
+<span class="s4">function </span><span class="s2">getWriteNode(id) {</span>
+	<span class="s4">let </span><span class="s2">node = id.parent;</span>
+
+	<span class="s4">while </span><span class="s2">(</span>
+		<span class="s2">node &amp;&amp;</span>
+		<span class="s2">node.type !== </span><span class="s3">&quot;AssignmentExpression&quot; </span><span class="s2">&amp;&amp;</span>
+		<span class="s2">node.type !== </span><span class="s3">&quot;UpdateExpression&quot; </span><span class="s2">&amp;&amp;</span>
+		<span class="s2">node.type !== </span><span class="s3">&quot;UnaryExpression&quot; </span><span class="s2">&amp;&amp;</span>
+		<span class="s2">node.type !== </span><span class="s3">&quot;CallExpression&quot; </span><span class="s2">&amp;&amp;</span>
+		<span class="s2">node.type !== </span><span class="s3">&quot;ForInStatement&quot; </span><span class="s2">&amp;&amp;</span>
+		<span class="s2">node.type !== </span><span class="s3">&quot;ForOfStatement&quot;</span>
+	<span class="s2">) {</span>
+		<span class="s2">node = node.parent;</span>
+	<span class="s2">}</span>
+
+	<span class="s4">return </span><span class="s2">node || id;</span>
+<span class="s2">}</span>
+
+<span class="s0">//------------------------------------------------------------------------------</span>
+<span class="s0">// Rule Definition</span>
+<span class="s0">//------------------------------------------------------------------------------</span>
+
+<span class="s0">/** </span><span class="s1">@type </span><span class="s0">{import('../types').Rule.RuleModule} */</span>
+<span class="s2">module.exports = {</span>
+	<span class="s2">meta: {</span>
+		<span class="s2">type: </span><span class="s3">&quot;problem&quot;</span><span class="s2">,</span>
+
+		<span class="s2">docs: {</span>
+			<span class="s2">description: </span><span class="s3">&quot;Disallow assigning to imported bindings&quot;</span><span class="s2">,</span>
+			<span class="s2">recommended: </span><span class="s4">true</span><span class="s2">,</span>
+			<span class="s2">url: </span><span class="s3">&quot;https://eslint.org/docs/latest/rules/no-import-assign&quot;</span><span class="s2">,</span>
+		<span class="s2">},</span>
+
+		<span class="s2">schema: [],</span>
+
+		<span class="s2">messages: {</span>
+			<span class="s2">readonly: </span><span class="s3">&quot;'{{name}}' is read-only.&quot;</span><span class="s2">,</span>
+			<span class="s2">readonlyMember: </span><span class="s3">&quot;The members of '{{name}}' are read-only.&quot;</span><span class="s2">,</span>
+		<span class="s2">},</span>
+	<span class="s2">},</span>
+
+	<span class="s2">create(context) {</span>
+		<span class="s4">const </span><span class="s2">sourceCode = context.sourceCode;</span>
+
+		<span class="s4">return </span><span class="s2">{</span>
+			<span class="s2">ImportDeclaration(node) {</span>
+				<span class="s4">const </span><span class="s2">scope = sourceCode.getScope(node);</span>
+
+				<span class="s4">for </span><span class="s2">(</span><span class="s4">const </span><span class="s2">variable of sourceCode.getDeclaredVariables(node)) {</span>
+					<span class="s4">const </span><span class="s2">shouldCheckMembers = variable.defs.some(</span>
+						<span class="s2">d =&gt; d.node.type === </span><span class="s3">&quot;ImportNamespaceSpecifier&quot;</span><span class="s2">,</span>
+					<span class="s2">);</span>
+					<span class="s4">let </span><span class="s2">prevIdNode = </span><span class="s4">null</span><span class="s2">;</span>
+
+					<span class="s4">for </span><span class="s2">(</span><span class="s4">const </span><span class="s2">reference of variable.references) {</span>
+						<span class="s4">const </span><span class="s2">idNode = reference.identifier;</span>
+
+						<span class="s0">/* 
+                         * AssignmentPattern (e.g. `[a = 0] = b`) makes two write 
+                         * references for the same identifier. This should skip 
+                         * the one of the two in order to prevent redundant reports. 
+                         */</span>
+						<span class="s4">if </span><span class="s2">(idNode === prevIdNode) {</span>
+							<span class="s4">continue</span><span class="s2">;</span>
+						<span class="s2">}</span>
+						<span class="s2">prevIdNode = idNode;</span>
+
+						<span class="s4">if </span><span class="s2">(reference.isWrite()) {</span>
+							<span class="s2">context.report({</span>
+								<span class="s2">node: getWriteNode(idNode),</span>
+								<span class="s2">messageId: </span><span class="s3">&quot;readonly&quot;</span><span class="s2">,</span>
+								<span class="s2">data: { name: idNode.name },</span>
+							<span class="s2">});</span>
+						<span class="s2">} </span><span class="s4">else if </span><span class="s2">(</span>
+							<span class="s2">shouldCheckMembers &amp;&amp;</span>
+							<span class="s2">isMemberWrite(idNode, scope)</span>
+						<span class="s2">) {</span>
+							<span class="s2">context.report({</span>
+								<span class="s2">node: getWriteNode(idNode),</span>
+								<span class="s2">messageId: </span><span class="s3">&quot;readonlyMember&quot;</span><span class="s2">,</span>
+								<span class="s2">data: { name: idNode.name },</span>
+							<span class="s2">});</span>
+						<span class="s2">}</span>
+					<span class="s2">}</span>
+				<span class="s2">}</span>
+			<span class="s2">},</span>
+		<span class="s2">};</span>
+	<span class="s2">},</span>
+<span class="s2">};</span>
+</pre>
+</body>
+</html>

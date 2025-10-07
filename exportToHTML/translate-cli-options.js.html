@@ -1,0 +1,304 @@
+<html>
+<head>
+<title>translate-cli-options.js</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #8c8c8c; font-style: italic;}
+.s1 { color: #8c8c8c; font-style: italic;}
+.s2 { color: #080808;}
+.s3 { color: #067d17;}
+.s4 { color: #0033b3;}
+.s5 { color: #0037a6;}
+.s6 { color: #1750eb;}
+</style>
+</head>
+<body bgcolor="#ffffff">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#c0c0c0" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+translate-cli-options.js</font>
+</center></td></tr></table>
+<pre><span class="s0">/**</span>
+ <span class="s0">* </span><span class="s1">@fileoverview </span><span class="s0">Translates CLI options into ESLint constructor options.</span>
+ <span class="s0">* </span><span class="s1">@author </span><span class="s0">Nicholas C. Zakas</span>
+ <span class="s0">* </span><span class="s1">@author </span><span class="s0">Francesco Trotta</span>
+ <span class="s0">*/</span>
+
+<span class="s3">&quot;use strict&quot;</span><span class="s2">;</span>
+
+<span class="s0">//------------------------------------------------------------------------------</span>
+<span class="s0">// Requirements</span>
+<span class="s0">//------------------------------------------------------------------------------</span>
+
+<span class="s4">const </span><span class="s2">{ normalizeSeverityToString } = require(</span><span class="s3">&quot;./severity&quot;</span><span class="s2">);</span>
+<span class="s4">const </span><span class="s2">{ getShorthandName, normalizePackageName } = require(</span><span class="s3">&quot;./naming&quot;</span><span class="s2">);</span>
+<span class="s4">const </span><span class="s2">{ ModuleImporter } = require(</span><span class="s3">&quot;@humanwhocodes/module-importer&quot;</span><span class="s2">);</span>
+
+<span class="s0">//------------------------------------------------------------------------------</span>
+<span class="s0">// Types</span>
+<span class="s0">//------------------------------------------------------------------------------</span>
+
+<span class="s0">/** </span><span class="s1">@typedef </span><span class="s0">{import(&quot;../types&quot;).ESLint.Options} ESLintOptions */</span>
+<span class="s0">/** </span><span class="s1">@typedef </span><span class="s0">{import(&quot;../types&quot;).ESLint.LegacyOptions} LegacyESLintOptions */</span>
+<span class="s0">/** </span><span class="s1">@typedef </span><span class="s0">{import(&quot;../types&quot;).Linter.LintMessage} LintMessage */</span>
+<span class="s0">/** </span><span class="s1">@typedef </span><span class="s0">{import(&quot;../options&quot;).ParsedCLIOptions} ParsedCLIOptions */</span>
+<span class="s0">/** </span><span class="s1">@typedef </span><span class="s0">{import(&quot;../types&quot;).ESLint.Plugin} Plugin */</span>
+
+<span class="s0">//------------------------------------------------------------------------------</span>
+<span class="s0">// Helpers</span>
+<span class="s0">//------------------------------------------------------------------------------</span>
+
+<span class="s0">/**</span>
+ <span class="s0">* Loads plugins with the specified names.</span>
+ <span class="s0">* </span><span class="s1">@param </span><span class="s0">{{ &quot;import&quot;: (name: string) =&gt; Promise&lt;any&gt; }} importer An object with an `import` method called once for each plugin.</span>
+ <span class="s0">* </span><span class="s1">@param </span><span class="s0">{string[]} pluginNames The names of the plugins to be loaded, with or without the &quot;eslint-plugin-&quot; prefix.</span>
+ <span class="s0">* </span><span class="s1">@returns </span><span class="s0">{Promise&lt;Record&lt;string, Plugin&gt;&gt;} A mapping of plugin short names to implementations.</span>
+ <span class="s0">*/</span>
+<span class="s2">async </span><span class="s4">function </span><span class="s2">loadPlugins(importer, pluginNames) {</span>
+	<span class="s4">const </span><span class="s2">plugins = {};</span>
+
+	<span class="s4">await </span><span class="s2">Promise.all(</span>
+		<span class="s2">pluginNames.map(async pluginName =&gt; {</span>
+			<span class="s4">const </span><span class="s2">longName = normalizePackageName(pluginName, </span><span class="s3">&quot;eslint-plugin&quot;</span><span class="s2">);</span>
+			<span class="s4">const </span><span class="s2">module = </span><span class="s4">await </span><span class="s2">importer.import(longName);</span>
+
+			<span class="s4">if </span><span class="s2">(!(</span><span class="s3">&quot;default&quot; </span><span class="s4">in </span><span class="s2">module)) {</span>
+				<span class="s4">throw new </span><span class="s2">Error(</span>
+					<span class="s3">`&quot;</span><span class="s2">${longName}</span><span class="s3">&quot; cannot be used with the </span><span class="s5">\`</span><span class="s3">--plugin</span><span class="s5">\` </span><span class="s3">option because its default module does not provide a </span><span class="s5">\`</span><span class="s3">default</span><span class="s5">\` </span><span class="s3">export`</span><span class="s2">,</span>
+				<span class="s2">);</span>
+			<span class="s2">}</span>
+
+			<span class="s4">const </span><span class="s2">shortName = getShorthandName(pluginName, </span><span class="s3">&quot;eslint-plugin&quot;</span><span class="s2">);</span>
+
+			<span class="s2">plugins[shortName] = module.default;</span>
+		<span class="s2">}),</span>
+	<span class="s2">);</span>
+
+	<span class="s4">return </span><span class="s2">plugins;</span>
+<span class="s2">}</span>
+
+<span class="s0">/**</span>
+ <span class="s0">* Predicate function for whether or not to apply fixes in quiet mode.</span>
+ <span class="s0">* If a message is a warning, do not apply a fix.</span>
+ <span class="s0">* </span><span class="s1">@param </span><span class="s0">{LintMessage} message The lint result.</span>
+ <span class="s0">* </span><span class="s1">@returns </span><span class="s0">{boolean} True if the lint message is an error (and thus should be</span>
+ <span class="s0">* autofixed), false otherwise.</span>
+ <span class="s0">*/</span>
+<span class="s4">function </span><span class="s2">quietFixPredicate(message) {</span>
+	<span class="s4">return </span><span class="s2">message.severity === </span><span class="s6">2</span><span class="s2">;</span>
+<span class="s2">}</span>
+
+<span class="s0">/**</span>
+ <span class="s0">* Predicate function for whether or not to run a rule in quiet mode.</span>
+ <span class="s0">* If a rule is set to warning, do not run it.</span>
+ <span class="s0">* </span><span class="s1">@param </span><span class="s0">{{ ruleId: string; severity: number; }} rule The rule id and severity.</span>
+ <span class="s0">* </span><span class="s1">@returns </span><span class="s0">{boolean} True if the lint rule should run, false otherwise.</span>
+ <span class="s0">*/</span>
+<span class="s4">function </span><span class="s2">quietRuleFilter(rule) {</span>
+	<span class="s4">return </span><span class="s2">rule.severity === </span><span class="s6">2</span><span class="s2">;</span>
+<span class="s2">}</span>
+
+<span class="s0">//------------------------------------------------------------------------------</span>
+<span class="s0">// Public Interface</span>
+<span class="s0">//------------------------------------------------------------------------------</span>
+
+<span class="s0">/**</span>
+ <span class="s0">* Translates the CLI options into the options expected by the ESLint constructor.</span>
+ <span class="s0">* </span><span class="s1">@param </span><span class="s0">{ParsedCLIOptions} cliOptions The CLI options to translate.</span>
+ <span class="s0">* </span><span class="s1">@param </span><span class="s0">{&quot;flat&quot;|&quot;eslintrc&quot;} [configType=&quot;eslintrc&quot;] The format of the config to generate.</span>
+ <span class="s0">* </span><span class="s1">@returns </span><span class="s0">{Promise&lt;ESLintOptions | LegacyESLintOptions&gt;} The options object for the ESLint constructor.</span>
+ <span class="s0">*/</span>
+<span class="s2">async </span><span class="s4">function </span><span class="s2">translateOptions(</span>
+	<span class="s2">{</span>
+		<span class="s2">cache,</span>
+		<span class="s2">cacheFile,</span>
+		<span class="s2">cacheLocation,</span>
+		<span class="s2">cacheStrategy,</span>
+		<span class="s2">concurrency,</span>
+		<span class="s2">config,</span>
+		<span class="s2">configLookup,</span>
+		<span class="s2">env,</span>
+		<span class="s2">errorOnUnmatchedPattern,</span>
+		<span class="s2">eslintrc,</span>
+		<span class="s2">ext,</span>
+		<span class="s2">fix,</span>
+		<span class="s2">fixDryRun,</span>
+		<span class="s2">fixType,</span>
+		<span class="s2">flag,</span>
+		<span class="s2">global,</span>
+		<span class="s2">ignore,</span>
+		<span class="s2">ignorePath,</span>
+		<span class="s2">ignorePattern,</span>
+		<span class="s2">inlineConfig,</span>
+		<span class="s2">parser,</span>
+		<span class="s2">parserOptions,</span>
+		<span class="s2">plugin,</span>
+		<span class="s2">quiet,</span>
+		<span class="s2">reportUnusedDisableDirectives,</span>
+		<span class="s2">reportUnusedDisableDirectivesSeverity,</span>
+		<span class="s2">reportUnusedInlineConfigs,</span>
+		<span class="s2">resolvePluginsRelativeTo,</span>
+		<span class="s2">rule,</span>
+		<span class="s2">rulesdir,</span>
+		<span class="s2">stats,</span>
+		<span class="s2">warnIgnored,</span>
+		<span class="s2">passOnNoPatterns,</span>
+		<span class="s2">maxWarnings,</span>
+	<span class="s2">},</span>
+	<span class="s2">configType,</span>
+<span class="s2">) {</span>
+	<span class="s4">let </span><span class="s2">overrideConfig, overrideConfigFile;</span>
+	<span class="s4">const </span><span class="s2">importer = </span><span class="s4">new </span><span class="s2">ModuleImporter();</span>
+
+	<span class="s4">if </span><span class="s2">(configType === </span><span class="s3">&quot;flat&quot;</span><span class="s2">) {</span>
+		<span class="s2">overrideConfigFile =</span>
+			<span class="s4">typeof </span><span class="s2">config === </span><span class="s3">&quot;string&quot; </span><span class="s2">? config : !configLookup;</span>
+		<span class="s4">if </span><span class="s2">(overrideConfigFile === </span><span class="s4">false</span><span class="s2">) {</span>
+			<span class="s2">overrideConfigFile = </span><span class="s4">void </span><span class="s6">0</span><span class="s2">;</span>
+		<span class="s2">}</span>
+
+		<span class="s4">const </span><span class="s2">languageOptions = {};</span>
+
+		<span class="s4">if </span><span class="s2">(global) {</span>
+			<span class="s2">languageOptions.globals = global.reduce((obj, name) =&gt; {</span>
+				<span class="s4">if </span><span class="s2">(name.endsWith(</span><span class="s3">&quot;:true&quot;</span><span class="s2">)) {</span>
+					<span class="s2">obj[name.slice(</span><span class="s6">0</span><span class="s2">, -</span><span class="s6">5</span><span class="s2">)] = </span><span class="s3">&quot;writable&quot;</span><span class="s2">;</span>
+				<span class="s2">} </span><span class="s4">else </span><span class="s2">{</span>
+					<span class="s2">obj[name] = </span><span class="s3">&quot;readonly&quot;</span><span class="s2">;</span>
+				<span class="s2">}</span>
+				<span class="s4">return </span><span class="s2">obj;</span>
+			<span class="s2">}, {});</span>
+		<span class="s2">}</span>
+
+		<span class="s4">if </span><span class="s2">(parserOptions) {</span>
+			<span class="s2">languageOptions.parserOptions = parserOptions;</span>
+		<span class="s2">}</span>
+
+		<span class="s4">if </span><span class="s2">(parser) {</span>
+			<span class="s2">languageOptions.parser = </span><span class="s4">await </span><span class="s2">importer.import(parser);</span>
+		<span class="s2">}</span>
+
+		<span class="s2">overrideConfig = [</span>
+			<span class="s2">{</span>
+				<span class="s2">...(Object.keys(languageOptions).length &gt; </span><span class="s6">0</span>
+					<span class="s2">? { languageOptions }</span>
+					<span class="s2">: {}),</span>
+				<span class="s2">rules: rule ? rule : {},</span>
+			<span class="s2">},</span>
+		<span class="s2">];</span>
+
+		<span class="s4">if </span><span class="s2">(</span>
+			<span class="s2">reportUnusedDisableDirectives ||</span>
+			<span class="s2">reportUnusedDisableDirectivesSeverity !== </span><span class="s4">void </span><span class="s6">0</span>
+		<span class="s2">) {</span>
+			<span class="s2">overrideConfig[</span><span class="s6">0</span><span class="s2">].linterOptions = {</span>
+				<span class="s2">reportUnusedDisableDirectives: reportUnusedDisableDirectives</span>
+					<span class="s2">? </span><span class="s3">&quot;error&quot;</span>
+					<span class="s2">: normalizeSeverityToString(</span>
+							<span class="s2">reportUnusedDisableDirectivesSeverity,</span>
+						<span class="s2">),</span>
+			<span class="s2">};</span>
+		<span class="s2">}</span>
+
+		<span class="s4">if </span><span class="s2">(reportUnusedInlineConfigs !== </span><span class="s4">void </span><span class="s6">0</span><span class="s2">) {</span>
+			<span class="s2">overrideConfig[</span><span class="s6">0</span><span class="s2">].linterOptions = {</span>
+				<span class="s2">...overrideConfig[</span><span class="s6">0</span><span class="s2">].linterOptions,</span>
+				<span class="s2">reportUnusedInlineConfigs: normalizeSeverityToString(</span>
+					<span class="s2">reportUnusedInlineConfigs,</span>
+				<span class="s2">),</span>
+			<span class="s2">};</span>
+		<span class="s2">}</span>
+
+		<span class="s4">if </span><span class="s2">(plugin) {</span>
+			<span class="s2">overrideConfig[</span><span class="s6">0</span><span class="s2">].plugins = </span><span class="s4">await </span><span class="s2">loadPlugins(importer, plugin);</span>
+		<span class="s2">}</span>
+
+		<span class="s4">if </span><span class="s2">(ext) {</span>
+			<span class="s2">overrideConfig.push({</span>
+				<span class="s2">files: ext.map(</span>
+					<span class="s2">extension =&gt;</span>
+						<span class="s3">`**/*</span><span class="s2">${extension.startsWith(</span><span class="s3">&quot;.&quot;</span><span class="s2">) ? </span><span class="s3">&quot;&quot; </span><span class="s2">: </span><span class="s3">&quot;.&quot;</span><span class="s2">}${extension}</span><span class="s3">`</span><span class="s2">,</span>
+				<span class="s2">),</span>
+			<span class="s2">});</span>
+		<span class="s2">}</span>
+	<span class="s2">} </span><span class="s4">else </span><span class="s2">{</span>
+		<span class="s2">overrideConfigFile = config;</span>
+
+		<span class="s2">overrideConfig = {</span>
+			<span class="s2">env:</span>
+				<span class="s2">env &amp;&amp;</span>
+				<span class="s2">env.reduce((obj, name) =&gt; {</span>
+					<span class="s2">obj[name] = </span><span class="s4">true</span><span class="s2">;</span>
+					<span class="s4">return </span><span class="s2">obj;</span>
+				<span class="s2">}, {}),</span>
+			<span class="s2">globals:</span>
+				<span class="s2">global &amp;&amp;</span>
+				<span class="s2">global.reduce((obj, name) =&gt; {</span>
+					<span class="s4">if </span><span class="s2">(name.endsWith(</span><span class="s3">&quot;:true&quot;</span><span class="s2">)) {</span>
+						<span class="s2">obj[name.slice(</span><span class="s6">0</span><span class="s2">, -</span><span class="s6">5</span><span class="s2">)] = </span><span class="s3">&quot;writable&quot;</span><span class="s2">;</span>
+					<span class="s2">} </span><span class="s4">else </span><span class="s2">{</span>
+						<span class="s2">obj[name] = </span><span class="s3">&quot;readonly&quot;</span><span class="s2">;</span>
+					<span class="s2">}</span>
+					<span class="s4">return </span><span class="s2">obj;</span>
+				<span class="s2">}, {}),</span>
+			<span class="s2">ignorePatterns: ignorePattern,</span>
+			<span class="s2">parser,</span>
+			<span class="s2">parserOptions,</span>
+			<span class="s2">plugins: plugin,</span>
+			<span class="s2">rules: rule,</span>
+		<span class="s2">};</span>
+	<span class="s2">}</span>
+
+	<span class="s4">const </span><span class="s2">options = {</span>
+		<span class="s2">allowInlineConfig: inlineConfig,</span>
+		<span class="s2">cache,</span>
+		<span class="s2">cacheLocation: cacheLocation || cacheFile,</span>
+		<span class="s2">cacheStrategy,</span>
+		<span class="s2">errorOnUnmatchedPattern,</span>
+		<span class="s2">fix: (fix || fixDryRun) &amp;&amp; (quiet ? quietFixPredicate : </span><span class="s4">true</span><span class="s2">),</span>
+		<span class="s2">fixTypes: fixType,</span>
+		<span class="s2">ignore,</span>
+		<span class="s2">overrideConfig,</span>
+		<span class="s2">overrideConfigFile,</span>
+		<span class="s2">passOnNoPatterns,</span>
+	<span class="s2">};</span>
+
+	<span class="s4">if </span><span class="s2">(configType === </span><span class="s3">&quot;flat&quot;</span><span class="s2">) {</span>
+		<span class="s2">options.concurrency = concurrency;</span>
+		<span class="s2">options.flags = flag;</span>
+		<span class="s2">options.ignorePatterns = ignorePattern;</span>
+		<span class="s2">options.stats = stats;</span>
+		<span class="s2">options.warnIgnored = warnIgnored;</span>
+
+		<span class="s0">/* 
+         * For performance reasons rules not marked as 'error' are filtered out in quiet mode. As maxWarnings 
+         * requires rules set to 'warn' to be run, we only filter out 'warn' rules if maxWarnings is not specified. 
+         */</span>
+		<span class="s2">options.ruleFilter =</span>
+			<span class="s2">quiet &amp;&amp; maxWarnings === -</span><span class="s6">1 </span><span class="s2">? quietRuleFilter : () =&gt; </span><span class="s4">true</span><span class="s2">;</span>
+	<span class="s2">} </span><span class="s4">else </span><span class="s2">{</span>
+		<span class="s2">options.resolvePluginsRelativeTo = resolvePluginsRelativeTo;</span>
+		<span class="s2">options.rulePaths = rulesdir;</span>
+		<span class="s2">options.useEslintrc = eslintrc;</span>
+		<span class="s2">options.extensions = ext;</span>
+		<span class="s2">options.ignorePath = ignorePath;</span>
+		<span class="s4">if </span><span class="s2">(</span>
+			<span class="s2">reportUnusedDisableDirectives ||</span>
+			<span class="s2">reportUnusedDisableDirectivesSeverity !== </span><span class="s4">void </span><span class="s6">0</span>
+		<span class="s2">) {</span>
+			<span class="s2">options.reportUnusedDisableDirectives =</span>
+				<span class="s2">reportUnusedDisableDirectives</span>
+					<span class="s2">? </span><span class="s3">&quot;error&quot;</span>
+					<span class="s2">: normalizeSeverityToString(</span>
+							<span class="s2">reportUnusedDisableDirectivesSeverity,</span>
+						<span class="s2">);</span>
+		<span class="s2">}</span>
+	<span class="s2">}</span>
+
+	<span class="s4">return </span><span class="s2">options;</span>
+<span class="s2">}</span>
+
+<span class="s2">module.exports = translateOptions;</span>
+</pre>
+</body>
+</html>

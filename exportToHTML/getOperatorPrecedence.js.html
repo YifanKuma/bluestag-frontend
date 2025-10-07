@@ -1,0 +1,438 @@
+<html>
+<head>
+<title>getOperatorPrecedence.js</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #067d17;}
+.s1 { color: #080808;}
+.s2 { color: #0033b3;}
+.s3 { color: #1750eb;}
+.s4 { color: #8c8c8c; font-style: italic;}
+</style>
+</head>
+<body bgcolor="#ffffff">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#c0c0c0" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+getOperatorPrecedence.js</font>
+</center></td></tr></table>
+<pre><span class="s0">&quot;use strict&quot;</span><span class="s1">;</span>
+<span class="s1">Object.defineProperty(exports, </span><span class="s0">&quot;__esModule&quot;</span><span class="s1">, { value: </span><span class="s2">true </span><span class="s1">});</span>
+<span class="s1">exports.OperatorPrecedence = </span><span class="s2">void </span><span class="s3">0</span><span class="s1">;</span>
+<span class="s1">exports.getOperatorPrecedenceForNode = getOperatorPrecedenceForNode;</span>
+<span class="s1">exports.getOperatorPrecedence = getOperatorPrecedence;</span>
+<span class="s1">exports.getBinaryOperatorPrecedence = getBinaryOperatorPrecedence;</span>
+<span class="s2">const </span><span class="s1">utils_1 = require(</span><span class="s0">&quot;@typescript-eslint/utils&quot;</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">typescript_1 = require(</span><span class="s0">&quot;typescript&quot;</span><span class="s1">);</span>
+<span class="s2">var </span><span class="s1">OperatorPrecedence;</span>
+<span class="s1">(</span><span class="s2">function </span><span class="s1">(OperatorPrecedence) {</span>
+    <span class="s4">// Expression:</span>
+    <span class="s4">//     AssignmentExpression</span>
+    <span class="s4">//     Expression `,` AssignmentExpression</span>
+    <span class="s1">OperatorPrecedence[OperatorPrecedence[</span><span class="s0">&quot;Comma&quot;</span><span class="s1">] = </span><span class="s3">0</span><span class="s1">] = </span><span class="s0">&quot;Comma&quot;</span><span class="s1">;</span>
+    <span class="s4">// NOTE: `Spread` is higher than `Comma` due to how it is parsed in |ElementList|</span>
+    <span class="s4">// SpreadElement:</span>
+    <span class="s4">//     `...` AssignmentExpression</span>
+    <span class="s1">OperatorPrecedence[OperatorPrecedence[</span><span class="s0">&quot;Spread&quot;</span><span class="s1">] = </span><span class="s3">1</span><span class="s1">] = </span><span class="s0">&quot;Spread&quot;</span><span class="s1">;</span>
+    <span class="s4">// AssignmentExpression:</span>
+    <span class="s4">//     ConditionalExpression</span>
+    <span class="s4">//     YieldExpression</span>
+    <span class="s4">//     ArrowFunction</span>
+    <span class="s4">//     AsyncArrowFunction</span>
+    <span class="s4">//     LeftHandSideExpression `=` AssignmentExpression</span>
+    <span class="s4">//     LeftHandSideExpression AssignmentOperator AssignmentExpression</span>
+    <span class="s4">//</span>
+    <span class="s4">// NOTE: AssignmentExpression is broken down into several precedences due to the requirements</span>
+    <span class="s4">//       of the parenthesize rules.</span>
+    <span class="s4">// AssignmentExpression: YieldExpression</span>
+    <span class="s4">// YieldExpression:</span>
+    <span class="s4">//     `yield`</span>
+    <span class="s4">//     `yield` AssignmentExpression</span>
+    <span class="s4">//     `yield` `*` AssignmentExpression</span>
+    <span class="s1">OperatorPrecedence[OperatorPrecedence[</span><span class="s0">&quot;Yield&quot;</span><span class="s1">] = </span><span class="s3">2</span><span class="s1">] = </span><span class="s0">&quot;Yield&quot;</span><span class="s1">;</span>
+    <span class="s4">// AssignmentExpression: LeftHandSideExpression `=` AssignmentExpression</span>
+    <span class="s4">// AssignmentExpression: LeftHandSideExpression AssignmentOperator AssignmentExpression</span>
+    <span class="s4">// AssignmentOperator: one of</span>
+    <span class="s4">//     `*=` `/=` `%=` `+=` `-=` `&lt;&lt;=` `&gt;&gt;=` `&gt;&gt;&gt;=` `&amp;=` `^=` `|=` `**=`</span>
+    <span class="s1">OperatorPrecedence[OperatorPrecedence[</span><span class="s0">&quot;Assignment&quot;</span><span class="s1">] = </span><span class="s3">3</span><span class="s1">] = </span><span class="s0">&quot;Assignment&quot;</span><span class="s1">;</span>
+    <span class="s4">// NOTE: `Conditional` is considered higher than `Assignment` here, but in reality they have</span>
+    <span class="s4">//       the same precedence.</span>
+    <span class="s4">// AssignmentExpression: ConditionalExpression</span>
+    <span class="s4">// ConditionalExpression:</span>
+    <span class="s4">//     ShortCircuitExpression</span>
+    <span class="s4">//     ShortCircuitExpression `?` AssignmentExpression `:` AssignmentExpression</span>
+    <span class="s4">// ShortCircuitExpression:</span>
+    <span class="s4">//     LogicalORExpression</span>
+    <span class="s4">//     CoalesceExpression</span>
+    <span class="s1">OperatorPrecedence[OperatorPrecedence[</span><span class="s0">&quot;Conditional&quot;</span><span class="s1">] = </span><span class="s3">4</span><span class="s1">] = </span><span class="s0">&quot;Conditional&quot;</span><span class="s1">;</span>
+    <span class="s4">// CoalesceExpression:</span>
+    <span class="s4">//     CoalesceExpressionHead `??` BitwiseORExpression</span>
+    <span class="s4">// CoalesceExpressionHead:</span>
+    <span class="s4">//     CoalesceExpression</span>
+    <span class="s4">//     BitwiseORExpression</span>
+    <span class="s1">OperatorPrecedence[OperatorPrecedence[</span><span class="s0">&quot;Coalesce&quot;</span><span class="s1">] = </span><span class="s3">4</span><span class="s1">] = </span><span class="s0">&quot;Coalesce&quot;</span><span class="s1">;</span>
+    <span class="s4">// LogicalORExpression:</span>
+    <span class="s4">//     LogicalANDExpression</span>
+    <span class="s4">//     LogicalORExpression `||` LogicalANDExpression</span>
+    <span class="s1">OperatorPrecedence[OperatorPrecedence[</span><span class="s0">&quot;LogicalOR&quot;</span><span class="s1">] = </span><span class="s3">5</span><span class="s1">] = </span><span class="s0">&quot;LogicalOR&quot;</span><span class="s1">;</span>
+    <span class="s4">// LogicalANDExpression:</span>
+    <span class="s4">//     BitwiseORExpression</span>
+    <span class="s4">//     LogicalANDExpression `&amp;&amp;` BitwiseORExpression</span>
+    <span class="s1">OperatorPrecedence[OperatorPrecedence[</span><span class="s0">&quot;LogicalAND&quot;</span><span class="s1">] = </span><span class="s3">6</span><span class="s1">] = </span><span class="s0">&quot;LogicalAND&quot;</span><span class="s1">;</span>
+    <span class="s4">// BitwiseORExpression:</span>
+    <span class="s4">//     BitwiseXORExpression</span>
+    <span class="s4">//     BitwiseORExpression `^` BitwiseXORExpression</span>
+    <span class="s1">OperatorPrecedence[OperatorPrecedence[</span><span class="s0">&quot;BitwiseOR&quot;</span><span class="s1">] = </span><span class="s3">7</span><span class="s1">] = </span><span class="s0">&quot;BitwiseOR&quot;</span><span class="s1">;</span>
+    <span class="s4">// BitwiseXORExpression:</span>
+    <span class="s4">//     BitwiseANDExpression</span>
+    <span class="s4">//     BitwiseXORExpression `^` BitwiseANDExpression</span>
+    <span class="s1">OperatorPrecedence[OperatorPrecedence[</span><span class="s0">&quot;BitwiseXOR&quot;</span><span class="s1">] = </span><span class="s3">8</span><span class="s1">] = </span><span class="s0">&quot;BitwiseXOR&quot;</span><span class="s1">;</span>
+    <span class="s4">// BitwiseANDExpression:</span>
+    <span class="s4">//     EqualityExpression</span>
+    <span class="s4">//     BitwiseANDExpression `^` EqualityExpression</span>
+    <span class="s1">OperatorPrecedence[OperatorPrecedence[</span><span class="s0">&quot;BitwiseAND&quot;</span><span class="s1">] = </span><span class="s3">9</span><span class="s1">] = </span><span class="s0">&quot;BitwiseAND&quot;</span><span class="s1">;</span>
+    <span class="s4">// EqualityExpression:</span>
+    <span class="s4">//     RelationalExpression</span>
+    <span class="s4">//     EqualityExpression `==` RelationalExpression</span>
+    <span class="s4">//     EqualityExpression `!=` RelationalExpression</span>
+    <span class="s4">//     EqualityExpression `===` RelationalExpression</span>
+    <span class="s4">//     EqualityExpression `!==` RelationalExpression</span>
+    <span class="s1">OperatorPrecedence[OperatorPrecedence[</span><span class="s0">&quot;Equality&quot;</span><span class="s1">] = </span><span class="s3">10</span><span class="s1">] = </span><span class="s0">&quot;Equality&quot;</span><span class="s1">;</span>
+    <span class="s4">// RelationalExpression:</span>
+    <span class="s4">//     ShiftExpression</span>
+    <span class="s4">//     RelationalExpression `&lt;` ShiftExpression</span>
+    <span class="s4">//     RelationalExpression `&gt;` ShiftExpression</span>
+    <span class="s4">//     RelationalExpression `&lt;=` ShiftExpression</span>
+    <span class="s4">//     RelationalExpression `&gt;=` ShiftExpression</span>
+    <span class="s4">//     RelationalExpression `instanceof` ShiftExpression</span>
+    <span class="s4">//     RelationalExpression `in` ShiftExpression</span>
+    <span class="s4">//     [+TypeScript] RelationalExpression `as` Type</span>
+    <span class="s1">OperatorPrecedence[OperatorPrecedence[</span><span class="s0">&quot;Relational&quot;</span><span class="s1">] = </span><span class="s3">11</span><span class="s1">] = </span><span class="s0">&quot;Relational&quot;</span><span class="s1">;</span>
+    <span class="s4">// ShiftExpression:</span>
+    <span class="s4">//     AdditiveExpression</span>
+    <span class="s4">//     ShiftExpression `&lt;&lt;` AdditiveExpression</span>
+    <span class="s4">//     ShiftExpression `&gt;&gt;` AdditiveExpression</span>
+    <span class="s4">//     ShiftExpression `&gt;&gt;&gt;` AdditiveExpression</span>
+    <span class="s1">OperatorPrecedence[OperatorPrecedence[</span><span class="s0">&quot;Shift&quot;</span><span class="s1">] = </span><span class="s3">12</span><span class="s1">] = </span><span class="s0">&quot;Shift&quot;</span><span class="s1">;</span>
+    <span class="s4">// AdditiveExpression:</span>
+    <span class="s4">//     MultiplicativeExpression</span>
+    <span class="s4">//     AdditiveExpression `+` MultiplicativeExpression</span>
+    <span class="s4">//     AdditiveExpression `-` MultiplicativeExpression</span>
+    <span class="s1">OperatorPrecedence[OperatorPrecedence[</span><span class="s0">&quot;Additive&quot;</span><span class="s1">] = </span><span class="s3">13</span><span class="s1">] = </span><span class="s0">&quot;Additive&quot;</span><span class="s1">;</span>
+    <span class="s4">// MultiplicativeExpression:</span>
+    <span class="s4">//     ExponentiationExpression</span>
+    <span class="s4">//     MultiplicativeExpression MultiplicativeOperator ExponentiationExpression</span>
+    <span class="s4">// MultiplicativeOperator: one of `*`, `/`, `%`</span>
+    <span class="s1">OperatorPrecedence[OperatorPrecedence[</span><span class="s0">&quot;Multiplicative&quot;</span><span class="s1">] = </span><span class="s3">14</span><span class="s1">] = </span><span class="s0">&quot;Multiplicative&quot;</span><span class="s1">;</span>
+    <span class="s4">// ExponentiationExpression:</span>
+    <span class="s4">//     UnaryExpression</span>
+    <span class="s4">//     UpdateExpression `**` ExponentiationExpression</span>
+    <span class="s1">OperatorPrecedence[OperatorPrecedence[</span><span class="s0">&quot;Exponentiation&quot;</span><span class="s1">] = </span><span class="s3">15</span><span class="s1">] = </span><span class="s0">&quot;Exponentiation&quot;</span><span class="s1">;</span>
+    <span class="s4">// UnaryExpression:</span>
+    <span class="s4">//     UpdateExpression</span>
+    <span class="s4">//     `delete` UnaryExpression</span>
+    <span class="s4">//     `void` UnaryExpression</span>
+    <span class="s4">//     `typeof` UnaryExpression</span>
+    <span class="s4">//     `+` UnaryExpression</span>
+    <span class="s4">//     `-` UnaryExpression</span>
+    <span class="s4">//     `~` UnaryExpression</span>
+    <span class="s4">//     `!` UnaryExpression</span>
+    <span class="s4">//     AwaitExpression</span>
+    <span class="s4">// UpdateExpression:            // TODO: Do we need to investigate the precedence here?</span>
+    <span class="s4">//     `++` UnaryExpression</span>
+    <span class="s4">//     `--` UnaryExpression</span>
+    <span class="s1">OperatorPrecedence[OperatorPrecedence[</span><span class="s0">&quot;Unary&quot;</span><span class="s1">] = </span><span class="s3">16</span><span class="s1">] = </span><span class="s0">&quot;Unary&quot;</span><span class="s1">;</span>
+    <span class="s4">// UpdateExpression:</span>
+    <span class="s4">//     LeftHandSideExpression</span>
+    <span class="s4">//     LeftHandSideExpression `++`</span>
+    <span class="s4">//     LeftHandSideExpression `--`</span>
+    <span class="s1">OperatorPrecedence[OperatorPrecedence[</span><span class="s0">&quot;Update&quot;</span><span class="s1">] = </span><span class="s3">17</span><span class="s1">] = </span><span class="s0">&quot;Update&quot;</span><span class="s1">;</span>
+    <span class="s4">// LeftHandSideExpression:</span>
+    <span class="s4">//     NewExpression</span>
+    <span class="s4">//     CallExpression</span>
+    <span class="s4">// NewExpression:</span>
+    <span class="s4">//     MemberExpression</span>
+    <span class="s4">//     `new` NewExpression</span>
+    <span class="s1">OperatorPrecedence[OperatorPrecedence[</span><span class="s0">&quot;LeftHandSide&quot;</span><span class="s1">] = </span><span class="s3">18</span><span class="s1">] = </span><span class="s0">&quot;LeftHandSide&quot;</span><span class="s1">;</span>
+    <span class="s4">// CallExpression:</span>
+    <span class="s4">//     CoverCallExpressionAndAsyncArrowHead</span>
+    <span class="s4">//     SuperCall</span>
+    <span class="s4">//     ImportCall</span>
+    <span class="s4">//     CallExpression Arguments</span>
+    <span class="s4">//     CallExpression `[` Expression `]`</span>
+    <span class="s4">//     CallExpression `.` IdentifierName</span>
+    <span class="s4">//     CallExpression TemplateLiteral</span>
+    <span class="s4">// MemberExpression:</span>
+    <span class="s4">//     PrimaryExpression</span>
+    <span class="s4">//     MemberExpression `[` Expression `]`</span>
+    <span class="s4">//     MemberExpression `.` IdentifierName</span>
+    <span class="s4">//     MemberExpression TemplateLiteral</span>
+    <span class="s4">//     SuperProperty</span>
+    <span class="s4">//     MetaProperty</span>
+    <span class="s4">//     `new` MemberExpression Arguments</span>
+    <span class="s1">OperatorPrecedence[OperatorPrecedence[</span><span class="s0">&quot;Member&quot;</span><span class="s1">] = </span><span class="s3">19</span><span class="s1">] = </span><span class="s0">&quot;Member&quot;</span><span class="s1">;</span>
+    <span class="s4">// TODO: JSXElement?</span>
+    <span class="s4">// PrimaryExpression:</span>
+    <span class="s4">//     `this`</span>
+    <span class="s4">//     IdentifierReference</span>
+    <span class="s4">//     Literal</span>
+    <span class="s4">//     ArrayLiteral</span>
+    <span class="s4">//     ObjectLiteral</span>
+    <span class="s4">//     FunctionExpression</span>
+    <span class="s4">//     ClassExpression</span>
+    <span class="s4">//     GeneratorExpression</span>
+    <span class="s4">//     AsyncFunctionExpression</span>
+    <span class="s4">//     AsyncGeneratorExpression</span>
+    <span class="s4">//     RegularExpressionLiteral</span>
+    <span class="s4">//     TemplateLiteral</span>
+    <span class="s4">//     CoverParenthesizedExpressionAndArrowParameterList</span>
+    <span class="s1">OperatorPrecedence[OperatorPrecedence[</span><span class="s0">&quot;Primary&quot;</span><span class="s1">] = </span><span class="s3">20</span><span class="s1">] = </span><span class="s0">&quot;Primary&quot;</span><span class="s1">;</span>
+    <span class="s1">OperatorPrecedence[OperatorPrecedence[</span><span class="s0">&quot;Highest&quot;</span><span class="s1">] = </span><span class="s3">20</span><span class="s1">] = </span><span class="s0">&quot;Highest&quot;</span><span class="s1">;</span>
+    <span class="s1">OperatorPrecedence[OperatorPrecedence[</span><span class="s0">&quot;Lowest&quot;</span><span class="s1">] = </span><span class="s3">0</span><span class="s1">] = </span><span class="s0">&quot;Lowest&quot;</span><span class="s1">;</span>
+    <span class="s4">// -1 is lower than all other precedences. Returning it will cause binary expression</span>
+    <span class="s4">// parsing to stop.</span>
+    <span class="s1">OperatorPrecedence[OperatorPrecedence[</span><span class="s0">&quot;Invalid&quot;</span><span class="s1">] = -</span><span class="s3">1</span><span class="s1">] = </span><span class="s0">&quot;Invalid&quot;</span><span class="s1">;</span>
+<span class="s1">})(OperatorPrecedence || (exports.OperatorPrecedence = OperatorPrecedence = {}));</span>
+<span class="s2">function </span><span class="s1">getOperatorPrecedenceForNode(node) {</span>
+    <span class="s2">switch </span><span class="s1">(node.type) {</span>
+        <span class="s2">case </span><span class="s1">utils_1.AST_NODE_TYPES.SpreadElement:</span>
+        <span class="s2">case </span><span class="s1">utils_1.AST_NODE_TYPES.RestElement:</span>
+            <span class="s2">return </span><span class="s1">OperatorPrecedence.Spread;</span>
+        <span class="s2">case </span><span class="s1">utils_1.AST_NODE_TYPES.YieldExpression:</span>
+        <span class="s2">case </span><span class="s1">utils_1.AST_NODE_TYPES.ArrowFunctionExpression:</span>
+            <span class="s2">return </span><span class="s1">OperatorPrecedence.Yield;</span>
+        <span class="s2">case </span><span class="s1">utils_1.AST_NODE_TYPES.ConditionalExpression:</span>
+            <span class="s2">return </span><span class="s1">OperatorPrecedence.Conditional;</span>
+        <span class="s2">case </span><span class="s1">utils_1.AST_NODE_TYPES.SequenceExpression:</span>
+            <span class="s2">return </span><span class="s1">OperatorPrecedence.Comma;</span>
+        <span class="s2">case </span><span class="s1">utils_1.AST_NODE_TYPES.AssignmentExpression:</span>
+        <span class="s2">case </span><span class="s1">utils_1.AST_NODE_TYPES.BinaryExpression:</span>
+        <span class="s2">case </span><span class="s1">utils_1.AST_NODE_TYPES.LogicalExpression:</span>
+            <span class="s2">switch </span><span class="s1">(node.operator) {</span>
+                <span class="s2">case </span><span class="s0">'=='</span><span class="s1">:</span>
+                <span class="s2">case </span><span class="s0">'+='</span><span class="s1">:</span>
+                <span class="s2">case </span><span class="s0">'-='</span><span class="s1">:</span>
+                <span class="s2">case </span><span class="s0">'**='</span><span class="s1">:</span>
+                <span class="s2">case </span><span class="s0">'*='</span><span class="s1">:</span>
+                <span class="s2">case </span><span class="s0">'/='</span><span class="s1">:</span>
+                <span class="s2">case </span><span class="s0">'%='</span><span class="s1">:</span>
+                <span class="s2">case </span><span class="s0">'&lt;&lt;='</span><span class="s1">:</span>
+                <span class="s2">case </span><span class="s0">'&gt;&gt;='</span><span class="s1">:</span>
+                <span class="s2">case </span><span class="s0">'&gt;&gt;&gt;='</span><span class="s1">:</span>
+                <span class="s2">case </span><span class="s0">'&amp;='</span><span class="s1">:</span>
+                <span class="s2">case </span><span class="s0">'^='</span><span class="s1">:</span>
+                <span class="s2">case </span><span class="s0">'|='</span><span class="s1">:</span>
+                <span class="s2">case </span><span class="s0">'||='</span><span class="s1">:</span>
+                <span class="s2">case </span><span class="s0">'&amp;&amp;='</span><span class="s1">:</span>
+                <span class="s2">case </span><span class="s0">'??='</span><span class="s1">:</span>
+                    <span class="s2">return </span><span class="s1">OperatorPrecedence.Assignment;</span>
+                <span class="s2">default</span><span class="s1">:</span>
+                    <span class="s2">return </span><span class="s1">getBinaryOperatorPrecedence(node.operator);</span>
+            <span class="s1">}</span>
+        <span class="s2">case </span><span class="s1">utils_1.AST_NODE_TYPES.TSTypeAssertion:</span>
+        <span class="s2">case </span><span class="s1">utils_1.AST_NODE_TYPES.TSNonNullExpression:</span>
+        <span class="s2">case </span><span class="s1">utils_1.AST_NODE_TYPES.UnaryExpression:</span>
+        <span class="s2">case </span><span class="s1">utils_1.AST_NODE_TYPES.AwaitExpression:</span>
+            <span class="s2">return </span><span class="s1">OperatorPrecedence.Unary;</span>
+        <span class="s2">case </span><span class="s1">utils_1.AST_NODE_TYPES.UpdateExpression:</span>
+            <span class="s4">// TODO: Should prefix `++` and `--` be moved to the `Update` precedence?</span>
+            <span class="s2">if </span><span class="s1">(node.prefix) {</span>
+                <span class="s2">return </span><span class="s1">OperatorPrecedence.Unary;</span>
+            <span class="s1">}</span>
+            <span class="s2">return </span><span class="s1">OperatorPrecedence.Update;</span>
+        <span class="s2">case </span><span class="s1">utils_1.AST_NODE_TYPES.ChainExpression:</span>
+            <span class="s2">return </span><span class="s1">getOperatorPrecedenceForNode(node.expression);</span>
+        <span class="s2">case </span><span class="s1">utils_1.AST_NODE_TYPES.CallExpression:</span>
+            <span class="s2">return </span><span class="s1">OperatorPrecedence.LeftHandSide;</span>
+        <span class="s2">case </span><span class="s1">utils_1.AST_NODE_TYPES.NewExpression:</span>
+            <span class="s2">return </span><span class="s1">node.arguments.length &gt; </span><span class="s3">0</span>
+                <span class="s1">? OperatorPrecedence.Member</span>
+                <span class="s1">: OperatorPrecedence.LeftHandSide;</span>
+        <span class="s2">case </span><span class="s1">utils_1.AST_NODE_TYPES.TaggedTemplateExpression:</span>
+        <span class="s2">case </span><span class="s1">utils_1.AST_NODE_TYPES.MemberExpression:</span>
+        <span class="s2">case </span><span class="s1">utils_1.AST_NODE_TYPES.MetaProperty:</span>
+            <span class="s2">return </span><span class="s1">OperatorPrecedence.Member;</span>
+        <span class="s2">case </span><span class="s1">utils_1.AST_NODE_TYPES.TSAsExpression:</span>
+            <span class="s2">return </span><span class="s1">OperatorPrecedence.Relational;</span>
+        <span class="s2">case </span><span class="s1">utils_1.AST_NODE_TYPES.ThisExpression:</span>
+        <span class="s2">case </span><span class="s1">utils_1.AST_NODE_TYPES.Super:</span>
+        <span class="s2">case </span><span class="s1">utils_1.AST_NODE_TYPES.Identifier:</span>
+        <span class="s2">case </span><span class="s1">utils_1.AST_NODE_TYPES.PrivateIdentifier:</span>
+        <span class="s2">case </span><span class="s1">utils_1.AST_NODE_TYPES.Literal:</span>
+        <span class="s2">case </span><span class="s1">utils_1.AST_NODE_TYPES.ArrayExpression:</span>
+        <span class="s2">case </span><span class="s1">utils_1.AST_NODE_TYPES.ObjectExpression:</span>
+        <span class="s2">case </span><span class="s1">utils_1.AST_NODE_TYPES.FunctionExpression:</span>
+        <span class="s2">case </span><span class="s1">utils_1.AST_NODE_TYPES.ClassExpression:</span>
+        <span class="s2">case </span><span class="s1">utils_1.AST_NODE_TYPES.TemplateLiteral:</span>
+        <span class="s2">case </span><span class="s1">utils_1.AST_NODE_TYPES.JSXElement:</span>
+        <span class="s2">case </span><span class="s1">utils_1.AST_NODE_TYPES.JSXFragment:</span>
+            <span class="s4">// we don't have nodes for these cases</span>
+            <span class="s4">// case SyntaxKind.ParenthesizedExpression:</span>
+            <span class="s4">// case SyntaxKind.OmittedExpression:</span>
+            <span class="s2">return </span><span class="s1">OperatorPrecedence.Primary;</span>
+        <span class="s2">default</span><span class="s1">:</span>
+            <span class="s2">return </span><span class="s1">OperatorPrecedence.Invalid;</span>
+    <span class="s1">}</span>
+<span class="s1">}</span>
+<span class="s2">function </span><span class="s1">getOperatorPrecedence(nodeKind, operatorKind, hasArguments) {</span>
+    <span class="s2">switch </span><span class="s1">(nodeKind) {</span>
+        <span class="s4">// A list of comma-separated expressions. This node is only created by transformations.</span>
+        <span class="s2">case </span><span class="s1">typescript_1.SyntaxKind.CommaListExpression:</span>
+            <span class="s2">return </span><span class="s1">OperatorPrecedence.Comma;</span>
+        <span class="s2">case </span><span class="s1">typescript_1.SyntaxKind.SpreadElement:</span>
+            <span class="s2">return </span><span class="s1">OperatorPrecedence.Spread;</span>
+        <span class="s2">case </span><span class="s1">typescript_1.SyntaxKind.YieldExpression:</span>
+            <span class="s2">return </span><span class="s1">OperatorPrecedence.Yield;</span>
+        <span class="s2">case </span><span class="s1">typescript_1.SyntaxKind.ConditionalExpression:</span>
+            <span class="s2">return </span><span class="s1">OperatorPrecedence.Conditional;</span>
+        <span class="s2">case </span><span class="s1">typescript_1.SyntaxKind.BinaryExpression:</span>
+            <span class="s2">switch </span><span class="s1">(operatorKind) {</span>
+                <span class="s2">case </span><span class="s1">typescript_1.SyntaxKind.AmpersandAmpersandEqualsToken:</span>
+                <span class="s2">case </span><span class="s1">typescript_1.SyntaxKind.AmpersandEqualsToken:</span>
+                <span class="s2">case </span><span class="s1">typescript_1.SyntaxKind.AsteriskAsteriskEqualsToken:</span>
+                <span class="s2">case </span><span class="s1">typescript_1.SyntaxKind.AsteriskEqualsToken:</span>
+                <span class="s2">case </span><span class="s1">typescript_1.SyntaxKind.BarBarEqualsToken:</span>
+                <span class="s2">case </span><span class="s1">typescript_1.SyntaxKind.BarEqualsToken:</span>
+                <span class="s2">case </span><span class="s1">typescript_1.SyntaxKind.CaretEqualsToken:</span>
+                <span class="s2">case </span><span class="s1">typescript_1.SyntaxKind.EqualsToken:</span>
+                <span class="s2">case </span><span class="s1">typescript_1.SyntaxKind.GreaterThanGreaterThanEqualsToken:</span>
+                <span class="s2">case </span><span class="s1">typescript_1.SyntaxKind.GreaterThanGreaterThanGreaterThanEqualsToken:</span>
+                <span class="s2">case </span><span class="s1">typescript_1.SyntaxKind.LessThanLessThanEqualsToken:</span>
+                <span class="s2">case </span><span class="s1">typescript_1.SyntaxKind.MinusEqualsToken:</span>
+                <span class="s2">case </span><span class="s1">typescript_1.SyntaxKind.PercentEqualsToken:</span>
+                <span class="s2">case </span><span class="s1">typescript_1.SyntaxKind.PlusEqualsToken:</span>
+                <span class="s2">case </span><span class="s1">typescript_1.SyntaxKind.QuestionQuestionEqualsToken:</span>
+                <span class="s2">case </span><span class="s1">typescript_1.SyntaxKind.SlashEqualsToken:</span>
+                    <span class="s2">return </span><span class="s1">OperatorPrecedence.Assignment;</span>
+                <span class="s2">case </span><span class="s1">typescript_1.SyntaxKind.CommaToken:</span>
+                    <span class="s2">return </span><span class="s1">OperatorPrecedence.Comma;</span>
+                <span class="s2">default</span><span class="s1">:</span>
+                    <span class="s2">return </span><span class="s1">getBinaryOperatorPrecedence(operatorKind);</span>
+            <span class="s1">}</span>
+        <span class="s4">// TODO: Should prefix `++` and `--` be moved to the `Update` precedence?</span>
+        <span class="s2">case </span><span class="s1">typescript_1.SyntaxKind.TypeAssertionExpression:</span>
+        <span class="s2">case </span><span class="s1">typescript_1.SyntaxKind.NonNullExpression:</span>
+        <span class="s2">case </span><span class="s1">typescript_1.SyntaxKind.PrefixUnaryExpression:</span>
+        <span class="s2">case </span><span class="s1">typescript_1.SyntaxKind.TypeOfExpression:</span>
+        <span class="s2">case </span><span class="s1">typescript_1.SyntaxKind.VoidExpression:</span>
+        <span class="s2">case </span><span class="s1">typescript_1.SyntaxKind.DeleteExpression:</span>
+        <span class="s2">case </span><span class="s1">typescript_1.SyntaxKind.AwaitExpression:</span>
+            <span class="s2">return </span><span class="s1">OperatorPrecedence.Unary;</span>
+        <span class="s2">case </span><span class="s1">typescript_1.SyntaxKind.PostfixUnaryExpression:</span>
+            <span class="s2">return </span><span class="s1">OperatorPrecedence.Update;</span>
+        <span class="s2">case </span><span class="s1">typescript_1.SyntaxKind.CallExpression:</span>
+            <span class="s2">return </span><span class="s1">OperatorPrecedence.LeftHandSide;</span>
+        <span class="s2">case </span><span class="s1">typescript_1.SyntaxKind.NewExpression:</span>
+            <span class="s2">return </span><span class="s1">hasArguments</span>
+                <span class="s1">? OperatorPrecedence.Member</span>
+                <span class="s1">: OperatorPrecedence.LeftHandSide;</span>
+        <span class="s2">case </span><span class="s1">typescript_1.SyntaxKind.TaggedTemplateExpression:</span>
+        <span class="s2">case </span><span class="s1">typescript_1.SyntaxKind.PropertyAccessExpression:</span>
+        <span class="s2">case </span><span class="s1">typescript_1.SyntaxKind.ElementAccessExpression:</span>
+        <span class="s2">case </span><span class="s1">typescript_1.SyntaxKind.MetaProperty:</span>
+            <span class="s2">return </span><span class="s1">OperatorPrecedence.Member;</span>
+        <span class="s2">case </span><span class="s1">typescript_1.SyntaxKind.AsExpression:</span>
+        <span class="s2">case </span><span class="s1">typescript_1.SyntaxKind.SatisfiesExpression:</span>
+            <span class="s2">return </span><span class="s1">OperatorPrecedence.Relational;</span>
+        <span class="s2">case </span><span class="s1">typescript_1.SyntaxKind.ThisKeyword:</span>
+        <span class="s2">case </span><span class="s1">typescript_1.SyntaxKind.SuperKeyword:</span>
+        <span class="s2">case </span><span class="s1">typescript_1.SyntaxKind.Identifier:</span>
+        <span class="s2">case </span><span class="s1">typescript_1.SyntaxKind.PrivateIdentifier:</span>
+        <span class="s2">case </span><span class="s1">typescript_1.SyntaxKind.NullKeyword:</span>
+        <span class="s2">case </span><span class="s1">typescript_1.SyntaxKind.TrueKeyword:</span>
+        <span class="s2">case </span><span class="s1">typescript_1.SyntaxKind.FalseKeyword:</span>
+        <span class="s2">case </span><span class="s1">typescript_1.SyntaxKind.NumericLiteral:</span>
+        <span class="s2">case </span><span class="s1">typescript_1.SyntaxKind.BigIntLiteral:</span>
+        <span class="s2">case </span><span class="s1">typescript_1.SyntaxKind.StringLiteral:</span>
+        <span class="s2">case </span><span class="s1">typescript_1.SyntaxKind.ArrayLiteralExpression:</span>
+        <span class="s2">case </span><span class="s1">typescript_1.SyntaxKind.ObjectLiteralExpression:</span>
+        <span class="s2">case </span><span class="s1">typescript_1.SyntaxKind.FunctionExpression:</span>
+        <span class="s2">case </span><span class="s1">typescript_1.SyntaxKind.ArrowFunction:</span>
+        <span class="s2">case </span><span class="s1">typescript_1.SyntaxKind.ClassExpression:</span>
+        <span class="s2">case </span><span class="s1">typescript_1.SyntaxKind.RegularExpressionLiteral:</span>
+        <span class="s2">case </span><span class="s1">typescript_1.SyntaxKind.NoSubstitutionTemplateLiteral:</span>
+        <span class="s2">case </span><span class="s1">typescript_1.SyntaxKind.TemplateExpression:</span>
+        <span class="s2">case </span><span class="s1">typescript_1.SyntaxKind.ParenthesizedExpression:</span>
+        <span class="s2">case </span><span class="s1">typescript_1.SyntaxKind.OmittedExpression:</span>
+        <span class="s2">case </span><span class="s1">typescript_1.SyntaxKind.JsxElement:</span>
+        <span class="s2">case </span><span class="s1">typescript_1.SyntaxKind.JsxSelfClosingElement:</span>
+        <span class="s2">case </span><span class="s1">typescript_1.SyntaxKind.JsxFragment:</span>
+            <span class="s2">return </span><span class="s1">OperatorPrecedence.Primary;</span>
+        <span class="s2">default</span><span class="s1">:</span>
+            <span class="s2">return </span><span class="s1">OperatorPrecedence.Invalid;</span>
+    <span class="s1">}</span>
+<span class="s1">}</span>
+<span class="s2">function </span><span class="s1">getBinaryOperatorPrecedence(kind) {</span>
+    <span class="s2">switch </span><span class="s1">(kind) {</span>
+        <span class="s2">case </span><span class="s0">'-'</span><span class="s1">:</span>
+        <span class="s2">case </span><span class="s0">'+'</span><span class="s1">:</span>
+        <span class="s2">case </span><span class="s1">typescript_1.SyntaxKind.MinusToken:</span>
+        <span class="s2">case </span><span class="s1">typescript_1.SyntaxKind.PlusToken:</span>
+            <span class="s2">return </span><span class="s1">OperatorPrecedence.Additive;</span>
+        <span class="s2">case </span><span class="s0">'!='</span><span class="s1">:</span>
+        <span class="s2">case </span><span class="s0">'!=='</span><span class="s1">:</span>
+        <span class="s2">case </span><span class="s0">'=='</span><span class="s1">:</span>
+        <span class="s2">case </span><span class="s0">'==='</span><span class="s1">:</span>
+        <span class="s2">case </span><span class="s1">typescript_1.SyntaxKind.EqualsEqualsEqualsToken:</span>
+        <span class="s2">case </span><span class="s1">typescript_1.SyntaxKind.EqualsEqualsToken:</span>
+        <span class="s2">case </span><span class="s1">typescript_1.SyntaxKind.ExclamationEqualsEqualsToken:</span>
+        <span class="s2">case </span><span class="s1">typescript_1.SyntaxKind.ExclamationEqualsToken:</span>
+            <span class="s2">return </span><span class="s1">OperatorPrecedence.Equality;</span>
+        <span class="s2">case </span><span class="s0">'??'</span><span class="s1">:</span>
+        <span class="s2">case </span><span class="s1">typescript_1.SyntaxKind.QuestionQuestionToken:</span>
+            <span class="s2">return </span><span class="s1">OperatorPrecedence.Coalesce;</span>
+        <span class="s2">case </span><span class="s0">'*'</span><span class="s1">:</span>
+        <span class="s2">case </span><span class="s0">'/'</span><span class="s1">:</span>
+        <span class="s2">case </span><span class="s0">'%'</span><span class="s1">:</span>
+        <span class="s2">case </span><span class="s1">typescript_1.SyntaxKind.AsteriskToken:</span>
+        <span class="s2">case </span><span class="s1">typescript_1.SyntaxKind.PercentToken:</span>
+        <span class="s2">case </span><span class="s1">typescript_1.SyntaxKind.SlashToken:</span>
+            <span class="s2">return </span><span class="s1">OperatorPrecedence.Multiplicative;</span>
+        <span class="s2">case </span><span class="s0">'**'</span><span class="s1">:</span>
+        <span class="s2">case </span><span class="s1">typescript_1.SyntaxKind.AsteriskAsteriskToken:</span>
+            <span class="s2">return </span><span class="s1">OperatorPrecedence.Exponentiation;</span>
+        <span class="s2">case </span><span class="s0">'&amp;'</span><span class="s1">:</span>
+        <span class="s2">case </span><span class="s1">typescript_1.SyntaxKind.AmpersandToken:</span>
+            <span class="s2">return </span><span class="s1">OperatorPrecedence.BitwiseAND;</span>
+        <span class="s2">case </span><span class="s0">'&amp;&amp;'</span><span class="s1">:</span>
+        <span class="s2">case </span><span class="s1">typescript_1.SyntaxKind.AmpersandAmpersandToken:</span>
+            <span class="s2">return </span><span class="s1">OperatorPrecedence.LogicalAND;</span>
+        <span class="s2">case </span><span class="s0">'^'</span><span class="s1">:</span>
+        <span class="s2">case </span><span class="s1">typescript_1.SyntaxKind.CaretToken:</span>
+            <span class="s2">return </span><span class="s1">OperatorPrecedence.BitwiseXOR;</span>
+        <span class="s2">case </span><span class="s0">'&lt;'</span><span class="s1">:</span>
+        <span class="s2">case </span><span class="s0">'&lt;='</span><span class="s1">:</span>
+        <span class="s2">case </span><span class="s0">'&gt;'</span><span class="s1">:</span>
+        <span class="s2">case </span><span class="s0">'&gt;='</span><span class="s1">:</span>
+        <span class="s2">case </span><span class="s0">'in'</span><span class="s1">:</span>
+        <span class="s2">case </span><span class="s0">'instanceof'</span><span class="s1">:</span>
+        <span class="s2">case </span><span class="s1">typescript_1.SyntaxKind.AsKeyword:</span>
+        <span class="s2">case </span><span class="s1">typescript_1.SyntaxKind.GreaterThanEqualsToken:</span>
+        <span class="s2">case </span><span class="s1">typescript_1.SyntaxKind.GreaterThanToken:</span>
+        <span class="s2">case </span><span class="s1">typescript_1.SyntaxKind.InKeyword:</span>
+        <span class="s2">case </span><span class="s1">typescript_1.SyntaxKind.InstanceOfKeyword:</span>
+        <span class="s2">case </span><span class="s1">typescript_1.SyntaxKind.LessThanEqualsToken:</span>
+        <span class="s2">case </span><span class="s1">typescript_1.SyntaxKind.LessThanToken:</span>
+            <span class="s4">// case 'as': -- we don't have a token for this</span>
+            <span class="s2">return </span><span class="s1">OperatorPrecedence.Relational;</span>
+        <span class="s2">case </span><span class="s0">'&lt;&lt;'</span><span class="s1">:</span>
+        <span class="s2">case </span><span class="s0">'&gt;&gt;'</span><span class="s1">:</span>
+        <span class="s2">case </span><span class="s0">'&gt;&gt;&gt;'</span><span class="s1">:</span>
+        <span class="s2">case </span><span class="s1">typescript_1.SyntaxKind.GreaterThanGreaterThanGreaterThanToken:</span>
+        <span class="s2">case </span><span class="s1">typescript_1.SyntaxKind.GreaterThanGreaterThanToken:</span>
+        <span class="s2">case </span><span class="s1">typescript_1.SyntaxKind.LessThanLessThanToken:</span>
+            <span class="s2">return </span><span class="s1">OperatorPrecedence.Shift;</span>
+        <span class="s2">case </span><span class="s0">'|'</span><span class="s1">:</span>
+        <span class="s2">case </span><span class="s1">typescript_1.SyntaxKind.BarToken:</span>
+            <span class="s2">return </span><span class="s1">OperatorPrecedence.BitwiseOR;</span>
+        <span class="s2">case </span><span class="s0">'||'</span><span class="s1">:</span>
+        <span class="s2">case </span><span class="s1">typescript_1.SyntaxKind.BarBarToken:</span>
+            <span class="s2">return </span><span class="s1">OperatorPrecedence.LogicalOR;</span>
+    <span class="s1">}</span>
+    <span class="s4">// -1 is lower than all other precedences.  Returning it will cause binary expression</span>
+    <span class="s4">// parsing to stop.</span>
+    <span class="s2">return </span><span class="s1">-</span><span class="s3">1</span><span class="s1">;</span>
+<span class="s1">}</span>
+</pre>
+</body>
+</html>

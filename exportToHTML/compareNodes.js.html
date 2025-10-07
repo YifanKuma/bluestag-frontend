@@ -1,0 +1,347 @@
+<html>
+<head>
+<title>compareNodes.js</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #067d17;}
+.s1 { color: #080808;}
+.s2 { color: #0033b3;}
+.s3 { color: #1750eb;}
+.s4 { color: #8c8c8c; font-style: italic;}
+</style>
+</head>
+<body bgcolor="#ffffff">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#c0c0c0" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+compareNodes.js</font>
+</center></td></tr></table>
+<pre><span class="s0">&quot;use strict&quot;</span><span class="s1">;</span>
+<span class="s1">Object.defineProperty(exports, </span><span class="s0">&quot;__esModule&quot;</span><span class="s1">, { value: </span><span class="s2">true </span><span class="s1">});</span>
+<span class="s1">exports.NodeComparisonResult = </span><span class="s2">void </span><span class="s3">0</span><span class="s1">;</span>
+<span class="s1">exports.compareNodes = compareNodes;</span>
+<span class="s2">const </span><span class="s1">utils_1 = require(</span><span class="s0">&quot;@typescript-eslint/utils&quot;</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">visitor_keys_1 = require(</span><span class="s0">&quot;@typescript-eslint/visitor-keys&quot;</span><span class="s1">);</span>
+<span class="s2">var </span><span class="s1">NodeComparisonResult;</span>
+<span class="s1">(</span><span class="s2">function </span><span class="s1">(NodeComparisonResult) {</span>
+    <span class="s4">/** the two nodes are comparably the same */</span>
+    <span class="s1">NodeComparisonResult[</span><span class="s0">&quot;Equal&quot;</span><span class="s1">] = </span><span class="s0">&quot;Equal&quot;</span><span class="s1">;</span>
+    <span class="s4">/** the left node is a subset of the right node */</span>
+    <span class="s1">NodeComparisonResult[</span><span class="s0">&quot;Subset&quot;</span><span class="s1">] = </span><span class="s0">&quot;Subset&quot;</span><span class="s1">;</span>
+    <span class="s4">/** the left node is not the same or is a superset of the right node */</span>
+    <span class="s1">NodeComparisonResult[</span><span class="s0">&quot;Invalid&quot;</span><span class="s1">] = </span><span class="s0">&quot;Invalid&quot;</span><span class="s1">;</span>
+<span class="s1">})(NodeComparisonResult || (exports.NodeComparisonResult = NodeComparisonResult = {}));</span>
+<span class="s2">function </span><span class="s1">compareArrays(arrayA, arrayB) {</span>
+    <span class="s2">if </span><span class="s1">(arrayA.length !== arrayB.length) {</span>
+        <span class="s2">return </span><span class="s1">NodeComparisonResult.Invalid;</span>
+    <span class="s1">}</span>
+    <span class="s2">const </span><span class="s1">result = arrayA.every((elA, idx) =&gt; {</span>
+        <span class="s2">const </span><span class="s1">elB = arrayB[idx];</span>
+        <span class="s2">if </span><span class="s1">(elA == </span><span class="s2">null </span><span class="s1">|| elB == </span><span class="s2">null</span><span class="s1">) {</span>
+            <span class="s2">return </span><span class="s1">elA === elB;</span>
+        <span class="s1">}</span>
+        <span class="s2">return </span><span class="s1">compareUnknownValues(elA, elB) === NodeComparisonResult.Equal;</span>
+    <span class="s1">});</span>
+    <span class="s2">if </span><span class="s1">(result) {</span>
+        <span class="s2">return </span><span class="s1">NodeComparisonResult.Equal;</span>
+    <span class="s1">}</span>
+    <span class="s2">return </span><span class="s1">NodeComparisonResult.Invalid;</span>
+<span class="s1">}</span>
+<span class="s2">function </span><span class="s1">isValidNode(x) {</span>
+    <span class="s2">return </span><span class="s1">(</span><span class="s2">typeof </span><span class="s1">x === </span><span class="s0">'object' </span><span class="s1">&amp;&amp;</span>
+        <span class="s1">x != </span><span class="s2">null </span><span class="s1">&amp;&amp;</span>
+        <span class="s0">'type' </span><span class="s2">in </span><span class="s1">x &amp;&amp;</span>
+        <span class="s2">typeof </span><span class="s1">x.type === </span><span class="s0">'string'</span><span class="s1">);</span>
+<span class="s1">}</span>
+<span class="s2">function </span><span class="s1">isValidChainExpressionToLookThrough(node) {</span>
+    <span class="s2">return </span><span class="s1">(!(node.parent?.type === utils_1.AST_NODE_TYPES.MemberExpression &amp;&amp;</span>
+        <span class="s1">node.parent.object === node) &amp;&amp;</span>
+        <span class="s1">!(node.parent?.type === utils_1.AST_NODE_TYPES.CallExpression &amp;&amp;</span>
+            <span class="s1">node.parent.callee === node) &amp;&amp;</span>
+        <span class="s1">node.type === utils_1.AST_NODE_TYPES.ChainExpression);</span>
+<span class="s1">}</span>
+<span class="s2">function </span><span class="s1">compareUnknownValues(valueA, valueB) {</span>
+    <span class="s4">/* istanbul ignore if -- not possible for us to test this - it's just a sanity safeguard */</span>
+    <span class="s2">if </span><span class="s1">(valueA == </span><span class="s2">null </span><span class="s1">|| valueB == </span><span class="s2">null</span><span class="s1">) {</span>
+        <span class="s2">if </span><span class="s1">(valueA !== valueB) {</span>
+            <span class="s2">return </span><span class="s1">NodeComparisonResult.Invalid;</span>
+        <span class="s1">}</span>
+        <span class="s2">return </span><span class="s1">NodeComparisonResult.Equal;</span>
+    <span class="s1">}</span>
+    <span class="s4">/* istanbul ignore if -- not possible for us to test this - it's just a sanity safeguard */</span>
+    <span class="s2">if </span><span class="s1">(!isValidNode(valueA) || !isValidNode(valueB)) {</span>
+        <span class="s2">return </span><span class="s1">NodeComparisonResult.Invalid;</span>
+    <span class="s1">}</span>
+    <span class="s2">return </span><span class="s1">compareNodes(valueA, valueB);</span>
+<span class="s1">}</span>
+<span class="s2">function </span><span class="s1">compareByVisiting(nodeA, nodeB) {</span>
+    <span class="s2">const </span><span class="s1">currentVisitorKeys = visitor_keys_1.visitorKeys[nodeA.type];</span>
+    <span class="s4">/* istanbul ignore if -- not possible for us to test this - it's just a sanity safeguard */</span>
+    <span class="s2">if </span><span class="s1">(currentVisitorKeys == </span><span class="s2">null</span><span class="s1">) {</span>
+        <span class="s4">// we don't know how to visit this node, so assume it's invalid to avoid false-positives / broken fixers</span>
+        <span class="s2">return </span><span class="s1">NodeComparisonResult.Invalid;</span>
+    <span class="s1">}</span>
+    <span class="s2">if </span><span class="s1">(currentVisitorKeys.length === </span><span class="s3">0</span><span class="s1">) {</span>
+        <span class="s4">// assume nodes with no keys are constant things like keywords</span>
+        <span class="s2">return </span><span class="s1">NodeComparisonResult.Equal;</span>
+    <span class="s1">}</span>
+    <span class="s2">for </span><span class="s1">(</span><span class="s2">const </span><span class="s1">key of currentVisitorKeys) {</span>
+        <span class="s4">// @ts-expect-error - dynamic access but it's safe</span>
+        <span class="s2">const </span><span class="s1">nodeAChildOrChildren = nodeA[key];</span>
+        <span class="s4">// @ts-expect-error - dynamic access but it's safe</span>
+        <span class="s2">const </span><span class="s1">nodeBChildOrChildren = nodeB[key];</span>
+        <span class="s2">if </span><span class="s1">(Array.isArray(nodeAChildOrChildren)) {</span>
+            <span class="s2">const </span><span class="s1">arrayA = nodeAChildOrChildren;</span>
+            <span class="s2">const </span><span class="s1">arrayB = nodeBChildOrChildren;</span>
+            <span class="s2">const </span><span class="s1">result = compareArrays(arrayA, arrayB);</span>
+            <span class="s2">if </span><span class="s1">(result !== NodeComparisonResult.Equal) {</span>
+                <span class="s2">return </span><span class="s1">NodeComparisonResult.Invalid;</span>
+            <span class="s1">}</span>
+            <span class="s4">// fallthrough to the next key as the key was &quot;equal&quot;</span>
+        <span class="s1">}</span>
+        <span class="s2">else </span><span class="s1">{</span>
+            <span class="s2">const </span><span class="s1">result = compareUnknownValues(nodeAChildOrChildren, nodeBChildOrChildren);</span>
+            <span class="s2">if </span><span class="s1">(result !== NodeComparisonResult.Equal) {</span>
+                <span class="s2">return </span><span class="s1">NodeComparisonResult.Invalid;</span>
+            <span class="s1">}</span>
+            <span class="s4">// fallthrough to the next key as the key was &quot;equal&quot;</span>
+        <span class="s1">}</span>
+    <span class="s1">}</span>
+    <span class="s2">return </span><span class="s1">NodeComparisonResult.Equal;</span>
+<span class="s1">}</span>
+<span class="s2">function </span><span class="s1">compareNodesUncached(nodeA, nodeB) {</span>
+    <span class="s2">if </span><span class="s1">(nodeA.type !== nodeB.type) {</span>
+        <span class="s4">// special cases where nodes are allowed to be non-equal</span>
+        <span class="s4">// look through a chain expression node at the top-level because it only</span>
+        <span class="s4">// exists to delimit the end of an optional chain</span>
+        <span class="s4">//</span>
+        <span class="s4">// a?.b &amp;&amp; a.b.c</span>
+        <span class="s4">// ^^^^ ChainExpression, MemberExpression</span>
+        <span class="s4">//         ^^^^^ MemberExpression</span>
+        <span class="s4">//</span>
+        <span class="s4">// except for in this class of cases</span>
+        <span class="s4">// (a?.b).c &amp;&amp; a.b.c</span>
+        <span class="s4">// because the parentheses have runtime meaning (sad face)</span>
+        <span class="s2">if </span><span class="s1">(isValidChainExpressionToLookThrough(nodeA)) {</span>
+            <span class="s2">return </span><span class="s1">compareNodes(nodeA.expression, nodeB);</span>
+        <span class="s1">}</span>
+        <span class="s2">if </span><span class="s1">(isValidChainExpressionToLookThrough(nodeB)) {</span>
+            <span class="s2">return </span><span class="s1">compareNodes(nodeA, nodeB.expression);</span>
+        <span class="s1">}</span>
+        <span class="s4">// look through the type-only non-null assertion because its existence could</span>
+        <span class="s4">// possibly be replaced by an optional chain instead</span>
+        <span class="s4">//</span>
+        <span class="s4">// a.b! &amp;&amp; a.b.c</span>
+        <span class="s4">// ^^^^ TSNonNullExpression</span>
+        <span class="s2">if </span><span class="s1">(nodeA.type === utils_1.AST_NODE_TYPES.TSNonNullExpression) {</span>
+            <span class="s2">return </span><span class="s1">compareNodes(nodeA.expression, nodeB);</span>
+        <span class="s1">}</span>
+        <span class="s2">if </span><span class="s1">(nodeB.type === utils_1.AST_NODE_TYPES.TSNonNullExpression) {</span>
+            <span class="s2">return </span><span class="s1">compareNodes(nodeA, nodeB.expression);</span>
+        <span class="s1">}</span>
+        <span class="s4">// special case for subset optional chains where the node types don't match,</span>
+        <span class="s4">// but we want to try comparing by discarding the &quot;extra&quot; code</span>
+        <span class="s4">//</span>
+        <span class="s4">// a &amp;&amp; a.b</span>
+        <span class="s4">//      ^ compare this</span>
+        <span class="s4">// a &amp;&amp; a()</span>
+        <span class="s4">//      ^ compare this</span>
+        <span class="s4">// a.b &amp;&amp; a.b()</span>
+        <span class="s4">//        ^^^ compare this</span>
+        <span class="s4">// a() &amp;&amp; a().b</span>
+        <span class="s4">//        ^^^ compare this</span>
+        <span class="s4">// import.meta &amp;&amp; import.meta.b</span>
+        <span class="s4">//                ^^^^^^^^^^^ compare this</span>
+        <span class="s2">if </span><span class="s1">(nodeA.type === utils_1.AST_NODE_TYPES.CallExpression ||</span>
+            <span class="s1">nodeA.type === utils_1.AST_NODE_TYPES.Identifier ||</span>
+            <span class="s1">nodeA.type === utils_1.AST_NODE_TYPES.MemberExpression ||</span>
+            <span class="s1">nodeA.type === utils_1.AST_NODE_TYPES.MetaProperty) {</span>
+            <span class="s2">switch </span><span class="s1">(nodeB.type) {</span>
+                <span class="s2">case </span><span class="s1">utils_1.AST_NODE_TYPES.MemberExpression:</span>
+                    <span class="s2">if </span><span class="s1">(nodeB.property.type === utils_1.AST_NODE_TYPES.PrivateIdentifier) {</span>
+                        <span class="s4">// Private identifiers in optional chaining is not currently allowed</span>
+                        <span class="s4">// TODO - handle this once TS supports it (https://github.com/microsoft/TypeScript/issues/42734)</span>
+                        <span class="s2">return </span><span class="s1">NodeComparisonResult.Invalid;</span>
+                    <span class="s1">}</span>
+                    <span class="s2">if </span><span class="s1">(compareNodes(nodeA, nodeB.object) !== NodeComparisonResult.Invalid) {</span>
+                        <span class="s2">return </span><span class="s1">NodeComparisonResult.Subset;</span>
+                    <span class="s1">}</span>
+                    <span class="s2">return </span><span class="s1">NodeComparisonResult.Invalid;</span>
+                <span class="s2">case </span><span class="s1">utils_1.AST_NODE_TYPES.CallExpression:</span>
+                    <span class="s2">if </span><span class="s1">(compareNodes(nodeA, nodeB.callee) !== NodeComparisonResult.Invalid) {</span>
+                        <span class="s2">return </span><span class="s1">NodeComparisonResult.Subset;</span>
+                    <span class="s1">}</span>
+                    <span class="s2">return </span><span class="s1">NodeComparisonResult.Invalid;</span>
+                <span class="s2">default</span><span class="s1">:</span>
+                    <span class="s2">return </span><span class="s1">NodeComparisonResult.Invalid;</span>
+            <span class="s1">}</span>
+        <span class="s1">}</span>
+        <span class="s2">return </span><span class="s1">NodeComparisonResult.Invalid;</span>
+    <span class="s1">}</span>
+    <span class="s2">switch </span><span class="s1">(nodeA.type) {</span>
+        <span class="s4">// these expressions create a new instance each time - so it makes no sense to compare the chain</span>
+        <span class="s2">case </span><span class="s1">utils_1.AST_NODE_TYPES.ArrayExpression:</span>
+        <span class="s2">case </span><span class="s1">utils_1.AST_NODE_TYPES.ArrowFunctionExpression:</span>
+        <span class="s2">case </span><span class="s1">utils_1.AST_NODE_TYPES.ClassExpression:</span>
+        <span class="s2">case </span><span class="s1">utils_1.AST_NODE_TYPES.FunctionExpression:</span>
+        <span class="s2">case </span><span class="s1">utils_1.AST_NODE_TYPES.JSXElement:</span>
+        <span class="s2">case </span><span class="s1">utils_1.AST_NODE_TYPES.JSXFragment:</span>
+        <span class="s2">case </span><span class="s1">utils_1.AST_NODE_TYPES.NewExpression:</span>
+        <span class="s2">case </span><span class="s1">utils_1.AST_NODE_TYPES.ObjectExpression:</span>
+            <span class="s2">return </span><span class="s1">NodeComparisonResult.Invalid;</span>
+        <span class="s4">// chaining from assignments could change the value irrevocably - so it makes no sense to compare the chain</span>
+        <span class="s2">case </span><span class="s1">utils_1.AST_NODE_TYPES.AssignmentExpression:</span>
+            <span class="s2">return </span><span class="s1">NodeComparisonResult.Invalid;</span>
+        <span class="s2">case </span><span class="s1">utils_1.AST_NODE_TYPES.CallExpression: {</span>
+            <span class="s2">const </span><span class="s1">nodeBCall = nodeB;</span>
+            <span class="s4">// check for cases like</span>
+            <span class="s4">// foo() &amp;&amp; foo()(bar)</span>
+            <span class="s4">// ^^^^^ nodeA</span>
+            <span class="s4">//          ^^^^^^^^^^ nodeB</span>
+            <span class="s4">// we don't want to check the arguments in this case</span>
+            <span class="s2">const </span><span class="s1">aSubsetOfB = compareNodes(nodeA, nodeBCall.callee);</span>
+            <span class="s2">if </span><span class="s1">(aSubsetOfB !== NodeComparisonResult.Invalid) {</span>
+                <span class="s2">return </span><span class="s1">NodeComparisonResult.Subset;</span>
+            <span class="s1">}</span>
+            <span class="s2">const </span><span class="s1">calleeCompare = compareNodes(nodeA.callee, nodeBCall.callee);</span>
+            <span class="s2">if </span><span class="s1">(calleeCompare !== NodeComparisonResult.Equal) {</span>
+                <span class="s2">return </span><span class="s1">NodeComparisonResult.Invalid;</span>
+            <span class="s1">}</span>
+            <span class="s4">// NOTE - we purposely ignore optional flag because for our purposes</span>
+            <span class="s4">// foo?.bar() &amp;&amp; foo.bar?.()?.baz</span>
+            <span class="s4">// or</span>
+            <span class="s4">// foo.bar() &amp;&amp; foo?.bar?.()?.baz</span>
+            <span class="s4">// are going to be exactly the same</span>
+            <span class="s2">const </span><span class="s1">argumentCompare = compareArrays(nodeA.arguments, nodeBCall.arguments);</span>
+            <span class="s2">if </span><span class="s1">(argumentCompare !== NodeComparisonResult.Equal) {</span>
+                <span class="s2">return </span><span class="s1">NodeComparisonResult.Invalid;</span>
+            <span class="s1">}</span>
+            <span class="s2">const </span><span class="s1">typeParamCompare = compareNodes(nodeA.typeArguments, nodeBCall.typeArguments);</span>
+            <span class="s2">if </span><span class="s1">(typeParamCompare === NodeComparisonResult.Equal) {</span>
+                <span class="s2">return </span><span class="s1">NodeComparisonResult.Equal;</span>
+            <span class="s1">}</span>
+            <span class="s2">return </span><span class="s1">NodeComparisonResult.Invalid;</span>
+        <span class="s1">}</span>
+        <span class="s2">case </span><span class="s1">utils_1.AST_NODE_TYPES.ChainExpression:</span>
+            <span class="s4">// special case handling for ChainExpression because it's allowed to be a subset</span>
+            <span class="s2">return </span><span class="s1">compareNodes(nodeA, nodeB.expression);</span>
+        <span class="s2">case </span><span class="s1">utils_1.AST_NODE_TYPES.Identifier:</span>
+        <span class="s2">case </span><span class="s1">utils_1.AST_NODE_TYPES.PrivateIdentifier:</span>
+            <span class="s2">if </span><span class="s1">(nodeA.name === nodeB.name) {</span>
+                <span class="s2">return </span><span class="s1">NodeComparisonResult.Equal;</span>
+            <span class="s1">}</span>
+            <span class="s2">return </span><span class="s1">NodeComparisonResult.Invalid;</span>
+        <span class="s2">case </span><span class="s1">utils_1.AST_NODE_TYPES.Literal: {</span>
+            <span class="s2">const </span><span class="s1">nodeBLiteral = nodeB;</span>
+            <span class="s2">if </span><span class="s1">(nodeA.raw === nodeBLiteral.raw &amp;&amp;</span>
+                <span class="s1">nodeA.value === nodeBLiteral.value) {</span>
+                <span class="s2">return </span><span class="s1">NodeComparisonResult.Equal;</span>
+            <span class="s1">}</span>
+            <span class="s2">return </span><span class="s1">NodeComparisonResult.Invalid;</span>
+        <span class="s1">}</span>
+        <span class="s2">case </span><span class="s1">utils_1.AST_NODE_TYPES.MemberExpression: {</span>
+            <span class="s2">const </span><span class="s1">nodeBMember = nodeB;</span>
+            <span class="s2">if </span><span class="s1">(nodeBMember.property.type === utils_1.AST_NODE_TYPES.PrivateIdentifier) {</span>
+                <span class="s4">// Private identifiers in optional chaining is not currently allowed</span>
+                <span class="s4">// TODO - handle this once TS supports it (https://github.com/microsoft/TypeScript/issues/42734)</span>
+                <span class="s2">return </span><span class="s1">NodeComparisonResult.Invalid;</span>
+            <span class="s1">}</span>
+            <span class="s4">// check for cases like</span>
+            <span class="s4">// foo.bar &amp;&amp; foo.bar.baz</span>
+            <span class="s4">// ^^^^^^^ nodeA</span>
+            <span class="s4">//            ^^^^^^^^^^^ nodeB</span>
+            <span class="s4">// result === Equal</span>
+            <span class="s4">//</span>
+            <span class="s4">// foo.bar &amp;&amp; foo.bar.baz.bam</span>
+            <span class="s4">// ^^^^^^^ nodeA</span>
+            <span class="s4">//            ^^^^^^^^^^^^^^^ nodeB</span>
+            <span class="s4">// result === Subset</span>
+            <span class="s4">//</span>
+            <span class="s4">// we don't want to check the property in this case</span>
+            <span class="s2">const </span><span class="s1">aSubsetOfB = compareNodes(nodeA, nodeBMember.object);</span>
+            <span class="s2">if </span><span class="s1">(aSubsetOfB !== NodeComparisonResult.Invalid) {</span>
+                <span class="s2">return </span><span class="s1">NodeComparisonResult.Subset;</span>
+            <span class="s1">}</span>
+            <span class="s2">if </span><span class="s1">(nodeA.computed !== nodeBMember.computed) {</span>
+                <span class="s2">return </span><span class="s1">NodeComparisonResult.Invalid;</span>
+            <span class="s1">}</span>
+            <span class="s4">// NOTE - we purposely ignore optional flag because for our purposes</span>
+            <span class="s4">// foo?.bar &amp;&amp; foo.bar?.baz</span>
+            <span class="s4">// or</span>
+            <span class="s4">// foo.bar &amp;&amp; foo?.bar?.baz</span>
+            <span class="s4">// are going to be exactly the same</span>
+            <span class="s2">const </span><span class="s1">objectCompare = compareNodes(nodeA.object, nodeBMember.object);</span>
+            <span class="s2">if </span><span class="s1">(objectCompare !== NodeComparisonResult.Equal) {</span>
+                <span class="s2">return </span><span class="s1">NodeComparisonResult.Invalid;</span>
+            <span class="s1">}</span>
+            <span class="s2">return </span><span class="s1">compareNodes(nodeA.property, nodeBMember.property);</span>
+        <span class="s1">}</span>
+        <span class="s2">case </span><span class="s1">utils_1.AST_NODE_TYPES.TSTemplateLiteralType:</span>
+        <span class="s2">case </span><span class="s1">utils_1.AST_NODE_TYPES.TemplateLiteral: {</span>
+            <span class="s2">const </span><span class="s1">nodeBTemplate = nodeB;</span>
+            <span class="s2">const </span><span class="s1">areQuasisEqual = nodeA.quasis.length === nodeBTemplate.quasis.length &amp;&amp;</span>
+                <span class="s1">nodeA.quasis.every((elA, idx) =&gt; {</span>
+                    <span class="s2">const </span><span class="s1">elB = nodeBTemplate.quasis[idx];</span>
+                    <span class="s2">return </span><span class="s1">elA.value.cooked === elB.value.cooked;</span>
+                <span class="s1">});</span>
+            <span class="s2">if </span><span class="s1">(!areQuasisEqual) {</span>
+                <span class="s2">return </span><span class="s1">NodeComparisonResult.Invalid;</span>
+            <span class="s1">}</span>
+            <span class="s2">return </span><span class="s1">NodeComparisonResult.Equal;</span>
+        <span class="s1">}</span>
+        <span class="s2">case </span><span class="s1">utils_1.AST_NODE_TYPES.TemplateElement: {</span>
+            <span class="s2">const </span><span class="s1">nodeBElement = nodeB;</span>
+            <span class="s2">if </span><span class="s1">(nodeA.value.cooked === nodeBElement.value.cooked) {</span>
+                <span class="s2">return </span><span class="s1">NodeComparisonResult.Equal;</span>
+            <span class="s1">}</span>
+            <span class="s2">return </span><span class="s1">NodeComparisonResult.Invalid;</span>
+        <span class="s1">}</span>
+        <span class="s4">// these aren't actually valid expressions.</span>
+        <span class="s4">// https://github.com/typescript-eslint/typescript-eslint/blob/20d7caee35ab84ae6381fdf04338c9e2b9e2bc48/packages/ast-spec/src/unions/Expression.ts#L37-L43</span>
+        <span class="s2">case </span><span class="s1">utils_1.AST_NODE_TYPES.ArrayPattern:</span>
+        <span class="s2">case </span><span class="s1">utils_1.AST_NODE_TYPES.ObjectPattern:</span>
+            <span class="s4">/* istanbul ignore next */</span>
+            <span class="s2">return </span><span class="s1">NodeComparisonResult.Invalid;</span>
+        <span class="s4">// update expression returns a number and also changes the value each time - so it makes no sense to compare the chain</span>
+        <span class="s2">case </span><span class="s1">utils_1.AST_NODE_TYPES.UpdateExpression:</span>
+            <span class="s2">return </span><span class="s1">NodeComparisonResult.Invalid;</span>
+        <span class="s4">// yield returns the value passed to the `next` function, so it may not be the same each time - so it makes no sense to compare the chain</span>
+        <span class="s2">case </span><span class="s1">utils_1.AST_NODE_TYPES.YieldExpression:</span>
+            <span class="s2">return </span><span class="s1">NodeComparisonResult.Invalid;</span>
+        <span class="s4">// general-case automatic handling of nodes to save us implementing every</span>
+        <span class="s4">// single case by hand. This just iterates the visitor keys to recursively</span>
+        <span class="s4">// check the children.</span>
+        <span class="s4">//</span>
+        <span class="s4">// Any specific logic cases or short-circuits should be listed as separate</span>
+        <span class="s4">// cases so that they don't fall into this generic handling</span>
+        <span class="s2">default</span><span class="s1">:</span>
+            <span class="s2">return </span><span class="s1">compareByVisiting(nodeA, nodeB);</span>
+    <span class="s1">}</span>
+<span class="s1">}</span>
+<span class="s2">const </span><span class="s1">COMPARE_NODES_CACHE = </span><span class="s2">new </span><span class="s1">WeakMap();</span>
+<span class="s4">/**</span>
+ <span class="s4">* Compares two nodes' ASTs to determine if the A is equal to or a subset of B</span>
+ <span class="s4">*/</span>
+<span class="s2">function </span><span class="s1">compareNodes(nodeA, nodeB) {</span>
+    <span class="s2">if </span><span class="s1">(nodeA == </span><span class="s2">null </span><span class="s1">|| nodeB == </span><span class="s2">null</span><span class="s1">) {</span>
+        <span class="s2">if </span><span class="s1">(nodeA !== nodeB) {</span>
+            <span class="s2">return </span><span class="s1">NodeComparisonResult.Invalid;</span>
+        <span class="s1">}</span>
+        <span class="s2">return </span><span class="s1">NodeComparisonResult.Equal;</span>
+    <span class="s1">}</span>
+    <span class="s2">const </span><span class="s1">cached = COMPARE_NODES_CACHE.get(nodeA)?.get(nodeB);</span>
+    <span class="s2">if </span><span class="s1">(cached) {</span>
+        <span class="s2">return </span><span class="s1">cached;</span>
+    <span class="s1">}</span>
+    <span class="s2">const </span><span class="s1">result = compareNodesUncached(nodeA, nodeB);</span>
+    <span class="s2">let </span><span class="s1">mapA = COMPARE_NODES_CACHE.get(nodeA);</span>
+    <span class="s2">if </span><span class="s1">(mapA == </span><span class="s2">null</span><span class="s1">) {</span>
+        <span class="s1">mapA = </span><span class="s2">new </span><span class="s1">WeakMap();</span>
+        <span class="s1">COMPARE_NODES_CACHE.set(nodeA, mapA);</span>
+    <span class="s1">}</span>
+    <span class="s1">mapA.set(nodeB, result);</span>
+    <span class="s2">return </span><span class="s1">result;</span>
+<span class="s1">}</span>
+</pre>
+</body>
+</html>

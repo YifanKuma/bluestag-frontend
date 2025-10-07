@@ -1,0 +1,161 @@
+<html>
+<head>
+<title>tsconfig-loader.js</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #067d17;}
+.s1 { color: #080808;}
+.s2 { color: #0033b3;}
+.s3 { color: #1750eb;}
+.s4 { color: #8c8c8c; font-style: italic;}
+</style>
+</head>
+<body bgcolor="#ffffff">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#c0c0c0" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+tsconfig-loader.js</font>
+</center></td></tr></table>
+<pre><span class="s0">&quot;use strict&quot;</span><span class="s1">;</span>
+<span class="s2">var </span><span class="s1">__assign = (</span><span class="s2">this </span><span class="s1">&amp;&amp; </span><span class="s2">this</span><span class="s1">.__assign) || </span><span class="s2">function </span><span class="s1">() {</span>
+    <span class="s1">__assign = Object.assign || </span><span class="s2">function</span><span class="s1">(t) {</span>
+        <span class="s2">for </span><span class="s1">(</span><span class="s2">var </span><span class="s1">s, i = </span><span class="s3">1</span><span class="s1">, n = arguments.length; i &lt; n; i++) {</span>
+            <span class="s1">s = arguments[i];</span>
+            <span class="s2">for </span><span class="s1">(</span><span class="s2">var </span><span class="s1">p </span><span class="s2">in </span><span class="s1">s) </span><span class="s2">if </span><span class="s1">(Object.prototype.hasOwnProperty.call(s, p))</span>
+                <span class="s1">t[p] = s[p];</span>
+        <span class="s1">}</span>
+        <span class="s2">return </span><span class="s1">t;</span>
+    <span class="s1">};</span>
+    <span class="s2">return </span><span class="s1">__assign.apply(</span><span class="s2">this</span><span class="s1">, arguments);</span>
+<span class="s1">};</span>
+<span class="s1">Object.defineProperty(exports, </span><span class="s0">&quot;__esModule&quot;</span><span class="s1">, { value: </span><span class="s2">true </span><span class="s1">});</span>
+<span class="s1">exports.loadTsconfig = exports.walkForTsConfig = exports.tsConfigLoader = </span><span class="s2">void </span><span class="s3">0</span><span class="s1">;</span>
+<span class="s2">var </span><span class="s1">path = require(</span><span class="s0">&quot;path&quot;</span><span class="s1">);</span>
+<span class="s2">var </span><span class="s1">fs = require(</span><span class="s0">&quot;fs&quot;</span><span class="s1">);</span>
+<span class="s4">// tslint:disable:no-require-imports</span>
+<span class="s2">var </span><span class="s1">JSON5 = require(</span><span class="s0">&quot;json5&quot;</span><span class="s1">);</span>
+<span class="s2">var </span><span class="s1">StripBom = require(</span><span class="s0">&quot;strip-bom&quot;</span><span class="s1">);</span>
+<span class="s2">function </span><span class="s1">tsConfigLoader(_a) {</span>
+    <span class="s2">var </span><span class="s1">getEnv = _a.getEnv, cwd = _a.cwd, _b = _a.loadSync, loadSync = _b === </span><span class="s2">void </span><span class="s3">0 </span><span class="s1">? loadSyncDefault : _b;</span>
+    <span class="s2">var </span><span class="s1">TS_NODE_PROJECT = getEnv(</span><span class="s0">&quot;TS_NODE_PROJECT&quot;</span><span class="s1">);</span>
+    <span class="s2">var </span><span class="s1">TS_NODE_BASEURL = getEnv(</span><span class="s0">&quot;TS_NODE_BASEURL&quot;</span><span class="s1">);</span>
+    <span class="s4">// tsconfig.loadSync handles if TS_NODE_PROJECT is a file or directory</span>
+    <span class="s4">// and also overrides baseURL if TS_NODE_BASEURL is available.</span>
+    <span class="s2">var </span><span class="s1">loadResult = loadSync(cwd, TS_NODE_PROJECT, TS_NODE_BASEURL);</span>
+    <span class="s2">return </span><span class="s1">loadResult;</span>
+<span class="s1">}</span>
+<span class="s1">exports.tsConfigLoader = tsConfigLoader;</span>
+<span class="s2">function </span><span class="s1">loadSyncDefault(cwd, filename, baseUrl) {</span>
+    <span class="s4">// Tsconfig.loadSync uses path.resolve. This is why we can use an absolute path as filename</span>
+    <span class="s2">var </span><span class="s1">configPath = resolveConfigPath(cwd, filename);</span>
+    <span class="s2">if </span><span class="s1">(!configPath) {</span>
+        <span class="s2">return </span><span class="s1">{</span>
+            <span class="s1">tsConfigPath: undefined,</span>
+            <span class="s1">baseUrl: undefined,</span>
+            <span class="s1">paths: undefined,</span>
+        <span class="s1">};</span>
+    <span class="s1">}</span>
+    <span class="s2">var </span><span class="s1">config = loadTsconfig(configPath);</span>
+    <span class="s2">return </span><span class="s1">{</span>
+        <span class="s1">tsConfigPath: configPath,</span>
+        <span class="s1">baseUrl: baseUrl ||</span>
+            <span class="s1">(config &amp;&amp; config.compilerOptions &amp;&amp; config.compilerOptions.baseUrl),</span>
+        <span class="s1">paths: config &amp;&amp; config.compilerOptions &amp;&amp; config.compilerOptions.paths,</span>
+    <span class="s1">};</span>
+<span class="s1">}</span>
+<span class="s2">function </span><span class="s1">resolveConfigPath(cwd, filename) {</span>
+    <span class="s2">if </span><span class="s1">(filename) {</span>
+        <span class="s2">var </span><span class="s1">absolutePath = fs.lstatSync(filename).isDirectory()</span>
+            <span class="s1">? path.resolve(filename, </span><span class="s0">&quot;./tsconfig.json&quot;</span><span class="s1">)</span>
+            <span class="s1">: path.resolve(cwd, filename);</span>
+        <span class="s2">return </span><span class="s1">absolutePath;</span>
+    <span class="s1">}</span>
+    <span class="s2">if </span><span class="s1">(fs.statSync(cwd).isFile()) {</span>
+        <span class="s2">return </span><span class="s1">path.resolve(cwd);</span>
+    <span class="s1">}</span>
+    <span class="s2">var </span><span class="s1">configAbsolutePath = walkForTsConfig(cwd);</span>
+    <span class="s2">return </span><span class="s1">configAbsolutePath ? path.resolve(configAbsolutePath) : undefined;</span>
+<span class="s1">}</span>
+<span class="s2">function </span><span class="s1">walkForTsConfig(directory, existsSync) {</span>
+    <span class="s2">if </span><span class="s1">(existsSync === </span><span class="s2">void </span><span class="s3">0</span><span class="s1">) { existsSync = fs.existsSync; }</span>
+    <span class="s2">var </span><span class="s1">configPath = path.join(directory, </span><span class="s0">&quot;./tsconfig.json&quot;</span><span class="s1">);</span>
+    <span class="s2">if </span><span class="s1">(existsSync(configPath)) {</span>
+        <span class="s2">return </span><span class="s1">configPath;</span>
+    <span class="s1">}</span>
+    <span class="s2">var </span><span class="s1">parentDirectory = path.join(directory, </span><span class="s0">&quot;../&quot;</span><span class="s1">);</span>
+    <span class="s4">// If we reached the top</span>
+    <span class="s2">if </span><span class="s1">(directory === parentDirectory) {</span>
+        <span class="s2">return </span><span class="s1">undefined;</span>
+    <span class="s1">}</span>
+    <span class="s2">return </span><span class="s1">walkForTsConfig(parentDirectory, existsSync);</span>
+<span class="s1">}</span>
+<span class="s1">exports.walkForTsConfig = walkForTsConfig;</span>
+<span class="s2">function </span><span class="s1">loadTsconfig(configFilePath, existsSync, readFileSync) {</span>
+    <span class="s2">if </span><span class="s1">(existsSync === </span><span class="s2">void </span><span class="s3">0</span><span class="s1">) { existsSync = fs.existsSync; }</span>
+    <span class="s2">if </span><span class="s1">(readFileSync === </span><span class="s2">void </span><span class="s3">0</span><span class="s1">) { readFileSync = </span><span class="s2">function </span><span class="s1">(filename) {</span>
+        <span class="s2">return </span><span class="s1">fs.readFileSync(filename, </span><span class="s0">&quot;utf8&quot;</span><span class="s1">);</span>
+    <span class="s1">}; }</span>
+    <span class="s2">if </span><span class="s1">(!existsSync(configFilePath)) {</span>
+        <span class="s2">return </span><span class="s1">undefined;</span>
+    <span class="s1">}</span>
+    <span class="s2">var </span><span class="s1">configString = readFileSync(configFilePath);</span>
+    <span class="s2">var </span><span class="s1">cleanedJson = StripBom(configString);</span>
+    <span class="s2">var </span><span class="s1">config;</span>
+    <span class="s2">try </span><span class="s1">{</span>
+        <span class="s1">config = JSON5.parse(cleanedJson);</span>
+    <span class="s1">}</span>
+    <span class="s2">catch </span><span class="s1">(e) {</span>
+        <span class="s2">throw new </span><span class="s1">Error(</span><span class="s0">&quot;&quot;</span><span class="s1">.concat(configFilePath, </span><span class="s0">&quot; is malformed &quot;</span><span class="s1">).concat(e.message));</span>
+    <span class="s1">}</span>
+    <span class="s2">var </span><span class="s1">extendedConfig = config.extends;</span>
+    <span class="s2">if </span><span class="s1">(extendedConfig) {</span>
+        <span class="s2">var </span><span class="s1">base = </span><span class="s2">void </span><span class="s3">0</span><span class="s1">;</span>
+        <span class="s2">if </span><span class="s1">(Array.isArray(extendedConfig)) {</span>
+            <span class="s1">base = extendedConfig.reduce(</span><span class="s2">function </span><span class="s1">(currBase, extendedConfigElement) {</span>
+                <span class="s2">return </span><span class="s1">mergeTsconfigs(currBase, loadTsconfigFromExtends(configFilePath, extendedConfigElement, existsSync, readFileSync));</span>
+            <span class="s1">}, {});</span>
+        <span class="s1">}</span>
+        <span class="s2">else </span><span class="s1">{</span>
+            <span class="s1">base = loadTsconfigFromExtends(configFilePath, extendedConfig, existsSync, readFileSync);</span>
+        <span class="s1">}</span>
+        <span class="s2">return </span><span class="s1">mergeTsconfigs(base, config);</span>
+    <span class="s1">}</span>
+    <span class="s2">return </span><span class="s1">config;</span>
+<span class="s1">}</span>
+<span class="s1">exports.loadTsconfig = loadTsconfig;</span>
+<span class="s4">/**</span>
+ <span class="s4">* Intended to be called only from loadTsconfig.</span>
+ <span class="s4">* Parameters don't have defaults because they should use the same as loadTsconfig.</span>
+ <span class="s4">*/</span>
+<span class="s2">function </span><span class="s1">loadTsconfigFromExtends(configFilePath, extendedConfigValue, </span>
+<span class="s4">// eslint-disable-next-line no-shadow</span>
+<span class="s1">existsSync, readFileSync) {</span>
+    <span class="s2">var </span><span class="s1">_a;</span>
+    <span class="s2">if </span><span class="s1">(</span><span class="s2">typeof </span><span class="s1">extendedConfigValue === </span><span class="s0">&quot;string&quot; </span><span class="s1">&amp;&amp;</span>
+        <span class="s1">extendedConfigValue.indexOf(</span><span class="s0">&quot;.json&quot;</span><span class="s1">) === -</span><span class="s3">1</span><span class="s1">) {</span>
+        <span class="s1">extendedConfigValue += </span><span class="s0">&quot;.json&quot;</span><span class="s1">;</span>
+    <span class="s1">}</span>
+    <span class="s2">var </span><span class="s1">currentDir = path.dirname(configFilePath);</span>
+    <span class="s2">var </span><span class="s1">extendedConfigPath = path.join(currentDir, extendedConfigValue);</span>
+    <span class="s2">if </span><span class="s1">(extendedConfigValue.indexOf(</span><span class="s0">&quot;/&quot;</span><span class="s1">) !== -</span><span class="s3">1 </span><span class="s1">&amp;&amp;</span>
+        <span class="s1">extendedConfigValue.indexOf(</span><span class="s0">&quot;.&quot;</span><span class="s1">) !== -</span><span class="s3">1 </span><span class="s1">&amp;&amp;</span>
+        <span class="s1">!existsSync(extendedConfigPath)) {</span>
+        <span class="s1">extendedConfigPath = path.join(currentDir, </span><span class="s0">&quot;node_modules&quot;</span><span class="s1">, extendedConfigValue);</span>
+    <span class="s1">}</span>
+    <span class="s2">var </span><span class="s1">config = loadTsconfig(extendedConfigPath, existsSync, readFileSync) || {};</span>
+    <span class="s4">// baseUrl should be interpreted as relative to extendedConfigPath,</span>
+    <span class="s4">// but we need to update it so it is relative to the original tsconfig being loaded</span>
+    <span class="s2">if </span><span class="s1">((_a = config.compilerOptions) === </span><span class="s2">null </span><span class="s1">|| _a === </span><span class="s2">void </span><span class="s3">0 </span><span class="s1">? </span><span class="s2">void </span><span class="s3">0 </span><span class="s1">: _a.baseUrl) {</span>
+        <span class="s2">var </span><span class="s1">extendsDir = path.dirname(extendedConfigValue);</span>
+        <span class="s1">config.compilerOptions.baseUrl = path.join(extendsDir, config.compilerOptions.baseUrl);</span>
+    <span class="s1">}</span>
+    <span class="s2">return </span><span class="s1">config;</span>
+<span class="s1">}</span>
+<span class="s2">function </span><span class="s1">mergeTsconfigs(base, config) {</span>
+    <span class="s1">base = base || {};</span>
+    <span class="s1">config = config || {};</span>
+    <span class="s2">return </span><span class="s1">__assign(__assign(__assign({}, base), config), { compilerOptions: __assign(__assign({}, base.compilerOptions), config.compilerOptions) });</span>
+<span class="s1">}</span>
+<span class="s4">//# sourceMappingURL=tsconfig-loader.js.map</span></pre>
+</body>
+</html>

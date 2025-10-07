@@ -1,0 +1,208 @@
+<html>
+<head>
+<title>parsers.js</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #0033b3;}
+.s1 { color: #080808;}
+.s2 { color: #067d17;}
+.s3 { color: #8c8c8c; font-style: italic;}
+.s4 { color: #1750eb;}
+.s5 { color: #0037a6;}
+</style>
+</head>
+<body bgcolor="#ffffff">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#c0c0c0" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+parsers.js</font>
+</center></td></tr></table>
+<pre><span class="s0">import </span><span class="s1">path from </span><span class="s2">'path'</span><span class="s1">;</span>
+<span class="s0">import </span><span class="s1">semver from </span><span class="s2">'semver'</span><span class="s1">;</span>
+<span class="s0">import </span><span class="s1">entries from </span><span class="s2">'object.entries'</span><span class="s1">;</span>
+<span class="s0">import </span><span class="s1">{ version } from </span><span class="s2">'eslint/package.json'</span><span class="s1">;</span>
+<span class="s0">import </span><span class="s1">flatMap from </span><span class="s2">'array.prototype.flatmap'</span><span class="s1">;</span>
+
+<span class="s0">let </span><span class="s1">tsParserVersion;</span>
+<span class="s0">try </span><span class="s1">{</span>
+  <span class="s3">// eslint-disable-next-line import/no-unresolved, global-require</span>
+  <span class="s1">tsParserVersion = require(</span><span class="s2">'@typescript-eslint/parser/package.json'</span><span class="s1">).version;</span>
+<span class="s1">} </span><span class="s0">catch </span><span class="s1">(e) { </span><span class="s3">/**/ </span><span class="s1">}</span>
+
+<span class="s0">const </span><span class="s1">disableNewTS = semver.satisfies(tsParserVersion, </span><span class="s2">'&gt;= 4.1'</span><span class="s1">) </span><span class="s3">// this rule is not useful on v4.1+ of the TS parser</span>
+  <span class="s1">? (x) =&gt; ({ ...x, features: [].concat(x.features, </span><span class="s2">'no-ts-new'</span><span class="s1">) })</span>
+  <span class="s1">: (x) =&gt; x;</span>
+
+<span class="s0">function </span><span class="s1">minEcmaVersion(features, parserOptions) {</span>
+  <span class="s0">const </span><span class="s1">minEcmaVersionForFeatures = {</span>
+    <span class="s2">'class fields'</span><span class="s1">: </span><span class="s4">2022</span><span class="s1">,</span>
+    <span class="s2">'optional chaining'</span><span class="s1">: </span><span class="s4">2020</span><span class="s1">,</span>
+    <span class="s2">'nullish coalescing'</span><span class="s1">: </span><span class="s4">2020</span><span class="s1">,</span>
+  <span class="s1">};</span>
+  <span class="s0">const </span><span class="s1">result = Math.max(</span>
+    <span class="s1">...[].concat(</span>
+      <span class="s1">(parserOptions &amp;&amp; parserOptions.ecmaVersion) || [],</span>
+      <span class="s1">flatMap(entries(minEcmaVersionForFeatures), (entry) =&gt; {</span>
+        <span class="s0">const </span><span class="s1">f = entry[</span><span class="s4">0</span><span class="s1">];</span>
+        <span class="s0">const </span><span class="s1">y = entry[</span><span class="s4">1</span><span class="s1">];</span>
+        <span class="s0">return </span><span class="s1">features.has(f) ? y : [];</span>
+      <span class="s1">}),</span>
+    <span class="s1">).map((y) =&gt; (y &gt; </span><span class="s4">5 </span><span class="s1">&amp;&amp; y &lt; </span><span class="s4">2015 </span><span class="s1">? y + </span><span class="s4">2009 </span><span class="s1">: y)), </span><span class="s3">// normalize editions to years</span>
+  <span class="s1">);</span>
+  <span class="s0">return </span><span class="s1">Number.isFinite(result) ? result : undefined;</span>
+<span class="s1">}</span>
+
+<span class="s0">const </span><span class="s1">NODE_MODULES = </span><span class="s2">'../../node_modules'</span><span class="s1">;</span>
+
+<span class="s0">const </span><span class="s1">parsers = {</span>
+  <span class="s1">BABEL_ESLINT: path.join(__dirname, NODE_MODULES, </span><span class="s2">'babel-eslint'</span><span class="s1">),</span>
+  <span class="s2">'@BABEL_ESLINT'</span><span class="s1">: path.join(__dirname, NODE_MODULES, </span><span class="s2">'@babel/eslint-parser'</span><span class="s1">),</span>
+  <span class="s1">TYPESCRIPT_ESLINT: path.join(__dirname, NODE_MODULES, </span><span class="s2">'typescript-eslint-parser'</span><span class="s1">),</span>
+  <span class="s2">'@TYPESCRIPT_ESLINT'</span><span class="s1">: path.join(__dirname, NODE_MODULES, </span><span class="s2">'@typescript-eslint/parser'</span><span class="s1">),</span>
+  <span class="s1">disableNewTS,</span>
+  <span class="s1">babelParserOptions: </span><span class="s0">function </span><span class="s1">parserOptions(test, features) {</span>
+    <span class="s0">return </span><span class="s1">{</span>
+      <span class="s1">...test.parserOptions,</span>
+      <span class="s1">requireConfigFile: </span><span class="s0">false</span><span class="s1">,</span>
+      <span class="s1">babelOptions: {</span>
+        <span class="s1">presets: [</span>
+          <span class="s2">'@babel/preset-react'</span><span class="s1">,</span>
+        <span class="s1">],</span>
+        <span class="s1">plugins: [</span>
+          <span class="s2">'@babel/plugin-syntax-do-expressions'</span><span class="s1">,</span>
+          <span class="s2">'@babel/plugin-syntax-function-bind'</span><span class="s1">,</span>
+          <span class="s1">[</span><span class="s2">'@babel/plugin-syntax-decorators'</span><span class="s1">, { legacy: </span><span class="s0">true </span><span class="s1">}],</span>
+        <span class="s1">],</span>
+        <span class="s1">parserOpts: {</span>
+          <span class="s1">allowSuperOutsideMethod: </span><span class="s0">false</span><span class="s1">,</span>
+          <span class="s1">allowReturnOutsideFunction: </span><span class="s0">false</span><span class="s1">,</span>
+        <span class="s1">},</span>
+      <span class="s1">},</span>
+      <span class="s1">ecmaFeatures: {</span>
+
+        <span class="s1">...test.parserOptions &amp;&amp; test.parserOptions.ecmaFeatures,</span>
+        <span class="s1">jsx: </span><span class="s0">true</span><span class="s1">,</span>
+        <span class="s1">modules: </span><span class="s0">true</span><span class="s1">,</span>
+        <span class="s1">legacyDecorators: features.has(</span><span class="s2">'decorators'</span><span class="s1">),</span>
+      <span class="s1">},</span>
+    <span class="s1">};</span>
+  <span class="s1">},</span>
+  <span class="s1">all: </span><span class="s0">function </span><span class="s1">all(tests) {</span>
+    <span class="s0">const </span><span class="s1">t = flatMap(tests, (test) =&gt; {</span>
+      <span class="s3">/* eslint no-param-reassign: 0 */</span>
+      <span class="s0">if </span><span class="s1">(</span><span class="s0">typeof </span><span class="s1">test === </span><span class="s2">'string'</span><span class="s1">) {</span>
+        <span class="s1">test = { code: test };</span>
+      <span class="s1">}</span>
+      <span class="s0">if </span><span class="s1">(</span><span class="s2">'parser' </span><span class="s0">in </span><span class="s1">test) {</span>
+        <span class="s0">delete </span><span class="s1">test.features;</span>
+        <span class="s0">return </span><span class="s1">test;</span>
+      <span class="s1">}</span>
+      <span class="s0">const </span><span class="s1">features = </span><span class="s0">new </span><span class="s1">Set([].concat(test.features || []));</span>
+      <span class="s0">delete </span><span class="s1">test.features;</span>
+
+      <span class="s0">const </span><span class="s1">es = minEcmaVersion(features, test.parserOptions);</span>
+
+      <span class="s0">function </span><span class="s1">addComment(testObject, parser) {</span>
+        <span class="s0">const </span><span class="s1">extras = [].concat(</span>
+          <span class="s2">`features: [</span><span class="s1">${Array.from(features).join(</span><span class="s2">','</span><span class="s1">)}</span><span class="s2">]`</span><span class="s1">,</span>
+          <span class="s2">`parser: </span><span class="s1">${parser}</span><span class="s2">`</span><span class="s1">,</span>
+          <span class="s1">testObject.parserOptions ? </span><span class="s2">`parserOptions: </span><span class="s1">${JSON.stringify(testObject.parserOptions)}</span><span class="s2">` </span><span class="s1">: [],</span>
+          <span class="s1">testObject.options ? </span><span class="s2">`options: </span><span class="s1">${JSON.stringify(testObject.options)}</span><span class="s2">` </span><span class="s1">: [],</span>
+          <span class="s1">testObject.settings ? </span><span class="s2">`settings: </span><span class="s1">${JSON.stringify(testObject.settings)}</span><span class="s2">` </span><span class="s1">: [],</span>
+        <span class="s1">);</span>
+
+        <span class="s0">const </span><span class="s1">extraComment = </span><span class="s2">`</span><span class="s5">\n</span><span class="s2">// </span><span class="s1">${extras.join(</span><span class="s2">', '</span><span class="s1">)}</span><span class="s2">`</span><span class="s1">;</span>
+
+        <span class="s3">// Augment expected fix code output with extraComment</span>
+        <span class="s0">const </span><span class="s1">nextCode = { code: testObject.code + extraComment };</span>
+        <span class="s0">const </span><span class="s1">nextOutput = testObject.output &amp;&amp; { output: testObject.output + extraComment };</span>
+
+        <span class="s3">// Augment expected suggestion outputs with extraComment</span>
+        <span class="s3">// `errors` may be a number (expected number of errors) or an array of</span>
+        <span class="s3">// error objects.</span>
+        <span class="s0">const </span><span class="s1">nextErrors = testObject.errors</span>
+          <span class="s1">&amp;&amp; </span><span class="s0">typeof </span><span class="s1">testObject.errors !== </span><span class="s2">'number'</span>
+          <span class="s1">&amp;&amp; {</span>
+            <span class="s1">errors: testObject.errors.map(</span>
+              <span class="s1">(errorObject) =&gt; {</span>
+                <span class="s0">const </span><span class="s1">nextSuggestions = errorObject.suggestions &amp;&amp; {</span>
+                  <span class="s1">suggestions: errorObject.suggestions.map((suggestion) =&gt; ({ ...suggestion, output: suggestion.output + extraComment })),</span>
+                <span class="s1">};</span>
+
+                <span class="s0">return </span><span class="s1">{ ...errorObject, ...nextSuggestions };</span>
+              <span class="s1">},</span>
+            <span class="s1">),</span>
+          <span class="s1">};</span>
+
+        <span class="s0">return </span><span class="s1">{</span>
+
+          <span class="s1">...testObject,</span>
+          <span class="s1">...nextCode,</span>
+          <span class="s1">...nextOutput,</span>
+          <span class="s1">...nextErrors,</span>
+        <span class="s1">};</span>
+      <span class="s1">}</span>
+
+      <span class="s0">const </span><span class="s1">skipBase = (features.has(</span><span class="s2">'class fields'</span><span class="s1">) &amp;&amp; semver.satisfies(version, </span><span class="s2">'&lt; 8'</span><span class="s1">))</span>
+        <span class="s1">|| (es &gt;= </span><span class="s4">2020 </span><span class="s1">&amp;&amp; semver.satisfies(version, </span><span class="s2">'&lt; 6'</span><span class="s1">))</span>
+        <span class="s1">|| features.has(</span><span class="s2">'no-default'</span><span class="s1">)</span>
+        <span class="s1">|| features.has(</span><span class="s2">'bind operator'</span><span class="s1">)</span>
+        <span class="s1">|| features.has(</span><span class="s2">'do expressions'</span><span class="s1">)</span>
+        <span class="s1">|| features.has(</span><span class="s2">'decorators'</span><span class="s1">)</span>
+        <span class="s1">|| features.has(</span><span class="s2">'flow'</span><span class="s1">)</span>
+        <span class="s1">|| features.has(</span><span class="s2">'ts'</span><span class="s1">)</span>
+        <span class="s1">|| features.has(</span><span class="s2">'types'</span><span class="s1">)</span>
+        <span class="s1">|| (features.has(</span><span class="s2">'fragment'</span><span class="s1">) &amp;&amp; semver.satisfies(version, </span><span class="s2">'&lt; 5'</span><span class="s1">));</span>
+
+      <span class="s0">const </span><span class="s1">skipBabel = features.has(</span><span class="s2">'no-babel'</span><span class="s1">);</span>
+      <span class="s0">const </span><span class="s1">skipOldBabel = skipBabel</span>
+        <span class="s1">|| features.has(</span><span class="s2">'no-babel-old'</span><span class="s1">)</span>
+        <span class="s1">|| features.has(</span><span class="s2">'optional chaining'</span><span class="s1">)</span>
+        <span class="s1">|| semver.satisfies(version, </span><span class="s2">'&gt;= 8'</span><span class="s1">);</span>
+      <span class="s0">const </span><span class="s1">skipNewBabel = skipBabel</span>
+        <span class="s1">|| features.has(</span><span class="s2">'no-babel-new'</span><span class="s1">)</span>
+        <span class="s1">|| !semver.satisfies(version, </span><span class="s2">'^7.5.0'</span><span class="s1">) </span><span class="s3">// require('@babel/eslint-parser/package.json').peerDependencies.eslint</span>
+        <span class="s1">|| features.has(</span><span class="s2">'flow'</span><span class="s1">)</span>
+        <span class="s1">|| features.has(</span><span class="s2">'types'</span><span class="s1">)</span>
+        <span class="s1">|| features.has(</span><span class="s2">'ts'</span><span class="s1">);</span>
+      <span class="s0">const </span><span class="s1">skipTS = semver.satisfies(version, </span><span class="s2">'&lt;= 5'</span><span class="s1">) </span><span class="s3">// TODO: make these pass on eslint 5</span>
+        <span class="s1">|| features.has(</span><span class="s2">'no-ts'</span><span class="s1">)</span>
+        <span class="s1">|| features.has(</span><span class="s2">'flow'</span><span class="s1">)</span>
+        <span class="s1">|| features.has(</span><span class="s2">'jsx namespace'</span><span class="s1">)</span>
+        <span class="s1">|| features.has(</span><span class="s2">'bind operator'</span><span class="s1">)</span>
+        <span class="s1">|| features.has(</span><span class="s2">'do expressions'</span><span class="s1">);</span>
+      <span class="s0">const </span><span class="s1">tsOld = !skipTS &amp;&amp; !features.has(</span><span class="s2">'no-ts-old'</span><span class="s1">);</span>
+      <span class="s0">const </span><span class="s1">tsNew = !skipTS &amp;&amp; !features.has(</span><span class="s2">'no-ts-new'</span><span class="s1">);</span>
+
+      <span class="s0">return </span><span class="s1">[].concat(</span>
+        <span class="s1">skipBase ? [] : addComment(</span>
+          <span class="s1">{</span>
+            <span class="s1">...test,</span>
+            <span class="s1">...</span><span class="s0">typeof </span><span class="s1">es === </span><span class="s2">'number' </span><span class="s1">&amp;&amp; {</span>
+              <span class="s1">parserOptions: { ...test.parserOptions, ecmaVersion: es },</span>
+            <span class="s1">},</span>
+          <span class="s1">},</span>
+          <span class="s2">'default'</span><span class="s1">,</span>
+        <span class="s1">),</span>
+        <span class="s1">skipOldBabel ? [] : addComment({</span>
+          <span class="s1">...test,</span>
+          <span class="s1">parser: parsers.BABEL_ESLINT,</span>
+          <span class="s1">parserOptions: parsers.babelParserOptions(test, features),</span>
+        <span class="s1">}, </span><span class="s2">'babel-eslint'</span><span class="s1">),</span>
+        <span class="s1">skipNewBabel ? [] : addComment({</span>
+          <span class="s1">...test,</span>
+          <span class="s1">parser: parsers[</span><span class="s2">'@BABEL_ESLINT'</span><span class="s1">],</span>
+          <span class="s1">parserOptions: parsers.babelParserOptions(test, features),</span>
+        <span class="s1">}, </span><span class="s2">'@babel/eslint-parser'</span><span class="s1">),</span>
+        <span class="s1">tsOld ? addComment({ ...test, parser: parsers.TYPESCRIPT_ESLINT }, </span><span class="s2">'typescript-eslint'</span><span class="s1">) : [],</span>
+        <span class="s1">tsNew ? addComment({ ...test, parser: parsers[</span><span class="s2">'@TYPESCRIPT_ESLINT'</span><span class="s1">] }, </span><span class="s2">'@typescript-eslint/parser'</span><span class="s1">) : [],</span>
+      <span class="s1">);</span>
+    <span class="s1">});</span>
+    <span class="s0">return </span><span class="s1">t;</span>
+  <span class="s1">},</span>
+<span class="s1">};</span>
+
+<span class="s0">export default </span><span class="s1">parsers;</span>
+</pre>
+</body>
+</html>

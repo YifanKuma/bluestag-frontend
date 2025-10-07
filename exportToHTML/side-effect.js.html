@@ -1,0 +1,86 @@
+<html>
+<head>
+<title>side-effect.js</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #067d17;}
+.s1 { color: #080808;}
+.s2 { color: #0033b3;}
+.s3 { color: #1750eb;}
+.s4 { color: #8c8c8c; font-style: italic;}
+</style>
+</head>
+<body bgcolor="#ffffff">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#c0c0c0" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+side-effect.js</font>
+</center></td></tr></table>
+<pre><span class="s0">&quot;use strict&quot;</span><span class="s1">;</span>
+<span class="s1">Object.defineProperty(exports, </span><span class="s0">&quot;__esModule&quot;</span><span class="s1">, {</span>
+    <span class="s1">value: </span><span class="s2">true</span>
+<span class="s1">});</span>
+<span class="s1">Object.defineProperty(exports, </span><span class="s0">&quot;default&quot;</span><span class="s1">, {</span>
+    <span class="s1">enumerable: </span><span class="s2">true</span><span class="s1">,</span>
+    <span class="s1">get: </span><span class="s2">function</span><span class="s1">() {</span>
+        <span class="s2">return </span><span class="s1">SideEffect;</span>
+    <span class="s1">}</span>
+<span class="s1">});</span>
+<span class="s2">const </span><span class="s1">_react = require(</span><span class="s0">&quot;react&quot;</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">isServer = </span><span class="s2">typeof </span><span class="s1">window === </span><span class="s0">'undefined'</span><span class="s1">;</span>
+<span class="s2">const </span><span class="s1">useClientOnlyLayoutEffect = isServer ? ()=&gt;{} : _react.useLayoutEffect;</span>
+<span class="s2">const </span><span class="s1">useClientOnlyEffect = isServer ? ()=&gt;{} : _react.useEffect;</span>
+<span class="s2">function </span><span class="s1">SideEffect(props) {</span>
+    <span class="s2">const </span><span class="s1">{ headManager, reduceComponentsToState } = props;</span>
+    <span class="s2">function </span><span class="s1">emitChange() {</span>
+        <span class="s2">if </span><span class="s1">(headManager &amp;&amp; headManager.mountedInstances) {</span>
+            <span class="s2">const </span><span class="s1">headElements = _react.Children.toArray(Array.from(headManager.mountedInstances).filter(Boolean));</span>
+            <span class="s1">headManager.updateHead(reduceComponentsToState(headElements, props));</span>
+        <span class="s1">}</span>
+    <span class="s1">}</span>
+    <span class="s2">if </span><span class="s1">(isServer) {</span>
+        <span class="s2">var </span><span class="s1">_headManager_mountedInstances;</span>
+        <span class="s1">headManager == </span><span class="s2">null </span><span class="s1">? </span><span class="s2">void </span><span class="s3">0 </span><span class="s1">: (_headManager_mountedInstances = headManager.mountedInstances) == </span><span class="s2">null </span><span class="s1">? </span><span class="s2">void </span><span class="s3">0 </span><span class="s1">: _headManager_mountedInstances.add(props.children);</span>
+        <span class="s1">emitChange();</span>
+    <span class="s1">}</span>
+    <span class="s1">useClientOnlyLayoutEffect(()=&gt;{</span>
+        <span class="s2">var </span><span class="s1">_headManager_mountedInstances;</span>
+        <span class="s1">headManager == </span><span class="s2">null </span><span class="s1">? </span><span class="s2">void </span><span class="s3">0 </span><span class="s1">: (_headManager_mountedInstances = headManager.mountedInstances) == </span><span class="s2">null </span><span class="s1">? </span><span class="s2">void </span><span class="s3">0 </span><span class="s1">: _headManager_mountedInstances.add(props.children);</span>
+        <span class="s2">return </span><span class="s1">()=&gt;{</span>
+            <span class="s2">var </span><span class="s1">_headManager_mountedInstances;</span>
+            <span class="s1">headManager == </span><span class="s2">null </span><span class="s1">? </span><span class="s2">void </span><span class="s3">0 </span><span class="s1">: (_headManager_mountedInstances = headManager.mountedInstances) == </span><span class="s2">null </span><span class="s1">? </span><span class="s2">void </span><span class="s3">0 </span><span class="s1">: _headManager_mountedInstances.delete(props.children);</span>
+        <span class="s1">};</span>
+    <span class="s1">});</span>
+    <span class="s4">// We need to call `updateHead` method whenever the `SideEffect` is trigger in all</span>
+    <span class="s4">// life-cycles: mount, update, unmount. However, if there are multiple `SideEffect`s</span>
+    <span class="s4">// being rendered, we only trigger the method from the last one.</span>
+    <span class="s4">// This is ensured by keeping the last unflushed `updateHead` in the `_pendingUpdate`</span>
+    <span class="s4">// singleton in the layout effect pass, and actually trigger it in the effect pass.</span>
+    <span class="s1">useClientOnlyLayoutEffect(()=&gt;{</span>
+        <span class="s2">if </span><span class="s1">(headManager) {</span>
+            <span class="s1">headManager._pendingUpdate = emitChange;</span>
+        <span class="s1">}</span>
+        <span class="s2">return </span><span class="s1">()=&gt;{</span>
+            <span class="s2">if </span><span class="s1">(headManager) {</span>
+                <span class="s1">headManager._pendingUpdate = emitChange;</span>
+            <span class="s1">}</span>
+        <span class="s1">};</span>
+    <span class="s1">});</span>
+    <span class="s1">useClientOnlyEffect(()=&gt;{</span>
+        <span class="s2">if </span><span class="s1">(headManager &amp;&amp; headManager._pendingUpdate) {</span>
+            <span class="s1">headManager._pendingUpdate();</span>
+            <span class="s1">headManager._pendingUpdate = </span><span class="s2">null</span><span class="s1">;</span>
+        <span class="s1">}</span>
+        <span class="s2">return </span><span class="s1">()=&gt;{</span>
+            <span class="s2">if </span><span class="s1">(headManager &amp;&amp; headManager._pendingUpdate) {</span>
+                <span class="s1">headManager._pendingUpdate();</span>
+                <span class="s1">headManager._pendingUpdate = </span><span class="s2">null</span><span class="s1">;</span>
+            <span class="s1">}</span>
+        <span class="s1">};</span>
+    <span class="s1">});</span>
+    <span class="s2">return null</span><span class="s1">;</span>
+<span class="s1">}</span>
+
+<span class="s4">//# sourceMappingURL=side-effect.js.map</span></pre>
+</body>
+</html>

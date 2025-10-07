@@ -1,0 +1,233 @@
+<html>
+<head>
+<title>no-warning-comments.js</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #8c8c8c; font-style: italic;}
+.s1 { color: #8c8c8c; font-style: italic;}
+.s2 { color: #080808;}
+.s3 { color: #067d17;}
+.s4 { color: #0033b3;}
+.s5 { color: #1750eb;}
+.s6 { color: #0037a6;}
+.s7 { color: #264eff;}
+</style>
+</head>
+<body bgcolor="#ffffff">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#c0c0c0" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+no-warning-comments.js</font>
+</center></td></tr></table>
+<pre><span class="s0">/**</span>
+ <span class="s0">* </span><span class="s1">@fileoverview </span><span class="s0">Rule that warns about used warning comments</span>
+ <span class="s0">* </span><span class="s1">@author </span><span class="s0">Alexander Schmidt &lt;https://github.com/lxanders&gt;</span>
+ <span class="s0">*/</span>
+
+<span class="s3">&quot;use strict&quot;</span><span class="s2">;</span>
+
+<span class="s4">const </span><span class="s2">escapeRegExp = require(</span><span class="s3">&quot;escape-string-regexp&quot;</span><span class="s2">);</span>
+<span class="s4">const </span><span class="s2">astUtils = require(</span><span class="s3">&quot;./utils/ast-utils&quot;</span><span class="s2">);</span>
+
+<span class="s4">const </span><span class="s2">CHAR_LIMIT = </span><span class="s5">40</span><span class="s2">;</span>
+
+<span class="s0">//------------------------------------------------------------------------------</span>
+<span class="s0">// Rule Definition</span>
+<span class="s0">//------------------------------------------------------------------------------</span>
+
+<span class="s0">/** </span><span class="s1">@type </span><span class="s0">{import('../types').Rule.RuleModule} */</span>
+<span class="s2">module.exports = {</span>
+	<span class="s2">meta: {</span>
+		<span class="s2">type: </span><span class="s3">&quot;suggestion&quot;</span><span class="s2">,</span>
+
+		<span class="s2">defaultOptions: [</span>
+			<span class="s2">{</span>
+				<span class="s2">location: </span><span class="s3">&quot;start&quot;</span><span class="s2">,</span>
+				<span class="s2">terms: [</span><span class="s3">&quot;todo&quot;</span><span class="s2">, </span><span class="s3">&quot;fixme&quot;</span><span class="s2">, </span><span class="s3">&quot;xxx&quot;</span><span class="s2">],</span>
+			<span class="s2">},</span>
+		<span class="s2">],</span>
+
+		<span class="s2">docs: {</span>
+			<span class="s2">description: </span><span class="s3">&quot;Disallow specified warning terms in comments&quot;</span><span class="s2">,</span>
+			<span class="s2">recommended: </span><span class="s4">false</span><span class="s2">,</span>
+			<span class="s2">frozen: </span><span class="s4">true</span><span class="s2">,</span>
+			<span class="s2">url: </span><span class="s3">&quot;https://eslint.org/docs/latest/rules/no-warning-comments&quot;</span><span class="s2">,</span>
+		<span class="s2">},</span>
+
+		<span class="s2">schema: [</span>
+			<span class="s2">{</span>
+				<span class="s2">type: </span><span class="s3">&quot;object&quot;</span><span class="s2">,</span>
+				<span class="s2">properties: {</span>
+					<span class="s2">terms: {</span>
+						<span class="s2">type: </span><span class="s3">&quot;array&quot;</span><span class="s2">,</span>
+						<span class="s2">items: {</span>
+							<span class="s2">type: </span><span class="s3">&quot;string&quot;</span><span class="s2">,</span>
+						<span class="s2">},</span>
+					<span class="s2">},</span>
+					<span class="s2">location: {</span>
+						<span class="s4">enum</span><span class="s2">: [</span><span class="s3">&quot;start&quot;</span><span class="s2">, </span><span class="s3">&quot;anywhere&quot;</span><span class="s2">],</span>
+					<span class="s2">},</span>
+					<span class="s2">decoration: {</span>
+						<span class="s2">type: </span><span class="s3">&quot;array&quot;</span><span class="s2">,</span>
+						<span class="s2">items: {</span>
+							<span class="s2">type: </span><span class="s3">&quot;string&quot;</span><span class="s2">,</span>
+							<span class="s2">pattern: </span><span class="s3">&quot;^</span><span class="s6">\\</span><span class="s3">S$&quot;</span><span class="s2">,</span>
+						<span class="s2">},</span>
+						<span class="s2">minItems: </span><span class="s5">1</span><span class="s2">,</span>
+						<span class="s2">uniqueItems: </span><span class="s4">true</span><span class="s2">,</span>
+					<span class="s2">},</span>
+				<span class="s2">},</span>
+				<span class="s2">additionalProperties: </span><span class="s4">false</span><span class="s2">,</span>
+			<span class="s2">},</span>
+		<span class="s2">],</span>
+
+		<span class="s2">messages: {</span>
+			<span class="s2">unexpectedComment:</span>
+				<span class="s3">&quot;Unexpected '{{matchedTerm}}' comment: '{{comment}}'.&quot;</span><span class="s2">,</span>
+		<span class="s2">},</span>
+	<span class="s2">},</span>
+
+	<span class="s2">create(context) {</span>
+		<span class="s4">const </span><span class="s2">sourceCode = context.sourceCode;</span>
+		<span class="s4">const </span><span class="s2">[{ decoration, location, terms: warningTerms }] = context.options;</span>
+		<span class="s4">const </span><span class="s2">escapedDecoration = escapeRegExp(</span>
+			<span class="s2">decoration ? decoration.join(</span><span class="s3">&quot;&quot;</span><span class="s2">) : </span><span class="s3">&quot;&quot;</span><span class="s2">,</span>
+		<span class="s2">);</span>
+		<span class="s4">const </span><span class="s2">selfConfigRegEx = </span><span class="s7">/\bno-warning-comments\b/u</span><span class="s2">;</span>
+
+		<span class="s0">/**</span>
+		 <span class="s0">* Convert a warning term into a RegExp which will match a comment containing that whole word in the specified</span>
+		 <span class="s0">* location (&quot;start&quot; or &quot;anywhere&quot;). If the term starts or ends with non word characters, then the match will not</span>
+		 <span class="s0">* require word boundaries on that side.</span>
+		 <span class="s0">* </span><span class="s1">@param </span><span class="s0">{string} term A term to convert to a RegExp</span>
+		 <span class="s0">* </span><span class="s1">@returns </span><span class="s0">{RegExp} The term converted to a RegExp</span>
+		 <span class="s0">*/</span>
+		<span class="s4">function </span><span class="s2">convertToRegExp(term) {</span>
+			<span class="s4">const </span><span class="s2">escaped = escapeRegExp(term);</span>
+
+			<span class="s0">/* 
+             * When matching at the start, ignore leading whitespace, and 
+             * there's no need to worry about word boundaries. 
+             * 
+             * These expressions for the prefix and suffix are designed as follows: 
+             * ^   handles any terms at the beginning of a comment. 
+             *     e.g. terms [&quot;TODO&quot;] matches `//TODO something` 
+             * $   handles any terms at the end of a comment 
+             *     e.g. terms [&quot;TODO&quot;] matches `// something TODO` 
+             * \b  handles terms preceded/followed by word boundary 
+             *     e.g. terms: [&quot;!FIX&quot;, &quot;FIX!&quot;] matches `// FIX!something` or `// something!FIX` 
+             *          terms: [&quot;FIX&quot;] matches `// FIX!` or `// !FIX`, but not `// fixed or affix` 
+             * 
+             * For location start: 
+             * [\s]* handles optional leading spaces 
+             *     e.g. terms [&quot;TODO&quot;] matches `//    TODO something` 
+             * [\s\*]* (where &quot;\*&quot; is the escaped string of decoration) 
+             *     handles optional leading spaces or decoration characters (for &quot;start&quot; location only) 
+             *     e.g. terms [&quot;TODO&quot;] matches `/**** TODO something ... ` 
+             */</span>
+			<span class="s4">const </span><span class="s2">wordBoundary = </span><span class="s3">&quot;</span><span class="s6">\\</span><span class="s3">b&quot;</span><span class="s2">;</span>
+
+			<span class="s4">let </span><span class="s2">prefix = </span><span class="s3">&quot;&quot;</span><span class="s2">;</span>
+
+			<span class="s4">if </span><span class="s2">(location === </span><span class="s3">&quot;start&quot;</span><span class="s2">) {</span>
+				<span class="s2">prefix = </span><span class="s3">`^[</span><span class="s6">\\</span><span class="s3">s</span><span class="s2">${escapedDecoration}</span><span class="s3">]*`</span><span class="s2">;</span>
+			<span class="s2">} </span><span class="s4">else if </span><span class="s2">(</span><span class="s7">/^\w/u</span><span class="s2">.test(term)) {</span>
+				<span class="s2">prefix = wordBoundary;</span>
+			<span class="s2">}</span>
+
+			<span class="s4">const </span><span class="s2">suffix = </span><span class="s7">/\w$/u</span><span class="s2">.test(term) ? wordBoundary : </span><span class="s3">&quot;&quot;</span><span class="s2">;</span>
+			<span class="s4">const </span><span class="s2">flags = </span><span class="s3">&quot;iu&quot;</span><span class="s2">; </span><span class="s0">// Case-insensitive with Unicode case folding.</span>
+
+			<span class="s0">/* 
+             * For location &quot;start&quot;, the typical regex is: 
+             *   /^[\s]*ESCAPED_TERM\b/iu. 
+             * Or if decoration characters are specified (e.g. &quot;*&quot;), then any of 
+             * those characters may appear in any order at the start: 
+             *   /^[\s\*]*ESCAPED_TERM\b/iu. 
+             * 
+             * For location &quot;anywhere&quot; the typical regex is 
+             *   /\bESCAPED_TERM\b/iu 
+             * 
+             * If it starts or ends with non-word character, the prefix and suffix are empty, respectively. 
+             */</span>
+			<span class="s4">return new </span><span class="s2">RegExp(</span><span class="s3">`</span><span class="s2">${prefix}${escaped}${suffix}</span><span class="s3">`</span><span class="s2">, flags);</span>
+		<span class="s2">}</span>
+
+		<span class="s4">const </span><span class="s2">warningRegExps = warningTerms.map(convertToRegExp);</span>
+
+		<span class="s0">/**</span>
+		 <span class="s0">* Checks the specified comment for matches of the configured warning terms and returns the matches.</span>
+		 <span class="s0">* </span><span class="s1">@param </span><span class="s0">{string} comment The comment which is checked.</span>
+		 <span class="s0">* </span><span class="s1">@returns </span><span class="s0">{Array} All matched warning terms for this comment.</span>
+		 <span class="s0">*/</span>
+		<span class="s4">function </span><span class="s2">commentContainsWarningTerm(comment) {</span>
+			<span class="s4">const </span><span class="s2">matches = [];</span>
+
+			<span class="s2">warningRegExps.forEach((regex, index) =&gt; {</span>
+				<span class="s4">if </span><span class="s2">(regex.test(comment)) {</span>
+					<span class="s2">matches.push(warningTerms[index]);</span>
+				<span class="s2">}</span>
+			<span class="s2">});</span>
+
+			<span class="s4">return </span><span class="s2">matches;</span>
+		<span class="s2">}</span>
+
+		<span class="s0">/**</span>
+		 <span class="s0">* Checks the specified node for matching warning comments and reports them.</span>
+		 <span class="s0">* </span><span class="s1">@param </span><span class="s0">{ASTNode} node The AST node being checked.</span>
+		 <span class="s0">* </span><span class="s1">@returns </span><span class="s0">{void} undefined.</span>
+		 <span class="s0">*/</span>
+		<span class="s4">function </span><span class="s2">checkComment(node) {</span>
+			<span class="s4">const </span><span class="s2">comment = node.value;</span>
+
+			<span class="s4">if </span><span class="s2">(</span>
+				<span class="s2">astUtils.isDirectiveComment(node) &amp;&amp;</span>
+				<span class="s2">selfConfigRegEx.test(comment)</span>
+			<span class="s2">) {</span>
+				<span class="s4">return</span><span class="s2">;</span>
+			<span class="s2">}</span>
+
+			<span class="s4">const </span><span class="s2">matches = commentContainsWarningTerm(comment);</span>
+
+			<span class="s2">matches.forEach(matchedTerm =&gt; {</span>
+				<span class="s4">let </span><span class="s2">commentToDisplay = </span><span class="s3">&quot;&quot;</span><span class="s2">;</span>
+				<span class="s4">let </span><span class="s2">truncated = </span><span class="s4">false</span><span class="s2">;</span>
+
+				<span class="s4">for </span><span class="s2">(</span><span class="s4">const </span><span class="s2">c of comment.trim().split(</span><span class="s7">/\s+/u</span><span class="s2">)) {</span>
+					<span class="s4">const </span><span class="s2">tmp = commentToDisplay</span>
+						<span class="s2">? </span><span class="s3">`</span><span class="s2">${commentToDisplay} ${c}</span><span class="s3">`</span>
+						<span class="s2">: c;</span>
+
+					<span class="s4">if </span><span class="s2">(tmp.length &lt;= CHAR_LIMIT) {</span>
+						<span class="s2">commentToDisplay = tmp;</span>
+					<span class="s2">} </span><span class="s4">else </span><span class="s2">{</span>
+						<span class="s2">truncated = </span><span class="s4">true</span><span class="s2">;</span>
+						<span class="s4">break</span><span class="s2">;</span>
+					<span class="s2">}</span>
+				<span class="s2">}</span>
+
+				<span class="s2">context.report({</span>
+					<span class="s2">node,</span>
+					<span class="s2">messageId: </span><span class="s3">&quot;unexpectedComment&quot;</span><span class="s2">,</span>
+					<span class="s2">data: {</span>
+						<span class="s2">matchedTerm,</span>
+						<span class="s2">comment: </span><span class="s3">`</span><span class="s2">${commentToDisplay}${truncated ? </span><span class="s3">&quot;...&quot; </span><span class="s2">: </span><span class="s3">&quot;&quot;</span><span class="s2">}</span><span class="s3">`</span><span class="s2">,</span>
+					<span class="s2">},</span>
+				<span class="s2">});</span>
+			<span class="s2">});</span>
+		<span class="s2">}</span>
+
+		<span class="s4">return </span><span class="s2">{</span>
+			<span class="s2">Program() {</span>
+				<span class="s4">const </span><span class="s2">comments = sourceCode.getAllComments();</span>
+
+				<span class="s2">comments</span>
+					<span class="s2">.filter(token =&gt; token.type !== </span><span class="s3">&quot;Shebang&quot;</span><span class="s2">)</span>
+					<span class="s2">.forEach(checkComment);</span>
+			<span class="s2">},</span>
+		<span class="s2">};</span>
+	<span class="s2">},</span>
+<span class="s2">};</span>
+</pre>
+</body>
+</html>

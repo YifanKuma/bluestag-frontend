@@ -1,0 +1,404 @@
+<html>
+<head>
+<title>adapter.js</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #067d17;}
+.s1 { color: #080808;}
+.s2 { color: #0033b3;}
+.s3 { color: #1750eb;}
+.s4 { color: #8c8c8c; font-style: italic;}
+.s5 { color: #264eff;}
+</style>
+</head>
+<body bgcolor="#ffffff">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#c0c0c0" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+adapter.js</font>
+</center></td></tr></table>
+<pre><span class="s0">&quot;use strict&quot;</span><span class="s1">;</span>
+<span class="s1">Object.defineProperty(exports, </span><span class="s0">&quot;__esModule&quot;</span><span class="s1">, {</span>
+    <span class="s1">value: </span><span class="s2">true</span>
+<span class="s1">});</span>
+<span class="s3">0 </span><span class="s1">&amp;&amp; (module.exports = {</span>
+    <span class="s1">NextRequestHint: </span><span class="s2">null</span><span class="s1">,</span>
+    <span class="s1">adapter: </span><span class="s2">null</span>
+<span class="s1">});</span>
+<span class="s2">function </span><span class="s1">_export(target, all) {</span>
+    <span class="s2">for</span><span class="s1">(</span><span class="s2">var </span><span class="s1">name </span><span class="s2">in </span><span class="s1">all)Object.defineProperty(target, name, {</span>
+        <span class="s1">enumerable: </span><span class="s2">true</span><span class="s1">,</span>
+        <span class="s1">get: all[name]</span>
+    <span class="s1">});</span>
+<span class="s1">}</span>
+<span class="s1">_export(exports, {</span>
+    <span class="s1">NextRequestHint: </span><span class="s2">function</span><span class="s1">() {</span>
+        <span class="s2">return </span><span class="s1">NextRequestHint;</span>
+    <span class="s1">},</span>
+    <span class="s1">adapter: </span><span class="s2">function</span><span class="s1">() {</span>
+        <span class="s2">return </span><span class="s1">adapter;</span>
+    <span class="s1">}</span>
+<span class="s1">});</span>
+<span class="s2">const </span><span class="s1">_error = require(</span><span class="s0">&quot;./error&quot;</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">_utils = require(</span><span class="s0">&quot;./utils&quot;</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">_fetchevent = require(</span><span class="s0">&quot;./spec-extension/fetch-event&quot;</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">_request = require(</span><span class="s0">&quot;./spec-extension/request&quot;</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">_response = require(</span><span class="s0">&quot;./spec-extension/response&quot;</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">_relativizeurl = require(</span><span class="s0">&quot;../../shared/lib/router/utils/relativize-url&quot;</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">_nexturl = require(</span><span class="s0">&quot;./next-url&quot;</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">_internalutils = require(</span><span class="s0">&quot;../internal-utils&quot;</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">_apppaths = require(</span><span class="s0">&quot;../../shared/lib/router/utils/app-paths&quot;</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">_approuterheaders = require(</span><span class="s0">&quot;../../client/components/app-router-headers&quot;</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">_globals = require(</span><span class="s0">&quot;./globals&quot;</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">_requeststore = require(</span><span class="s0">&quot;../async-storage/request-store&quot;</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">_workunitasyncstorageexternal = require(</span><span class="s0">&quot;../app-render/work-unit-async-storage.external&quot;</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">_workstore = require(</span><span class="s0">&quot;../async-storage/work-store&quot;</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">_workasyncstorageexternal = require(</span><span class="s0">&quot;../app-render/work-async-storage.external&quot;</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">_tracer = require(</span><span class="s0">&quot;../lib/trace/tracer&quot;</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">_constants = require(</span><span class="s0">&quot;../lib/trace/constants&quot;</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">_webonclose = require(</span><span class="s0">&quot;./web-on-close&quot;</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">_getedgepreviewprops = require(</span><span class="s0">&quot;./get-edge-preview-props&quot;</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">_builtinrequestcontext = require(</span><span class="s0">&quot;../after/builtin-request-context&quot;</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">_implicittags = require(</span><span class="s0">&quot;../lib/implicit-tags&quot;</span><span class="s1">);</span>
+<span class="s2">class </span><span class="s1">NextRequestHint </span><span class="s2">extends </span><span class="s1">_request.NextRequest {</span>
+    <span class="s1">constructor(params){</span>
+        <span class="s2">super</span><span class="s1">(params.input, params.init);</span>
+        <span class="s2">this</span><span class="s1">.sourcePage = params.page;</span>
+    <span class="s1">}</span>
+    <span class="s1">get request() {</span>
+        <span class="s2">throw </span><span class="s1">Object.defineProperty(</span><span class="s2">new </span><span class="s1">_error.PageSignatureError({</span>
+            <span class="s1">page: </span><span class="s2">this</span><span class="s1">.sourcePage</span>
+        <span class="s1">}), </span><span class="s0">&quot;__NEXT_ERROR_CODE&quot;</span><span class="s1">, {</span>
+            <span class="s1">value: </span><span class="s0">&quot;E394&quot;</span><span class="s1">,</span>
+            <span class="s1">enumerable: </span><span class="s2">false</span><span class="s1">,</span>
+            <span class="s1">configurable: </span><span class="s2">true</span>
+        <span class="s1">});</span>
+    <span class="s1">}</span>
+    <span class="s1">respondWith() {</span>
+        <span class="s2">throw </span><span class="s1">Object.defineProperty(</span><span class="s2">new </span><span class="s1">_error.PageSignatureError({</span>
+            <span class="s1">page: </span><span class="s2">this</span><span class="s1">.sourcePage</span>
+        <span class="s1">}), </span><span class="s0">&quot;__NEXT_ERROR_CODE&quot;</span><span class="s1">, {</span>
+            <span class="s1">value: </span><span class="s0">&quot;E394&quot;</span><span class="s1">,</span>
+            <span class="s1">enumerable: </span><span class="s2">false</span><span class="s1">,</span>
+            <span class="s1">configurable: </span><span class="s2">true</span>
+        <span class="s1">});</span>
+    <span class="s1">}</span>
+    <span class="s1">waitUntil() {</span>
+        <span class="s2">throw </span><span class="s1">Object.defineProperty(</span><span class="s2">new </span><span class="s1">_error.PageSignatureError({</span>
+            <span class="s1">page: </span><span class="s2">this</span><span class="s1">.sourcePage</span>
+        <span class="s1">}), </span><span class="s0">&quot;__NEXT_ERROR_CODE&quot;</span><span class="s1">, {</span>
+            <span class="s1">value: </span><span class="s0">&quot;E394&quot;</span><span class="s1">,</span>
+            <span class="s1">enumerable: </span><span class="s2">false</span><span class="s1">,</span>
+            <span class="s1">configurable: </span><span class="s2">true</span>
+        <span class="s1">});</span>
+    <span class="s1">}</span>
+<span class="s1">}</span>
+<span class="s2">const </span><span class="s1">headersGetter = {</span>
+    <span class="s1">keys: (headers)=&gt;Array.from(headers.keys()),</span>
+    <span class="s1">get: (headers, key)=&gt;headers.get(key) ?? undefined</span>
+<span class="s1">};</span>
+<span class="s2">let </span><span class="s1">propagator = (request, fn)=&gt;{</span>
+    <span class="s2">const </span><span class="s1">tracer = (</span><span class="s3">0</span><span class="s1">, _tracer.getTracer)();</span>
+    <span class="s2">return </span><span class="s1">tracer.withPropagatedContext(request.headers, fn, headersGetter);</span>
+<span class="s1">};</span>
+<span class="s2">let </span><span class="s1">testApisIntercepted = </span><span class="s2">false</span><span class="s1">;</span>
+<span class="s2">function </span><span class="s1">ensureTestApisIntercepted() {</span>
+    <span class="s2">if </span><span class="s1">(!testApisIntercepted) {</span>
+        <span class="s1">testApisIntercepted = </span><span class="s2">true</span><span class="s1">;</span>
+        <span class="s2">if </span><span class="s1">(process.env.NEXT_PRIVATE_TEST_PROXY === </span><span class="s0">'true'</span><span class="s1">) {</span>
+            <span class="s2">const </span><span class="s1">{ interceptTestApis, wrapRequestHandler } = </span><span class="s4">// eslint-disable-next-line @next/internal/typechecked-require -- experimental/testmode is not built ins next/dist/esm</span>
+            <span class="s1">require(</span><span class="s0">'next/dist/experimental/testmode/server-edge'</span><span class="s1">);</span>
+            <span class="s1">interceptTestApis();</span>
+            <span class="s1">propagator = wrapRequestHandler(propagator);</span>
+        <span class="s1">}</span>
+    <span class="s1">}</span>
+<span class="s1">}</span>
+<span class="s1">async </span><span class="s2">function </span><span class="s1">adapter(params) {</span>
+    <span class="s2">var </span><span class="s1">_getBuiltinRequestContext;</span>
+    <span class="s1">ensureTestApisIntercepted();</span>
+    <span class="s2">await </span><span class="s1">(</span><span class="s3">0</span><span class="s1">, _globals.ensureInstrumentationRegistered)();</span>
+    <span class="s4">// TODO-APP: use explicit marker for this</span>
+    <span class="s2">const </span><span class="s1">isEdgeRendering = </span><span class="s2">typeof </span><span class="s1">globalThis.__BUILD_MANIFEST !== </span><span class="s0">'undefined'</span><span class="s1">;</span>
+    <span class="s1">params.request.url = (</span><span class="s3">0</span><span class="s1">, _apppaths.normalizeRscURL)(params.request.url);</span>
+    <span class="s2">const </span><span class="s1">requestURL = params.bypassNextUrl ? </span><span class="s2">new </span><span class="s1">URL(params.request.url) : </span><span class="s2">new </span><span class="s1">_nexturl.NextURL(params.request.url, {</span>
+        <span class="s1">headers: params.request.headers,</span>
+        <span class="s1">nextConfig: params.request.nextConfig</span>
+    <span class="s1">});</span>
+    <span class="s4">// Iterator uses an index to keep track of the current iteration. Because of deleting and appending below we can't just use the iterator.</span>
+    <span class="s4">// Instead we use the keys before iteration.</span>
+    <span class="s2">const </span><span class="s1">keys = [</span>
+        <span class="s1">...requestURL.searchParams.keys()</span>
+    <span class="s1">];</span>
+    <span class="s2">for </span><span class="s1">(</span><span class="s2">const </span><span class="s1">key of keys){</span>
+        <span class="s2">const </span><span class="s1">value = requestURL.searchParams.getAll(key);</span>
+        <span class="s2">const </span><span class="s1">normalizedKey = (</span><span class="s3">0</span><span class="s1">, _utils.normalizeNextQueryParam)(key);</span>
+        <span class="s2">if </span><span class="s1">(normalizedKey) {</span>
+            <span class="s1">requestURL.searchParams.delete(normalizedKey);</span>
+            <span class="s2">for </span><span class="s1">(</span><span class="s2">const </span><span class="s1">val of value){</span>
+                <span class="s1">requestURL.searchParams.append(normalizedKey, val);</span>
+            <span class="s1">}</span>
+            <span class="s1">requestURL.searchParams.delete(key);</span>
+        <span class="s1">}</span>
+    <span class="s1">}</span>
+    <span class="s4">// Ensure users only see page requests, never data requests.</span>
+    <span class="s2">let </span><span class="s1">buildId = process.env.__NEXT_BUILD_ID || </span><span class="s0">''</span><span class="s1">;</span>
+    <span class="s2">if </span><span class="s1">(</span><span class="s0">'buildId' </span><span class="s2">in </span><span class="s1">requestURL) {</span>
+        <span class="s1">buildId = requestURL.buildId || </span><span class="s0">''</span><span class="s1">;</span>
+        <span class="s1">requestURL.buildId = </span><span class="s0">''</span><span class="s1">;</span>
+    <span class="s1">}</span>
+    <span class="s2">const </span><span class="s1">requestHeaders = (</span><span class="s3">0</span><span class="s1">, _utils.fromNodeOutgoingHttpHeaders)(params.request.headers);</span>
+    <span class="s2">const </span><span class="s1">isNextDataRequest = requestHeaders.has(</span><span class="s0">'x-nextjs-data'</span><span class="s1">);</span>
+    <span class="s2">const </span><span class="s1">isRSCRequest = requestHeaders.get(_approuterheaders.RSC_HEADER) === </span><span class="s0">'1'</span><span class="s1">;</span>
+    <span class="s2">if </span><span class="s1">(isNextDataRequest &amp;&amp; requestURL.pathname === </span><span class="s0">'/index'</span><span class="s1">) {</span>
+        <span class="s1">requestURL.pathname = </span><span class="s0">'/'</span><span class="s1">;</span>
+    <span class="s1">}</span>
+    <span class="s2">const </span><span class="s1">flightHeaders = </span><span class="s2">new </span><span class="s1">Map();</span>
+    <span class="s4">// Headers should only be stripped for middleware</span>
+    <span class="s2">if </span><span class="s1">(!isEdgeRendering) {</span>
+        <span class="s2">for </span><span class="s1">(</span><span class="s2">const </span><span class="s1">header of _approuterheaders.FLIGHT_HEADERS){</span>
+            <span class="s2">const </span><span class="s1">value = requestHeaders.get(header);</span>
+            <span class="s2">if </span><span class="s1">(value !== </span><span class="s2">null</span><span class="s1">) {</span>
+                <span class="s1">flightHeaders.set(header, value);</span>
+                <span class="s1">requestHeaders.delete(header);</span>
+            <span class="s1">}</span>
+        <span class="s1">}</span>
+    <span class="s1">}</span>
+    <span class="s2">const </span><span class="s1">normalizeURL = process.env.__NEXT_NO_MIDDLEWARE_URL_NORMALIZE ? </span><span class="s2">new </span><span class="s1">URL(params.request.url) : requestURL;</span>
+    <span class="s2">const </span><span class="s1">rscHash = normalizeURL.searchParams.get(_approuterheaders.NEXT_RSC_UNION_QUERY);</span>
+    <span class="s2">const </span><span class="s1">request = </span><span class="s2">new </span><span class="s1">NextRequestHint({</span>
+        <span class="s1">page: params.page,</span>
+        <span class="s4">// Strip internal query parameters off the request.</span>
+        <span class="s1">input: (</span><span class="s3">0</span><span class="s1">, _internalutils.stripInternalSearchParams)(normalizeURL).toString(),</span>
+        <span class="s1">init: {</span>
+            <span class="s1">body: params.request.body,</span>
+            <span class="s1">headers: requestHeaders,</span>
+            <span class="s1">method: params.request.method,</span>
+            <span class="s1">nextConfig: params.request.nextConfig,</span>
+            <span class="s1">signal: params.request.signal</span>
+        <span class="s1">}</span>
+    <span class="s1">});</span>
+    <span class="s4">/**</span>
+   <span class="s4">* This allows to identify the request as a data request. The user doesn't</span>
+   <span class="s4">* need to know about this property neither use it. We add it for testing</span>
+   <span class="s4">* purposes.</span>
+   <span class="s4">*/ </span><span class="s2">if </span><span class="s1">(isNextDataRequest) {</span>
+        <span class="s1">Object.defineProperty(request, </span><span class="s0">'__isData'</span><span class="s1">, {</span>
+            <span class="s1">enumerable: </span><span class="s2">false</span><span class="s1">,</span>
+            <span class="s1">value: </span><span class="s2">true</span>
+        <span class="s1">});</span>
+    <span class="s1">}</span>
+    <span class="s2">if </span><span class="s1">(</span><span class="s4">// If we are inside of the next start sandbox</span>
+    <span class="s4">// leverage the shared instance if not we need</span>
+    <span class="s4">// to create a fresh cache instance each time</span>
+    <span class="s1">!globalThis.__incrementalCacheShared &amp;&amp; params.IncrementalCache) {</span>
+        <span class="s1">;</span>
+        <span class="s1">globalThis.__incrementalCache = </span><span class="s2">new </span><span class="s1">params.IncrementalCache({</span>
+            <span class="s1">CurCacheHandler: params.incrementalCacheHandler,</span>
+            <span class="s1">minimalMode: process.env.NODE_ENV !== </span><span class="s0">'development'</span><span class="s1">,</span>
+            <span class="s1">fetchCacheKeyPrefix: process.env.__NEXT_FETCH_CACHE_KEY_PREFIX,</span>
+            <span class="s1">dev: process.env.NODE_ENV === </span><span class="s0">'development'</span><span class="s1">,</span>
+            <span class="s1">requestHeaders: params.request.headers,</span>
+            <span class="s1">getPrerenderManifest: ()=&gt;{</span>
+                <span class="s2">return </span><span class="s1">{</span>
+                    <span class="s1">version: -</span><span class="s3">1</span><span class="s1">,</span>
+                    <span class="s1">routes: {},</span>
+                    <span class="s1">dynamicRoutes: {},</span>
+                    <span class="s1">notFoundRoutes: [],</span>
+                    <span class="s1">preview: (</span><span class="s3">0</span><span class="s1">, _getedgepreviewprops.getEdgePreviewProps)()</span>
+                <span class="s1">};</span>
+            <span class="s1">}</span>
+        <span class="s1">});</span>
+    <span class="s1">}</span>
+    <span class="s4">// if we're in an edge runtime sandbox, we should use the waitUntil</span>
+    <span class="s4">// that we receive from the enclosing NextServer</span>
+    <span class="s2">const </span><span class="s1">outerWaitUntil = params.request.waitUntil ?? ((_getBuiltinRequestContext = (</span><span class="s3">0</span><span class="s1">, _builtinrequestcontext.getBuiltinRequestContext)()) == </span><span class="s2">null </span><span class="s1">? </span><span class="s2">void </span><span class="s3">0 </span><span class="s1">: _getBuiltinRequestContext.waitUntil);</span>
+    <span class="s2">const </span><span class="s1">event = </span><span class="s2">new </span><span class="s1">_fetchevent.NextFetchEvent({</span>
+        <span class="s1">request,</span>
+        <span class="s1">page: params.page,</span>
+        <span class="s1">context: outerWaitUntil ? {</span>
+            <span class="s1">waitUntil: outerWaitUntil</span>
+        <span class="s1">} : undefined</span>
+    <span class="s1">});</span>
+    <span class="s2">let </span><span class="s1">response;</span>
+    <span class="s2">let </span><span class="s1">cookiesFromResponse;</span>
+    <span class="s1">response = </span><span class="s2">await </span><span class="s1">propagator(request, ()=&gt;{</span>
+        <span class="s4">// we only care to make async storage available for middleware</span>
+        <span class="s2">const </span><span class="s1">isMiddleware = params.page === </span><span class="s0">'/middleware' </span><span class="s1">|| params.page === </span><span class="s0">'/src/middleware'</span><span class="s1">;</span>
+        <span class="s2">if </span><span class="s1">(isMiddleware) {</span>
+            <span class="s4">// if we're in an edge function, we only get a subset of `nextConfig` (no `experimental`),</span>
+            <span class="s4">// so we have to inject it via DefinePlugin.</span>
+            <span class="s4">// in `next start` this will be passed normally (see `NextNodeServer.runMiddleware`).</span>
+            <span class="s2">const </span><span class="s1">waitUntil = event.waitUntil.bind(event);</span>
+            <span class="s2">const </span><span class="s1">closeController = </span><span class="s2">new </span><span class="s1">_webonclose.CloseController();</span>
+            <span class="s2">return </span><span class="s1">(</span><span class="s3">0</span><span class="s1">, _tracer.getTracer)().trace(_constants.MiddlewareSpan.execute, {</span>
+                <span class="s1">spanName: </span><span class="s0">`middleware </span><span class="s1">${request.method} ${request.nextUrl.pathname}</span><span class="s0">`</span><span class="s1">,</span>
+                <span class="s1">attributes: {</span>
+                    <span class="s0">'http.target'</span><span class="s1">: request.nextUrl.pathname,</span>
+                    <span class="s0">'http.method'</span><span class="s1">: request.method</span>
+                <span class="s1">}</span>
+            <span class="s1">}, async ()=&gt;{</span>
+                <span class="s2">try </span><span class="s1">{</span>
+                    <span class="s2">var </span><span class="s1">_params_request_nextConfig_experimental, _params_request_nextConfig, _params_request_nextConfig_experimental1, _params_request_nextConfig1;</span>
+                    <span class="s2">const </span><span class="s1">onUpdateCookies = (cookies)=&gt;{</span>
+                        <span class="s1">cookiesFromResponse = cookies;</span>
+                    <span class="s1">};</span>
+                    <span class="s2">const </span><span class="s1">previewProps = (</span><span class="s3">0</span><span class="s1">, _getedgepreviewprops.getEdgePreviewProps)();</span>
+                    <span class="s2">const </span><span class="s1">page = </span><span class="s0">'/' </span><span class="s4">// Fake Work</span>
+                    <span class="s1">;</span>
+                    <span class="s2">const </span><span class="s1">fallbackRouteParams = </span><span class="s2">null</span><span class="s1">;</span>
+                    <span class="s2">const </span><span class="s1">implicitTags = </span><span class="s2">await </span><span class="s1">(</span><span class="s3">0</span><span class="s1">, _implicittags.getImplicitTags)(page, request.nextUrl, fallbackRouteParams);</span>
+                    <span class="s2">const </span><span class="s1">requestStore = (</span><span class="s3">0</span><span class="s1">, _requeststore.createRequestStoreForAPI)(request, request.nextUrl, implicitTags, onUpdateCookies, previewProps);</span>
+                    <span class="s2">const </span><span class="s1">workStore = (</span><span class="s3">0</span><span class="s1">, _workstore.createWorkStore)({</span>
+                        <span class="s1">page,</span>
+                        <span class="s1">renderOpts: {</span>
+                            <span class="s1">cacheLifeProfiles: (_params_request_nextConfig = params.request.nextConfig) == </span><span class="s2">null </span><span class="s1">? </span><span class="s2">void </span><span class="s3">0 </span><span class="s1">: (_params_request_nextConfig_experimental = _params_request_nextConfig.experimental) == </span><span class="s2">null </span><span class="s1">? </span><span class="s2">void </span><span class="s3">0 </span><span class="s1">: _params_request_nextConfig_experimental.cacheLife,</span>
+                            <span class="s1">experimental: {</span>
+                                <span class="s1">isRoutePPREnabled: </span><span class="s2">false</span><span class="s1">,</span>
+                                <span class="s1">cacheComponents: </span><span class="s2">false</span><span class="s1">,</span>
+                                <span class="s1">authInterrupts: !!((_params_request_nextConfig1 = params.request.nextConfig) == </span><span class="s2">null </span><span class="s1">? </span><span class="s2">void </span><span class="s3">0 </span><span class="s1">: (_params_request_nextConfig_experimental1 = _params_request_nextConfig1.experimental) == </span><span class="s2">null </span><span class="s1">? </span><span class="s2">void </span><span class="s3">0 </span><span class="s1">: _params_request_nextConfig_experimental1.authInterrupts)</span>
+                            <span class="s1">},</span>
+                            <span class="s1">supportsDynamicResponse: </span><span class="s2">true</span><span class="s1">,</span>
+                            <span class="s1">waitUntil,</span>
+                            <span class="s1">onClose: closeController.onClose.bind(closeController),</span>
+                            <span class="s1">onAfterTaskError: undefined</span>
+                        <span class="s1">},</span>
+                        <span class="s1">isPrefetchRequest: request.headers.get(_approuterheaders.NEXT_ROUTER_PREFETCH_HEADER) === </span><span class="s0">'1'</span><span class="s1">,</span>
+                        <span class="s1">buildId: buildId ?? </span><span class="s0">''</span><span class="s1">,</span>
+                        <span class="s1">previouslyRevalidatedTags: []</span>
+                    <span class="s1">});</span>
+                    <span class="s2">return await </span><span class="s1">_workasyncstorageexternal.workAsyncStorage.run(workStore, ()=&gt;_workunitasyncstorageexternal.workUnitAsyncStorage.run(requestStore, params.handler, request, event));</span>
+                <span class="s1">} </span><span class="s2">finally</span><span class="s1">{</span>
+                    <span class="s4">// middleware cannot stream, so we can consider the response closed</span>
+                    <span class="s4">// as soon as the handler returns.</span>
+                    <span class="s4">// we can delay running it until a bit later --</span>
+                    <span class="s4">// if it's needed, we'll have a `waitUntil` lock anyway.</span>
+                    <span class="s1">setTimeout(()=&gt;{</span>
+                        <span class="s1">closeController.dispatchClose();</span>
+                    <span class="s1">}, </span><span class="s3">0</span><span class="s1">);</span>
+                <span class="s1">}</span>
+            <span class="s1">});</span>
+        <span class="s1">}</span>
+        <span class="s2">return </span><span class="s1">params.handler(request, event);</span>
+    <span class="s1">});</span>
+    <span class="s4">// check if response is a Response object</span>
+    <span class="s2">if </span><span class="s1">(response &amp;&amp; !(response </span><span class="s2">instanceof </span><span class="s1">Response)) {</span>
+        <span class="s2">throw </span><span class="s1">Object.defineProperty(</span><span class="s2">new </span><span class="s1">TypeError(</span><span class="s0">'Expected an instance of Response to be returned'</span><span class="s1">), </span><span class="s0">&quot;__NEXT_ERROR_CODE&quot;</span><span class="s1">, {</span>
+            <span class="s1">value: </span><span class="s0">&quot;E567&quot;</span><span class="s1">,</span>
+            <span class="s1">enumerable: </span><span class="s2">false</span><span class="s1">,</span>
+            <span class="s1">configurable: </span><span class="s2">true</span>
+        <span class="s1">});</span>
+    <span class="s1">}</span>
+    <span class="s2">if </span><span class="s1">(response &amp;&amp; cookiesFromResponse) {</span>
+        <span class="s1">response.headers.set(</span><span class="s0">'set-cookie'</span><span class="s1">, cookiesFromResponse);</span>
+    <span class="s1">}</span>
+    <span class="s4">/**</span>
+   <span class="s4">* For rewrites we must always include the locale in the final pathname</span>
+   <span class="s4">* so we re-create the NextURL forcing it to include it when the it is</span>
+   <span class="s4">* an internal rewrite. Also we make sure the outgoing rewrite URL is</span>
+   <span class="s4">* a data URL if the request was a data request.</span>
+   <span class="s4">*/ </span><span class="s2">const </span><span class="s1">rewrite = response == </span><span class="s2">null </span><span class="s1">? </span><span class="s2">void </span><span class="s3">0 </span><span class="s1">: response.headers.get(</span><span class="s0">'x-middleware-rewrite'</span><span class="s1">);</span>
+    <span class="s2">if </span><span class="s1">(response &amp;&amp; rewrite &amp;&amp; (isRSCRequest || !isEdgeRendering)) {</span>
+        <span class="s2">const </span><span class="s1">destination = </span><span class="s2">new </span><span class="s1">_nexturl.NextURL(rewrite, {</span>
+            <span class="s1">forceLocale: </span><span class="s2">true</span><span class="s1">,</span>
+            <span class="s1">headers: params.request.headers,</span>
+            <span class="s1">nextConfig: params.request.nextConfig</span>
+        <span class="s1">});</span>
+        <span class="s2">if </span><span class="s1">(!process.env.__NEXT_NO_MIDDLEWARE_URL_NORMALIZE &amp;&amp; !isEdgeRendering) {</span>
+            <span class="s2">if </span><span class="s1">(destination.host === request.nextUrl.host) {</span>
+                <span class="s1">destination.buildId = buildId || destination.buildId;</span>
+                <span class="s1">response.headers.set(</span><span class="s0">'x-middleware-rewrite'</span><span class="s1">, String(destination));</span>
+            <span class="s1">}</span>
+        <span class="s1">}</span>
+        <span class="s4">/**</span>
+     <span class="s4">* When the request is a data request we must show if there was a rewrite</span>
+     <span class="s4">* with an internal header so the client knows which component to load</span>
+     <span class="s4">* from the data request.</span>
+     <span class="s4">*/ </span><span class="s2">const </span><span class="s1">{ url: relativeDestination, isRelative } = (</span><span class="s3">0</span><span class="s1">, _relativizeurl.parseRelativeURL)(destination.toString(), requestURL.toString());</span>
+        <span class="s2">if </span><span class="s1">(!isEdgeRendering &amp;&amp; isNextDataRequest &amp;&amp; </span><span class="s4">// if the rewrite is external and external rewrite</span>
+        <span class="s4">// resolving config is enabled don't add this header</span>
+        <span class="s4">// so the upstream app can set it instead</span>
+        <span class="s1">!(process.env.__NEXT_EXTERNAL_MIDDLEWARE_REWRITE_RESOLVE &amp;&amp; relativeDestination.match(</span><span class="s5">/http(s)?:\/\//</span><span class="s1">))) {</span>
+            <span class="s1">response.headers.set(</span><span class="s0">'x-nextjs-rewrite'</span><span class="s1">, relativeDestination);</span>
+        <span class="s1">}</span>
+        <span class="s4">// If this is an RSC request, and the pathname or search has changed, and</span>
+        <span class="s4">// this isn't an external rewrite, we need to set the rewritten pathname and</span>
+        <span class="s4">// query headers.</span>
+        <span class="s2">if </span><span class="s1">(isRSCRequest &amp;&amp; isRelative) {</span>
+            <span class="s2">if </span><span class="s1">(requestURL.pathname !== destination.pathname) {</span>
+                <span class="s1">response.headers.set(_approuterheaders.NEXT_REWRITTEN_PATH_HEADER, destination.pathname);</span>
+            <span class="s1">}</span>
+            <span class="s2">if </span><span class="s1">(requestURL.search !== destination.search) {</span>
+                <span class="s1">response.headers.set(_approuterheaders.NEXT_REWRITTEN_QUERY_HEADER, </span><span class="s4">// remove the leading ? from the search string</span>
+                <span class="s1">destination.search.slice(</span><span class="s3">1</span><span class="s1">));</span>
+            <span class="s1">}</span>
+        <span class="s1">}</span>
+    <span class="s1">}</span>
+    <span class="s4">/**</span>
+   <span class="s4">* Always forward the `_rsc` search parameter to the rewritten URL for RSC requests,</span>
+   <span class="s4">* unless it's already present. This is necessary to ensure that RSC hash validation</span>
+   <span class="s4">* works correctly after a rewrite. For internal rewrites, the server can validate the</span>
+   <span class="s4">* RSC hash using the original URL, so forwarding the `_rsc` parameter is less critical.</span>
+   <span class="s4">* However, for external rewrites (where the request is proxied to another Next.js server),</span>
+   <span class="s4">* the external server does not have access to the original URL or its search parameters.</span>
+   <span class="s4">* In these cases, forwarding the `_rsc` parameter is essential so that the external server</span>
+   <span class="s4">* can perform the correct RSC hash validation.</span>
+   <span class="s4">*/ </span><span class="s2">if </span><span class="s1">(response &amp;&amp; rewrite &amp;&amp; isRSCRequest &amp;&amp; rscHash) {</span>
+        <span class="s2">const </span><span class="s1">rewriteURL = </span><span class="s2">new </span><span class="s1">URL(rewrite);</span>
+        <span class="s2">if </span><span class="s1">(!rewriteURL.searchParams.has(_approuterheaders.NEXT_RSC_UNION_QUERY)) {</span>
+            <span class="s1">rewriteURL.searchParams.set(_approuterheaders.NEXT_RSC_UNION_QUERY, rscHash);</span>
+            <span class="s1">response.headers.set(</span><span class="s0">'x-middleware-rewrite'</span><span class="s1">, rewriteURL.toString());</span>
+        <span class="s1">}</span>
+    <span class="s1">}</span>
+    <span class="s4">/**</span>
+   <span class="s4">* For redirects we will not include the locale in case when it is the</span>
+   <span class="s4">* default and we must also make sure the outgoing URL is a data one if</span>
+   <span class="s4">* the incoming request was a data request.</span>
+   <span class="s4">*/ </span><span class="s2">const </span><span class="s1">redirect = response == </span><span class="s2">null </span><span class="s1">? </span><span class="s2">void </span><span class="s3">0 </span><span class="s1">: response.headers.get(</span><span class="s0">'Location'</span><span class="s1">);</span>
+    <span class="s2">if </span><span class="s1">(response &amp;&amp; redirect &amp;&amp; !isEdgeRendering) {</span>
+        <span class="s2">const </span><span class="s1">redirectURL = </span><span class="s2">new </span><span class="s1">_nexturl.NextURL(redirect, {</span>
+            <span class="s1">forceLocale: </span><span class="s2">false</span><span class="s1">,</span>
+            <span class="s1">headers: params.request.headers,</span>
+            <span class="s1">nextConfig: params.request.nextConfig</span>
+        <span class="s1">});</span>
+        <span class="s4">/**</span>
+     <span class="s4">* Responses created from redirects have immutable headers so we have</span>
+     <span class="s4">* to clone the response to be able to modify it.</span>
+     <span class="s4">*/ </span><span class="s1">response = </span><span class="s2">new </span><span class="s1">Response(response.body, response);</span>
+        <span class="s2">if </span><span class="s1">(!process.env.__NEXT_NO_MIDDLEWARE_URL_NORMALIZE) {</span>
+            <span class="s2">if </span><span class="s1">(redirectURL.host === requestURL.host) {</span>
+                <span class="s1">redirectURL.buildId = buildId || redirectURL.buildId;</span>
+                <span class="s1">response.headers.set(</span><span class="s0">'Location'</span><span class="s1">, redirectURL.toString());</span>
+            <span class="s1">}</span>
+        <span class="s1">}</span>
+        <span class="s4">/**</span>
+     <span class="s4">* When the request is a data request we can't use the location header as</span>
+     <span class="s4">* it may end up with CORS error. Instead we map to an internal header so</span>
+     <span class="s4">* the client knows the destination.</span>
+     <span class="s4">*/ </span><span class="s2">if </span><span class="s1">(isNextDataRequest) {</span>
+            <span class="s1">response.headers.delete(</span><span class="s0">'Location'</span><span class="s1">);</span>
+            <span class="s1">response.headers.set(</span><span class="s0">'x-nextjs-redirect'</span><span class="s1">, (</span><span class="s3">0</span><span class="s1">, _relativizeurl.getRelativeURL)(redirectURL.toString(), requestURL.toString()));</span>
+        <span class="s1">}</span>
+    <span class="s1">}</span>
+    <span class="s2">const </span><span class="s1">finalResponse = response ? response : _response.NextResponse.next();</span>
+    <span class="s4">// Flight headers are not overridable / removable so they are applied at the end.</span>
+    <span class="s2">const </span><span class="s1">middlewareOverrideHeaders = finalResponse.headers.get(</span><span class="s0">'x-middleware-override-headers'</span><span class="s1">);</span>
+    <span class="s2">const </span><span class="s1">overwrittenHeaders = [];</span>
+    <span class="s2">if </span><span class="s1">(middlewareOverrideHeaders) {</span>
+        <span class="s2">for </span><span class="s1">(</span><span class="s2">const </span><span class="s1">[key, value] of flightHeaders){</span>
+            <span class="s1">finalResponse.headers.set(</span><span class="s0">`x-middleware-request-</span><span class="s1">${key}</span><span class="s0">`</span><span class="s1">, value);</span>
+            <span class="s1">overwrittenHeaders.push(key);</span>
+        <span class="s1">}</span>
+        <span class="s2">if </span><span class="s1">(overwrittenHeaders.length &gt; </span><span class="s3">0</span><span class="s1">) {</span>
+            <span class="s1">finalResponse.headers.set(</span><span class="s0">'x-middleware-override-headers'</span><span class="s1">, middlewareOverrideHeaders + </span><span class="s0">',' </span><span class="s1">+ overwrittenHeaders.join(</span><span class="s0">','</span><span class="s1">));</span>
+        <span class="s1">}</span>
+    <span class="s1">}</span>
+    <span class="s2">return </span><span class="s1">{</span>
+        <span class="s1">response: finalResponse,</span>
+        <span class="s1">waitUntil: (</span><span class="s3">0</span><span class="s1">, _fetchevent.getWaitUntilPromiseFromEvent)(event) ?? Promise.resolve(),</span>
+        <span class="s1">fetchMetrics: request.fetchMetrics</span>
+    <span class="s1">};</span>
+<span class="s1">}</span>
+
+<span class="s4">//# sourceMappingURL=adapter.js.map</span></pre>
+</body>
+</html>

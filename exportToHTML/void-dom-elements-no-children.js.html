@@ -1,0 +1,188 @@
+<html>
+<head>
+<title>void-dom-elements-no-children.js</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #8c8c8c; font-style: italic;}
+.s1 { color: #8c8c8c; font-style: italic;}
+.s2 { color: #080808;}
+.s3 { color: #067d17;}
+.s4 { color: #0033b3;}
+.s5 { color: #1750eb;}
+</style>
+</head>
+<body bgcolor="#ffffff">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#c0c0c0" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+void-dom-elements-no-children.js</font>
+</center></td></tr></table>
+<pre><span class="s0">/**</span>
+ <span class="s0">* </span><span class="s1">@fileoverview </span><span class="s0">Prevent void elements (e.g. &lt;img /&gt;, &lt;br /&gt;) from receiving</span>
+ <span class="s0">*   children</span>
+ <span class="s0">* </span><span class="s1">@author </span><span class="s0">Joe Lencioni</span>
+ <span class="s0">*/</span>
+
+<span class="s3">'use strict'</span><span class="s2">;</span>
+
+<span class="s4">const </span><span class="s2">has = require(</span><span class="s3">'hasown'</span><span class="s2">);</span>
+
+<span class="s4">const </span><span class="s2">docsUrl = require(</span><span class="s3">'../util/docsUrl'</span><span class="s2">);</span>
+<span class="s4">const </span><span class="s2">isCreateElement = require(</span><span class="s3">'../util/isCreateElement'</span><span class="s2">);</span>
+<span class="s4">const </span><span class="s2">report = require(</span><span class="s3">'../util/report'</span><span class="s2">);</span>
+
+<span class="s0">// ------------------------------------------------------------------------------</span>
+<span class="s0">// Helpers</span>
+<span class="s0">// ------------------------------------------------------------------------------</span>
+
+<span class="s0">// Using an object here to avoid array scan. We should switch to Set once</span>
+<span class="s0">// support is good enough.</span>
+<span class="s4">const </span><span class="s2">VOID_DOM_ELEMENTS = {</span>
+  <span class="s2">area: </span><span class="s4">true</span><span class="s2">,</span>
+  <span class="s2">base: </span><span class="s4">true</span><span class="s2">,</span>
+  <span class="s2">br: </span><span class="s4">true</span><span class="s2">,</span>
+  <span class="s2">col: </span><span class="s4">true</span><span class="s2">,</span>
+  <span class="s2">embed: </span><span class="s4">true</span><span class="s2">,</span>
+  <span class="s2">hr: </span><span class="s4">true</span><span class="s2">,</span>
+  <span class="s2">img: </span><span class="s4">true</span><span class="s2">,</span>
+  <span class="s2">input: </span><span class="s4">true</span><span class="s2">,</span>
+  <span class="s2">keygen: </span><span class="s4">true</span><span class="s2">,</span>
+  <span class="s2">link: </span><span class="s4">true</span><span class="s2">,</span>
+  <span class="s2">menuitem: </span><span class="s4">true</span><span class="s2">,</span>
+  <span class="s2">meta: </span><span class="s4">true</span><span class="s2">,</span>
+  <span class="s2">param: </span><span class="s4">true</span><span class="s2">,</span>
+  <span class="s2">source: </span><span class="s4">true</span><span class="s2">,</span>
+  <span class="s2">track: </span><span class="s4">true</span><span class="s2">,</span>
+  <span class="s2">wbr: </span><span class="s4">true</span><span class="s2">,</span>
+<span class="s2">};</span>
+
+<span class="s4">function </span><span class="s2">isVoidDOMElement(elementName) {</span>
+  <span class="s4">return </span><span class="s2">has(VOID_DOM_ELEMENTS, elementName);</span>
+<span class="s2">}</span>
+
+<span class="s0">// ------------------------------------------------------------------------------</span>
+<span class="s0">// Rule Definition</span>
+<span class="s0">// ------------------------------------------------------------------------------</span>
+
+<span class="s4">const </span><span class="s2">noChildrenInVoidEl = </span><span class="s3">'Void DOM element &lt;{{element}} /&gt; cannot receive children.'</span><span class="s2">;</span>
+
+<span class="s0">/** </span><span class="s1">@type </span><span class="s0">{import('eslint').Rule.RuleModule} */</span>
+<span class="s2">module.exports = {</span>
+  <span class="s2">meta: {</span>
+    <span class="s2">docs: {</span>
+      <span class="s2">description: </span><span class="s3">'Disallow void DOM elements (e.g. `&lt;img /&gt;`, `&lt;br /&gt;`) from receiving children'</span><span class="s2">,</span>
+      <span class="s2">category: </span><span class="s3">'Best Practices'</span><span class="s2">,</span>
+      <span class="s2">recommended: </span><span class="s4">false</span><span class="s2">,</span>
+      <span class="s2">url: docsUrl(</span><span class="s3">'void-dom-elements-no-children'</span><span class="s2">),</span>
+    <span class="s2">},</span>
+
+    <span class="s2">messages: {</span>
+      <span class="s2">noChildrenInVoidEl,</span>
+    <span class="s2">},</span>
+
+    <span class="s2">schema: [],</span>
+  <span class="s2">},</span>
+
+  <span class="s2">create: (context) =&gt; ({</span>
+    <span class="s2">JSXElement(node) {</span>
+      <span class="s4">const </span><span class="s2">elementName = node.openingElement.name.name;</span>
+
+      <span class="s4">if </span><span class="s2">(!isVoidDOMElement(elementName)) {</span>
+        <span class="s0">// e.g. &lt;div /&gt;</span>
+        <span class="s4">return</span><span class="s2">;</span>
+      <span class="s2">}</span>
+
+      <span class="s4">if </span><span class="s2">(node.children.length &gt; </span><span class="s5">0</span><span class="s2">) {</span>
+        <span class="s0">// e.g. &lt;br&gt;Foo&lt;/br&gt;</span>
+        <span class="s2">report(context, noChildrenInVoidEl, </span><span class="s3">'noChildrenInVoidEl'</span><span class="s2">, {</span>
+          <span class="s2">node,</span>
+          <span class="s2">data: {</span>
+            <span class="s2">element: elementName,</span>
+          <span class="s2">},</span>
+        <span class="s2">});</span>
+      <span class="s2">}</span>
+
+      <span class="s4">const </span><span class="s2">attributes = node.openingElement.attributes;</span>
+
+      <span class="s4">const </span><span class="s2">hasChildrenAttributeOrDanger = attributes.some((attribute) =&gt; {</span>
+        <span class="s4">if </span><span class="s2">(!attribute.name) {</span>
+          <span class="s4">return false</span><span class="s2">;</span>
+        <span class="s2">}</span>
+
+        <span class="s4">return </span><span class="s2">attribute.name.name === </span><span class="s3">'children' </span><span class="s2">|| attribute.name.name === </span><span class="s3">'dangerouslySetInnerHTML'</span><span class="s2">;</span>
+      <span class="s2">});</span>
+
+      <span class="s4">if </span><span class="s2">(hasChildrenAttributeOrDanger) {</span>
+        <span class="s0">// e.g. &lt;br children=&quot;Foo&quot; /&gt;</span>
+        <span class="s2">report(context, noChildrenInVoidEl, </span><span class="s3">'noChildrenInVoidEl'</span><span class="s2">, {</span>
+          <span class="s2">node,</span>
+          <span class="s2">data: {</span>
+            <span class="s2">element: elementName,</span>
+          <span class="s2">},</span>
+        <span class="s2">});</span>
+      <span class="s2">}</span>
+    <span class="s2">},</span>
+
+    <span class="s2">CallExpression(node) {</span>
+      <span class="s4">if </span><span class="s2">(node.callee.type !== </span><span class="s3">'MemberExpression' </span><span class="s2">&amp;&amp; node.callee.type !== </span><span class="s3">'Identifier'</span><span class="s2">) {</span>
+        <span class="s4">return</span><span class="s2">;</span>
+      <span class="s2">}</span>
+
+      <span class="s4">if </span><span class="s2">(!isCreateElement(context, node)) {</span>
+        <span class="s4">return</span><span class="s2">;</span>
+      <span class="s2">}</span>
+
+      <span class="s4">const </span><span class="s2">args = node.arguments;</span>
+
+      <span class="s4">if </span><span class="s2">(args.length &lt; </span><span class="s5">1</span><span class="s2">) {</span>
+        <span class="s0">// React.createElement() should not crash linter</span>
+        <span class="s4">return</span><span class="s2">;</span>
+      <span class="s2">}</span>
+
+      <span class="s4">const </span><span class="s2">elementName = </span><span class="s3">'value' </span><span class="s4">in </span><span class="s2">args[</span><span class="s5">0</span><span class="s2">] ? args[</span><span class="s5">0</span><span class="s2">].value : undefined;</span>
+
+      <span class="s4">if </span><span class="s2">(!isVoidDOMElement(elementName)) {</span>
+        <span class="s0">// e.g. React.createElement('div');</span>
+        <span class="s4">return</span><span class="s2">;</span>
+      <span class="s2">}</span>
+
+      <span class="s4">if </span><span class="s2">(args.length &lt; </span><span class="s5">2 </span><span class="s2">|| args[</span><span class="s5">1</span><span class="s2">].type !== </span><span class="s3">'ObjectExpression'</span><span class="s2">) {</span>
+        <span class="s4">return</span><span class="s2">;</span>
+      <span class="s2">}</span>
+
+      <span class="s4">const </span><span class="s2">firstChild = args[</span><span class="s5">2</span><span class="s2">];</span>
+      <span class="s4">if </span><span class="s2">(firstChild) {</span>
+        <span class="s0">// e.g. React.createElement('br', undefined, 'Foo')</span>
+        <span class="s2">report(context, noChildrenInVoidEl, </span><span class="s3">'noChildrenInVoidEl'</span><span class="s2">, {</span>
+          <span class="s2">node,</span>
+          <span class="s2">data: {</span>
+            <span class="s2">element: elementName,</span>
+          <span class="s2">},</span>
+        <span class="s2">});</span>
+      <span class="s2">}</span>
+
+      <span class="s4">const </span><span class="s2">props = args[</span><span class="s5">1</span><span class="s2">].properties;</span>
+
+      <span class="s4">const </span><span class="s2">hasChildrenPropOrDanger = props.some((prop) =&gt; {</span>
+        <span class="s4">if </span><span class="s2">(!(</span><span class="s3">'key' </span><span class="s4">in </span><span class="s2">prop) || !prop.key || !(</span><span class="s3">'name' </span><span class="s4">in </span><span class="s2">prop.key)) {</span>
+          <span class="s4">return false</span><span class="s2">;</span>
+        <span class="s2">}</span>
+
+        <span class="s4">return </span><span class="s2">prop.key.name === </span><span class="s3">'children' </span><span class="s2">|| prop.key.name === </span><span class="s3">'dangerouslySetInnerHTML'</span><span class="s2">;</span>
+      <span class="s2">});</span>
+
+      <span class="s4">if </span><span class="s2">(hasChildrenPropOrDanger) {</span>
+        <span class="s0">// e.g. React.createElement('br', { children: 'Foo' })</span>
+        <span class="s2">report(context, noChildrenInVoidEl, </span><span class="s3">'noChildrenInVoidEl'</span><span class="s2">, {</span>
+          <span class="s2">node,</span>
+          <span class="s2">data: {</span>
+            <span class="s2">element: elementName,</span>
+          <span class="s2">},</span>
+        <span class="s2">});</span>
+      <span class="s2">}</span>
+    <span class="s2">},</span>
+  <span class="s2">}),</span>
+<span class="s2">};</span>
+</pre>
+</body>
+</html>

@@ -1,0 +1,214 @@
+<html>
+<head>
+<title>walk-tree-with-flight-router-state.js</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #067d17;}
+.s1 { color: #080808;}
+.s2 { color: #0033b3;}
+.s3 { color: #8c8c8c; font-style: italic;}
+.s4 { color: #1750eb;}
+</style>
+</head>
+<body bgcolor="#ffffff">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#c0c0c0" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+walk-tree-with-flight-router-state.js</font>
+</center></td></tr></table>
+<pre><span class="s0">&quot;use strict&quot;</span><span class="s1">;</span>
+<span class="s1">Object.defineProperty(exports, </span><span class="s0">&quot;__esModule&quot;</span><span class="s1">, {</span>
+    <span class="s1">value: </span><span class="s2">true</span>
+<span class="s1">});</span>
+<span class="s1">Object.defineProperty(exports, </span><span class="s0">&quot;walkTreeWithFlightRouterState&quot;</span><span class="s1">, {</span>
+    <span class="s1">enumerable: </span><span class="s2">true</span><span class="s1">,</span>
+    <span class="s1">get: </span><span class="s2">function</span><span class="s1">() {</span>
+        <span class="s2">return </span><span class="s1">walkTreeWithFlightRouterState;</span>
+    <span class="s1">}</span>
+<span class="s1">});</span>
+<span class="s2">const </span><span class="s1">_matchsegments = require(</span><span class="s0">&quot;../../client/components/match-segments&quot;</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">_getcssinlinedlinktags = require(</span><span class="s0">&quot;./get-css-inlined-link-tags&quot;</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">_getpreloadablefonts = require(</span><span class="s0">&quot;./get-preloadable-fonts&quot;</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">_createflightrouterstatefromloadertree = require(</span><span class="s0">&quot;./create-flight-router-state-from-loader-tree&quot;</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">_hasloadingcomponentintree = require(</span><span class="s0">&quot;./has-loading-component-in-tree&quot;</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">_segment = require(</span><span class="s0">&quot;../../shared/lib/segment&quot;</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">_createcomponenttree = require(</span><span class="s0">&quot;./create-component-tree&quot;</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">_getsegmentparam = require(</span><span class="s0">&quot;./get-segment-param&quot;</span><span class="s1">);</span>
+<span class="s1">async </span><span class="s2">function </span><span class="s1">walkTreeWithFlightRouterState({ loaderTreeToFilter, parentParams, flightRouterState, parentIsInsideSharedLayout, rscHead, injectedCSS, injectedJS, injectedFontPreloadTags, rootLayoutIncluded, getViewportReady, getMetadataReady, ctx, preloadCallbacks, StreamingMetadataOutlet }) {</span>
+    <span class="s2">const </span><span class="s1">{ renderOpts: { nextFontManifest, experimental }, query, isPrefetch, getDynamicParamFromSegment, parsedRequestHeaders } = ctx;</span>
+    <span class="s2">const </span><span class="s1">[segment, parallelRoutes, modules] = loaderTreeToFilter;</span>
+    <span class="s2">const </span><span class="s1">parallelRoutesKeys = Object.keys(parallelRoutes);</span>
+    <span class="s2">const </span><span class="s1">{ layout } = modules;</span>
+    <span class="s2">const </span><span class="s1">isLayout = </span><span class="s2">typeof </span><span class="s1">layout !== </span><span class="s0">'undefined'</span><span class="s1">;</span>
+    <span class="s3">/**</span>
+   <span class="s3">* Checks if the current segment is a root layout.</span>
+   <span class="s3">*/ </span><span class="s2">const </span><span class="s1">rootLayoutAtThisLevel = isLayout &amp;&amp; !rootLayoutIncluded;</span>
+    <span class="s3">/**</span>
+   <span class="s3">* Checks if the current segment or any level above it has a root layout.</span>
+   <span class="s3">*/ </span><span class="s2">const </span><span class="s1">rootLayoutIncludedAtThisLevelOrAbove = rootLayoutIncluded || rootLayoutAtThisLevel;</span>
+    <span class="s3">// Because this function walks to a deeper point in the tree to start rendering we have to track the dynamic parameters up to the point where rendering starts</span>
+    <span class="s2">const </span><span class="s1">segmentParam = getDynamicParamFromSegment(segment);</span>
+    <span class="s2">const </span><span class="s1">currentParams = </span><span class="s3">// Handle null case where dynamic param is optional</span>
+    <span class="s1">segmentParam &amp;&amp; segmentParam.value !== </span><span class="s2">null </span><span class="s1">? {</span>
+        <span class="s1">...parentParams,</span>
+        <span class="s1">[segmentParam.param]: segmentParam.value</span>
+    <span class="s1">} : parentParams;</span>
+    <span class="s2">const </span><span class="s1">actualSegment = (</span><span class="s4">0</span><span class="s1">, _segment.addSearchParamsIfPageSegment)(segmentParam ? segmentParam.treeSegment : segment, query);</span>
+    <span class="s3">/**</span>
+   <span class="s3">* Decide if the current segment is where rendering has to start.</span>
+   <span class="s3">*/ </span><span class="s2">const </span><span class="s1">renderComponentsOnThisLevel = </span><span class="s3">// No further router state available</span>
+    <span class="s1">!flightRouterState || </span><span class="s3">// Segment in router state does not match current segment</span>
+    <span class="s1">!(</span><span class="s4">0</span><span class="s1">, _matchsegments.matchSegment)(actualSegment, flightRouterState[</span><span class="s4">0</span><span class="s1">]) || </span><span class="s3">// Last item in the tree</span>
+    <span class="s1">parallelRoutesKeys.length === </span><span class="s4">0 </span><span class="s1">|| </span><span class="s3">// Explicit refresh</span>
+    <span class="s1">flightRouterState[</span><span class="s4">3</span><span class="s1">] === </span><span class="s0">'refetch'</span><span class="s1">;</span>
+    <span class="s3">// Pre-PPR, the `loading` component signals to the router how deep to render the component tree</span>
+    <span class="s3">// to ensure prefetches are quick and inexpensive. If there's no `loading` component anywhere in the tree being rendered,</span>
+    <span class="s3">// the prefetch will be short-circuited to avoid requesting a potentially very expensive subtree. If there's a `loading`</span>
+    <span class="s3">// somewhere in the tree, we'll recursively render the component tree up until we encounter that loading component, and then stop.</span>
+    <span class="s3">// Check if we're inside the &quot;new&quot; part of the navigation — inside the</span>
+    <span class="s3">// shared layout. In the case of a prefetch, this can be true even if the</span>
+    <span class="s3">// segment matches, because the client might send a matching segment to</span>
+    <span class="s3">// indicate that it already has the data in its cache. But in order to find</span>
+    <span class="s3">// the correct loading boundary, we still need to track where the shared</span>
+    <span class="s3">// layout begins.</span>
+    <span class="s3">//</span>
+    <span class="s3">// TODO: We should rethink the protocol for dynamic requests. It might not</span>
+    <span class="s3">// make sense for the client to send a FlightRouterState, since that type is</span>
+    <span class="s3">// overloaded with other concerns.</span>
+    <span class="s2">const </span><span class="s1">isInsideSharedLayout = renderComponentsOnThisLevel || parentIsInsideSharedLayout || flightRouterState[</span><span class="s4">3</span><span class="s1">] === </span><span class="s0">'inside-shared-layout'</span><span class="s1">;</span>
+    <span class="s2">if </span><span class="s1">(isInsideSharedLayout &amp;&amp; !experimental.isRoutePPREnabled &amp;&amp; </span><span class="s3">// If PPR is disabled, and this is a request for the route tree, then we</span>
+    <span class="s3">// never render any components. Only send the router state.</span>
+    <span class="s1">(parsedRequestHeaders.isRouteTreePrefetchRequest || </span><span class="s3">// Otherwise, check for the presence of a `loading` component.</span>
+    <span class="s1">isPrefetch &amp;&amp; !Boolean(modules.loading) &amp;&amp; !(</span><span class="s4">0</span><span class="s1">, _hasloadingcomponentintree.hasLoadingComponentInTree)(loaderTreeToFilter))) {</span>
+        <span class="s3">// Send only the router state.</span>
+        <span class="s3">// TODO: Even for a dynamic route, we should cache these responses,</span>
+        <span class="s3">// because they do not contain any render data (neither segment data nor</span>
+        <span class="s3">// the head). They can be made even more cacheable once we move the route</span>
+        <span class="s3">// params into a separate data structure.</span>
+        <span class="s2">const </span><span class="s1">overriddenSegment = flightRouterState &amp;&amp; </span><span class="s3">// TODO: Why does canSegmentBeOverridden exist? Why don't we always just</span>
+        <span class="s3">// use `actualSegment`? Is it to avoid overwriting some state that's</span>
+        <span class="s3">// tracked by the client? Dig deeper to see if we can simplify this.</span>
+        <span class="s1">canSegmentBeOverridden(actualSegment, flightRouterState[</span><span class="s4">0</span><span class="s1">]) ? flightRouterState[</span><span class="s4">0</span><span class="s1">] : actualSegment;</span>
+        <span class="s2">const </span><span class="s1">routerState = parsedRequestHeaders.isRouteTreePrefetchRequest ? (</span><span class="s4">0</span><span class="s1">, _createflightrouterstatefromloadertree.createRouteTreePrefetch)(loaderTreeToFilter, getDynamicParamFromSegment) : (</span><span class="s4">0</span><span class="s1">, _createflightrouterstatefromloadertree.createFlightRouterStateFromLoaderTree)(loaderTreeToFilter, getDynamicParamFromSegment, query);</span>
+        <span class="s2">return </span><span class="s1">[</span>
+            <span class="s1">[</span>
+                <span class="s1">overriddenSegment,</span>
+                <span class="s1">routerState,</span>
+                <span class="s2">null</span><span class="s1">,</span>
+                <span class="s1">[</span>
+                    <span class="s2">null</span><span class="s1">,</span>
+                    <span class="s2">null</span>
+                <span class="s1">],</span>
+                <span class="s2">true</span>
+            <span class="s1">]</span>
+        <span class="s1">];</span>
+    <span class="s1">}</span>
+    <span class="s3">// Similar to the previous branch. This flag is sent by the client to request</span>
+    <span class="s3">// only the metadata for a page. No segment data.</span>
+    <span class="s2">if </span><span class="s1">(flightRouterState &amp;&amp; flightRouterState[</span><span class="s4">3</span><span class="s1">] === </span><span class="s0">'metadata-only'</span><span class="s1">) {</span>
+        <span class="s2">const </span><span class="s1">overriddenSegment = flightRouterState &amp;&amp; canSegmentBeOverridden(actualSegment, flightRouterState[</span><span class="s4">0</span><span class="s1">]) ? flightRouterState[</span><span class="s4">0</span><span class="s1">] : actualSegment;</span>
+        <span class="s2">const </span><span class="s1">routerState = parsedRequestHeaders.isRouteTreePrefetchRequest ? (</span><span class="s4">0</span><span class="s1">, _createflightrouterstatefromloadertree.createRouteTreePrefetch)(loaderTreeToFilter, getDynamicParamFromSegment) : (</span><span class="s4">0</span><span class="s1">, _createflightrouterstatefromloadertree.createFlightRouterStateFromLoaderTree)(loaderTreeToFilter, getDynamicParamFromSegment, query);</span>
+        <span class="s2">return </span><span class="s1">[</span>
+            <span class="s1">[</span>
+                <span class="s1">overriddenSegment,</span>
+                <span class="s1">routerState,</span>
+                <span class="s2">null</span><span class="s1">,</span>
+                <span class="s1">rscHead,</span>
+                <span class="s2">false</span>
+            <span class="s1">]</span>
+        <span class="s1">];</span>
+    <span class="s1">}</span>
+    <span class="s2">if </span><span class="s1">(renderComponentsOnThisLevel) {</span>
+        <span class="s2">const </span><span class="s1">overriddenSegment = flightRouterState &amp;&amp; </span><span class="s3">// TODO: Why does canSegmentBeOverridden exist? Why don't we always just</span>
+        <span class="s3">// use `actualSegment`? Is it to avoid overwriting some state that's</span>
+        <span class="s3">// tracked by the client? Dig deeper to see if we can simplify this.</span>
+        <span class="s1">canSegmentBeOverridden(actualSegment, flightRouterState[</span><span class="s4">0</span><span class="s1">]) ? flightRouterState[</span><span class="s4">0</span><span class="s1">] : actualSegment;</span>
+        <span class="s2">const </span><span class="s1">routerState = (</span><span class="s4">0</span><span class="s1">, _createflightrouterstatefromloadertree.createFlightRouterStateFromLoaderTree)(</span><span class="s3">// Create router state using the slice of the loaderTree</span>
+        <span class="s1">loaderTreeToFilter, getDynamicParamFromSegment, query);</span>
+        <span class="s3">// Create component tree using the slice of the loaderTree</span>
+        <span class="s2">const </span><span class="s1">seedData = </span><span class="s2">await </span><span class="s1">(</span><span class="s4">0</span><span class="s1">, _createcomponenttree.createComponentTree)(</span><span class="s3">// This ensures flightRouterPath is valid and filters down the tree</span>
+        <span class="s1">{</span>
+            <span class="s1">ctx,</span>
+            <span class="s1">loaderTree: loaderTreeToFilter,</span>
+            <span class="s1">parentParams: currentParams,</span>
+            <span class="s1">injectedCSS,</span>
+            <span class="s1">injectedJS,</span>
+            <span class="s1">injectedFontPreloadTags,</span>
+            <span class="s3">// This is intentionally not &quot;rootLayoutIncludedAtThisLevelOrAbove&quot; as createComponentTree starts at the current level and does a check for &quot;rootLayoutAtThisLevel&quot; too.</span>
+            <span class="s1">rootLayoutIncluded,</span>
+            <span class="s1">getViewportReady,</span>
+            <span class="s1">getMetadataReady,</span>
+            <span class="s1">preloadCallbacks,</span>
+            <span class="s1">authInterrupts: experimental.authInterrupts,</span>
+            <span class="s1">StreamingMetadataOutlet</span>
+        <span class="s1">});</span>
+        <span class="s2">return </span><span class="s1">[</span>
+            <span class="s1">[</span>
+                <span class="s1">overriddenSegment,</span>
+                <span class="s1">routerState,</span>
+                <span class="s1">seedData,</span>
+                <span class="s1">rscHead,</span>
+                <span class="s2">false</span>
+            <span class="s1">]</span>
+        <span class="s1">];</span>
+    <span class="s1">}</span>
+    <span class="s3">// If we are not rendering on this level we need to check if the current</span>
+    <span class="s3">// segment has a layout. If so, we need to track all the used CSS to make</span>
+    <span class="s3">// the result consistent.</span>
+    <span class="s2">const </span><span class="s1">layoutPath = layout == </span><span class="s2">null </span><span class="s1">? </span><span class="s2">void </span><span class="s4">0 </span><span class="s1">: layout[</span><span class="s4">1</span><span class="s1">];</span>
+    <span class="s2">const </span><span class="s1">injectedCSSWithCurrentLayout = </span><span class="s2">new </span><span class="s1">Set(injectedCSS);</span>
+    <span class="s2">const </span><span class="s1">injectedJSWithCurrentLayout = </span><span class="s2">new </span><span class="s1">Set(injectedJS);</span>
+    <span class="s2">const </span><span class="s1">injectedFontPreloadTagsWithCurrentLayout = </span><span class="s2">new </span><span class="s1">Set(injectedFontPreloadTags);</span>
+    <span class="s2">if </span><span class="s1">(layoutPath) {</span>
+        <span class="s1">(</span><span class="s4">0</span><span class="s1">, _getcssinlinedlinktags.getLinkAndScriptTags)(ctx.clientReferenceManifest, layoutPath, injectedCSSWithCurrentLayout, injectedJSWithCurrentLayout, </span><span class="s2">true</span><span class="s1">);</span>
+        <span class="s1">(</span><span class="s4">0</span><span class="s1">, _getpreloadablefonts.getPreloadableFonts)(nextFontManifest, layoutPath, injectedFontPreloadTagsWithCurrentLayout);</span>
+    <span class="s1">}</span>
+    <span class="s2">const </span><span class="s1">paths = [];</span>
+    <span class="s3">// Walk through all parallel routes.</span>
+    <span class="s2">for </span><span class="s1">(</span><span class="s2">const </span><span class="s1">parallelRouteKey of parallelRoutesKeys){</span>
+        <span class="s2">const </span><span class="s1">parallelRoute = parallelRoutes[parallelRouteKey];</span>
+        <span class="s2">const </span><span class="s1">subPaths = </span><span class="s2">await </span><span class="s1">walkTreeWithFlightRouterState({</span>
+            <span class="s1">ctx,</span>
+            <span class="s1">loaderTreeToFilter: parallelRoute,</span>
+            <span class="s1">parentParams: currentParams,</span>
+            <span class="s1">flightRouterState: flightRouterState &amp;&amp; flightRouterState[</span><span class="s4">1</span><span class="s1">][parallelRouteKey],</span>
+            <span class="s1">parentIsInsideSharedLayout: isInsideSharedLayout,</span>
+            <span class="s1">rscHead,</span>
+            <span class="s1">injectedCSS: injectedCSSWithCurrentLayout,</span>
+            <span class="s1">injectedJS: injectedJSWithCurrentLayout,</span>
+            <span class="s1">injectedFontPreloadTags: injectedFontPreloadTagsWithCurrentLayout,</span>
+            <span class="s1">rootLayoutIncluded: rootLayoutIncludedAtThisLevelOrAbove,</span>
+            <span class="s1">getViewportReady,</span>
+            <span class="s1">getMetadataReady,</span>
+            <span class="s1">preloadCallbacks,</span>
+            <span class="s1">StreamingMetadataOutlet</span>
+        <span class="s1">});</span>
+        <span class="s2">for </span><span class="s1">(</span><span class="s2">const </span><span class="s1">subPath of subPaths){</span>
+            <span class="s3">// we don't need to send over default routes in the flight data</span>
+            <span class="s3">// because they are always ignored by the client, unless it's a refetch</span>
+            <span class="s2">if </span><span class="s1">(subPath[</span><span class="s4">0</span><span class="s1">] === _segment.DEFAULT_SEGMENT_KEY &amp;&amp; flightRouterState &amp;&amp; !!flightRouterState[</span><span class="s4">1</span><span class="s1">][parallelRouteKey][</span><span class="s4">0</span><span class="s1">] &amp;&amp; flightRouterState[</span><span class="s4">1</span><span class="s1">][parallelRouteKey][</span><span class="s4">3</span><span class="s1">] !== </span><span class="s0">'refetch'</span><span class="s1">) {</span>
+                <span class="s2">continue</span><span class="s1">;</span>
+            <span class="s1">}</span>
+            <span class="s1">paths.push([</span>
+                <span class="s1">actualSegment,</span>
+                <span class="s1">parallelRouteKey,</span>
+                <span class="s1">...subPath</span>
+            <span class="s1">]);</span>
+        <span class="s1">}</span>
+    <span class="s1">}</span>
+    <span class="s2">return </span><span class="s1">paths;</span>
+<span class="s1">}</span>
+<span class="s3">/* 
+ * This function is used to determine if an existing segment can be overridden 
+ * by the incoming segment. 
+ */ </span><span class="s2">const </span><span class="s1">canSegmentBeOverridden = (existingSegment, segment)=&gt;{</span>
+    <span class="s2">var </span><span class="s1">_getSegmentParam;</span>
+    <span class="s2">if </span><span class="s1">(Array.isArray(existingSegment) || !Array.isArray(segment)) {</span>
+        <span class="s2">return false</span><span class="s1">;</span>
+    <span class="s1">}</span>
+    <span class="s2">return </span><span class="s1">((_getSegmentParam = (</span><span class="s4">0</span><span class="s1">, _getsegmentparam.getSegmentParam)(existingSegment)) == </span><span class="s2">null </span><span class="s1">? </span><span class="s2">void </span><span class="s4">0 </span><span class="s1">: _getSegmentParam.param) === segment[</span><span class="s4">0</span><span class="s1">];</span>
+<span class="s1">};</span>
+
+<span class="s3">//# sourceMappingURL=walk-tree-with-flight-router-state.js.map</span></pre>
+</body>
+</html>

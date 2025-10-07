@@ -1,0 +1,441 @@
+<html>
+<head>
+<title>arrow-body-style.js</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #8c8c8c; font-style: italic;}
+.s1 { color: #8c8c8c; font-style: italic;}
+.s2 { color: #080808;}
+.s3 { color: #067d17;}
+.s4 { color: #0033b3;}
+.s5 { color: #1750eb;}
+.s6 { color: #264eff;}
+</style>
+</head>
+<body bgcolor="#ffffff">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#c0c0c0" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+arrow-body-style.js</font>
+</center></td></tr></table>
+<pre><span class="s0">/**</span>
+ <span class="s0">* </span><span class="s1">@fileoverview </span><span class="s0">Rule to require braces in arrow function body.</span>
+ <span class="s0">* </span><span class="s1">@author </span><span class="s0">Alberto Rodríguez</span>
+ <span class="s0">*/</span>
+<span class="s3">&quot;use strict&quot;</span><span class="s2">;</span>
+
+<span class="s0">//------------------------------------------------------------------------------</span>
+<span class="s0">// Requirements</span>
+<span class="s0">//------------------------------------------------------------------------------</span>
+
+<span class="s4">const </span><span class="s2">astUtils = require(</span><span class="s3">&quot;./utils/ast-utils&quot;</span><span class="s2">);</span>
+
+<span class="s0">//------------------------------------------------------------------------------</span>
+<span class="s0">// Rule Definition</span>
+<span class="s0">//------------------------------------------------------------------------------</span>
+
+<span class="s0">/** </span><span class="s1">@type </span><span class="s0">{import('../types').Rule.RuleModule} */</span>
+<span class="s2">module.exports = {</span>
+	<span class="s2">meta: {</span>
+		<span class="s2">type: </span><span class="s3">&quot;suggestion&quot;</span><span class="s2">,</span>
+
+		<span class="s2">defaultOptions: [</span><span class="s3">&quot;as-needed&quot;</span><span class="s2">],</span>
+
+		<span class="s2">docs: {</span>
+			<span class="s2">description: </span><span class="s3">&quot;Require braces around arrow function bodies&quot;</span><span class="s2">,</span>
+			<span class="s2">recommended: </span><span class="s4">false</span><span class="s2">,</span>
+			<span class="s2">frozen: </span><span class="s4">true</span><span class="s2">,</span>
+			<span class="s2">url: </span><span class="s3">&quot;https://eslint.org/docs/latest/rules/arrow-body-style&quot;</span><span class="s2">,</span>
+		<span class="s2">},</span>
+
+		<span class="s2">schema: {</span>
+			<span class="s2">anyOf: [</span>
+				<span class="s2">{</span>
+					<span class="s2">type: </span><span class="s3">&quot;array&quot;</span><span class="s2">,</span>
+					<span class="s2">items: [</span>
+						<span class="s2">{</span>
+							<span class="s4">enum</span><span class="s2">: [</span><span class="s3">&quot;always&quot;</span><span class="s2">, </span><span class="s3">&quot;never&quot;</span><span class="s2">],</span>
+						<span class="s2">},</span>
+					<span class="s2">],</span>
+					<span class="s2">minItems: </span><span class="s5">0</span><span class="s2">,</span>
+					<span class="s2">maxItems: </span><span class="s5">1</span><span class="s2">,</span>
+				<span class="s2">},</span>
+				<span class="s2">{</span>
+					<span class="s2">type: </span><span class="s3">&quot;array&quot;</span><span class="s2">,</span>
+					<span class="s2">items: [</span>
+						<span class="s2">{</span>
+							<span class="s4">enum</span><span class="s2">: [</span><span class="s3">&quot;as-needed&quot;</span><span class="s2">],</span>
+						<span class="s2">},</span>
+						<span class="s2">{</span>
+							<span class="s2">type: </span><span class="s3">&quot;object&quot;</span><span class="s2">,</span>
+							<span class="s2">properties: {</span>
+								<span class="s2">requireReturnForObjectLiteral: {</span>
+									<span class="s2">type: </span><span class="s3">&quot;boolean&quot;</span><span class="s2">,</span>
+								<span class="s2">},</span>
+							<span class="s2">},</span>
+							<span class="s2">additionalProperties: </span><span class="s4">false</span><span class="s2">,</span>
+						<span class="s2">},</span>
+					<span class="s2">],</span>
+					<span class="s2">minItems: </span><span class="s5">0</span><span class="s2">,</span>
+					<span class="s2">maxItems: </span><span class="s5">2</span><span class="s2">,</span>
+				<span class="s2">},</span>
+			<span class="s2">],</span>
+		<span class="s2">},</span>
+
+		<span class="s2">fixable: </span><span class="s3">&quot;code&quot;</span><span class="s2">,</span>
+
+		<span class="s2">messages: {</span>
+			<span class="s2">unexpectedOtherBlock:</span>
+				<span class="s3">&quot;Unexpected block statement surrounding arrow body.&quot;</span><span class="s2">,</span>
+			<span class="s2">unexpectedEmptyBlock:</span>
+				<span class="s3">&quot;Unexpected block statement surrounding arrow body; put a value of `undefined` immediately after the `=&gt;`.&quot;</span><span class="s2">,</span>
+			<span class="s2">unexpectedObjectBlock:</span>
+				<span class="s3">&quot;Unexpected block statement surrounding arrow body; parenthesize the returned value and move it immediately after the `=&gt;`.&quot;</span><span class="s2">,</span>
+			<span class="s2">unexpectedSingleBlock:</span>
+				<span class="s3">&quot;Unexpected block statement surrounding arrow body; move the returned value immediately after the `=&gt;`.&quot;</span><span class="s2">,</span>
+			<span class="s2">expectedBlock: </span><span class="s3">&quot;Expected block statement surrounding arrow body.&quot;</span><span class="s2">,</span>
+		<span class="s2">},</span>
+	<span class="s2">},</span>
+
+	<span class="s2">create(context) {</span>
+		<span class="s4">const </span><span class="s2">options = context.options;</span>
+		<span class="s4">const </span><span class="s2">always = options[</span><span class="s5">0</span><span class="s2">] === </span><span class="s3">&quot;always&quot;</span><span class="s2">;</span>
+		<span class="s4">const </span><span class="s2">asNeeded = options[</span><span class="s5">0</span><span class="s2">] === </span><span class="s3">&quot;as-needed&quot;</span><span class="s2">;</span>
+		<span class="s4">const </span><span class="s2">never = options[</span><span class="s5">0</span><span class="s2">] === </span><span class="s3">&quot;never&quot;</span><span class="s2">;</span>
+		<span class="s4">const </span><span class="s2">requireReturnForObjectLiteral =</span>
+			<span class="s2">options[</span><span class="s5">1</span><span class="s2">] &amp;&amp; options[</span><span class="s5">1</span><span class="s2">].requireReturnForObjectLiteral;</span>
+		<span class="s4">const </span><span class="s2">sourceCode = context.sourceCode;</span>
+		<span class="s4">let </span><span class="s2">funcInfo = </span><span class="s4">null</span><span class="s2">;</span>
+
+		<span class="s0">/**</span>
+		 <span class="s0">* Checks whether the given node has ASI problem or not.</span>
+		 <span class="s0">* </span><span class="s1">@param </span><span class="s0">{Token} token The token to check.</span>
+		 <span class="s0">* </span><span class="s1">@returns </span><span class="s0">{boolean} `true` if it changes semantics if `;` or `}` followed by the token are removed.</span>
+		 <span class="s0">*/</span>
+		<span class="s4">function </span><span class="s2">hasASIProblem(token) {</span>
+			<span class="s4">return </span><span class="s2">(</span>
+				<span class="s2">token &amp;&amp;</span>
+				<span class="s2">token.type === </span><span class="s3">&quot;Punctuator&quot; </span><span class="s2">&amp;&amp;</span>
+				<span class="s6">/^[([/`+-]/u</span><span class="s2">.test(token.value)</span>
+			<span class="s2">);</span>
+		<span class="s2">}</span>
+
+		<span class="s0">/**</span>
+		 <span class="s0">* Gets the closing parenthesis by the given node.</span>
+		 <span class="s0">* </span><span class="s1">@param </span><span class="s0">{ASTNode} node first node after an opening parenthesis.</span>
+		 <span class="s0">* </span><span class="s1">@returns </span><span class="s0">{Token} The found closing parenthesis token.</span>
+		 <span class="s0">*/</span>
+		<span class="s4">function </span><span class="s2">findClosingParen(node) {</span>
+			<span class="s4">let </span><span class="s2">nodeToCheck = node;</span>
+
+			<span class="s4">while </span><span class="s2">(!astUtils.isParenthesised(sourceCode, nodeToCheck)) {</span>
+				<span class="s2">nodeToCheck = nodeToCheck.parent;</span>
+			<span class="s2">}</span>
+			<span class="s4">return </span><span class="s2">sourceCode.getTokenAfter(nodeToCheck);</span>
+		<span class="s2">}</span>
+
+		<span class="s0">/**</span>
+		 <span class="s0">* Check whether the node is inside of a for loop's init</span>
+		 <span class="s0">* </span><span class="s1">@param </span><span class="s0">{ASTNode} node node is inside for loop</span>
+		 <span class="s0">* </span><span class="s1">@returns </span><span class="s0">{boolean} `true` if the node is inside of a for loop, else `false`</span>
+		 <span class="s0">*/</span>
+		<span class="s4">function </span><span class="s2">isInsideForLoopInitializer(node) {</span>
+			<span class="s4">if </span><span class="s2">(node &amp;&amp; node.parent) {</span>
+				<span class="s4">if </span><span class="s2">(</span>
+					<span class="s2">node.parent.type === </span><span class="s3">&quot;ForStatement&quot; </span><span class="s2">&amp;&amp;</span>
+					<span class="s2">node.parent.init === node</span>
+				<span class="s2">) {</span>
+					<span class="s4">return true</span><span class="s2">;</span>
+				<span class="s2">}</span>
+				<span class="s4">return </span><span class="s2">isInsideForLoopInitializer(node.parent);</span>
+			<span class="s2">}</span>
+			<span class="s4">return false</span><span class="s2">;</span>
+		<span class="s2">}</span>
+
+		<span class="s0">/**</span>
+		 <span class="s0">* Determines whether a arrow function body needs braces</span>
+		 <span class="s0">* </span><span class="s1">@param </span><span class="s0">{ASTNode} node The arrow function node.</span>
+		 <span class="s0">* </span><span class="s1">@returns </span><span class="s0">{void}</span>
+		 <span class="s0">*/</span>
+		<span class="s4">function </span><span class="s2">validate(node) {</span>
+			<span class="s4">const </span><span class="s2">arrowBody = node.body;</span>
+
+			<span class="s4">if </span><span class="s2">(arrowBody.type === </span><span class="s3">&quot;BlockStatement&quot;</span><span class="s2">) {</span>
+				<span class="s4">const </span><span class="s2">blockBody = arrowBody.body;</span>
+
+				<span class="s4">if </span><span class="s2">(blockBody.length !== </span><span class="s5">1 </span><span class="s2">&amp;&amp; !never) {</span>
+					<span class="s4">return</span><span class="s2">;</span>
+				<span class="s2">}</span>
+
+				<span class="s4">if </span><span class="s2">(</span>
+					<span class="s2">asNeeded &amp;&amp;</span>
+					<span class="s2">requireReturnForObjectLiteral &amp;&amp;</span>
+					<span class="s2">blockBody[</span><span class="s5">0</span><span class="s2">].type === </span><span class="s3">&quot;ReturnStatement&quot; </span><span class="s2">&amp;&amp;</span>
+					<span class="s2">blockBody[</span><span class="s5">0</span><span class="s2">].argument &amp;&amp;</span>
+					<span class="s2">blockBody[</span><span class="s5">0</span><span class="s2">].argument.type === </span><span class="s3">&quot;ObjectExpression&quot;</span>
+				<span class="s2">) {</span>
+					<span class="s4">return</span><span class="s2">;</span>
+				<span class="s2">}</span>
+
+				<span class="s4">if </span><span class="s2">(</span>
+					<span class="s2">never ||</span>
+					<span class="s2">(asNeeded &amp;&amp; blockBody[</span><span class="s5">0</span><span class="s2">].type === </span><span class="s3">&quot;ReturnStatement&quot;</span><span class="s2">)</span>
+				<span class="s2">) {</span>
+					<span class="s4">let </span><span class="s2">messageId;</span>
+
+					<span class="s4">if </span><span class="s2">(blockBody.length === </span><span class="s5">0</span><span class="s2">) {</span>
+						<span class="s2">messageId = </span><span class="s3">&quot;unexpectedEmptyBlock&quot;</span><span class="s2">;</span>
+					<span class="s2">} </span><span class="s4">else if </span><span class="s2">(</span>
+						<span class="s2">blockBody.length &gt; </span><span class="s5">1 </span><span class="s2">||</span>
+						<span class="s2">blockBody[</span><span class="s5">0</span><span class="s2">].type !== </span><span class="s3">&quot;ReturnStatement&quot;</span>
+					<span class="s2">) {</span>
+						<span class="s2">messageId = </span><span class="s3">&quot;unexpectedOtherBlock&quot;</span><span class="s2">;</span>
+					<span class="s2">} </span><span class="s4">else if </span><span class="s2">(blockBody[</span><span class="s5">0</span><span class="s2">].argument === </span><span class="s4">null</span><span class="s2">) {</span>
+						<span class="s2">messageId = </span><span class="s3">&quot;unexpectedSingleBlock&quot;</span><span class="s2">;</span>
+					<span class="s2">} </span><span class="s4">else if </span><span class="s2">(</span>
+						<span class="s2">astUtils.isOpeningBraceToken(</span>
+							<span class="s2">sourceCode.getFirstToken(blockBody[</span><span class="s5">0</span><span class="s2">], { skip: </span><span class="s5">1 </span><span class="s2">}),</span>
+						<span class="s2">)</span>
+					<span class="s2">) {</span>
+						<span class="s2">messageId = </span><span class="s3">&quot;unexpectedObjectBlock&quot;</span><span class="s2">;</span>
+					<span class="s2">} </span><span class="s4">else </span><span class="s2">{</span>
+						<span class="s2">messageId = </span><span class="s3">&quot;unexpectedSingleBlock&quot;</span><span class="s2">;</span>
+					<span class="s2">}</span>
+
+					<span class="s2">context.report({</span>
+						<span class="s2">node,</span>
+						<span class="s2">loc: arrowBody.loc,</span>
+						<span class="s2">messageId,</span>
+						<span class="s2">fix(fixer) {</span>
+							<span class="s4">const </span><span class="s2">fixes = [];</span>
+
+							<span class="s4">if </span><span class="s2">(</span>
+								<span class="s2">blockBody.length !== </span><span class="s5">1 </span><span class="s2">||</span>
+								<span class="s2">blockBody[</span><span class="s5">0</span><span class="s2">].type !== </span><span class="s3">&quot;ReturnStatement&quot; </span><span class="s2">||</span>
+								<span class="s2">!blockBody[</span><span class="s5">0</span><span class="s2">].argument ||</span>
+								<span class="s2">hasASIProblem(</span>
+									<span class="s2">sourceCode.getTokenAfter(arrowBody),</span>
+								<span class="s2">)</span>
+							<span class="s2">) {</span>
+								<span class="s4">return </span><span class="s2">fixes;</span>
+							<span class="s2">}</span>
+
+							<span class="s4">const </span><span class="s2">openingBrace =</span>
+								<span class="s2">sourceCode.getFirstToken(arrowBody);</span>
+							<span class="s4">const </span><span class="s2">closingBrace =</span>
+								<span class="s2">sourceCode.getLastToken(arrowBody);</span>
+							<span class="s4">const </span><span class="s2">firstValueToken = sourceCode.getFirstToken(</span>
+								<span class="s2">blockBody[</span><span class="s5">0</span><span class="s2">],</span>
+								<span class="s5">1</span><span class="s2">,</span>
+							<span class="s2">);</span>
+							<span class="s4">const </span><span class="s2">lastValueToken = sourceCode.getLastToken(</span>
+								<span class="s2">blockBody[</span><span class="s5">0</span><span class="s2">],</span>
+							<span class="s2">);</span>
+							<span class="s4">const </span><span class="s2">commentsExist =</span>
+								<span class="s2">sourceCode.commentsExistBetween(</span>
+									<span class="s2">openingBrace,</span>
+									<span class="s2">firstValueToken,</span>
+								<span class="s2">) ||</span>
+								<span class="s2">sourceCode.commentsExistBetween(</span>
+									<span class="s2">lastValueToken,</span>
+									<span class="s2">closingBrace,</span>
+								<span class="s2">);</span>
+
+							<span class="s0">/* 
+                             * Remove tokens around the return value. 
+                             * If comments don't exist, remove extra spaces as well. 
+                             */</span>
+							<span class="s4">if </span><span class="s2">(commentsExist) {</span>
+								<span class="s2">fixes.push(</span>
+									<span class="s2">fixer.remove(openingBrace),</span>
+									<span class="s2">fixer.remove(closingBrace),</span>
+									<span class="s2">fixer.remove(</span>
+										<span class="s2">sourceCode.getTokenAfter(openingBrace),</span>
+									<span class="s2">), </span><span class="s0">// return keyword</span>
+								<span class="s2">);</span>
+							<span class="s2">} </span><span class="s4">else </span><span class="s2">{</span>
+								<span class="s2">fixes.push(</span>
+									<span class="s2">fixer.removeRange([</span>
+										<span class="s2">openingBrace.range[</span><span class="s5">0</span><span class="s2">],</span>
+										<span class="s2">firstValueToken.range[</span><span class="s5">0</span><span class="s2">],</span>
+									<span class="s2">]),</span>
+									<span class="s2">fixer.removeRange([</span>
+										<span class="s2">lastValueToken.range[</span><span class="s5">1</span><span class="s2">],</span>
+										<span class="s2">closingBrace.range[</span><span class="s5">1</span><span class="s2">],</span>
+									<span class="s2">]),</span>
+								<span class="s2">);</span>
+							<span class="s2">}</span>
+
+							<span class="s0">/* 
+                             * If the first token of the return value is `{` or the return value is a sequence expression, 
+                             * enclose the return value by parentheses to avoid syntax error. 
+                             */</span>
+							<span class="s4">if </span><span class="s2">(</span>
+								<span class="s2">astUtils.isOpeningBraceToken(firstValueToken) ||</span>
+								<span class="s2">blockBody[</span><span class="s5">0</span><span class="s2">].argument.type ===</span>
+									<span class="s3">&quot;SequenceExpression&quot; </span><span class="s2">||</span>
+								<span class="s2">(funcInfo.hasInOperator &amp;&amp;</span>
+									<span class="s2">isInsideForLoopInitializer(node))</span>
+							<span class="s2">) {</span>
+								<span class="s4">if </span><span class="s2">(</span>
+									<span class="s2">!astUtils.isParenthesised(</span>
+										<span class="s2">sourceCode,</span>
+										<span class="s2">blockBody[</span><span class="s5">0</span><span class="s2">].argument,</span>
+									<span class="s2">)</span>
+								<span class="s2">) {</span>
+									<span class="s2">fixes.push(</span>
+										<span class="s2">fixer.insertTextBefore(</span>
+											<span class="s2">firstValueToken,</span>
+											<span class="s3">&quot;(&quot;</span><span class="s2">,</span>
+										<span class="s2">),</span>
+										<span class="s2">fixer.insertTextAfter(</span>
+											<span class="s2">lastValueToken,</span>
+											<span class="s3">&quot;)&quot;</span><span class="s2">,</span>
+										<span class="s2">),</span>
+									<span class="s2">);</span>
+								<span class="s2">}</span>
+							<span class="s2">}</span>
+
+							<span class="s0">/* 
+                             * If the last token of the return statement is semicolon, remove it. 
+                             * Non-block arrow body is an expression, not a statement. 
+                             */</span>
+							<span class="s4">if </span><span class="s2">(astUtils.isSemicolonToken(lastValueToken)) {</span>
+								<span class="s2">fixes.push(fixer.remove(lastValueToken));</span>
+							<span class="s2">}</span>
+
+							<span class="s4">return </span><span class="s2">fixes;</span>
+						<span class="s2">},</span>
+					<span class="s2">});</span>
+				<span class="s2">}</span>
+			<span class="s2">} </span><span class="s4">else </span><span class="s2">{</span>
+				<span class="s4">if </span><span class="s2">(</span>
+					<span class="s2">always ||</span>
+					<span class="s2">(asNeeded &amp;&amp;</span>
+						<span class="s2">requireReturnForObjectLiteral &amp;&amp;</span>
+						<span class="s2">arrowBody.type === </span><span class="s3">&quot;ObjectExpression&quot;</span><span class="s2">)</span>
+				<span class="s2">) {</span>
+					<span class="s2">context.report({</span>
+						<span class="s2">node,</span>
+						<span class="s2">loc: arrowBody.loc,</span>
+						<span class="s2">messageId: </span><span class="s3">&quot;expectedBlock&quot;</span><span class="s2">,</span>
+						<span class="s2">fix(fixer) {</span>
+							<span class="s4">const </span><span class="s2">fixes = [];</span>
+							<span class="s4">const </span><span class="s2">arrowToken = sourceCode.getTokenBefore(</span>
+								<span class="s2">arrowBody,</span>
+								<span class="s2">astUtils.isArrowToken,</span>
+							<span class="s2">);</span>
+							<span class="s4">const </span><span class="s2">[</span>
+								<span class="s2">firstTokenAfterArrow,</span>
+								<span class="s2">secondTokenAfterArrow,</span>
+							<span class="s2">] = sourceCode.getTokensAfter(arrowToken, {</span>
+								<span class="s2">count: </span><span class="s5">2</span><span class="s2">,</span>
+							<span class="s2">});</span>
+							<span class="s4">const </span><span class="s2">lastToken = sourceCode.getLastToken(node);</span>
+
+							<span class="s4">let </span><span class="s2">parenthesisedObjectLiteral = </span><span class="s4">null</span><span class="s2">;</span>
+
+							<span class="s4">if </span><span class="s2">(</span>
+								<span class="s2">astUtils.isOpeningParenToken(</span>
+									<span class="s2">firstTokenAfterArrow,</span>
+								<span class="s2">) &amp;&amp;</span>
+								<span class="s2">astUtils.isOpeningBraceToken(</span>
+									<span class="s2">secondTokenAfterArrow,</span>
+								<span class="s2">)</span>
+							<span class="s2">) {</span>
+								<span class="s4">const </span><span class="s2">braceNode =</span>
+									<span class="s2">sourceCode.getNodeByRangeIndex(</span>
+										<span class="s2">secondTokenAfterArrow.range[</span><span class="s5">0</span><span class="s2">],</span>
+									<span class="s2">);</span>
+
+								<span class="s4">if </span><span class="s2">(braceNode.type === </span><span class="s3">&quot;ObjectExpression&quot;</span><span class="s2">) {</span>
+									<span class="s2">parenthesisedObjectLiteral = braceNode;</span>
+								<span class="s2">}</span>
+							<span class="s2">}</span>
+
+							<span class="s0">// If the value is object literal, remove parentheses which were forced by syntax.</span>
+							<span class="s4">if </span><span class="s2">(parenthesisedObjectLiteral) {</span>
+								<span class="s4">const </span><span class="s2">openingParenToken = firstTokenAfterArrow;</span>
+								<span class="s4">const </span><span class="s2">openingBraceToken = secondTokenAfterArrow;</span>
+
+								<span class="s4">if </span><span class="s2">(</span>
+									<span class="s2">astUtils.isTokenOnSameLine(</span>
+										<span class="s2">openingParenToken,</span>
+										<span class="s2">openingBraceToken,</span>
+									<span class="s2">)</span>
+								<span class="s2">) {</span>
+									<span class="s2">fixes.push(</span>
+										<span class="s2">fixer.replaceText(</span>
+											<span class="s2">openingParenToken,</span>
+											<span class="s3">&quot;{return &quot;</span><span class="s2">,</span>
+										<span class="s2">),</span>
+									<span class="s2">);</span>
+								<span class="s2">} </span><span class="s4">else </span><span class="s2">{</span>
+									<span class="s0">// Avoid ASI</span>
+									<span class="s2">fixes.push(</span>
+										<span class="s2">fixer.replaceText(</span>
+											<span class="s2">openingParenToken,</span>
+											<span class="s3">&quot;{&quot;</span><span class="s2">,</span>
+										<span class="s2">),</span>
+										<span class="s2">fixer.insertTextBefore(</span>
+											<span class="s2">openingBraceToken,</span>
+											<span class="s3">&quot;return &quot;</span><span class="s2">,</span>
+										<span class="s2">),</span>
+									<span class="s2">);</span>
+								<span class="s2">}</span>
+
+								<span class="s0">// Closing paren for the object doesn't have to be lastToken, e.g.: () =&gt; ({}).foo()</span>
+								<span class="s2">fixes.push(</span>
+									<span class="s2">fixer.remove(</span>
+										<span class="s2">findClosingParen(</span>
+											<span class="s2">parenthesisedObjectLiteral,</span>
+										<span class="s2">),</span>
+									<span class="s2">),</span>
+								<span class="s2">);</span>
+								<span class="s2">fixes.push(</span>
+									<span class="s2">fixer.insertTextAfter(lastToken, </span><span class="s3">&quot;}&quot;</span><span class="s2">),</span>
+								<span class="s2">);</span>
+							<span class="s2">} </span><span class="s4">else </span><span class="s2">{</span>
+								<span class="s2">fixes.push(</span>
+									<span class="s2">fixer.insertTextBefore(</span>
+										<span class="s2">firstTokenAfterArrow,</span>
+										<span class="s3">&quot;{return &quot;</span><span class="s2">,</span>
+									<span class="s2">),</span>
+								<span class="s2">);</span>
+								<span class="s2">fixes.push(</span>
+									<span class="s2">fixer.insertTextAfter(lastToken, </span><span class="s3">&quot;}&quot;</span><span class="s2">),</span>
+								<span class="s2">);</span>
+							<span class="s2">}</span>
+
+							<span class="s4">return </span><span class="s2">fixes;</span>
+						<span class="s2">},</span>
+					<span class="s2">});</span>
+				<span class="s2">}</span>
+			<span class="s2">}</span>
+		<span class="s2">}</span>
+
+		<span class="s4">return </span><span class="s2">{</span>
+			<span class="s3">&quot;BinaryExpression[operator='in']&quot;</span><span class="s2">() {</span>
+				<span class="s4">let </span><span class="s2">info = funcInfo;</span>
+
+				<span class="s4">while </span><span class="s2">(info) {</span>
+					<span class="s2">info.hasInOperator = </span><span class="s4">true</span><span class="s2">;</span>
+					<span class="s2">info = info.upper;</span>
+				<span class="s2">}</span>
+			<span class="s2">},</span>
+			<span class="s2">ArrowFunctionExpression() {</span>
+				<span class="s2">funcInfo = {</span>
+					<span class="s2">upper: funcInfo,</span>
+					<span class="s2">hasInOperator: </span><span class="s4">false</span><span class="s2">,</span>
+				<span class="s2">};</span>
+			<span class="s2">},</span>
+			<span class="s3">&quot;ArrowFunctionExpression:exit&quot;</span><span class="s2">(node) {</span>
+				<span class="s2">validate(node);</span>
+				<span class="s2">funcInfo = funcInfo.upper;</span>
+			<span class="s2">},</span>
+		<span class="s2">};</span>
+	<span class="s2">},</span>
+<span class="s2">};</span>
+</pre>
+</body>
+</html>

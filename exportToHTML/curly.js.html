@@ -1,0 +1,448 @@
+<html>
+<head>
+<title>curly.js</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #8c8c8c; font-style: italic;}
+.s1 { color: #8c8c8c; font-style: italic;}
+.s2 { color: #080808;}
+.s3 { color: #067d17;}
+.s4 { color: #0033b3;}
+.s5 { color: #1750eb;}
+.s6 { color: #264eff;}
+</style>
+</head>
+<body bgcolor="#ffffff">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#c0c0c0" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+curly.js</font>
+</center></td></tr></table>
+<pre><span class="s0">/**</span>
+ <span class="s0">* </span><span class="s1">@fileoverview </span><span class="s0">Rule to flag statements without curly braces</span>
+ <span class="s0">* </span><span class="s1">@author </span><span class="s0">Nicholas C. Zakas</span>
+ <span class="s0">*/</span>
+<span class="s3">&quot;use strict&quot;</span><span class="s2">;</span>
+
+<span class="s0">//------------------------------------------------------------------------------</span>
+<span class="s0">// Requirements</span>
+<span class="s0">//------------------------------------------------------------------------------</span>
+
+<span class="s4">const </span><span class="s2">astUtils = require(</span><span class="s3">&quot;./utils/ast-utils&quot;</span><span class="s2">);</span>
+
+<span class="s0">//------------------------------------------------------------------------------</span>
+<span class="s0">// Rule Definition</span>
+<span class="s0">//------------------------------------------------------------------------------</span>
+
+<span class="s0">/** </span><span class="s1">@type </span><span class="s0">{import('../types').Rule.RuleModule} */</span>
+<span class="s2">module.exports = {</span>
+	<span class="s2">meta: {</span>
+		<span class="s2">type: </span><span class="s3">&quot;suggestion&quot;</span><span class="s2">,</span>
+
+		<span class="s2">docs: {</span>
+			<span class="s2">description:</span>
+				<span class="s3">&quot;Enforce consistent brace style for all control statements&quot;</span><span class="s2">,</span>
+			<span class="s2">recommended: </span><span class="s4">false</span><span class="s2">,</span>
+			<span class="s2">frozen: </span><span class="s4">true</span><span class="s2">,</span>
+			<span class="s2">url: </span><span class="s3">&quot;https://eslint.org/docs/latest/rules/curly&quot;</span><span class="s2">,</span>
+		<span class="s2">},</span>
+
+		<span class="s2">schema: {</span>
+			<span class="s2">anyOf: [</span>
+				<span class="s2">{</span>
+					<span class="s2">type: </span><span class="s3">&quot;array&quot;</span><span class="s2">,</span>
+					<span class="s2">items: [</span>
+						<span class="s2">{</span>
+							<span class="s4">enum</span><span class="s2">: [</span><span class="s3">&quot;all&quot;</span><span class="s2">],</span>
+						<span class="s2">},</span>
+					<span class="s2">],</span>
+					<span class="s2">minItems: </span><span class="s5">0</span><span class="s2">,</span>
+					<span class="s2">maxItems: </span><span class="s5">1</span><span class="s2">,</span>
+				<span class="s2">},</span>
+				<span class="s2">{</span>
+					<span class="s2">type: </span><span class="s3">&quot;array&quot;</span><span class="s2">,</span>
+					<span class="s2">items: [</span>
+						<span class="s2">{</span>
+							<span class="s4">enum</span><span class="s2">: [</span><span class="s3">&quot;multi&quot;</span><span class="s2">, </span><span class="s3">&quot;multi-line&quot;</span><span class="s2">, </span><span class="s3">&quot;multi-or-nest&quot;</span><span class="s2">],</span>
+						<span class="s2">},</span>
+						<span class="s2">{</span>
+							<span class="s4">enum</span><span class="s2">: [</span><span class="s3">&quot;consistent&quot;</span><span class="s2">],</span>
+						<span class="s2">},</span>
+					<span class="s2">],</span>
+					<span class="s2">minItems: </span><span class="s5">0</span><span class="s2">,</span>
+					<span class="s2">maxItems: </span><span class="s5">2</span><span class="s2">,</span>
+				<span class="s2">},</span>
+			<span class="s2">],</span>
+		<span class="s2">},</span>
+
+		<span class="s2">defaultOptions: [</span><span class="s3">&quot;all&quot;</span><span class="s2">],</span>
+
+		<span class="s2">fixable: </span><span class="s3">&quot;code&quot;</span><span class="s2">,</span>
+
+		<span class="s2">messages: {</span>
+			<span class="s2">missingCurlyAfter: </span><span class="s3">&quot;Expected { after '{{name}}'.&quot;</span><span class="s2">,</span>
+			<span class="s2">missingCurlyAfterCondition:</span>
+				<span class="s3">&quot;Expected { after '{{name}}' condition.&quot;</span><span class="s2">,</span>
+			<span class="s2">unexpectedCurlyAfter: </span><span class="s3">&quot;Unnecessary { after '{{name}}'.&quot;</span><span class="s2">,</span>
+			<span class="s2">unexpectedCurlyAfterCondition:</span>
+				<span class="s3">&quot;Unnecessary { after '{{name}}' condition.&quot;</span><span class="s2">,</span>
+		<span class="s2">},</span>
+	<span class="s2">},</span>
+
+	<span class="s2">create(context) {</span>
+		<span class="s4">const </span><span class="s2">multiOnly = context.options[</span><span class="s5">0</span><span class="s2">] === </span><span class="s3">&quot;multi&quot;</span><span class="s2">;</span>
+		<span class="s4">const </span><span class="s2">multiLine = context.options[</span><span class="s5">0</span><span class="s2">] === </span><span class="s3">&quot;multi-line&quot;</span><span class="s2">;</span>
+		<span class="s4">const </span><span class="s2">multiOrNest = context.options[</span><span class="s5">0</span><span class="s2">] === </span><span class="s3">&quot;multi-or-nest&quot;</span><span class="s2">;</span>
+		<span class="s4">const </span><span class="s2">consistent = context.options[</span><span class="s5">1</span><span class="s2">] === </span><span class="s3">&quot;consistent&quot;</span><span class="s2">;</span>
+
+		<span class="s4">const </span><span class="s2">sourceCode = context.sourceCode;</span>
+
+		<span class="s0">//--------------------------------------------------------------------------</span>
+		<span class="s0">// Helpers</span>
+		<span class="s0">//--------------------------------------------------------------------------</span>
+
+		<span class="s0">/**</span>
+		 <span class="s0">* Determines if a given node is a one-liner that's on the same line as it's preceding code.</span>
+		 <span class="s0">* </span><span class="s1">@param </span><span class="s0">{ASTNode} node The node to check.</span>
+		 <span class="s0">* </span><span class="s1">@returns </span><span class="s0">{boolean} True if the node is a one-liner that's on the same line as it's preceding code.</span>
+		 <span class="s0">* </span><span class="s1">@private</span>
+		 <span class="s0">*/</span>
+		<span class="s4">function </span><span class="s2">isCollapsedOneLiner(node) {</span>
+			<span class="s4">const </span><span class="s2">before = sourceCode.getTokenBefore(node);</span>
+			<span class="s4">const </span><span class="s2">last = sourceCode.getLastToken(node);</span>
+			<span class="s4">const </span><span class="s2">lastExcludingSemicolon = astUtils.isSemicolonToken(last)</span>
+				<span class="s2">? sourceCode.getTokenBefore(last)</span>
+				<span class="s2">: last;</span>
+
+			<span class="s4">return </span><span class="s2">(</span>
+				<span class="s2">before.loc.start.line === lastExcludingSemicolon.loc.end.line</span>
+			<span class="s2">);</span>
+		<span class="s2">}</span>
+
+		<span class="s0">/**</span>
+		 <span class="s0">* Determines if a given node is a one-liner.</span>
+		 <span class="s0">* </span><span class="s1">@param </span><span class="s0">{ASTNode} node The node to check.</span>
+		 <span class="s0">* </span><span class="s1">@returns </span><span class="s0">{boolean} True if the node is a one-liner.</span>
+		 <span class="s0">* </span><span class="s1">@private</span>
+		 <span class="s0">*/</span>
+		<span class="s4">function </span><span class="s2">isOneLiner(node) {</span>
+			<span class="s4">if </span><span class="s2">(node.type === </span><span class="s3">&quot;EmptyStatement&quot;</span><span class="s2">) {</span>
+				<span class="s4">return true</span><span class="s2">;</span>
+			<span class="s2">}</span>
+
+			<span class="s4">const </span><span class="s2">first = sourceCode.getFirstToken(node);</span>
+			<span class="s4">const </span><span class="s2">last = sourceCode.getLastToken(node);</span>
+			<span class="s4">const </span><span class="s2">lastExcludingSemicolon = astUtils.isSemicolonToken(last)</span>
+				<span class="s2">? sourceCode.getTokenBefore(last)</span>
+				<span class="s2">: last;</span>
+
+			<span class="s4">return </span><span class="s2">first.loc.start.line === lastExcludingSemicolon.loc.end.line;</span>
+		<span class="s2">}</span>
+
+		<span class="s0">/**</span>
+		 <span class="s0">* Determines if a semicolon needs to be inserted after removing a set of curly brackets, in order to avoid a SyntaxError.</span>
+		 <span class="s0">* </span><span class="s1">@param </span><span class="s0">{Token} closingBracket The } token</span>
+		 <span class="s0">* </span><span class="s1">@returns </span><span class="s0">{boolean} `true` if a semicolon needs to be inserted after the last statement in the block.</span>
+		 <span class="s0">*/</span>
+		<span class="s4">function </span><span class="s2">needsSemicolon(closingBracket) {</span>
+			<span class="s4">const </span><span class="s2">tokenBefore = sourceCode.getTokenBefore(closingBracket);</span>
+			<span class="s4">const </span><span class="s2">tokenAfter = sourceCode.getTokenAfter(closingBracket);</span>
+			<span class="s4">const </span><span class="s2">lastBlockNode = sourceCode.getNodeByRangeIndex(</span>
+				<span class="s2">tokenBefore.range[</span><span class="s5">0</span><span class="s2">],</span>
+			<span class="s2">);</span>
+
+			<span class="s4">if </span><span class="s2">(astUtils.isSemicolonToken(tokenBefore)) {</span>
+				<span class="s0">// If the last statement already has a semicolon, don't add another one.</span>
+				<span class="s4">return false</span><span class="s2">;</span>
+			<span class="s2">}</span>
+
+			<span class="s4">if </span><span class="s2">(!tokenAfter) {</span>
+				<span class="s0">// If there are no statements after this block, there is no need to add a semicolon.</span>
+				<span class="s4">return false</span><span class="s2">;</span>
+			<span class="s2">}</span>
+
+			<span class="s4">if </span><span class="s2">(</span>
+				<span class="s2">lastBlockNode.type === </span><span class="s3">&quot;BlockStatement&quot; </span><span class="s2">&amp;&amp;</span>
+				<span class="s2">lastBlockNode.parent.type !== </span><span class="s3">&quot;FunctionExpression&quot; </span><span class="s2">&amp;&amp;</span>
+				<span class="s2">lastBlockNode.parent.type !== </span><span class="s3">&quot;ArrowFunctionExpression&quot;</span>
+			<span class="s2">) {</span>
+				<span class="s0">/* 
+                 * If the last node surrounded by curly brackets is a BlockStatement (other than a FunctionExpression or an ArrowFunctionExpression), 
+                 * don't insert a semicolon. Otherwise, the semicolon would be parsed as a separate statement, which would cause 
+                 * a SyntaxError if it was followed by `else`. 
+                 */</span>
+				<span class="s4">return false</span><span class="s2">;</span>
+			<span class="s2">}</span>
+
+			<span class="s4">if </span><span class="s2">(tokenBefore.loc.end.line === tokenAfter.loc.start.line) {</span>
+				<span class="s0">// If the next token is on the same line, insert a semicolon.</span>
+				<span class="s4">return true</span><span class="s2">;</span>
+			<span class="s2">}</span>
+
+			<span class="s4">if </span><span class="s2">(</span><span class="s6">/^[([/`+-]/u</span><span class="s2">.test(tokenAfter.value)) {</span>
+				<span class="s0">// If the next token starts with a character that would disrupt ASI, insert a semicolon.</span>
+				<span class="s4">return true</span><span class="s2">;</span>
+			<span class="s2">}</span>
+
+			<span class="s4">if </span><span class="s2">(</span>
+				<span class="s2">tokenBefore.type === </span><span class="s3">&quot;Punctuator&quot; </span><span class="s2">&amp;&amp;</span>
+				<span class="s2">(tokenBefore.value === </span><span class="s3">&quot;++&quot; </span><span class="s2">|| tokenBefore.value === </span><span class="s3">&quot;--&quot;</span><span class="s2">)</span>
+			<span class="s2">) {</span>
+				<span class="s0">// If the last token is ++ or --, insert a semicolon to avoid disrupting ASI.</span>
+				<span class="s4">return true</span><span class="s2">;</span>
+			<span class="s2">}</span>
+
+			<span class="s0">// Otherwise, do not insert a semicolon.</span>
+			<span class="s4">return false</span><span class="s2">;</span>
+		<span class="s2">}</span>
+
+		<span class="s0">/**</span>
+		 <span class="s0">* Prepares to check the body of a node to see if it's a block statement.</span>
+		 <span class="s0">* </span><span class="s1">@param </span><span class="s0">{ASTNode} node The node to report if there's a problem.</span>
+		 <span class="s0">* </span><span class="s1">@param </span><span class="s0">{ASTNode} body The body node to check for blocks.</span>
+		 <span class="s0">* </span><span class="s1">@param </span><span class="s0">{string} name The name to report if there's a problem.</span>
+		 <span class="s0">* </span><span class="s1">@param </span><span class="s0">{{ condition: boolean }} opts Options to pass to the report functions</span>
+		 <span class="s0">* </span><span class="s1">@returns </span><span class="s0">{Object} a prepared check object, with &quot;actual&quot;, &quot;expected&quot;, &quot;check&quot; properties.</span>
+		 <span class="s0">*   &quot;actual&quot; will be `true` or `false` whether the body is already a block statement.</span>
+		 <span class="s0">*   &quot;expected&quot; will be `true` or `false` if the body should be a block statement or not, or</span>
+		 <span class="s0">*   `null` if it doesn't matter, depending on the rule options. It can be modified to change</span>
+		 <span class="s0">*   the final behavior of &quot;check&quot;.</span>
+		 <span class="s0">*   &quot;check&quot; will be a function reporting appropriate problems depending on the other</span>
+		 <span class="s0">*   properties.</span>
+		 <span class="s0">*/</span>
+		<span class="s4">function </span><span class="s2">prepareCheck(node, body, name, opts) {</span>
+			<span class="s4">const </span><span class="s2">hasBlock = body.type === </span><span class="s3">&quot;BlockStatement&quot;</span><span class="s2">;</span>
+			<span class="s4">let </span><span class="s2">expected = </span><span class="s4">null</span><span class="s2">;</span>
+
+			<span class="s4">if </span><span class="s2">(</span>
+				<span class="s2">hasBlock &amp;&amp;</span>
+				<span class="s2">(body.body.length !== </span><span class="s5">1 </span><span class="s2">||</span>
+					<span class="s2">astUtils.areBracesNecessary(body, sourceCode))</span>
+			<span class="s2">) {</span>
+				<span class="s2">expected = </span><span class="s4">true</span><span class="s2">;</span>
+			<span class="s2">} </span><span class="s4">else if </span><span class="s2">(multiOnly) {</span>
+				<span class="s2">expected = </span><span class="s4">false</span><span class="s2">;</span>
+			<span class="s2">} </span><span class="s4">else if </span><span class="s2">(multiLine) {</span>
+				<span class="s4">if </span><span class="s2">(!isCollapsedOneLiner(body)) {</span>
+					<span class="s2">expected = </span><span class="s4">true</span><span class="s2">;</span>
+				<span class="s2">}</span>
+
+				<span class="s0">// otherwise, the body is allowed to have braces or not to have braces</span>
+			<span class="s2">} </span><span class="s4">else if </span><span class="s2">(multiOrNest) {</span>
+				<span class="s4">if </span><span class="s2">(hasBlock) {</span>
+					<span class="s4">const </span><span class="s2">statement = body.body[</span><span class="s5">0</span><span class="s2">];</span>
+					<span class="s4">const </span><span class="s2">leadingCommentsInBlock =</span>
+						<span class="s2">sourceCode.getCommentsBefore(statement);</span>
+
+					<span class="s2">expected =</span>
+						<span class="s2">!isOneLiner(statement) ||</span>
+						<span class="s2">leadingCommentsInBlock.length &gt; </span><span class="s5">0</span><span class="s2">;</span>
+				<span class="s2">} </span><span class="s4">else </span><span class="s2">{</span>
+					<span class="s2">expected = !isOneLiner(body);</span>
+				<span class="s2">}</span>
+			<span class="s2">} </span><span class="s4">else </span><span class="s2">{</span>
+				<span class="s0">// default &quot;all&quot;</span>
+				<span class="s2">expected = </span><span class="s4">true</span><span class="s2">;</span>
+			<span class="s2">}</span>
+
+			<span class="s4">return </span><span class="s2">{</span>
+				<span class="s2">actual: hasBlock,</span>
+				<span class="s2">expected,</span>
+				<span class="s2">check() {</span>
+					<span class="s4">if </span><span class="s2">(</span>
+						<span class="s4">this</span><span class="s2">.expected !== </span><span class="s4">null </span><span class="s2">&amp;&amp;</span>
+						<span class="s4">this</span><span class="s2">.expected !== </span><span class="s4">this</span><span class="s2">.actual</span>
+					<span class="s2">) {</span>
+						<span class="s4">if </span><span class="s2">(</span><span class="s4">this</span><span class="s2">.expected) {</span>
+							<span class="s2">context.report({</span>
+								<span class="s2">node,</span>
+								<span class="s2">loc: body.loc,</span>
+								<span class="s2">messageId:</span>
+									<span class="s2">opts &amp;&amp; opts.condition</span>
+										<span class="s2">? </span><span class="s3">&quot;missingCurlyAfterCondition&quot;</span>
+										<span class="s2">: </span><span class="s3">&quot;missingCurlyAfter&quot;</span><span class="s2">,</span>
+								<span class="s2">data: {</span>
+									<span class="s2">name,</span>
+								<span class="s2">},</span>
+								<span class="s2">fix: fixer =&gt;</span>
+									<span class="s2">fixer.replaceText(</span>
+										<span class="s2">body,</span>
+										<span class="s3">`{</span><span class="s2">${sourceCode.getText(body)}</span><span class="s3">}`</span><span class="s2">,</span>
+									<span class="s2">),</span>
+							<span class="s2">});</span>
+						<span class="s2">} </span><span class="s4">else </span><span class="s2">{</span>
+							<span class="s2">context.report({</span>
+								<span class="s2">node,</span>
+								<span class="s2">loc: body.loc,</span>
+								<span class="s2">messageId:</span>
+									<span class="s2">opts &amp;&amp; opts.condition</span>
+										<span class="s2">? </span><span class="s3">&quot;unexpectedCurlyAfterCondition&quot;</span>
+										<span class="s2">: </span><span class="s3">&quot;unexpectedCurlyAfter&quot;</span><span class="s2">,</span>
+								<span class="s2">data: {</span>
+									<span class="s2">name,</span>
+								<span class="s2">},</span>
+								<span class="s2">fix(fixer) {</span>
+									<span class="s0">/* 
+                                     * `do while` expressions sometimes need a space to be inserted after `do`. 
+                                     * e.g. `do{foo()} while (bar)` should be corrected to `do foo() while (bar)` 
+                                     */</span>
+									<span class="s4">const </span><span class="s2">needsPrecedingSpace =</span>
+										<span class="s2">node.type === </span><span class="s3">&quot;DoWhileStatement&quot; </span><span class="s2">&amp;&amp;</span>
+										<span class="s2">sourceCode.getTokenBefore(body)</span>
+											<span class="s2">.range[</span><span class="s5">1</span><span class="s2">] === body.range[</span><span class="s5">0</span><span class="s2">] &amp;&amp;</span>
+										<span class="s2">!astUtils.canTokensBeAdjacent(</span>
+											<span class="s3">&quot;do&quot;</span><span class="s2">,</span>
+											<span class="s2">sourceCode.getFirstToken(body, {</span>
+												<span class="s2">skip: </span><span class="s5">1</span><span class="s2">,</span>
+											<span class="s2">}),</span>
+										<span class="s2">);</span>
+
+									<span class="s4">const </span><span class="s2">openingBracket =</span>
+										<span class="s2">sourceCode.getFirstToken(body);</span>
+									<span class="s4">const </span><span class="s2">closingBracket =</span>
+										<span class="s2">sourceCode.getLastToken(body);</span>
+									<span class="s4">const </span><span class="s2">lastTokenInBlock =</span>
+										<span class="s2">sourceCode.getTokenBefore(</span>
+											<span class="s2">closingBracket,</span>
+										<span class="s2">);</span>
+
+									<span class="s4">if </span><span class="s2">(needsSemicolon(closingBracket)) {</span>
+										<span class="s0">/* 
+                                         * If removing braces would cause a SyntaxError due to multiple statements on the same line (or 
+                                         * change the semantics of the code due to ASI), don't perform a fix. 
+                                         */</span>
+										<span class="s4">return null</span><span class="s2">;</span>
+									<span class="s2">}</span>
+
+									<span class="s4">const </span><span class="s2">resultingBodyText =</span>
+										<span class="s2">sourceCode</span>
+											<span class="s2">.getText()</span>
+											<span class="s2">.slice(</span>
+												<span class="s2">openingBracket.range[</span><span class="s5">1</span><span class="s2">],</span>
+												<span class="s2">lastTokenInBlock.range[</span><span class="s5">0</span><span class="s2">],</span>
+											<span class="s2">) +</span>
+										<span class="s2">sourceCode.getText(lastTokenInBlock) +</span>
+										<span class="s2">sourceCode</span>
+											<span class="s2">.getText()</span>
+											<span class="s2">.slice(</span>
+												<span class="s2">lastTokenInBlock.range[</span><span class="s5">1</span><span class="s2">],</span>
+												<span class="s2">closingBracket.range[</span><span class="s5">0</span><span class="s2">],</span>
+											<span class="s2">);</span>
+
+									<span class="s4">return </span><span class="s2">fixer.replaceText(</span>
+										<span class="s2">body,</span>
+										<span class="s2">(needsPrecedingSpace ? </span><span class="s3">&quot; &quot; </span><span class="s2">: </span><span class="s3">&quot;&quot;</span><span class="s2">) +</span>
+											<span class="s2">resultingBodyText,</span>
+									<span class="s2">);</span>
+								<span class="s2">},</span>
+							<span class="s2">});</span>
+						<span class="s2">}</span>
+					<span class="s2">}</span>
+				<span class="s2">},</span>
+			<span class="s2">};</span>
+		<span class="s2">}</span>
+
+		<span class="s0">/**</span>
+		 <span class="s0">* Prepares to check the bodies of a &quot;if&quot;, &quot;else if&quot; and &quot;else&quot; chain.</span>
+		 <span class="s0">* </span><span class="s1">@param </span><span class="s0">{ASTNode} node The first IfStatement node of the chain.</span>
+		 <span class="s0">* </span><span class="s1">@returns </span><span class="s0">{Object[]} prepared checks for each body of the chain. See `prepareCheck` for more</span>
+		 <span class="s0">*   information.</span>
+		 <span class="s0">*/</span>
+		<span class="s4">function </span><span class="s2">prepareIfChecks(node) {</span>
+			<span class="s4">const </span><span class="s2">preparedChecks = [];</span>
+
+			<span class="s4">for </span><span class="s2">(</span>
+				<span class="s4">let </span><span class="s2">currentNode = node;</span>
+				<span class="s2">currentNode;</span>
+				<span class="s2">currentNode = currentNode.alternate</span>
+			<span class="s2">) {</span>
+				<span class="s2">preparedChecks.push(</span>
+					<span class="s2">prepareCheck(currentNode, currentNode.consequent, </span><span class="s3">&quot;if&quot;</span><span class="s2">, {</span>
+						<span class="s2">condition: </span><span class="s4">true</span><span class="s2">,</span>
+					<span class="s2">}),</span>
+				<span class="s2">);</span>
+				<span class="s4">if </span><span class="s2">(</span>
+					<span class="s2">currentNode.alternate &amp;&amp;</span>
+					<span class="s2">currentNode.alternate.type !== </span><span class="s3">&quot;IfStatement&quot;</span>
+				<span class="s2">) {</span>
+					<span class="s2">preparedChecks.push(</span>
+						<span class="s2">prepareCheck(</span>
+							<span class="s2">currentNode,</span>
+							<span class="s2">currentNode.alternate,</span>
+							<span class="s3">&quot;else&quot;</span><span class="s2">,</span>
+						<span class="s2">),</span>
+					<span class="s2">);</span>
+					<span class="s4">break</span><span class="s2">;</span>
+				<span class="s2">}</span>
+			<span class="s2">}</span>
+
+			<span class="s4">if </span><span class="s2">(consistent) {</span>
+				<span class="s0">/* 
+                 * If any node should have or already have braces, make sure they 
+                 * all have braces. 
+                 * If all nodes shouldn't have braces, make sure they don't. 
+                 */</span>
+				<span class="s4">const </span><span class="s2">expected = preparedChecks.some(preparedCheck =&gt; {</span>
+					<span class="s4">if </span><span class="s2">(preparedCheck.expected !== </span><span class="s4">null</span><span class="s2">) {</span>
+						<span class="s4">return </span><span class="s2">preparedCheck.expected;</span>
+					<span class="s2">}</span>
+					<span class="s4">return </span><span class="s2">preparedCheck.actual;</span>
+				<span class="s2">});</span>
+
+				<span class="s2">preparedChecks.forEach(preparedCheck =&gt; {</span>
+					<span class="s2">preparedCheck.expected = expected;</span>
+				<span class="s2">});</span>
+			<span class="s2">}</span>
+
+			<span class="s4">return </span><span class="s2">preparedChecks;</span>
+		<span class="s2">}</span>
+
+		<span class="s0">//--------------------------------------------------------------------------</span>
+		<span class="s0">// Public</span>
+		<span class="s0">//--------------------------------------------------------------------------</span>
+
+		<span class="s4">return </span><span class="s2">{</span>
+			<span class="s2">IfStatement(node) {</span>
+				<span class="s4">const </span><span class="s2">parent = node.parent;</span>
+				<span class="s4">const </span><span class="s2">isElseIf =</span>
+					<span class="s2">parent.type === </span><span class="s3">&quot;IfStatement&quot; </span><span class="s2">&amp;&amp; parent.alternate === node;</span>
+
+				<span class="s4">if </span><span class="s2">(!isElseIf) {</span>
+					<span class="s0">// This is a top `if`, check the whole `if-else-if` chain</span>
+					<span class="s2">prepareIfChecks(node).forEach(preparedCheck =&gt; {</span>
+						<span class="s2">preparedCheck.check();</span>
+					<span class="s2">});</span>
+				<span class="s2">}</span>
+
+				<span class="s0">// Skip `else if`, it's already checked (when the top `if` was visited)</span>
+			<span class="s2">},</span>
+
+			<span class="s2">WhileStatement(node) {</span>
+				<span class="s2">prepareCheck(node, node.body, </span><span class="s3">&quot;while&quot;</span><span class="s2">, {</span>
+					<span class="s2">condition: </span><span class="s4">true</span><span class="s2">,</span>
+				<span class="s2">}).check();</span>
+			<span class="s2">},</span>
+
+			<span class="s2">DoWhileStatement(node) {</span>
+				<span class="s2">prepareCheck(node, node.body, </span><span class="s3">&quot;do&quot;</span><span class="s2">).check();</span>
+			<span class="s2">},</span>
+
+			<span class="s2">ForStatement(node) {</span>
+				<span class="s2">prepareCheck(node, node.body, </span><span class="s3">&quot;for&quot;</span><span class="s2">, {</span>
+					<span class="s2">condition: </span><span class="s4">true</span><span class="s2">,</span>
+				<span class="s2">}).check();</span>
+			<span class="s2">},</span>
+
+			<span class="s2">ForInStatement(node) {</span>
+				<span class="s2">prepareCheck(node, node.body, </span><span class="s3">&quot;for-in&quot;</span><span class="s2">).check();</span>
+			<span class="s2">},</span>
+
+			<span class="s2">ForOfStatement(node) {</span>
+				<span class="s2">prepareCheck(node, node.body, </span><span class="s3">&quot;for-of&quot;</span><span class="s2">).check();</span>
+			<span class="s2">},</span>
+		<span class="s2">};</span>
+	<span class="s2">},</span>
+<span class="s2">};</span>
+</pre>
+</body>
+</html>

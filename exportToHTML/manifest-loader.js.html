@@ -1,0 +1,499 @@
+<html>
+<head>
+<title>manifest-loader.js</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #067d17;}
+.s1 { color: #080808;}
+.s2 { color: #0033b3;}
+.s3 { color: #8c8c8c; font-style: italic;}
+.s4 { color: #1750eb;}
+.s5 { color: #264eff;}
+.s6 { color: #8c8c8c; font-style: italic;}
+.s7 { color: #0037a6;}
+</style>
+</head>
+<body bgcolor="#ffffff">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#c0c0c0" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+manifest-loader.js</font>
+</center></td></tr></table>
+<pre><span class="s0">&quot;use strict&quot;</span><span class="s1">;</span>
+<span class="s1">Object.defineProperty(exports, </span><span class="s0">&quot;__esModule&quot;</span><span class="s1">, {</span>
+    <span class="s1">value: </span><span class="s2">true</span>
+<span class="s1">});</span>
+<span class="s1">Object.defineProperty(exports, </span><span class="s0">&quot;TurbopackManifestLoader&quot;</span><span class="s1">, {</span>
+    <span class="s1">enumerable: </span><span class="s2">true</span><span class="s1">,</span>
+    <span class="s1">get: </span><span class="s2">function</span><span class="s1">() {</span>
+        <span class="s2">return </span><span class="s1">TurbopackManifestLoader;</span>
+    <span class="s1">}</span>
+<span class="s1">});</span>
+<span class="s2">const </span><span class="s1">_interop_require_default = require(</span><span class="s0">&quot;@swc/helpers/_/_interop_require_default&quot;</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">_constants = require(</span><span class="s0">&quot;../constants&quot;</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">_path = require(</span><span class="s0">&quot;path&quot;</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">_promises = require(</span><span class="s0">&quot;fs/promises&quot;</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">_requirecache = require(</span><span class="s0">&quot;../../../server/dev/require-cache&quot;</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">_writeatomic = require(</span><span class="s0">&quot;../../../lib/fs/write-atomic&quot;</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">_generateinterceptionroutesrewrites = require(</span><span class="s0">&quot;../../../lib/generate-interception-routes-rewrites&quot;</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">_buildmanifestplugin = require(</span><span class="s0">&quot;../../../build/webpack/plugins/build-manifest-plugin&quot;</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">_getassetpathfromroute = </span><span class="s3">/*#__PURE__*/ </span><span class="s1">_interop_require_default._(require(</span><span class="s0">&quot;../router/utils/get-asset-path-from-route&quot;</span><span class="s1">));</span>
+<span class="s2">const </span><span class="s1">_entrykey = require(</span><span class="s0">&quot;./entry-key&quot;</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">_utils = require(</span><span class="s0">&quot;../router/utils&quot;</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">_fs = require(</span><span class="s0">&quot;fs&quot;</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">_turbopackutils = require(</span><span class="s0">&quot;../../../server/dev/turbopack-utils&quot;</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">_trytoparsepath = require(</span><span class="s0">&quot;../../../lib/try-to-parse-path&quot;</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">_routematchutils = require(</span><span class="s0">&quot;../router/utils/route-match-utils&quot;</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">getManifestPath = (page, distDir, name, type, firstCall)=&gt;{</span>
+    <span class="s2">let </span><span class="s1">manifestPath = _path.posix.join(distDir, </span><span class="s0">&quot;server&quot;</span><span class="s1">, type, type === </span><span class="s0">'middleware' </span><span class="s1">|| type === </span><span class="s0">'instrumentation' </span><span class="s1">? </span><span class="s0">'' </span><span class="s1">: type === </span><span class="s0">'app' </span><span class="s1">? page : (</span><span class="s4">0</span><span class="s1">, _getassetpathfromroute.default)(page), name);</span>
+    <span class="s2">if </span><span class="s1">(firstCall) {</span>
+        <span class="s2">const </span><span class="s1">isSitemapRoute = </span><span class="s5">/[\\/]sitemap(.xml)?\/route$/</span><span class="s1">.test(page);</span>
+        <span class="s3">// Check the ambiguity of /sitemap and /sitemap.xml</span>
+        <span class="s2">if </span><span class="s1">(isSitemapRoute &amp;&amp; !(</span><span class="s4">0</span><span class="s1">, _fs.existsSync)(manifestPath)) {</span>
+            <span class="s1">manifestPath = getManifestPath(page.replace(</span><span class="s5">/\/sitemap\/route$/</span><span class="s1">, </span><span class="s0">'/sitemap.xml/route'</span><span class="s1">), distDir, name, type, </span><span class="s2">false</span><span class="s1">);</span>
+        <span class="s1">}</span>
+        <span class="s3">// existsSync is faster than using the async version</span>
+        <span class="s2">if </span><span class="s1">(!(</span><span class="s4">0</span><span class="s1">, _fs.existsSync)(manifestPath) &amp;&amp; page.endsWith(</span><span class="s0">'/route'</span><span class="s1">)) {</span>
+            <span class="s3">// TODO: Improve implementation of metadata routes, currently it requires this extra check for the variants of the files that can be written.</span>
+            <span class="s2">let </span><span class="s1">metadataPage = (</span><span class="s4">0</span><span class="s1">, _turbopackutils.addRouteSuffix)((</span><span class="s4">0</span><span class="s1">, _turbopackutils.addMetadataIdToRoute)((</span><span class="s4">0</span><span class="s1">, _turbopackutils.removeRouteSuffix)(page)));</span>
+            <span class="s1">manifestPath = getManifestPath(metadataPage, distDir, name, type, </span><span class="s2">false</span><span class="s1">);</span>
+        <span class="s1">}</span>
+    <span class="s1">}</span>
+    <span class="s2">return </span><span class="s1">manifestPath;</span>
+<span class="s1">};</span>
+<span class="s1">async </span><span class="s2">function </span><span class="s1">readPartialManifest(distDir, name, pageName, type) {</span>
+    <span class="s2">if </span><span class="s1">(type === </span><span class="s2">void </span><span class="s4">0</span><span class="s1">) type = </span><span class="s0">'pages'</span><span class="s1">;</span>
+    <span class="s2">const </span><span class="s1">page = pageName;</span>
+    <span class="s2">const </span><span class="s1">manifestPath = getManifestPath(page, distDir, name, type, </span><span class="s2">true</span><span class="s1">);</span>
+    <span class="s2">return </span><span class="s1">JSON.parse(</span><span class="s2">await </span><span class="s1">(</span><span class="s4">0</span><span class="s1">, _promises.readFile)(_path.posix.join(manifestPath), </span><span class="s0">'utf-8'</span><span class="s1">));</span>
+<span class="s1">}</span>
+<span class="s2">class </span><span class="s1">TurbopackManifestLoader {</span>
+    <span class="s2">delete</span><span class="s1">(key) {</span>
+        <span class="s2">this</span><span class="s1">.actionManifests.delete(key);</span>
+        <span class="s2">this</span><span class="s1">.appBuildManifests.delete(key);</span>
+        <span class="s2">this</span><span class="s1">.appPathsManifests.delete(key);</span>
+        <span class="s2">this</span><span class="s1">.buildManifests.delete(key);</span>
+        <span class="s2">this</span><span class="s1">.clientBuildManifests.delete(key);</span>
+        <span class="s2">this</span><span class="s1">.fontManifests.delete(key);</span>
+        <span class="s2">this</span><span class="s1">.middlewareManifests.delete(key);</span>
+        <span class="s2">this</span><span class="s1">.pagesManifests.delete(key);</span>
+        <span class="s2">this</span><span class="s1">.webpackStats.delete(key);</span>
+    <span class="s1">}</span>
+    <span class="s1">async loadActionManifest(pageName) {</span>
+        <span class="s2">this</span><span class="s1">.actionManifests.set((</span><span class="s4">0</span><span class="s1">, _entrykey.getEntryKey)(</span><span class="s0">'app'</span><span class="s1">, </span><span class="s0">'server'</span><span class="s1">, pageName), </span><span class="s2">await </span><span class="s1">readPartialManifest(</span><span class="s2">this</span><span class="s1">.distDir, </span><span class="s0">&quot;&quot; </span><span class="s1">+ _constants.SERVER_REFERENCE_MANIFEST + </span><span class="s0">&quot;.json&quot;</span><span class="s1">, pageName, </span><span class="s0">'app'</span><span class="s1">));</span>
+    <span class="s1">}</span>
+    <span class="s1">async mergeActionManifests(manifests) {</span>
+        <span class="s2">const </span><span class="s1">manifest = {</span>
+            <span class="s1">node: {},</span>
+            <span class="s1">edge: {},</span>
+            <span class="s1">encryptionKey: </span><span class="s2">this</span><span class="s1">.encryptionKey</span>
+        <span class="s1">};</span>
+        <span class="s2">function </span><span class="s1">mergeActionIds(actionEntries, other) {</span>
+            <span class="s2">for</span><span class="s1">(</span><span class="s2">const </span><span class="s1">key </span><span class="s2">in </span><span class="s1">other){</span>
+                <span class="s2">var </span><span class="s1">_actionEntries, _key;</span>
+                <span class="s2">var </span><span class="s1">_;</span>
+                <span class="s2">const </span><span class="s1">action = (_ = (_actionEntries = actionEntries)[_key = key]) != </span><span class="s2">null </span><span class="s1">? _ : _actionEntries[_key] = {</span>
+                    <span class="s1">workers: {},</span>
+                    <span class="s1">layer: {}</span>
+                <span class="s1">};</span>
+                <span class="s1">action.filename = other[key].filename;</span>
+                <span class="s1">action.exportedName = other[key].exportedName;</span>
+                <span class="s1">Object.assign(action.workers, other[key].workers);</span>
+                <span class="s1">Object.assign(action.layer, other[key].layer);</span>
+            <span class="s1">}</span>
+        <span class="s1">}</span>
+        <span class="s2">for </span><span class="s1">(</span><span class="s2">const </span><span class="s1">m of manifests){</span>
+            <span class="s1">mergeActionIds(manifest.node, m.node);</span>
+            <span class="s1">mergeActionIds(manifest.edge, m.edge);</span>
+        <span class="s1">}</span>
+        <span class="s2">for</span><span class="s1">(</span><span class="s2">const </span><span class="s1">key </span><span class="s2">in </span><span class="s1">manifest.node){</span>
+            <span class="s2">const </span><span class="s1">entry = manifest.node[key];</span>
+            <span class="s1">entry.workers = sortObjectByKey(entry.workers);</span>
+            <span class="s1">entry.layer = sortObjectByKey(entry.layer);</span>
+        <span class="s1">}</span>
+        <span class="s2">for</span><span class="s1">(</span><span class="s2">const </span><span class="s1">key </span><span class="s2">in </span><span class="s1">manifest.edge){</span>
+            <span class="s2">const </span><span class="s1">entry = manifest.edge[key];</span>
+            <span class="s1">entry.workers = sortObjectByKey(entry.workers);</span>
+            <span class="s1">entry.layer = sortObjectByKey(entry.layer);</span>
+        <span class="s1">}</span>
+        <span class="s2">return </span><span class="s1">manifest;</span>
+    <span class="s1">}</span>
+    <span class="s1">async writeActionManifest() {</span>
+        <span class="s2">const </span><span class="s1">actionManifest = </span><span class="s2">await this</span><span class="s1">.mergeActionManifests(</span><span class="s2">this</span><span class="s1">.actionManifests.values());</span>
+        <span class="s2">const </span><span class="s1">actionManifestJsonPath = (</span><span class="s4">0</span><span class="s1">, _path.join)(</span><span class="s2">this</span><span class="s1">.distDir, </span><span class="s0">'server'</span><span class="s1">, </span><span class="s0">&quot;&quot; </span><span class="s1">+ _constants.SERVER_REFERENCE_MANIFEST + </span><span class="s0">&quot;.json&quot;</span><span class="s1">);</span>
+        <span class="s2">const </span><span class="s1">actionManifestJsPath = (</span><span class="s4">0</span><span class="s1">, _path.join)(</span><span class="s2">this</span><span class="s1">.distDir, </span><span class="s0">'server'</span><span class="s1">, </span><span class="s0">&quot;&quot; </span><span class="s1">+ _constants.SERVER_REFERENCE_MANIFEST + </span><span class="s0">&quot;.js&quot;</span><span class="s1">);</span>
+        <span class="s2">const </span><span class="s1">json = JSON.stringify(actionManifest, </span><span class="s2">null</span><span class="s1">, </span><span class="s4">2</span><span class="s1">);</span>
+        <span class="s1">(</span><span class="s4">0</span><span class="s1">, _requirecache.deleteCache)(actionManifestJsonPath);</span>
+        <span class="s1">(</span><span class="s4">0</span><span class="s1">, _requirecache.deleteCache)(actionManifestJsPath);</span>
+        <span class="s2">await </span><span class="s1">(</span><span class="s4">0</span><span class="s1">, _writeatomic.writeFileAtomic)(actionManifestJsonPath, json);</span>
+        <span class="s2">await </span><span class="s1">(</span><span class="s4">0</span><span class="s1">, _writeatomic.writeFileAtomic)(actionManifestJsPath, </span><span class="s0">&quot;self.__RSC_SERVER_MANIFEST=&quot; </span><span class="s1">+ JSON.stringify(json));</span>
+    <span class="s1">}</span>
+    <span class="s1">async loadAppBuildManifest(pageName) {</span>
+        <span class="s2">this</span><span class="s1">.appBuildManifests.set((</span><span class="s4">0</span><span class="s1">, _entrykey.getEntryKey)(</span><span class="s0">'app'</span><span class="s1">, </span><span class="s0">'server'</span><span class="s1">, pageName), </span><span class="s2">await </span><span class="s1">readPartialManifest(</span><span class="s2">this</span><span class="s1">.distDir, _constants.APP_BUILD_MANIFEST, pageName, </span><span class="s0">'app'</span><span class="s1">));</span>
+    <span class="s1">}</span>
+    <span class="s1">mergeAppBuildManifests(manifests) {</span>
+        <span class="s2">const </span><span class="s1">manifest = {</span>
+            <span class="s1">pages: {}</span>
+        <span class="s1">};</span>
+        <span class="s2">for </span><span class="s1">(</span><span class="s2">const </span><span class="s1">m of manifests){</span>
+            <span class="s1">Object.assign(manifest.pages, m.pages);</span>
+        <span class="s1">}</span>
+        <span class="s1">manifest.pages = sortObjectByKey(manifest.pages);</span>
+        <span class="s2">return </span><span class="s1">manifest;</span>
+    <span class="s1">}</span>
+    <span class="s1">async writeAppBuildManifest() {</span>
+        <span class="s2">const </span><span class="s1">appBuildManifest = </span><span class="s2">this</span><span class="s1">.mergeAppBuildManifests(</span><span class="s2">this</span><span class="s1">.appBuildManifests.values());</span>
+        <span class="s2">const </span><span class="s1">appBuildManifestPath = (</span><span class="s4">0</span><span class="s1">, _path.join)(</span><span class="s2">this</span><span class="s1">.distDir, _constants.APP_BUILD_MANIFEST);</span>
+        <span class="s1">(</span><span class="s4">0</span><span class="s1">, _requirecache.deleteCache)(appBuildManifestPath);</span>
+        <span class="s2">await </span><span class="s1">(</span><span class="s4">0</span><span class="s1">, _writeatomic.writeFileAtomic)(appBuildManifestPath, JSON.stringify(appBuildManifest, </span><span class="s2">null</span><span class="s1">, </span><span class="s4">2</span><span class="s1">));</span>
+    <span class="s1">}</span>
+    <span class="s1">async loadAppPathsManifest(pageName) {</span>
+        <span class="s2">this</span><span class="s1">.appPathsManifests.set((</span><span class="s4">0</span><span class="s1">, _entrykey.getEntryKey)(</span><span class="s0">'app'</span><span class="s1">, </span><span class="s0">'server'</span><span class="s1">, pageName), </span><span class="s2">await </span><span class="s1">readPartialManifest(</span><span class="s2">this</span><span class="s1">.distDir, _constants.APP_PATHS_MANIFEST, pageName, </span><span class="s0">'app'</span><span class="s1">));</span>
+    <span class="s1">}</span>
+    <span class="s1">async writeAppPathsManifest() {</span>
+        <span class="s2">const </span><span class="s1">appPathsManifest = </span><span class="s2">this</span><span class="s1">.mergePagesManifests(</span><span class="s2">this</span><span class="s1">.appPathsManifests.values());</span>
+        <span class="s2">const </span><span class="s1">appPathsManifestPath = (</span><span class="s4">0</span><span class="s1">, _path.join)(</span><span class="s2">this</span><span class="s1">.distDir, </span><span class="s0">'server'</span><span class="s1">, _constants.APP_PATHS_MANIFEST);</span>
+        <span class="s1">(</span><span class="s4">0</span><span class="s1">, _requirecache.deleteCache)(appPathsManifestPath);</span>
+        <span class="s2">await </span><span class="s1">(</span><span class="s4">0</span><span class="s1">, _writeatomic.writeFileAtomic)(appPathsManifestPath, JSON.stringify(appPathsManifest, </span><span class="s2">null</span><span class="s1">, </span><span class="s4">2</span><span class="s1">));</span>
+    <span class="s1">}</span>
+    <span class="s1">async writeWebpackStats() {</span>
+        <span class="s2">const </span><span class="s1">webpackStats = </span><span class="s2">this</span><span class="s1">.mergeWebpackStats(</span><span class="s2">this</span><span class="s1">.webpackStats.values());</span>
+        <span class="s2">const </span><span class="s1">path = (</span><span class="s4">0</span><span class="s1">, _path.join)(</span><span class="s2">this</span><span class="s1">.distDir, </span><span class="s0">'server'</span><span class="s1">, _constants.WEBPACK_STATS);</span>
+        <span class="s1">(</span><span class="s4">0</span><span class="s1">, _requirecache.deleteCache)(path);</span>
+        <span class="s2">await </span><span class="s1">(</span><span class="s4">0</span><span class="s1">, _writeatomic.writeFileAtomic)(path, JSON.stringify(webpackStats, </span><span class="s2">null</span><span class="s1">, </span><span class="s4">2</span><span class="s1">));</span>
+    <span class="s1">}</span>
+    <span class="s1">async loadBuildManifest(pageName, type) {</span>
+        <span class="s2">if </span><span class="s1">(type === </span><span class="s2">void </span><span class="s4">0</span><span class="s1">) type = </span><span class="s0">'pages'</span><span class="s1">;</span>
+        <span class="s2">this</span><span class="s1">.buildManifests.set((</span><span class="s4">0</span><span class="s1">, _entrykey.getEntryKey)(type, </span><span class="s0">'server'</span><span class="s1">, pageName), </span><span class="s2">await </span><span class="s1">readPartialManifest(</span><span class="s2">this</span><span class="s1">.distDir, _constants.BUILD_MANIFEST, pageName, type));</span>
+    <span class="s1">}</span>
+    <span class="s1">async loadClientBuildManifest(pageName, type) {</span>
+        <span class="s2">if </span><span class="s1">(type === </span><span class="s2">void </span><span class="s4">0</span><span class="s1">) type = </span><span class="s0">'pages'</span><span class="s1">;</span>
+        <span class="s2">this</span><span class="s1">.clientBuildManifests.set((</span><span class="s4">0</span><span class="s1">, _entrykey.getEntryKey)(type, </span><span class="s0">'server'</span><span class="s1">, pageName), </span><span class="s2">await </span><span class="s1">readPartialManifest(</span><span class="s2">this</span><span class="s1">.distDir, _constants.TURBOPACK_CLIENT_BUILD_MANIFEST, pageName, type));</span>
+    <span class="s1">}</span>
+    <span class="s1">async loadWebpackStats(pageName, type) {</span>
+        <span class="s2">if </span><span class="s1">(type === </span><span class="s2">void </span><span class="s4">0</span><span class="s1">) type = </span><span class="s0">'pages'</span><span class="s1">;</span>
+        <span class="s2">this</span><span class="s1">.webpackStats.set((</span><span class="s4">0</span><span class="s1">, _entrykey.getEntryKey)(type, </span><span class="s0">'client'</span><span class="s1">, pageName), </span><span class="s2">await </span><span class="s1">readPartialManifest(</span><span class="s2">this</span><span class="s1">.distDir, _constants.WEBPACK_STATS, pageName, type));</span>
+    <span class="s1">}</span>
+    <span class="s1">mergeWebpackStats(statsFiles) {</span>
+        <span class="s2">const </span><span class="s1">entrypoints = {};</span>
+        <span class="s2">const </span><span class="s1">assets = </span><span class="s2">new </span><span class="s1">Map();</span>
+        <span class="s2">const </span><span class="s1">chunks = </span><span class="s2">new </span><span class="s1">Map();</span>
+        <span class="s2">const </span><span class="s1">modules = </span><span class="s2">new </span><span class="s1">Map();</span>
+        <span class="s2">for </span><span class="s1">(</span><span class="s2">const </span><span class="s1">statsFile of statsFiles){</span>
+            <span class="s2">if </span><span class="s1">(statsFile.entrypoints) {</span>
+                <span class="s2">for </span><span class="s1">(</span><span class="s2">const </span><span class="s1">[k, v] of Object.entries(statsFile.entrypoints)){</span>
+                    <span class="s2">if </span><span class="s1">(!entrypoints[k]) {</span>
+                        <span class="s1">entrypoints[k] = v;</span>
+                    <span class="s1">}</span>
+                <span class="s1">}</span>
+            <span class="s1">}</span>
+            <span class="s2">if </span><span class="s1">(statsFile.assets) {</span>
+                <span class="s2">for </span><span class="s1">(</span><span class="s2">const </span><span class="s1">asset of statsFile.assets){</span>
+                    <span class="s2">if </span><span class="s1">(!assets.has(asset.name)) {</span>
+                        <span class="s1">assets.set(asset.name, asset);</span>
+                    <span class="s1">}</span>
+                <span class="s1">}</span>
+            <span class="s1">}</span>
+            <span class="s2">if </span><span class="s1">(statsFile.chunks) {</span>
+                <span class="s2">for </span><span class="s1">(</span><span class="s2">const </span><span class="s1">chunk of statsFile.chunks){</span>
+                    <span class="s2">if </span><span class="s1">(!chunks.has(chunk.id)) {</span>
+                        <span class="s1">chunks.set(chunk.id, chunk);</span>
+                    <span class="s1">}</span>
+                <span class="s1">}</span>
+            <span class="s1">}</span>
+            <span class="s2">if </span><span class="s1">(statsFile.modules) {</span>
+                <span class="s2">for </span><span class="s1">(</span><span class="s2">const </span><span class="s1">module of statsFile.modules){</span>
+                    <span class="s2">const </span><span class="s1">id = module.id;</span>
+                    <span class="s2">if </span><span class="s1">(id != </span><span class="s2">null</span><span class="s1">) {</span>
+                        <span class="s3">// Merge the chunk list for the module. This can vary across endpoints.</span>
+                        <span class="s2">const </span><span class="s1">existing = modules.get(id);</span>
+                        <span class="s2">if </span><span class="s1">(existing == </span><span class="s2">null</span><span class="s1">) {</span>
+                            <span class="s1">modules.set(id, module);</span>
+                        <span class="s1">} </span><span class="s2">else if </span><span class="s1">(module.chunks != </span><span class="s2">null </span><span class="s1">&amp;&amp; existing.chunks != </span><span class="s2">null</span><span class="s1">) {</span>
+                            <span class="s2">for </span><span class="s1">(</span><span class="s2">const </span><span class="s1">chunk of module.chunks){</span>
+                                <span class="s2">if </span><span class="s1">(!existing.chunks.includes(chunk)) {</span>
+                                    <span class="s1">existing.chunks.push(chunk);</span>
+                                <span class="s1">}</span>
+                            <span class="s1">}</span>
+                        <span class="s1">}</span>
+                    <span class="s1">}</span>
+                <span class="s1">}</span>
+            <span class="s1">}</span>
+        <span class="s1">}</span>
+        <span class="s2">return </span><span class="s1">{</span>
+            <span class="s1">version: </span><span class="s0">'Turbopack'</span><span class="s1">,</span>
+            <span class="s1">entrypoints,</span>
+            <span class="s1">assets: [</span>
+                <span class="s1">...assets.values()</span>
+            <span class="s1">],</span>
+            <span class="s1">chunks: [</span>
+                <span class="s1">...chunks.values()</span>
+            <span class="s1">],</span>
+            <span class="s1">modules: [</span>
+                <span class="s1">...modules.values()</span>
+            <span class="s1">]</span>
+        <span class="s1">};</span>
+    <span class="s1">}</span>
+    <span class="s1">mergeBuildManifests(manifests) {</span>
+        <span class="s2">const </span><span class="s1">manifest = {</span>
+            <span class="s1">pages: {</span>
+                <span class="s0">'/_app'</span><span class="s1">: []</span>
+            <span class="s1">},</span>
+            <span class="s3">// Something in next.js depends on these to exist even for app dir rendering</span>
+            <span class="s1">devFiles: [],</span>
+            <span class="s1">ampDevFiles: [],</span>
+            <span class="s1">polyfillFiles: [],</span>
+            <span class="s1">lowPriorityFiles: [</span>
+                <span class="s0">&quot;static/&quot; </span><span class="s1">+ </span><span class="s2">this</span><span class="s1">.buildId + </span><span class="s0">&quot;/_ssgManifest.js&quot;</span><span class="s1">,</span>
+                <span class="s0">&quot;static/&quot; </span><span class="s1">+ </span><span class="s2">this</span><span class="s1">.buildId + </span><span class="s0">&quot;/_buildManifest.js&quot;</span>
+            <span class="s1">],</span>
+            <span class="s1">rootMainFiles: [],</span>
+            <span class="s1">ampFirstPages: []</span>
+        <span class="s1">};</span>
+        <span class="s2">for </span><span class="s1">(</span><span class="s2">const </span><span class="s1">m of manifests){</span>
+            <span class="s1">Object.assign(manifest.pages, m.pages);</span>
+            <span class="s2">if </span><span class="s1">(m.rootMainFiles.length) manifest.rootMainFiles = m.rootMainFiles;</span>
+            <span class="s3">// polyfillFiles should always be the same, so we can overwrite instead of actually merging</span>
+            <span class="s2">if </span><span class="s1">(m.polyfillFiles.length) manifest.polyfillFiles = m.polyfillFiles;</span>
+        <span class="s1">}</span>
+        <span class="s1">manifest.pages = sortObjectByKey(manifest.pages);</span>
+        <span class="s2">return </span><span class="s1">manifest;</span>
+    <span class="s1">}</span>
+    <span class="s1">mergeClientBuildManifests(rewrites, manifests, sortedPageKeys) {</span>
+        <span class="s2">const </span><span class="s1">manifest = {</span>
+            <span class="s1">__rewrites: (</span><span class="s4">0</span><span class="s1">, _buildmanifestplugin.normalizeRewritesForBuildManifest)(rewrites),</span>
+            <span class="s1">sortedPages: sortedPageKeys</span>
+        <span class="s1">};</span>
+        <span class="s2">for </span><span class="s1">(</span><span class="s2">const </span><span class="s1">m of manifests){</span>
+            <span class="s1">Object.assign(manifest, m);</span>
+        <span class="s1">}</span>
+        <span class="s2">return </span><span class="s1">sortObjectByKey(manifest);</span>
+    <span class="s1">}</span>
+    <span class="s1">async writeBuildManifest(entrypoints, devRewrites, productionRewrites) {</span>
+        <span class="s2">var </span><span class="s1">_devRewrites_beforeFiles, _devRewrites_afterFiles, _devRewrites_fallback;</span>
+        <span class="s2">const </span><span class="s1">rewrites = productionRewrites != </span><span class="s2">null </span><span class="s1">? productionRewrites : {</span>
+            <span class="s1">...devRewrites,</span>
+            <span class="s1">beforeFiles: ((_devRewrites_beforeFiles = devRewrites == </span><span class="s2">null </span><span class="s1">? </span><span class="s2">void </span><span class="s4">0 </span><span class="s1">: devRewrites.beforeFiles) != </span><span class="s2">null </span><span class="s1">? _devRewrites_beforeFiles : []).map(_buildmanifestplugin.processRoute),</span>
+            <span class="s1">afterFiles: ((_devRewrites_afterFiles = devRewrites == </span><span class="s2">null </span><span class="s1">? </span><span class="s2">void </span><span class="s4">0 </span><span class="s1">: devRewrites.afterFiles) != </span><span class="s2">null </span><span class="s1">? _devRewrites_afterFiles : []).map(_buildmanifestplugin.processRoute),</span>
+            <span class="s1">fallback: ((_devRewrites_fallback = devRewrites == </span><span class="s2">null </span><span class="s1">? </span><span class="s2">void </span><span class="s4">0 </span><span class="s1">: devRewrites.fallback) != </span><span class="s2">null </span><span class="s1">? _devRewrites_fallback : []).map(_buildmanifestplugin.processRoute)</span>
+        <span class="s1">};</span>
+        <span class="s2">const </span><span class="s1">buildManifest = </span><span class="s2">this</span><span class="s1">.mergeBuildManifests(</span><span class="s2">this</span><span class="s1">.buildManifests.values());</span>
+        <span class="s2">const </span><span class="s1">buildManifestPath = (</span><span class="s4">0</span><span class="s1">, _path.join)(</span><span class="s2">this</span><span class="s1">.distDir, _constants.BUILD_MANIFEST);</span>
+        <span class="s2">const </span><span class="s1">middlewareBuildManifestPath = (</span><span class="s4">0</span><span class="s1">, _path.join)(</span><span class="s2">this</span><span class="s1">.distDir, </span><span class="s0">'server'</span><span class="s1">, </span><span class="s0">&quot;&quot; </span><span class="s1">+ _constants.MIDDLEWARE_BUILD_MANIFEST + </span><span class="s0">&quot;.js&quot;</span><span class="s1">);</span>
+        <span class="s2">const </span><span class="s1">interceptionRewriteManifestPath = (</span><span class="s4">0</span><span class="s1">, _path.join)(</span><span class="s2">this</span><span class="s1">.distDir, </span><span class="s0">'server'</span><span class="s1">, </span><span class="s0">&quot;&quot; </span><span class="s1">+ _constants.INTERCEPTION_ROUTE_REWRITE_MANIFEST + </span><span class="s0">&quot;.js&quot;</span><span class="s1">);</span>
+        <span class="s1">(</span><span class="s4">0</span><span class="s1">, _requirecache.deleteCache)(buildManifestPath);</span>
+        <span class="s1">(</span><span class="s4">0</span><span class="s1">, _requirecache.deleteCache)(middlewareBuildManifestPath);</span>
+        <span class="s1">(</span><span class="s4">0</span><span class="s1">, _requirecache.deleteCache)(interceptionRewriteManifestPath);</span>
+        <span class="s2">await </span><span class="s1">(</span><span class="s4">0</span><span class="s1">, _writeatomic.writeFileAtomic)(buildManifestPath, JSON.stringify(buildManifest, </span><span class="s2">null</span><span class="s1">, </span><span class="s4">2</span><span class="s1">));</span>
+        <span class="s2">await </span><span class="s1">(</span><span class="s4">0</span><span class="s1">, _writeatomic.writeFileAtomic)(middlewareBuildManifestPath, </span><span class="s3">// we use globalThis here because middleware can be node</span>
+        <span class="s3">// which doesn't have &quot;self&quot;</span>
+        <span class="s1">(</span><span class="s4">0</span><span class="s1">, _buildmanifestplugin.createEdgeRuntimeManifest)(buildManifest));</span>
+        <span class="s2">const </span><span class="s1">interceptionRewrites = JSON.stringify(rewrites.beforeFiles.filter(_generateinterceptionroutesrewrites.isInterceptionRouteRewrite));</span>
+        <span class="s2">await </span><span class="s1">(</span><span class="s4">0</span><span class="s1">, _writeatomic.writeFileAtomic)(interceptionRewriteManifestPath, </span><span class="s0">&quot;self.__INTERCEPTION_ROUTE_REWRITE_MANIFEST=&quot; </span><span class="s1">+ JSON.stringify(interceptionRewrites) + </span><span class="s0">&quot;;&quot;</span><span class="s1">);</span>
+        <span class="s2">const </span><span class="s1">pagesKeys = [</span>
+            <span class="s1">...entrypoints.page.keys()</span>
+        <span class="s1">];</span>
+        <span class="s2">if </span><span class="s1">(entrypoints.global.app) {</span>
+            <span class="s1">pagesKeys.push(</span><span class="s0">'/_app'</span><span class="s1">);</span>
+        <span class="s1">}</span>
+        <span class="s2">if </span><span class="s1">(entrypoints.global.error) {</span>
+            <span class="s1">pagesKeys.push(</span><span class="s0">'/_error'</span><span class="s1">);</span>
+        <span class="s1">}</span>
+        <span class="s2">const </span><span class="s1">sortedPageKeys = (</span><span class="s4">0</span><span class="s1">, _utils.getSortedRoutes)(pagesKeys);</span>
+        <span class="s2">const </span><span class="s1">clientBuildManifest = </span><span class="s2">this</span><span class="s1">.mergeClientBuildManifests(rewrites, </span><span class="s2">this</span><span class="s1">.clientBuildManifests.values(), sortedPageKeys);</span>
+        <span class="s2">const </span><span class="s1">clientBuildManifestJs = </span><span class="s0">&quot;self.__BUILD_MANIFEST = &quot; </span><span class="s1">+ JSON.stringify(clientBuildManifest, </span><span class="s2">null</span><span class="s1">, </span><span class="s4">2</span><span class="s1">) + </span><span class="s0">&quot;;self.__BUILD_MANIFEST_CB &amp;&amp; self.__BUILD_MANIFEST_CB()&quot;</span><span class="s1">;</span>
+        <span class="s2">await </span><span class="s1">(</span><span class="s4">0</span><span class="s1">, _writeatomic.writeFileAtomic)((</span><span class="s4">0</span><span class="s1">, _path.join)(</span><span class="s2">this</span><span class="s1">.distDir, </span><span class="s0">'static'</span><span class="s1">, </span><span class="s2">this</span><span class="s1">.buildId, </span><span class="s0">'_buildManifest.js'</span><span class="s1">), clientBuildManifestJs);</span>
+        <span class="s2">await </span><span class="s1">(</span><span class="s4">0</span><span class="s1">, _writeatomic.writeFileAtomic)((</span><span class="s4">0</span><span class="s1">, _path.join)(</span><span class="s2">this</span><span class="s1">.distDir, </span><span class="s0">'static'</span><span class="s1">, </span><span class="s2">this</span><span class="s1">.buildId, </span><span class="s0">'_ssgManifest.js'</span><span class="s1">), _buildmanifestplugin.srcEmptySsgManifest);</span>
+    <span class="s1">}</span>
+    <span class="s1">async writeClientMiddlewareManifest() {</span>
+        <span class="s2">var </span><span class="s1">_middlewareManifest_middleware_;</span>
+        <span class="s2">const </span><span class="s1">middlewareManifest = </span><span class="s2">this</span><span class="s1">.mergeMiddlewareManifests(</span><span class="s2">this</span><span class="s1">.middlewareManifests.values());</span>
+        <span class="s2">const </span><span class="s1">matchers = (middlewareManifest == </span><span class="s2">null </span><span class="s1">? </span><span class="s2">void </span><span class="s4">0 </span><span class="s1">: (_middlewareManifest_middleware_ = middlewareManifest.middleware[</span><span class="s0">'/'</span><span class="s1">]) == </span><span class="s2">null </span><span class="s1">? </span><span class="s2">void </span><span class="s4">0 </span><span class="s1">: _middlewareManifest_middleware_.matchers) || [];</span>
+        <span class="s2">const </span><span class="s1">clientMiddlewareManifestPath = (</span><span class="s4">0</span><span class="s1">, _path.join)(</span><span class="s2">this</span><span class="s1">.distDir, </span><span class="s0">'static'</span><span class="s1">, </span><span class="s2">this</span><span class="s1">.buildId, </span><span class="s0">&quot;&quot; </span><span class="s1">+ _constants.TURBOPACK_CLIENT_MIDDLEWARE_MANIFEST);</span>
+        <span class="s1">(</span><span class="s4">0</span><span class="s1">, _requirecache.deleteCache)(clientMiddlewareManifestPath);</span>
+        <span class="s2">await </span><span class="s1">(</span><span class="s4">0</span><span class="s1">, _writeatomic.writeFileAtomic)(clientMiddlewareManifestPath, JSON.stringify(matchers, </span><span class="s2">null</span><span class="s1">, </span><span class="s4">2</span><span class="s1">));</span>
+    <span class="s1">}</span>
+    <span class="s1">async writeFallbackBuildManifest() {</span>
+        <span class="s2">const </span><span class="s1">fallbackBuildManifest = </span><span class="s2">this</span><span class="s1">.mergeBuildManifests([</span>
+            <span class="s2">this</span><span class="s1">.buildManifests.get((</span><span class="s4">0</span><span class="s1">, _entrykey.getEntryKey)(</span><span class="s0">'pages'</span><span class="s1">, </span><span class="s0">'server'</span><span class="s1">, </span><span class="s0">'_app'</span><span class="s1">)),</span>
+            <span class="s2">this</span><span class="s1">.buildManifests.get((</span><span class="s4">0</span><span class="s1">, _entrykey.getEntryKey)(</span><span class="s0">'pages'</span><span class="s1">, </span><span class="s0">'server'</span><span class="s1">, </span><span class="s0">'_error'</span><span class="s1">))</span>
+        <span class="s1">].filter(Boolean));</span>
+        <span class="s2">const </span><span class="s1">fallbackBuildManifestPath = (</span><span class="s4">0</span><span class="s1">, _path.join)(</span><span class="s2">this</span><span class="s1">.distDir, </span><span class="s0">&quot;fallback-&quot; </span><span class="s1">+ _constants.BUILD_MANIFEST);</span>
+        <span class="s1">(</span><span class="s4">0</span><span class="s1">, _requirecache.deleteCache)(fallbackBuildManifestPath);</span>
+        <span class="s2">await </span><span class="s1">(</span><span class="s4">0</span><span class="s1">, _writeatomic.writeFileAtomic)(fallbackBuildManifestPath, JSON.stringify(fallbackBuildManifest, </span><span class="s2">null</span><span class="s1">, </span><span class="s4">2</span><span class="s1">));</span>
+    <span class="s1">}</span>
+    <span class="s1">async loadFontManifest(pageName, type) {</span>
+        <span class="s2">if </span><span class="s1">(type === </span><span class="s2">void </span><span class="s4">0</span><span class="s1">) type = </span><span class="s0">'pages'</span><span class="s1">;</span>
+        <span class="s2">this</span><span class="s1">.fontManifests.set((</span><span class="s4">0</span><span class="s1">, _entrykey.getEntryKey)(type, </span><span class="s0">'server'</span><span class="s1">, pageName), </span><span class="s2">await </span><span class="s1">readPartialManifest(</span><span class="s2">this</span><span class="s1">.distDir, </span><span class="s0">&quot;&quot; </span><span class="s1">+ _constants.NEXT_FONT_MANIFEST + </span><span class="s0">&quot;.json&quot;</span><span class="s1">, pageName, type));</span>
+    <span class="s1">}</span>
+    <span class="s1">mergeFontManifests(manifests) {</span>
+        <span class="s2">const </span><span class="s1">manifest = {</span>
+            <span class="s1">app: {},</span>
+            <span class="s1">appUsingSizeAdjust: </span><span class="s2">false</span><span class="s1">,</span>
+            <span class="s1">pages: {},</span>
+            <span class="s1">pagesUsingSizeAdjust: </span><span class="s2">false</span>
+        <span class="s1">};</span>
+        <span class="s2">for </span><span class="s1">(</span><span class="s2">const </span><span class="s1">m of manifests){</span>
+            <span class="s1">Object.assign(manifest.app, m.app);</span>
+            <span class="s1">Object.assign(manifest.pages, m.pages);</span>
+            <span class="s1">manifest.appUsingSizeAdjust = manifest.appUsingSizeAdjust || m.appUsingSizeAdjust;</span>
+            <span class="s1">manifest.pagesUsingSizeAdjust = manifest.pagesUsingSizeAdjust || m.pagesUsingSizeAdjust;</span>
+        <span class="s1">}</span>
+        <span class="s1">manifest.app = sortObjectByKey(manifest.app);</span>
+        <span class="s1">manifest.pages = sortObjectByKey(manifest.pages);</span>
+        <span class="s2">return </span><span class="s1">manifest;</span>
+    <span class="s1">}</span>
+    <span class="s1">async writeNextFontManifest() {</span>
+        <span class="s2">const </span><span class="s1">fontManifest = </span><span class="s2">this</span><span class="s1">.mergeFontManifests(</span><span class="s2">this</span><span class="s1">.fontManifests.values());</span>
+        <span class="s2">const </span><span class="s1">json = JSON.stringify(fontManifest, </span><span class="s2">null</span><span class="s1">, </span><span class="s4">2</span><span class="s1">);</span>
+        <span class="s2">const </span><span class="s1">fontManifestJsonPath = (</span><span class="s4">0</span><span class="s1">, _path.join)(</span><span class="s2">this</span><span class="s1">.distDir, </span><span class="s0">'server'</span><span class="s1">, </span><span class="s0">&quot;&quot; </span><span class="s1">+ _constants.NEXT_FONT_MANIFEST + </span><span class="s0">&quot;.json&quot;</span><span class="s1">);</span>
+        <span class="s2">const </span><span class="s1">fontManifestJsPath = (</span><span class="s4">0</span><span class="s1">, _path.join)(</span><span class="s2">this</span><span class="s1">.distDir, </span><span class="s0">'server'</span><span class="s1">, </span><span class="s0">&quot;&quot; </span><span class="s1">+ _constants.NEXT_FONT_MANIFEST + </span><span class="s0">&quot;.js&quot;</span><span class="s1">);</span>
+        <span class="s1">(</span><span class="s4">0</span><span class="s1">, _requirecache.deleteCache)(fontManifestJsonPath);</span>
+        <span class="s1">(</span><span class="s4">0</span><span class="s1">, _requirecache.deleteCache)(fontManifestJsPath);</span>
+        <span class="s2">await </span><span class="s1">(</span><span class="s4">0</span><span class="s1">, _writeatomic.writeFileAtomic)(fontManifestJsonPath, json);</span>
+        <span class="s2">await </span><span class="s1">(</span><span class="s4">0</span><span class="s1">, _writeatomic.writeFileAtomic)(fontManifestJsPath, </span><span class="s0">&quot;self.__NEXT_FONT_MANIFEST=&quot; </span><span class="s1">+ JSON.stringify(json));</span>
+    <span class="s1">}</span>
+    <span class="s3">/**</span>
+   <span class="s3">* </span><span class="s6">@returns </span><span class="s3">If the manifest was written or not</span>
+   <span class="s3">*/ </span><span class="s1">async loadMiddlewareManifest(pageName, type) {</span>
+        <span class="s2">const </span><span class="s1">middlewareManifestPath = getManifestPath(pageName, </span><span class="s2">this</span><span class="s1">.distDir, _constants.MIDDLEWARE_MANIFEST, type, </span><span class="s2">true</span><span class="s1">);</span>
+        <span class="s3">// middlewareManifest is actually &quot;edge manifest&quot; and not all routes are edge runtime. If it is not written we skip it.</span>
+        <span class="s2">if </span><span class="s1">(!(</span><span class="s4">0</span><span class="s1">, _fs.existsSync)(middlewareManifestPath)) {</span>
+            <span class="s2">return false</span><span class="s1">;</span>
+        <span class="s1">}</span>
+        <span class="s2">this</span><span class="s1">.middlewareManifests.set((</span><span class="s4">0</span><span class="s1">, _entrykey.getEntryKey)(type === </span><span class="s0">'middleware' </span><span class="s1">|| type === </span><span class="s0">'instrumentation' </span><span class="s1">? </span><span class="s0">'root' </span><span class="s1">: type, </span><span class="s0">'server'</span><span class="s1">, pageName), </span><span class="s2">await </span><span class="s1">readPartialManifest(</span><span class="s2">this</span><span class="s1">.distDir, _constants.MIDDLEWARE_MANIFEST, pageName, type));</span>
+        <span class="s2">return true</span><span class="s1">;</span>
+    <span class="s1">}</span>
+    <span class="s1">getMiddlewareManifest(key) {</span>
+        <span class="s2">return this</span><span class="s1">.middlewareManifests.get(key);</span>
+    <span class="s1">}</span>
+    <span class="s1">deleteMiddlewareManifest(key) {</span>
+        <span class="s2">return this</span><span class="s1">.middlewareManifests.delete(key);</span>
+    <span class="s1">}</span>
+    <span class="s1">mergeMiddlewareManifests(manifests) {</span>
+        <span class="s2">const </span><span class="s1">manifest = {</span>
+            <span class="s1">version: </span><span class="s4">3</span><span class="s1">,</span>
+            <span class="s1">middleware: {},</span>
+            <span class="s1">sortedMiddleware: [],</span>
+            <span class="s1">functions: {}</span>
+        <span class="s1">};</span>
+        <span class="s2">let </span><span class="s1">instrumentation = undefined;</span>
+        <span class="s2">for </span><span class="s1">(</span><span class="s2">const </span><span class="s1">m of manifests){</span>
+            <span class="s1">Object.assign(manifest.functions, m.functions);</span>
+            <span class="s1">Object.assign(manifest.middleware, m.middleware);</span>
+            <span class="s2">if </span><span class="s1">(m.instrumentation) {</span>
+                <span class="s1">instrumentation = m.instrumentation;</span>
+            <span class="s1">}</span>
+        <span class="s1">}</span>
+        <span class="s1">manifest.functions = sortObjectByKey(manifest.functions);</span>
+        <span class="s1">manifest.middleware = sortObjectByKey(manifest.middleware);</span>
+        <span class="s2">const </span><span class="s1">updateFunctionDefinition = (fun)=&gt;{</span>
+            <span class="s2">var </span><span class="s1">_instrumentation_files;</span>
+            <span class="s2">return </span><span class="s1">{</span>
+                <span class="s1">...fun,</span>
+                <span class="s1">files: [</span>
+                    <span class="s1">...(_instrumentation_files = instrumentation == </span><span class="s2">null </span><span class="s1">? </span><span class="s2">void </span><span class="s4">0 </span><span class="s1">: instrumentation.files) != </span><span class="s2">null </span><span class="s1">? _instrumentation_files : [],</span>
+                    <span class="s1">...fun.files</span>
+                <span class="s1">]</span>
+            <span class="s1">};</span>
+        <span class="s1">};</span>
+        <span class="s2">for </span><span class="s1">(</span><span class="s2">const </span><span class="s1">key of Object.keys(manifest.middleware)){</span>
+            <span class="s2">const </span><span class="s1">value = manifest.middleware[key];</span>
+            <span class="s1">manifest.middleware[key] = updateFunctionDefinition(value);</span>
+        <span class="s1">}</span>
+        <span class="s2">for </span><span class="s1">(</span><span class="s2">const </span><span class="s1">key of Object.keys(manifest.functions)){</span>
+            <span class="s2">const </span><span class="s1">value = manifest.functions[key];</span>
+            <span class="s1">manifest.functions[key] = updateFunctionDefinition(value);</span>
+        <span class="s1">}</span>
+        <span class="s2">for </span><span class="s1">(</span><span class="s2">const </span><span class="s1">fun of Object.values(manifest.functions).concat(Object.values(manifest.middleware))){</span>
+            <span class="s2">for </span><span class="s1">(</span><span class="s2">const </span><span class="s1">matcher of fun.matchers){</span>
+                <span class="s2">if </span><span class="s1">(!matcher.regexp) {</span>
+                    <span class="s1">matcher.regexp = (</span><span class="s4">0</span><span class="s1">, _routematchutils.safePathToRegexp)(matcher.originalSource, [], {</span>
+                        <span class="s1">delimiter: </span><span class="s0">'/'</span><span class="s1">,</span>
+                        <span class="s1">sensitive: </span><span class="s2">false</span><span class="s1">,</span>
+                        <span class="s1">strict: </span><span class="s2">true</span>
+                    <span class="s1">}).source.replaceAll(</span><span class="s0">'</span><span class="s7">\\</span><span class="s0">/'</span><span class="s1">, </span><span class="s0">'/'</span><span class="s1">);</span>
+                <span class="s1">}</span>
+            <span class="s1">}</span>
+        <span class="s1">}</span>
+        <span class="s1">manifest.sortedMiddleware = Object.keys(manifest.middleware);</span>
+        <span class="s2">return </span><span class="s1">manifest;</span>
+    <span class="s1">}</span>
+    <span class="s1">async writeMiddlewareManifest() {</span>
+        <span class="s2">const </span><span class="s1">middlewareManifest = </span><span class="s2">this</span><span class="s1">.mergeMiddlewareManifests(</span><span class="s2">this</span><span class="s1">.middlewareManifests.values());</span>
+        <span class="s3">// Normalize regexes as it uses path-to-regexp</span>
+        <span class="s2">for</span><span class="s1">(</span><span class="s2">const </span><span class="s1">key </span><span class="s2">in </span><span class="s1">middlewareManifest.middleware){</span>
+            <span class="s1">middlewareManifest.middleware[key].matchers.forEach((matcher)=&gt;{</span>
+                <span class="s2">if </span><span class="s1">(!matcher.regexp.startsWith(</span><span class="s0">'^'</span><span class="s1">)) {</span>
+                    <span class="s2">const </span><span class="s1">parsedPage = (</span><span class="s4">0</span><span class="s1">, _trytoparsepath.tryToParsePath)(matcher.regexp);</span>
+                    <span class="s2">if </span><span class="s1">(parsedPage.error || !parsedPage.regexStr) {</span>
+                        <span class="s2">throw </span><span class="s1">Object.defineProperty(</span><span class="s2">new </span><span class="s1">Error(</span><span class="s0">&quot;Invalid source: &quot; </span><span class="s1">+ matcher.regexp), </span><span class="s0">&quot;__NEXT_ERROR_CODE&quot;</span><span class="s1">, {</span>
+                            <span class="s1">value: </span><span class="s0">&quot;E442&quot;</span><span class="s1">,</span>
+                            <span class="s1">enumerable: </span><span class="s2">false</span><span class="s1">,</span>
+                            <span class="s1">configurable: </span><span class="s2">true</span>
+                        <span class="s1">});</span>
+                    <span class="s1">}</span>
+                    <span class="s1">matcher.regexp = parsedPage.regexStr;</span>
+                <span class="s1">}</span>
+            <span class="s1">});</span>
+        <span class="s1">}</span>
+        <span class="s2">const </span><span class="s1">middlewareManifestPath = (</span><span class="s4">0</span><span class="s1">, _path.join)(</span><span class="s2">this</span><span class="s1">.distDir, </span><span class="s0">'server'</span><span class="s1">, _constants.MIDDLEWARE_MANIFEST);</span>
+        <span class="s1">(</span><span class="s4">0</span><span class="s1">, _requirecache.deleteCache)(middlewareManifestPath);</span>
+        <span class="s2">await </span><span class="s1">(</span><span class="s4">0</span><span class="s1">, _writeatomic.writeFileAtomic)(middlewareManifestPath, JSON.stringify(middlewareManifest, </span><span class="s2">null</span><span class="s1">, </span><span class="s4">2</span><span class="s1">));</span>
+    <span class="s1">}</span>
+    <span class="s1">async loadPagesManifest(pageName) {</span>
+        <span class="s2">this</span><span class="s1">.pagesManifests.set((</span><span class="s4">0</span><span class="s1">, _entrykey.getEntryKey)(</span><span class="s0">'pages'</span><span class="s1">, </span><span class="s0">'server'</span><span class="s1">, pageName), </span><span class="s2">await </span><span class="s1">readPartialManifest(</span><span class="s2">this</span><span class="s1">.distDir, _constants.PAGES_MANIFEST, pageName));</span>
+    <span class="s1">}</span>
+    <span class="s1">mergePagesManifests(manifests) {</span>
+        <span class="s2">const </span><span class="s1">manifest = {};</span>
+        <span class="s2">for </span><span class="s1">(</span><span class="s2">const </span><span class="s1">m of manifests){</span>
+            <span class="s1">Object.assign(manifest, m);</span>
+        <span class="s1">}</span>
+        <span class="s2">return </span><span class="s1">sortObjectByKey(manifest);</span>
+    <span class="s1">}</span>
+    <span class="s1">async writePagesManifest() {</span>
+        <span class="s2">const </span><span class="s1">pagesManifest = </span><span class="s2">this</span><span class="s1">.mergePagesManifests(</span><span class="s2">this</span><span class="s1">.pagesManifests.values());</span>
+        <span class="s2">const </span><span class="s1">pagesManifestPath = (</span><span class="s4">0</span><span class="s1">, _path.join)(</span><span class="s2">this</span><span class="s1">.distDir, </span><span class="s0">'server'</span><span class="s1">, _constants.PAGES_MANIFEST);</span>
+        <span class="s1">(</span><span class="s4">0</span><span class="s1">, _requirecache.deleteCache)(pagesManifestPath);</span>
+        <span class="s2">await </span><span class="s1">(</span><span class="s4">0</span><span class="s1">, _writeatomic.writeFileAtomic)(pagesManifestPath, JSON.stringify(pagesManifest, </span><span class="s2">null</span><span class="s1">, </span><span class="s4">2</span><span class="s1">));</span>
+    <span class="s1">}</span>
+    <span class="s1">async writeManifests(param) {</span>
+        <span class="s2">let </span><span class="s1">{ devRewrites, productionRewrites, entrypoints } = param;</span>
+        <span class="s2">await this</span><span class="s1">.writeActionManifest();</span>
+        <span class="s2">await this</span><span class="s1">.writeAppBuildManifest();</span>
+        <span class="s2">await this</span><span class="s1">.writeAppPathsManifest();</span>
+        <span class="s2">await this</span><span class="s1">.writeBuildManifest(entrypoints, devRewrites, productionRewrites);</span>
+        <span class="s2">await this</span><span class="s1">.writeFallbackBuildManifest();</span>
+        <span class="s2">await this</span><span class="s1">.writeMiddlewareManifest();</span>
+        <span class="s2">await this</span><span class="s1">.writeClientMiddlewareManifest();</span>
+        <span class="s2">await this</span><span class="s1">.writeNextFontManifest();</span>
+        <span class="s2">await this</span><span class="s1">.writePagesManifest();</span>
+        <span class="s2">if </span><span class="s1">(process.env.TURBOPACK_STATS != </span><span class="s2">null</span><span class="s1">) {</span>
+            <span class="s2">await this</span><span class="s1">.writeWebpackStats();</span>
+        <span class="s1">}</span>
+    <span class="s1">}</span>
+    <span class="s1">constructor({ distDir, buildId, encryptionKey }){</span>
+        <span class="s2">this</span><span class="s1">.actionManifests = </span><span class="s2">new </span><span class="s1">Map();</span>
+        <span class="s2">this</span><span class="s1">.appBuildManifests = </span><span class="s2">new </span><span class="s1">Map();</span>
+        <span class="s2">this</span><span class="s1">.appPathsManifests = </span><span class="s2">new </span><span class="s1">Map();</span>
+        <span class="s2">this</span><span class="s1">.buildManifests = </span><span class="s2">new </span><span class="s1">Map();</span>
+        <span class="s2">this</span><span class="s1">.clientBuildManifests = </span><span class="s2">new </span><span class="s1">Map();</span>
+        <span class="s2">this</span><span class="s1">.fontManifests = </span><span class="s2">new </span><span class="s1">Map();</span>
+        <span class="s2">this</span><span class="s1">.middlewareManifests = </span><span class="s2">new </span><span class="s1">Map();</span>
+        <span class="s2">this</span><span class="s1">.pagesManifests = </span><span class="s2">new </span><span class="s1">Map();</span>
+        <span class="s2">this</span><span class="s1">.webpackStats = </span><span class="s2">new </span><span class="s1">Map();</span>
+        <span class="s2">this</span><span class="s1">.distDir = distDir;</span>
+        <span class="s2">this</span><span class="s1">.buildId = buildId;</span>
+        <span class="s2">this</span><span class="s1">.encryptionKey = encryptionKey;</span>
+    <span class="s1">}</span>
+<span class="s1">}</span>
+<span class="s2">function </span><span class="s1">sortObjectByKey(obj) {</span>
+    <span class="s2">return </span><span class="s1">Object.keys(obj).sort().reduce((acc, key)=&gt;{</span>
+        <span class="s1">acc[key] = obj[key];</span>
+        <span class="s2">return </span><span class="s1">acc;</span>
+    <span class="s1">}, {});</span>
+<span class="s1">}</span>
+
+<span class="s3">//# sourceMappingURL=manifest-loader.js.map</span></pre>
+</body>
+</html>

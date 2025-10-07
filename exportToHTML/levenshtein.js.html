@@ -1,0 +1,158 @@
+<html>
+<head>
+<title>levenshtein.js</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #080808;}
+.s1 { color: #0033b3;}
+.s2 { color: #067d17;}
+.s3 { color: #8c8c8c; font-style: italic;}
+.s4 { color: #8c8c8c; font-style: italic;}
+.s5 { color: #1750eb;}
+</style>
+</head>
+<body bgcolor="#ffffff">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#c0c0c0" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+levenshtein.js</font>
+</center></td></tr></table>
+<pre><span class="s0">(</span><span class="s1">function</span><span class="s0">() {</span>
+  <span class="s2">'use strict'</span><span class="s0">;</span>
+  
+  <span class="s1">var </span><span class="s0">collator;</span>
+  <span class="s1">try </span><span class="s0">{</span>
+    <span class="s0">collator = (</span><span class="s1">typeof </span><span class="s0">Intl !== </span><span class="s2">&quot;undefined&quot; </span><span class="s0">&amp;&amp; </span><span class="s1">typeof </span><span class="s0">Intl.Collator !== </span><span class="s2">&quot;undefined&quot;</span><span class="s0">) ? Intl.Collator(</span><span class="s2">&quot;generic&quot;</span><span class="s0">, { sensitivity: </span><span class="s2">&quot;base&quot; </span><span class="s0">}) : </span><span class="s1">null</span><span class="s0">;</span>
+  <span class="s0">} </span><span class="s1">catch </span><span class="s0">(err){</span>
+    <span class="s0">console.log(</span><span class="s2">&quot;Collator could not be initialized and wouldn't be used&quot;</span><span class="s0">);</span>
+  <span class="s0">}</span>
+  <span class="s3">// arrays to re-use</span>
+  <span class="s1">var </span><span class="s0">prevRow = [],</span>
+    <span class="s0">str2Char = [];</span>
+  
+  <span class="s3">/**</span>
+   <span class="s3">* Based on the algorithm at http://en.wikipedia.org/wiki/Levenshtein_distance.</span>
+   <span class="s3">*/</span>
+  <span class="s1">var </span><span class="s0">Levenshtein = {</span>
+    <span class="s3">/**</span>
+     <span class="s3">* Calculate levenshtein distance of the two strings.</span>
+     <span class="s3">*</span>
+     <span class="s3">* </span><span class="s4">@param </span><span class="s3">str1 String the first string.</span>
+     <span class="s3">* </span><span class="s4">@param </span><span class="s3">str2 String the second string.</span>
+     <span class="s3">* </span><span class="s4">@param </span><span class="s3">[options] Additional options.</span>
+     <span class="s3">* </span><span class="s4">@param </span><span class="s3">[options.useCollator] Use `Intl.Collator` for locale-sensitive string comparison.</span>
+     <span class="s3">* </span><span class="s4">@return </span><span class="s3">Integer the levenshtein distance (0 and above).</span>
+     <span class="s3">*/</span>
+    <span class="s0">get: </span><span class="s1">function</span><span class="s0">(str1, str2, options) {</span>
+      <span class="s1">var </span><span class="s0">useCollator = (options &amp;&amp; collator &amp;&amp; options.useCollator);</span>
+      
+      <span class="s1">var </span><span class="s0">str1Len = str1.length,</span>
+        <span class="s0">str2Len = str2.length;</span>
+      
+      <span class="s3">// base cases</span>
+      <span class="s1">if </span><span class="s0">(str1Len === </span><span class="s5">0</span><span class="s0">) </span><span class="s1">return </span><span class="s0">str2Len;</span>
+      <span class="s1">if </span><span class="s0">(str2Len === </span><span class="s5">0</span><span class="s0">) </span><span class="s1">return </span><span class="s0">str1Len;</span>
+
+      <span class="s3">// two rows</span>
+      <span class="s1">var </span><span class="s0">curCol, nextCol, i, j, tmp;</span>
+
+      <span class="s3">// initialise previous row</span>
+      <span class="s1">for </span><span class="s0">(i=</span><span class="s5">0</span><span class="s0">; i&lt;str2Len; ++i) {</span>
+        <span class="s0">prevRow[i] = i;</span>
+        <span class="s0">str2Char[i] = str2.charCodeAt(i);</span>
+      <span class="s0">}</span>
+      <span class="s0">prevRow[str2Len] = str2Len;</span>
+
+      <span class="s1">var </span><span class="s0">strCmp;</span>
+      <span class="s1">if </span><span class="s0">(useCollator) {</span>
+        <span class="s3">// calculate current row distance from previous row using collator</span>
+        <span class="s1">for </span><span class="s0">(i = </span><span class="s5">0</span><span class="s0">; i &lt; str1Len; ++i) {</span>
+          <span class="s0">nextCol = i + </span><span class="s5">1</span><span class="s0">;</span>
+
+          <span class="s1">for </span><span class="s0">(j = </span><span class="s5">0</span><span class="s0">; j &lt; str2Len; ++j) {</span>
+            <span class="s0">curCol = nextCol;</span>
+
+            <span class="s3">// substution</span>
+            <span class="s0">strCmp = </span><span class="s5">0 </span><span class="s0">=== collator.compare(str1.charAt(i), String.fromCharCode(str2Char[j]));</span>
+
+            <span class="s0">nextCol = prevRow[j] + (strCmp ? </span><span class="s5">0 </span><span class="s0">: </span><span class="s5">1</span><span class="s0">);</span>
+
+            <span class="s3">// insertion</span>
+            <span class="s0">tmp = curCol + </span><span class="s5">1</span><span class="s0">;</span>
+            <span class="s1">if </span><span class="s0">(nextCol &gt; tmp) {</span>
+              <span class="s0">nextCol = tmp;</span>
+            <span class="s0">}</span>
+            <span class="s3">// deletion</span>
+            <span class="s0">tmp = prevRow[j + </span><span class="s5">1</span><span class="s0">] + </span><span class="s5">1</span><span class="s0">;</span>
+            <span class="s1">if </span><span class="s0">(nextCol &gt; tmp) {</span>
+              <span class="s0">nextCol = tmp;</span>
+            <span class="s0">}</span>
+
+            <span class="s3">// copy current col value into previous (in preparation for next iteration)</span>
+            <span class="s0">prevRow[j] = curCol;</span>
+          <span class="s0">}</span>
+
+          <span class="s3">// copy last col value into previous (in preparation for next iteration)</span>
+          <span class="s0">prevRow[j] = nextCol;</span>
+        <span class="s0">}</span>
+      <span class="s0">}</span>
+      <span class="s1">else </span><span class="s0">{</span>
+        <span class="s3">// calculate current row distance from previous row without collator</span>
+        <span class="s1">for </span><span class="s0">(i = </span><span class="s5">0</span><span class="s0">; i &lt; str1Len; ++i) {</span>
+          <span class="s0">nextCol = i + </span><span class="s5">1</span><span class="s0">;</span>
+
+          <span class="s1">for </span><span class="s0">(j = </span><span class="s5">0</span><span class="s0">; j &lt; str2Len; ++j) {</span>
+            <span class="s0">curCol = nextCol;</span>
+
+            <span class="s3">// substution</span>
+            <span class="s0">strCmp = str1.charCodeAt(i) === str2Char[j];</span>
+
+            <span class="s0">nextCol = prevRow[j] + (strCmp ? </span><span class="s5">0 </span><span class="s0">: </span><span class="s5">1</span><span class="s0">);</span>
+
+            <span class="s3">// insertion</span>
+            <span class="s0">tmp = curCol + </span><span class="s5">1</span><span class="s0">;</span>
+            <span class="s1">if </span><span class="s0">(nextCol &gt; tmp) {</span>
+              <span class="s0">nextCol = tmp;</span>
+            <span class="s0">}</span>
+            <span class="s3">// deletion</span>
+            <span class="s0">tmp = prevRow[j + </span><span class="s5">1</span><span class="s0">] + </span><span class="s5">1</span><span class="s0">;</span>
+            <span class="s1">if </span><span class="s0">(nextCol &gt; tmp) {</span>
+              <span class="s0">nextCol = tmp;</span>
+            <span class="s0">}</span>
+
+            <span class="s3">// copy current col value into previous (in preparation for next iteration)</span>
+            <span class="s0">prevRow[j] = curCol;</span>
+          <span class="s0">}</span>
+
+          <span class="s3">// copy last col value into previous (in preparation for next iteration)</span>
+          <span class="s0">prevRow[j] = nextCol;</span>
+        <span class="s0">}</span>
+      <span class="s0">}</span>
+      <span class="s1">return </span><span class="s0">nextCol;</span>
+    <span class="s0">}</span>
+
+  <span class="s0">};</span>
+
+  <span class="s3">// amd</span>
+  <span class="s1">if </span><span class="s0">(</span><span class="s1">typeof </span><span class="s0">define !== </span><span class="s2">&quot;undefined&quot; </span><span class="s0">&amp;&amp; define !== </span><span class="s1">null </span><span class="s0">&amp;&amp; define.amd) {</span>
+    <span class="s0">define(</span><span class="s1">function</span><span class="s0">() {</span>
+      <span class="s1">return </span><span class="s0">Levenshtein;</span>
+    <span class="s0">});</span>
+  <span class="s0">}</span>
+  <span class="s3">// commonjs</span>
+  <span class="s1">else if </span><span class="s0">(</span><span class="s1">typeof </span><span class="s0">module !== </span><span class="s2">&quot;undefined&quot; </span><span class="s0">&amp;&amp; module !== </span><span class="s1">null </span><span class="s0">&amp;&amp; </span><span class="s1">typeof </span><span class="s0">exports !== </span><span class="s2">&quot;undefined&quot; </span><span class="s0">&amp;&amp; module.exports === exports) {</span>
+    <span class="s0">module.exports = Levenshtein;</span>
+  <span class="s0">}</span>
+  <span class="s3">// web worker</span>
+  <span class="s1">else if </span><span class="s0">(</span><span class="s1">typeof </span><span class="s0">self !== </span><span class="s2">&quot;undefined&quot; </span><span class="s0">&amp;&amp; </span><span class="s1">typeof </span><span class="s0">self.postMessage === </span><span class="s2">'function' </span><span class="s0">&amp;&amp; </span><span class="s1">typeof </span><span class="s0">self.importScripts === </span><span class="s2">'function'</span><span class="s0">) {</span>
+    <span class="s0">self.Levenshtein = Levenshtein;</span>
+  <span class="s0">}</span>
+  <span class="s3">// browser main thread</span>
+  <span class="s1">else if </span><span class="s0">(</span><span class="s1">typeof </span><span class="s0">window !== </span><span class="s2">&quot;undefined&quot; </span><span class="s0">&amp;&amp; window !== </span><span class="s1">null</span><span class="s0">) {</span>
+    <span class="s0">window.Levenshtein = Levenshtein;</span>
+  <span class="s0">}</span>
+<span class="s0">}());</span>
+
+</pre>
+</body>
+</html>

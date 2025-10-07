@@ -1,0 +1,472 @@
+<html>
+<head>
+<title>sort-comp.js</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #8c8c8c; font-style: italic;}
+.s1 { color: #8c8c8c; font-style: italic;}
+.s2 { color: #080808;}
+.s3 { color: #067d17;}
+.s4 { color: #0033b3;}
+.s5 { color: #1750eb;}
+.s6 { color: #264eff;}
+</style>
+</head>
+<body bgcolor="#ffffff">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#c0c0c0" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+sort-comp.js</font>
+</center></td></tr></table>
+<pre><span class="s0">/**</span>
+ <span class="s0">* </span><span class="s1">@fileoverview </span><span class="s0">Enforce component methods order</span>
+ <span class="s0">* </span><span class="s1">@author </span><span class="s0">Yannick Croissant</span>
+ <span class="s0">*/</span>
+
+<span class="s3">'use strict'</span><span class="s2">;</span>
+
+<span class="s4">const </span><span class="s2">has = require(</span><span class="s3">'hasown'</span><span class="s2">);</span>
+<span class="s4">const </span><span class="s2">entries = require(</span><span class="s3">'object.entries'</span><span class="s2">);</span>
+<span class="s4">const </span><span class="s2">values = require(</span><span class="s3">'object.values'</span><span class="s2">);</span>
+<span class="s4">const </span><span class="s2">arrayIncludes = require(</span><span class="s3">'array-includes'</span><span class="s2">);</span>
+
+<span class="s4">const </span><span class="s2">Components = require(</span><span class="s3">'../util/Components'</span><span class="s2">);</span>
+<span class="s4">const </span><span class="s2">astUtil = require(</span><span class="s3">'../util/ast'</span><span class="s2">);</span>
+<span class="s4">const </span><span class="s2">docsUrl = require(</span><span class="s3">'../util/docsUrl'</span><span class="s2">);</span>
+<span class="s4">const </span><span class="s2">report = require(</span><span class="s3">'../util/report'</span><span class="s2">);</span>
+
+<span class="s4">const </span><span class="s2">defaultConfig = {</span>
+  <span class="s2">order: [</span>
+    <span class="s3">'static-methods'</span><span class="s2">,</span>
+    <span class="s3">'lifecycle'</span><span class="s2">,</span>
+    <span class="s3">'everything-else'</span><span class="s2">,</span>
+    <span class="s3">'render'</span><span class="s2">,</span>
+  <span class="s2">],</span>
+  <span class="s2">groups: {</span>
+    <span class="s2">lifecycle: [</span>
+      <span class="s3">'displayName'</span><span class="s2">,</span>
+      <span class="s3">'propTypes'</span><span class="s2">,</span>
+      <span class="s3">'contextTypes'</span><span class="s2">,</span>
+      <span class="s3">'childContextTypes'</span><span class="s2">,</span>
+      <span class="s3">'mixins'</span><span class="s2">,</span>
+      <span class="s3">'statics'</span><span class="s2">,</span>
+      <span class="s3">'defaultProps'</span><span class="s2">,</span>
+      <span class="s3">'constructor'</span><span class="s2">,</span>
+      <span class="s3">'getDefaultProps'</span><span class="s2">,</span>
+      <span class="s3">'state'</span><span class="s2">,</span>
+      <span class="s3">'getInitialState'</span><span class="s2">,</span>
+      <span class="s3">'getChildContext'</span><span class="s2">,</span>
+      <span class="s3">'getDerivedStateFromProps'</span><span class="s2">,</span>
+      <span class="s3">'componentWillMount'</span><span class="s2">,</span>
+      <span class="s3">'UNSAFE_componentWillMount'</span><span class="s2">,</span>
+      <span class="s3">'componentDidMount'</span><span class="s2">,</span>
+      <span class="s3">'componentWillReceiveProps'</span><span class="s2">,</span>
+      <span class="s3">'UNSAFE_componentWillReceiveProps'</span><span class="s2">,</span>
+      <span class="s3">'shouldComponentUpdate'</span><span class="s2">,</span>
+      <span class="s3">'componentWillUpdate'</span><span class="s2">,</span>
+      <span class="s3">'UNSAFE_componentWillUpdate'</span><span class="s2">,</span>
+      <span class="s3">'getSnapshotBeforeUpdate'</span><span class="s2">,</span>
+      <span class="s3">'componentDidUpdate'</span><span class="s2">,</span>
+      <span class="s3">'componentDidCatch'</span><span class="s2">,</span>
+      <span class="s3">'componentWillUnmount'</span><span class="s2">,</span>
+    <span class="s2">],</span>
+  <span class="s2">},</span>
+<span class="s2">};</span>
+
+<span class="s0">/**</span>
+ <span class="s0">* Get the methods order from the default config and the user config</span>
+ <span class="s0">* </span><span class="s1">@param </span><span class="s0">{Object} userConfig The user configuration.</span>
+ <span class="s0">* </span><span class="s1">@returns </span><span class="s0">{Array} Methods order</span>
+ <span class="s0">*/</span>
+<span class="s4">function </span><span class="s2">getMethodsOrder(userConfig) {</span>
+  <span class="s2">userConfig = userConfig || {};</span>
+
+  <span class="s4">const </span><span class="s2">groups = Object.assign({}, defaultConfig.groups, userConfig.groups);</span>
+  <span class="s4">const </span><span class="s2">order = userConfig.order || defaultConfig.order;</span>
+
+  <span class="s4">let </span><span class="s2">config = [];</span>
+  <span class="s4">let </span><span class="s2">entry;</span>
+  <span class="s4">for </span><span class="s2">(</span><span class="s4">let </span><span class="s2">i = </span><span class="s5">0</span><span class="s2">, j = order.length; i &lt; j; i++) {</span>
+    <span class="s2">entry = order[i];</span>
+    <span class="s4">if </span><span class="s2">(has(groups, entry)) {</span>
+      <span class="s2">config = config.concat(groups[entry]);</span>
+    <span class="s2">} </span><span class="s4">else </span><span class="s2">{</span>
+      <span class="s2">config.push(entry);</span>
+    <span class="s2">}</span>
+  <span class="s2">}</span>
+
+  <span class="s4">return </span><span class="s2">config;</span>
+<span class="s2">}</span>
+
+<span class="s0">// ------------------------------------------------------------------------------</span>
+<span class="s0">// Rule Definition</span>
+<span class="s0">// ------------------------------------------------------------------------------</span>
+
+<span class="s4">const </span><span class="s2">messages = {</span>
+  <span class="s2">unsortedProps: </span><span class="s3">'{{propA}} should be placed {{position}} {{propB}}'</span><span class="s2">,</span>
+<span class="s2">};</span>
+
+<span class="s0">/** </span><span class="s1">@type </span><span class="s0">{import('eslint').Rule.RuleModule} */</span>
+<span class="s2">module.exports = {</span>
+  <span class="s2">meta: {</span>
+    <span class="s2">docs: {</span>
+      <span class="s2">description: </span><span class="s3">'Enforce component methods order'</span><span class="s2">,</span>
+      <span class="s2">category: </span><span class="s3">'Stylistic Issues'</span><span class="s2">,</span>
+      <span class="s2">recommended: </span><span class="s4">false</span><span class="s2">,</span>
+      <span class="s2">url: docsUrl(</span><span class="s3">'sort-comp'</span><span class="s2">),</span>
+    <span class="s2">},</span>
+
+    <span class="s2">messages,</span>
+
+    <span class="s2">schema: [{</span>
+      <span class="s2">type: </span><span class="s3">'object'</span><span class="s2">,</span>
+      <span class="s2">properties: {</span>
+        <span class="s2">order: {</span>
+          <span class="s2">type: </span><span class="s3">'array'</span><span class="s2">,</span>
+          <span class="s2">items: {</span>
+            <span class="s2">type: </span><span class="s3">'string'</span><span class="s2">,</span>
+          <span class="s2">},</span>
+        <span class="s2">},</span>
+        <span class="s2">groups: {</span>
+          <span class="s2">type: </span><span class="s3">'object'</span><span class="s2">,</span>
+          <span class="s2">patternProperties: {</span>
+            <span class="s3">'^.*$'</span><span class="s2">: {</span>
+              <span class="s2">type: </span><span class="s3">'array'</span><span class="s2">,</span>
+              <span class="s2">items: {</span>
+                <span class="s2">type: </span><span class="s3">'string'</span><span class="s2">,</span>
+              <span class="s2">},</span>
+            <span class="s2">},</span>
+          <span class="s2">},</span>
+        <span class="s2">},</span>
+      <span class="s2">},</span>
+      <span class="s2">additionalProperties: </span><span class="s4">false</span><span class="s2">,</span>
+    <span class="s2">}],</span>
+  <span class="s2">},</span>
+
+  <span class="s2">create: Components.detect((context, components) =&gt; {</span>
+    <span class="s0">/** </span><span class="s1">@satisfies </span><span class="s0">{Record&lt;string, { node: ASTNode, score: number, closest: { distance: number, ref: { node: null | ASTNode, index: number } } }&gt;} */</span>
+    <span class="s4">const </span><span class="s2">errors = {};</span>
+    <span class="s4">const </span><span class="s2">methodsOrder = getMethodsOrder(context.options[</span><span class="s5">0</span><span class="s2">]);</span>
+
+    <span class="s0">// --------------------------------------------------------------------------</span>
+    <span class="s0">// Public</span>
+    <span class="s0">// --------------------------------------------------------------------------</span>
+
+    <span class="s4">const </span><span class="s2">regExpRegExp = </span><span class="s6">/\/(.*)\/([gimsuy]*)/</span><span class="s2">;</span>
+
+    <span class="s0">/**</span>
+     <span class="s0">* Get indexes of the matching patterns in methods order configuration</span>
+     <span class="s0">* </span><span class="s1">@param </span><span class="s0">{Object} method - Method metadata.</span>
+     <span class="s0">* </span><span class="s1">@returns </span><span class="s0">{Array} The matching patterns indexes. Return [Infinity] if there is no match.</span>
+     <span class="s0">*/</span>
+    <span class="s4">function </span><span class="s2">getRefPropIndexes(method) {</span>
+      <span class="s4">const </span><span class="s2">methodGroupIndexes = [];</span>
+
+      <span class="s2">methodsOrder.forEach((currentGroup, groupIndex) =&gt; {</span>
+        <span class="s4">if </span><span class="s2">(currentGroup === </span><span class="s3">'getters'</span><span class="s2">) {</span>
+          <span class="s4">if </span><span class="s2">(method.getter) {</span>
+            <span class="s2">methodGroupIndexes.push(groupIndex);</span>
+          <span class="s2">}</span>
+        <span class="s2">} </span><span class="s4">else if </span><span class="s2">(currentGroup === </span><span class="s3">'setters'</span><span class="s2">) {</span>
+          <span class="s4">if </span><span class="s2">(method.setter) {</span>
+            <span class="s2">methodGroupIndexes.push(groupIndex);</span>
+          <span class="s2">}</span>
+        <span class="s2">} </span><span class="s4">else if </span><span class="s2">(currentGroup === </span><span class="s3">'type-annotations'</span><span class="s2">) {</span>
+          <span class="s4">if </span><span class="s2">(method.typeAnnotation) {</span>
+            <span class="s2">methodGroupIndexes.push(groupIndex);</span>
+          <span class="s2">}</span>
+        <span class="s2">} </span><span class="s4">else if </span><span class="s2">(currentGroup === </span><span class="s3">'static-variables'</span><span class="s2">) {</span>
+          <span class="s4">if </span><span class="s2">(method.staticVariable) {</span>
+            <span class="s2">methodGroupIndexes.push(groupIndex);</span>
+          <span class="s2">}</span>
+        <span class="s2">} </span><span class="s4">else if </span><span class="s2">(currentGroup === </span><span class="s3">'static-methods'</span><span class="s2">) {</span>
+          <span class="s4">if </span><span class="s2">(method.staticMethod) {</span>
+            <span class="s2">methodGroupIndexes.push(groupIndex);</span>
+          <span class="s2">}</span>
+        <span class="s2">} </span><span class="s4">else if </span><span class="s2">(currentGroup === </span><span class="s3">'instance-variables'</span><span class="s2">) {</span>
+          <span class="s4">if </span><span class="s2">(method.instanceVariable) {</span>
+            <span class="s2">methodGroupIndexes.push(groupIndex);</span>
+          <span class="s2">}</span>
+        <span class="s2">} </span><span class="s4">else if </span><span class="s2">(currentGroup === </span><span class="s3">'instance-methods'</span><span class="s2">) {</span>
+          <span class="s4">if </span><span class="s2">(method.instanceMethod) {</span>
+            <span class="s2">methodGroupIndexes.push(groupIndex);</span>
+          <span class="s2">}</span>
+        <span class="s2">} </span><span class="s4">else if </span><span class="s2">(arrayIncludes([</span>
+          <span class="s3">'displayName'</span><span class="s2">,</span>
+          <span class="s3">'propTypes'</span><span class="s2">,</span>
+          <span class="s3">'contextTypes'</span><span class="s2">,</span>
+          <span class="s3">'childContextTypes'</span><span class="s2">,</span>
+          <span class="s3">'mixins'</span><span class="s2">,</span>
+          <span class="s3">'statics'</span><span class="s2">,</span>
+          <span class="s3">'defaultProps'</span><span class="s2">,</span>
+          <span class="s3">'constructor'</span><span class="s2">,</span>
+          <span class="s3">'getDefaultProps'</span><span class="s2">,</span>
+          <span class="s3">'state'</span><span class="s2">,</span>
+          <span class="s3">'getInitialState'</span><span class="s2">,</span>
+          <span class="s3">'getChildContext'</span><span class="s2">,</span>
+          <span class="s3">'getDerivedStateFromProps'</span><span class="s2">,</span>
+          <span class="s3">'componentWillMount'</span><span class="s2">,</span>
+          <span class="s3">'UNSAFE_componentWillMount'</span><span class="s2">,</span>
+          <span class="s3">'componentDidMount'</span><span class="s2">,</span>
+          <span class="s3">'componentWillReceiveProps'</span><span class="s2">,</span>
+          <span class="s3">'UNSAFE_componentWillReceiveProps'</span><span class="s2">,</span>
+          <span class="s3">'shouldComponentUpdate'</span><span class="s2">,</span>
+          <span class="s3">'componentWillUpdate'</span><span class="s2">,</span>
+          <span class="s3">'UNSAFE_componentWillUpdate'</span><span class="s2">,</span>
+          <span class="s3">'getSnapshotBeforeUpdate'</span><span class="s2">,</span>
+          <span class="s3">'componentDidUpdate'</span><span class="s2">,</span>
+          <span class="s3">'componentDidCatch'</span><span class="s2">,</span>
+          <span class="s3">'componentWillUnmount'</span><span class="s2">,</span>
+          <span class="s3">'render'</span><span class="s2">,</span>
+        <span class="s2">], currentGroup)) {</span>
+          <span class="s4">if </span><span class="s2">(currentGroup === method.name) {</span>
+            <span class="s2">methodGroupIndexes.push(groupIndex);</span>
+          <span class="s2">}</span>
+        <span class="s2">} </span><span class="s4">else </span><span class="s2">{</span>
+          <span class="s0">// Is the group a regex?</span>
+          <span class="s4">const </span><span class="s2">isRegExp = currentGroup.match(regExpRegExp);</span>
+          <span class="s4">if </span><span class="s2">(isRegExp) {</span>
+            <span class="s4">const </span><span class="s2">isMatching = </span><span class="s4">new </span><span class="s2">RegExp(isRegExp[</span><span class="s5">1</span><span class="s2">], isRegExp[</span><span class="s5">2</span><span class="s2">]).test(method.name);</span>
+            <span class="s4">if </span><span class="s2">(isMatching) {</span>
+              <span class="s2">methodGroupIndexes.push(groupIndex);</span>
+            <span class="s2">}</span>
+          <span class="s2">} </span><span class="s4">else if </span><span class="s2">(currentGroup === method.name) {</span>
+            <span class="s2">methodGroupIndexes.push(groupIndex);</span>
+          <span class="s2">}</span>
+        <span class="s2">}</span>
+      <span class="s2">});</span>
+
+      <span class="s0">// No matching pattern, return 'everything-else' index</span>
+      <span class="s4">if </span><span class="s2">(methodGroupIndexes.length === </span><span class="s5">0</span><span class="s2">) {</span>
+        <span class="s4">const </span><span class="s2">everythingElseIndex = methodsOrder.indexOf(</span><span class="s3">'everything-else'</span><span class="s2">);</span>
+
+        <span class="s4">if </span><span class="s2">(everythingElseIndex !== -</span><span class="s5">1</span><span class="s2">) {</span>
+          <span class="s2">methodGroupIndexes.push(everythingElseIndex);</span>
+        <span class="s2">} </span><span class="s4">else </span><span class="s2">{</span>
+          <span class="s0">// No matching pattern and no 'everything-else' group</span>
+          <span class="s2">methodGroupIndexes.push(Infinity);</span>
+        <span class="s2">}</span>
+      <span class="s2">}</span>
+
+      <span class="s4">return </span><span class="s2">methodGroupIndexes;</span>
+    <span class="s2">}</span>
+
+    <span class="s0">/**</span>
+     <span class="s0">* Get properties name</span>
+     <span class="s0">* </span><span class="s1">@param </span><span class="s0">{Object} node - Property.</span>
+     <span class="s0">* </span><span class="s1">@returns </span><span class="s0">{string} Property name.</span>
+     <span class="s0">*/</span>
+    <span class="s4">function </span><span class="s2">getPropertyName(node) {</span>
+      <span class="s4">if </span><span class="s2">(node.kind === </span><span class="s3">'get'</span><span class="s2">) {</span>
+        <span class="s4">return </span><span class="s3">'getter functions'</span><span class="s2">;</span>
+      <span class="s2">}</span>
+
+      <span class="s4">if </span><span class="s2">(node.kind === </span><span class="s3">'set'</span><span class="s2">) {</span>
+        <span class="s4">return </span><span class="s3">'setter functions'</span><span class="s2">;</span>
+      <span class="s2">}</span>
+
+      <span class="s4">return </span><span class="s2">astUtil.getPropertyName(node);</span>
+    <span class="s2">}</span>
+
+    <span class="s0">/**</span>
+     <span class="s0">* Store a new error in the error list</span>
+     <span class="s0">* </span><span class="s1">@param </span><span class="s0">{Object} propA - Mispositioned property.</span>
+     <span class="s0">* </span><span class="s1">@param </span><span class="s0">{Object} propB - Reference property.</span>
+     <span class="s0">*/</span>
+    <span class="s4">function </span><span class="s2">storeError(propA, propB) {</span>
+      <span class="s0">// Initialize the error object if needed</span>
+      <span class="s4">if </span><span class="s2">(!errors[propA.index]) {</span>
+        <span class="s2">errors[propA.index] = {</span>
+          <span class="s2">node: propA.node,</span>
+          <span class="s2">score: </span><span class="s5">0</span><span class="s2">,</span>
+          <span class="s2">closest: {</span>
+            <span class="s2">distance: Infinity,</span>
+            <span class="s2">ref: {</span>
+              <span class="s2">node: </span><span class="s4">null</span><span class="s2">,</span>
+              <span class="s2">index: </span><span class="s5">0</span><span class="s2">,</span>
+            <span class="s2">},</span>
+          <span class="s2">},</span>
+        <span class="s2">};</span>
+      <span class="s2">}</span>
+      <span class="s0">// Increment the prop score</span>
+      <span class="s2">errors[propA.index].score += </span><span class="s5">1</span><span class="s2">;</span>
+      <span class="s0">// Stop here if we already have pushed another node at this position</span>
+      <span class="s4">if </span><span class="s2">(getPropertyName(errors[propA.index].node) !== getPropertyName(propA.node)) {</span>
+        <span class="s4">return</span><span class="s2">;</span>
+      <span class="s2">}</span>
+      <span class="s0">// Stop here if we already have a closer reference</span>
+      <span class="s4">if </span><span class="s2">(Math.abs(propA.index - propB.index) &gt; errors[propA.index].closest.distance) {</span>
+        <span class="s4">return</span><span class="s2">;</span>
+      <span class="s2">}</span>
+      <span class="s0">// Update the closest reference</span>
+      <span class="s2">errors[propA.index].closest.distance = Math.abs(propA.index - propB.index);</span>
+      <span class="s2">errors[propA.index].closest.ref.node = propB.node;</span>
+      <span class="s2">errors[propA.index].closest.ref.index = propB.index;</span>
+    <span class="s2">}</span>
+
+    <span class="s0">/**</span>
+     <span class="s0">* Dedupe errors, only keep the ones with the highest score and delete the others</span>
+     <span class="s0">*/</span>
+    <span class="s4">function </span><span class="s2">dedupeErrors() {</span>
+      <span class="s2">entries(errors).forEach((entry) =&gt; {</span>
+        <span class="s4">const </span><span class="s2">i = entry[</span><span class="s5">0</span><span class="s2">];</span>
+        <span class="s4">const </span><span class="s2">error = entry[</span><span class="s5">1</span><span class="s2">];</span>
+
+        <span class="s4">const </span><span class="s2">index = error.closest.ref.index;</span>
+        <span class="s4">if </span><span class="s2">(errors[index]) {</span>
+          <span class="s4">if </span><span class="s2">(error.score &gt; errors[index].score) {</span>
+            <span class="s4">delete </span><span class="s2">errors[index];</span>
+          <span class="s2">} </span><span class="s4">else </span><span class="s2">{</span>
+            <span class="s4">delete </span><span class="s2">errors[i];</span>
+          <span class="s2">}</span>
+        <span class="s2">}</span>
+      <span class="s2">});</span>
+    <span class="s2">}</span>
+
+    <span class="s0">/**</span>
+     <span class="s0">* Report errors</span>
+     <span class="s0">*/</span>
+    <span class="s4">function </span><span class="s2">reportErrors() {</span>
+      <span class="s2">dedupeErrors();</span>
+
+      <span class="s2">entries(errors).forEach((entry) =&gt; {</span>
+        <span class="s4">const </span><span class="s2">nodeA = entry[</span><span class="s5">1</span><span class="s2">].node;</span>
+        <span class="s4">const </span><span class="s2">nodeB = entry[</span><span class="s5">1</span><span class="s2">].closest.ref.node;</span>
+        <span class="s4">const </span><span class="s2">indexA = entry[</span><span class="s5">0</span><span class="s2">];</span>
+        <span class="s4">const </span><span class="s2">indexB = entry[</span><span class="s5">1</span><span class="s2">].closest.ref.index;</span>
+
+        <span class="s2">report(context, messages.unsortedProps, </span><span class="s3">'unsortedProps'</span><span class="s2">, {</span>
+          <span class="s2">node: nodeA,</span>
+          <span class="s2">data: {</span>
+            <span class="s2">propA: getPropertyName(nodeA),</span>
+            <span class="s2">propB: getPropertyName(nodeB),</span>
+            <span class="s2">position: indexA &lt; indexB ? </span><span class="s3">'before' </span><span class="s2">: </span><span class="s3">'after'</span><span class="s2">,</span>
+          <span class="s2">},</span>
+        <span class="s2">});</span>
+      <span class="s2">});</span>
+    <span class="s2">}</span>
+
+    <span class="s0">/**</span>
+     <span class="s0">* Compare two properties and find out if they are in the right order</span>
+     <span class="s0">* </span><span class="s1">@param </span><span class="s0">{Array} propertiesInfos Array containing all the properties metadata.</span>
+     <span class="s0">* </span><span class="s1">@param </span><span class="s0">{Object} propA First property name and metadata</span>
+     <span class="s0">* </span><span class="s1">@param </span><span class="s0">{Object} propB Second property name.</span>
+     <span class="s0">* </span><span class="s1">@returns </span><span class="s0">{Object} Object containing a correct true/false flag and the correct indexes for the two properties.</span>
+     <span class="s0">*/</span>
+    <span class="s4">function </span><span class="s2">comparePropsOrder(propertiesInfos, propA, propB) {</span>
+      <span class="s4">let </span><span class="s2">i;</span>
+      <span class="s4">let </span><span class="s2">j;</span>
+      <span class="s4">let </span><span class="s2">k;</span>
+      <span class="s4">let </span><span class="s2">l;</span>
+      <span class="s4">let </span><span class="s2">refIndexA;</span>
+      <span class="s4">let </span><span class="s2">refIndexB;</span>
+
+      <span class="s0">// Get references indexes (the correct position) for given properties</span>
+      <span class="s4">const </span><span class="s2">refIndexesA = getRefPropIndexes(propA);</span>
+      <span class="s4">const </span><span class="s2">refIndexesB = getRefPropIndexes(propB);</span>
+
+      <span class="s0">// Get current indexes for given properties</span>
+      <span class="s4">const </span><span class="s2">classIndexA = propertiesInfos.indexOf(propA);</span>
+      <span class="s4">const </span><span class="s2">classIndexB = propertiesInfos.indexOf(propB);</span>
+
+      <span class="s0">// Loop around the references indexes for the 1st property</span>
+      <span class="s4">for </span><span class="s2">(i = </span><span class="s5">0</span><span class="s2">, j = refIndexesA.length; i &lt; j; i++) {</span>
+        <span class="s2">refIndexA = refIndexesA[i];</span>
+
+        <span class="s0">// Loop around the properties for the 2nd property (for comparison)</span>
+        <span class="s4">for </span><span class="s2">(k = </span><span class="s5">0</span><span class="s2">, l = refIndexesB.length; k &lt; l; k++) {</span>
+          <span class="s2">refIndexB = refIndexesB[k];</span>
+
+          <span class="s4">if </span><span class="s2">(</span>
+            <span class="s0">// Comparing the same properties</span>
+            <span class="s2">refIndexA === refIndexB</span>
+            <span class="s0">// 1st property is placed before the 2nd one in reference and in current component</span>
+            <span class="s2">|| ((refIndexA &lt; refIndexB) &amp;&amp; (classIndexA &lt; classIndexB))</span>
+            <span class="s0">// 1st property is placed after the 2nd one in reference and in current component</span>
+            <span class="s2">|| ((refIndexA &gt; refIndexB) &amp;&amp; (classIndexA &gt; classIndexB))</span>
+          <span class="s2">) {</span>
+            <span class="s4">return </span><span class="s2">{</span>
+              <span class="s2">correct: </span><span class="s4">true</span><span class="s2">,</span>
+              <span class="s2">indexA: classIndexA,</span>
+              <span class="s2">indexB: classIndexB,</span>
+            <span class="s2">};</span>
+          <span class="s2">}</span>
+        <span class="s2">}</span>
+      <span class="s2">}</span>
+
+      <span class="s0">// We did not find any correct match between reference and current component</span>
+      <span class="s4">return </span><span class="s2">{</span>
+        <span class="s2">correct: </span><span class="s4">false</span><span class="s2">,</span>
+        <span class="s2">indexA: refIndexA,</span>
+        <span class="s2">indexB: refIndexB,</span>
+      <span class="s2">};</span>
+    <span class="s2">}</span>
+
+    <span class="s0">/**</span>
+     <span class="s0">* Check properties order from a properties list and store the eventual errors</span>
+     <span class="s0">* </span><span class="s1">@param </span><span class="s0">{Array} properties Array containing all the properties.</span>
+     <span class="s0">*/</span>
+    <span class="s4">function </span><span class="s2">checkPropsOrder(properties) {</span>
+      <span class="s4">const </span><span class="s2">propertiesInfos = properties.map((node) =&gt; ({</span>
+        <span class="s2">name: getPropertyName(node),</span>
+        <span class="s2">getter: node.kind === </span><span class="s3">'get'</span><span class="s2">,</span>
+        <span class="s2">setter: node.kind === </span><span class="s3">'set'</span><span class="s2">,</span>
+        <span class="s2">staticVariable: node.static</span>
+          <span class="s2">&amp;&amp; (node.type === </span><span class="s3">'ClassProperty' </span><span class="s2">|| node.type === </span><span class="s3">'PropertyDefinition'</span><span class="s2">)</span>
+          <span class="s2">&amp;&amp; (!node.value || !astUtil.isFunctionLikeExpression(node.value)),</span>
+        <span class="s2">staticMethod: node.static</span>
+          <span class="s2">&amp;&amp; (node.type === </span><span class="s3">'ClassProperty' </span><span class="s2">|| node.type === </span><span class="s3">'PropertyDefinition' </span><span class="s2">|| node.type === </span><span class="s3">'MethodDefinition'</span><span class="s2">)</span>
+          <span class="s2">&amp;&amp; node.value</span>
+          <span class="s2">&amp;&amp; (astUtil.isFunctionLikeExpression(node.value)),</span>
+        <span class="s2">instanceVariable: !node.static</span>
+          <span class="s2">&amp;&amp; (node.type === </span><span class="s3">'ClassProperty' </span><span class="s2">|| node.type === </span><span class="s3">'PropertyDefinition'</span><span class="s2">)</span>
+          <span class="s2">&amp;&amp; (!node.value || !astUtil.isFunctionLikeExpression(node.value)),</span>
+        <span class="s2">instanceMethod: !node.static</span>
+          <span class="s2">&amp;&amp; (node.type === </span><span class="s3">'ClassProperty' </span><span class="s2">|| node.type === </span><span class="s3">'PropertyDefinition'</span><span class="s2">)</span>
+          <span class="s2">&amp;&amp; node.value</span>
+          <span class="s2">&amp;&amp; (astUtil.isFunctionLikeExpression(node.value)),</span>
+        <span class="s2">typeAnnotation: !!node.typeAnnotation &amp;&amp; node.value === </span><span class="s4">null</span><span class="s2">,</span>
+      <span class="s2">}));</span>
+
+      <span class="s0">// Loop around the properties</span>
+      <span class="s2">propertiesInfos.forEach((propA, i) =&gt; {</span>
+        <span class="s0">// Loop around the properties a second time (for comparison)</span>
+        <span class="s2">propertiesInfos.forEach((propB, k) =&gt; {</span>
+          <span class="s4">if </span><span class="s2">(i === k) {</span>
+            <span class="s4">return</span><span class="s2">;</span>
+          <span class="s2">}</span>
+
+          <span class="s0">// Compare the properties order</span>
+          <span class="s4">const </span><span class="s2">order = comparePropsOrder(propertiesInfos, propA, propB);</span>
+
+          <span class="s4">if </span><span class="s2">(!order.correct) {</span>
+            <span class="s0">// Store an error if the order is incorrect</span>
+            <span class="s2">storeError({</span>
+              <span class="s2">node: properties[i],</span>
+              <span class="s2">index: order.indexA,</span>
+            <span class="s2">}, {</span>
+              <span class="s2">node: properties[k],</span>
+              <span class="s2">index: order.indexB,</span>
+            <span class="s2">});</span>
+          <span class="s2">}</span>
+        <span class="s2">});</span>
+      <span class="s2">});</span>
+    <span class="s2">}</span>
+
+    <span class="s4">return </span><span class="s2">{</span>
+      <span class="s3">'Program:exit'</span><span class="s2">() {</span>
+        <span class="s2">values(components.list()).forEach((component) =&gt; {</span>
+          <span class="s4">const </span><span class="s2">properties = astUtil.getComponentProperties(component.node);</span>
+          <span class="s2">checkPropsOrder(properties);</span>
+        <span class="s2">});</span>
+
+        <span class="s2">reportErrors();</span>
+      <span class="s2">},</span>
+    <span class="s2">};</span>
+  <span class="s2">}),</span>
+
+  <span class="s2">defaultConfig,</span>
+<span class="s2">};</span>
+</pre>
+</body>
+</html>

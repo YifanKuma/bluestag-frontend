@@ -1,0 +1,86 @@
+<html>
+<head>
+<title>track-module-loading.instance.js</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #067d17;}
+.s1 { color: #080808;}
+.s2 { color: #0033b3;}
+.s3 { color: #1750eb;}
+.s4 { color: #8c8c8c; font-style: italic;}
+</style>
+</head>
+<body bgcolor="#ffffff">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#c0c0c0" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+track-module-loading.instance.js</font>
+</center></td></tr></table>
+<pre><span class="s0">&quot;use strict&quot;</span><span class="s1">;</span>
+<span class="s1">Object.defineProperty(exports, </span><span class="s0">&quot;__esModule&quot;</span><span class="s1">, {</span>
+    <span class="s1">value: </span><span class="s2">true</span>
+<span class="s1">});</span>
+<span class="s3">0 </span><span class="s1">&amp;&amp; (module.exports = {</span>
+    <span class="s1">trackPendingChunkLoad: </span><span class="s2">null</span><span class="s1">,</span>
+    <span class="s1">trackPendingImport: </span><span class="s2">null</span><span class="s1">,</span>
+    <span class="s1">trackPendingModules: </span><span class="s2">null</span>
+<span class="s1">});</span>
+<span class="s2">function </span><span class="s1">_export(target, all) {</span>
+    <span class="s2">for</span><span class="s1">(</span><span class="s2">var </span><span class="s1">name </span><span class="s2">in </span><span class="s1">all)Object.defineProperty(target, name, {</span>
+        <span class="s1">enumerable: </span><span class="s2">true</span><span class="s1">,</span>
+        <span class="s1">get: all[name]</span>
+    <span class="s1">});</span>
+<span class="s1">}</span>
+<span class="s1">_export(exports, {</span>
+    <span class="s1">trackPendingChunkLoad: </span><span class="s2">function</span><span class="s1">() {</span>
+        <span class="s2">return </span><span class="s1">trackPendingChunkLoad;</span>
+    <span class="s1">},</span>
+    <span class="s1">trackPendingImport: </span><span class="s2">function</span><span class="s1">() {</span>
+        <span class="s2">return </span><span class="s1">trackPendingImport;</span>
+    <span class="s1">},</span>
+    <span class="s1">trackPendingModules: </span><span class="s2">function</span><span class="s1">() {</span>
+        <span class="s2">return </span><span class="s1">trackPendingModules;</span>
+    <span class="s1">}</span>
+<span class="s1">});</span>
+<span class="s2">const </span><span class="s1">_cachesignal = require(</span><span class="s0">&quot;../cache-signal&quot;</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">_isthenable = require(</span><span class="s0">&quot;../../../shared/lib/is-thenable&quot;</span><span class="s1">);</span>
+<span class="s4">/**</span>
+ <span class="s4">* Tracks all in-flight async imports and chunk loads.</span>
+ <span class="s4">* Initialized lazily, because we don't want this to error in case it gets pulled into an edge runtime module.</span>
+ <span class="s4">*/ </span><span class="s2">let </span><span class="s1">_moduleLoadingSignal;</span>
+<span class="s2">function </span><span class="s1">getModuleLoadingSignal() {</span>
+    <span class="s2">if </span><span class="s1">(!_moduleLoadingSignal) {</span>
+        <span class="s1">_moduleLoadingSignal = </span><span class="s2">new </span><span class="s1">_cachesignal.CacheSignal();</span>
+    <span class="s1">}</span>
+    <span class="s2">return </span><span class="s1">_moduleLoadingSignal;</span>
+<span class="s1">}</span>
+<span class="s2">function </span><span class="s1">trackPendingChunkLoad(promise) {</span>
+    <span class="s2">const </span><span class="s1">moduleLoadingSignal = getModuleLoadingSignal();</span>
+    <span class="s1">moduleLoadingSignal.trackRead(promise);</span>
+<span class="s1">}</span>
+<span class="s2">function </span><span class="s1">trackPendingImport(exportsOrPromise) {</span>
+    <span class="s2">const </span><span class="s1">moduleLoadingSignal = getModuleLoadingSignal();</span>
+    <span class="s4">// requiring an async module returns a promise.</span>
+    <span class="s4">// if it's sync, there's nothing to track.</span>
+    <span class="s2">if </span><span class="s1">((</span><span class="s3">0</span><span class="s1">, _isthenable.isThenable)(exportsOrPromise)) {</span>
+        <span class="s4">// A client reference proxy might look like a promise, but we can only call `.then()` on it, not e.g. `.finally()`.</span>
+        <span class="s4">// Turn it into a real promise to avoid issues elsewhere.</span>
+        <span class="s2">const </span><span class="s1">promise = Promise.resolve(exportsOrPromise);</span>
+        <span class="s1">moduleLoadingSignal.trackRead(promise);</span>
+    <span class="s1">}</span>
+<span class="s1">}</span>
+<span class="s2">function </span><span class="s1">trackPendingModules(cacheSignal) {</span>
+    <span class="s2">const </span><span class="s1">moduleLoadingSignal = getModuleLoadingSignal();</span>
+    <span class="s4">// We can't just use `cacheSignal.trackRead(moduleLoadingSignal.cacheReady())`,</span>
+    <span class="s4">// because we might start and finish multiple batches of module loads while waiting for caches,</span>
+    <span class="s4">// and `moduleLoadingSignal.cacheReady()` would resolve after the first batch.</span>
+    <span class="s4">// Instead, we'll keep notifying `cacheSignal` of each import/chunk-load.</span>
+    <span class="s2">const </span><span class="s1">unsubscribe = moduleLoadingSignal.subscribeToReads(cacheSignal);</span>
+    <span class="s4">// Later, when `cacheSignal` is no longer waiting for any caches (or imports that we've notified it of),</span>
+    <span class="s4">// we can unsubscribe it.</span>
+    <span class="s1">cacheSignal.cacheReady().then(unsubscribe);</span>
+<span class="s1">}</span>
+
+<span class="s4">//# sourceMappingURL=track-module-loading.instance.js.map</span></pre>
+</body>
+</html>

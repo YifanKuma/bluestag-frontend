@@ -1,0 +1,276 @@
+<html>
+<head>
+<title>consistent-indexed-object-style.js</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #067d17;}
+.s1 { color: #080808;}
+.s2 { color: #0033b3;}
+.s3 { color: #1750eb;}
+.s4 { color: #8c8c8c; font-style: italic;}
+</style>
+</head>
+<body bgcolor="#ffffff">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#c0c0c0" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+consistent-indexed-object-style.js</font>
+</center></td></tr></table>
+<pre><span class="s0">&quot;use strict&quot;</span><span class="s1">;</span>
+<span class="s1">Object.defineProperty(exports, </span><span class="s0">&quot;__esModule&quot;</span><span class="s1">, { value: </span><span class="s2">true </span><span class="s1">});</span>
+<span class="s2">const </span><span class="s1">utils_1 = require(</span><span class="s0">&quot;@typescript-eslint/utils&quot;</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">util_1 = require(</span><span class="s0">&quot;../util&quot;</span><span class="s1">);</span>
+<span class="s1">exports.default = (</span><span class="s3">0</span><span class="s1">, util_1.createRule)({</span>
+    <span class="s1">name: </span><span class="s0">'consistent-indexed-object-style'</span><span class="s1">,</span>
+    <span class="s1">meta: {</span>
+        <span class="s1">type: </span><span class="s0">'suggestion'</span><span class="s1">,</span>
+        <span class="s1">docs: {</span>
+            <span class="s1">description: </span><span class="s0">'Require or disallow the `Record` type'</span><span class="s1">,</span>
+            <span class="s1">recommended: </span><span class="s0">'stylistic'</span><span class="s1">,</span>
+        <span class="s1">},</span>
+        <span class="s1">fixable: </span><span class="s0">'code'</span><span class="s1">,</span>
+        <span class="s4">// eslint-disable-next-line eslint-plugin/require-meta-has-suggestions -- suggestions are exposed through a helper.</span>
+        <span class="s1">hasSuggestions: </span><span class="s2">true</span><span class="s1">,</span>
+        <span class="s1">messages: {</span>
+            <span class="s1">preferIndexSignature: </span><span class="s0">'An index signature is preferred over a record.'</span><span class="s1">,</span>
+            <span class="s1">preferIndexSignatureSuggestion: </span><span class="s0">'Change into an index signature instead of a record.'</span><span class="s1">,</span>
+            <span class="s1">preferRecord: </span><span class="s0">'A record is preferred over an index signature.'</span><span class="s1">,</span>
+        <span class="s1">},</span>
+        <span class="s1">schema: [</span>
+            <span class="s1">{</span>
+                <span class="s1">type: </span><span class="s0">'string'</span><span class="s1">,</span>
+                <span class="s1">description: </span><span class="s0">'Which indexed object syntax to prefer.'</span><span class="s1">,</span>
+                <span class="s2">enum</span><span class="s1">: [</span><span class="s0">'record'</span><span class="s1">, </span><span class="s0">'index-signature'</span><span class="s1">],</span>
+            <span class="s1">},</span>
+        <span class="s1">],</span>
+    <span class="s1">},</span>
+    <span class="s1">defaultOptions: [</span><span class="s0">'record'</span><span class="s1">],</span>
+    <span class="s1">create(context, [mode]) {</span>
+        <span class="s2">function </span><span class="s1">checkMembers(members, node, parentId, prefix, postfix, safeFix = </span><span class="s2">true</span><span class="s1">) {</span>
+            <span class="s2">if </span><span class="s1">(members.length !== </span><span class="s3">1</span><span class="s1">) {</span>
+                <span class="s2">return</span><span class="s1">;</span>
+            <span class="s1">}</span>
+            <span class="s2">const </span><span class="s1">[member] = members;</span>
+            <span class="s2">if </span><span class="s1">(member.type !== utils_1.AST_NODE_TYPES.TSIndexSignature) {</span>
+                <span class="s2">return</span><span class="s1">;</span>
+            <span class="s1">}</span>
+            <span class="s2">const </span><span class="s1">parameter = member.parameters.at(</span><span class="s3">0</span><span class="s1">);</span>
+            <span class="s2">if </span><span class="s1">(parameter?.type !== utils_1.AST_NODE_TYPES.Identifier) {</span>
+                <span class="s2">return</span><span class="s1">;</span>
+            <span class="s1">}</span>
+            <span class="s2">const </span><span class="s1">keyType = parameter.typeAnnotation;</span>
+            <span class="s2">if </span><span class="s1">(!keyType) {</span>
+                <span class="s2">return</span><span class="s1">;</span>
+            <span class="s1">}</span>
+            <span class="s2">const </span><span class="s1">valueType = member.typeAnnotation;</span>
+            <span class="s2">if </span><span class="s1">(!valueType) {</span>
+                <span class="s2">return</span><span class="s1">;</span>
+            <span class="s1">}</span>
+            <span class="s2">if </span><span class="s1">(parentId) {</span>
+                <span class="s2">const </span><span class="s1">scope = context.sourceCode.getScope(parentId);</span>
+                <span class="s2">const </span><span class="s1">superVar = utils_1.ASTUtils.findVariable(scope, parentId.name);</span>
+                <span class="s2">if </span><span class="s1">(superVar &amp;&amp;</span>
+                    <span class="s1">isDeeplyReferencingType(node, superVar, </span><span class="s2">new </span><span class="s1">Set([parentId]))) {</span>
+                    <span class="s2">return</span><span class="s1">;</span>
+                <span class="s1">}</span>
+            <span class="s1">}</span>
+            <span class="s1">context.report({</span>
+                <span class="s1">node,</span>
+                <span class="s1">messageId: </span><span class="s0">'preferRecord'</span><span class="s1">,</span>
+                <span class="s1">fix: safeFix</span>
+                    <span class="s1">? (fixer) =&gt; {</span>
+                        <span class="s2">const </span><span class="s1">key = context.sourceCode.getText(keyType.typeAnnotation);</span>
+                        <span class="s2">const </span><span class="s1">value = context.sourceCode.getText(valueType.typeAnnotation);</span>
+                        <span class="s2">const </span><span class="s1">record = member.readonly</span>
+                            <span class="s1">? </span><span class="s0">`Readonly&lt;Record&lt;</span><span class="s1">${key}</span><span class="s0">, </span><span class="s1">${value}</span><span class="s0">&gt;&gt;`</span>
+                            <span class="s1">: </span><span class="s0">`Record&lt;</span><span class="s1">${key}</span><span class="s0">, </span><span class="s1">${value}</span><span class="s0">&gt;`</span><span class="s1">;</span>
+                        <span class="s2">return </span><span class="s1">fixer.replaceText(node, </span><span class="s0">`</span><span class="s1">${prefix}${record}${postfix}</span><span class="s0">`</span><span class="s1">);</span>
+                    <span class="s1">}</span>
+                    <span class="s1">: </span><span class="s2">null</span><span class="s1">,</span>
+            <span class="s1">});</span>
+        <span class="s1">}</span>
+        <span class="s2">return </span><span class="s1">{</span>
+            <span class="s1">...(mode === </span><span class="s0">'index-signature' </span><span class="s1">&amp;&amp; {</span>
+                <span class="s1">TSTypeReference(node) {</span>
+                    <span class="s2">const </span><span class="s1">typeName = node.typeName;</span>
+                    <span class="s2">if </span><span class="s1">(typeName.type !== utils_1.AST_NODE_TYPES.Identifier) {</span>
+                        <span class="s2">return</span><span class="s1">;</span>
+                    <span class="s1">}</span>
+                    <span class="s2">if </span><span class="s1">(typeName.name !== </span><span class="s0">'Record'</span><span class="s1">) {</span>
+                        <span class="s2">return</span><span class="s1">;</span>
+                    <span class="s1">}</span>
+                    <span class="s2">const </span><span class="s1">params = node.typeArguments?.params;</span>
+                    <span class="s2">if </span><span class="s1">(params?.length !== </span><span class="s3">2</span><span class="s1">) {</span>
+                        <span class="s2">return</span><span class="s1">;</span>
+                    <span class="s1">}</span>
+                    <span class="s2">const </span><span class="s1">indexParam = params[</span><span class="s3">0</span><span class="s1">];</span>
+                    <span class="s2">const </span><span class="s1">shouldFix = indexParam.type === utils_1.AST_NODE_TYPES.TSStringKeyword ||</span>
+                        <span class="s1">indexParam.type === utils_1.AST_NODE_TYPES.TSNumberKeyword ||</span>
+                        <span class="s1">indexParam.type === utils_1.AST_NODE_TYPES.TSSymbolKeyword;</span>
+                    <span class="s1">context.report({</span>
+                        <span class="s1">node,</span>
+                        <span class="s1">messageId: </span><span class="s0">'preferIndexSignature'</span><span class="s1">,</span>
+                        <span class="s1">...(</span><span class="s3">0</span><span class="s1">, util_1.getFixOrSuggest)({</span>
+                            <span class="s1">fixOrSuggest: shouldFix ? </span><span class="s0">'fix' </span><span class="s1">: </span><span class="s0">'suggest'</span><span class="s1">,</span>
+                            <span class="s1">suggestion: {</span>
+                                <span class="s1">messageId: </span><span class="s0">'preferIndexSignatureSuggestion'</span><span class="s1">,</span>
+                                <span class="s1">fix: fixer =&gt; {</span>
+                                    <span class="s2">const </span><span class="s1">key = context.sourceCode.getText(params[</span><span class="s3">0</span><span class="s1">]);</span>
+                                    <span class="s2">const </span><span class="s1">type = context.sourceCode.getText(params[</span><span class="s3">1</span><span class="s1">]);</span>
+                                    <span class="s2">return </span><span class="s1">fixer.replaceText(node, </span><span class="s0">`{ [key: </span><span class="s1">${key}</span><span class="s0">]: </span><span class="s1">${type} </span><span class="s0">}`</span><span class="s1">);</span>
+                                <span class="s1">},</span>
+                            <span class="s1">},</span>
+                        <span class="s1">}),</span>
+                    <span class="s1">});</span>
+                <span class="s1">},</span>
+            <span class="s1">}),</span>
+            <span class="s1">...(mode === </span><span class="s0">'record' </span><span class="s1">&amp;&amp; {</span>
+                <span class="s1">TSInterfaceDeclaration(node) {</span>
+                    <span class="s2">let </span><span class="s1">genericTypes = </span><span class="s0">''</span><span class="s1">;</span>
+                    <span class="s2">if </span><span class="s1">(node.typeParameters?.params.length) {</span>
+                        <span class="s1">genericTypes = </span><span class="s0">`&lt;</span><span class="s1">${node.typeParameters.params</span>
+                            <span class="s1">.map(p =&gt; context.sourceCode.getText(p))</span>
+                            <span class="s1">.join(</span><span class="s0">', '</span><span class="s1">)}</span><span class="s0">&gt;`</span><span class="s1">;</span>
+                    <span class="s1">}</span>
+                    <span class="s1">checkMembers(node.body.body, node, node.id, </span><span class="s0">`type </span><span class="s1">${node.id.name}${genericTypes} </span><span class="s0">= `</span><span class="s1">, </span><span class="s0">';'</span><span class="s1">, !node.extends.length);</span>
+                <span class="s1">},</span>
+                <span class="s1">TSMappedType(node) {</span>
+                    <span class="s2">const </span><span class="s1">key = node.key;</span>
+                    <span class="s2">const </span><span class="s1">scope = context.sourceCode.getScope(key);</span>
+                    <span class="s2">const </span><span class="s1">scopeManagerKey = (</span><span class="s3">0</span><span class="s1">, util_1.nullThrows)(scope.variables.find(value =&gt; value.name === key.name &amp;&amp; value.isTypeVariable), </span><span class="s0">'key type parameter must be a defined type variable in its scope'</span><span class="s1">);</span>
+                    <span class="s4">// If the key is used to compute the value, we can't convert to a Record.</span>
+                    <span class="s2">if </span><span class="s1">(scopeManagerKey.references.some(reference =&gt; reference.isTypeReference)) {</span>
+                        <span class="s2">return</span><span class="s1">;</span>
+                    <span class="s1">}</span>
+                    <span class="s2">const </span><span class="s1">constraint = node.constraint;</span>
+                    <span class="s2">if </span><span class="s1">(constraint.type === utils_1.AST_NODE_TYPES.TSTypeOperator &amp;&amp;</span>
+                        <span class="s1">constraint.operator === </span><span class="s0">'keyof' </span><span class="s1">&amp;&amp;</span>
+                        <span class="s1">!(</span><span class="s3">0</span><span class="s1">, util_1.isParenthesized)(constraint, context.sourceCode)) {</span>
+                        <span class="s4">// This is a weird special case, since modifiers are preserved by</span>
+                        <span class="s4">// the mapped type, but not by the Record type. So this type is not,</span>
+                        <span class="s4">// in general, equivalent to a Record type.</span>
+                        <span class="s2">return</span><span class="s1">;</span>
+                    <span class="s1">}</span>
+                    <span class="s4">// If the mapped type is circular, we can't convert it to a Record.</span>
+                    <span class="s2">const </span><span class="s1">parentId = findParentDeclaration(node)?.id;</span>
+                    <span class="s2">if </span><span class="s1">(parentId) {</span>
+                        <span class="s2">const </span><span class="s1">scope = context.sourceCode.getScope(key);</span>
+                        <span class="s2">const </span><span class="s1">superVar = utils_1.ASTUtils.findVariable(scope, parentId.name);</span>
+                        <span class="s2">if </span><span class="s1">(superVar) {</span>
+                            <span class="s2">const </span><span class="s1">isCircular = isDeeplyReferencingType(node.parent, superVar, </span><span class="s2">new </span><span class="s1">Set([parentId]));</span>
+                            <span class="s2">if </span><span class="s1">(isCircular) {</span>
+                                <span class="s2">return</span><span class="s1">;</span>
+                            <span class="s1">}</span>
+                        <span class="s1">}</span>
+                    <span class="s1">}</span>
+                    <span class="s4">// There's no builtin Mutable&lt;T&gt; type, so we can't autofix it really.</span>
+                    <span class="s2">const </span><span class="s1">canFix = node.readonly !== </span><span class="s0">'-'</span><span class="s1">;</span>
+                    <span class="s1">context.report({</span>
+                        <span class="s1">node,</span>
+                        <span class="s1">messageId: </span><span class="s0">'preferRecord'</span><span class="s1">,</span>
+                        <span class="s1">...(canFix &amp;&amp; {</span>
+                            <span class="s1">fix: (fixer) =&gt; {</span>
+                                <span class="s2">const </span><span class="s1">keyType = context.sourceCode.getText(constraint);</span>
+                                <span class="s2">const </span><span class="s1">valueType = node.typeAnnotation</span>
+                                    <span class="s1">? context.sourceCode.getText(node.typeAnnotation)</span>
+                                    <span class="s1">: </span><span class="s0">'any'</span><span class="s1">;</span>
+                                <span class="s2">let </span><span class="s1">recordText = </span><span class="s0">`Record&lt;</span><span class="s1">${keyType}</span><span class="s0">, </span><span class="s1">${valueType}</span><span class="s0">&gt;`</span><span class="s1">;</span>
+                                <span class="s2">if </span><span class="s1">(node.optional === </span><span class="s0">'+' </span><span class="s1">|| node.optional === </span><span class="s2">true</span><span class="s1">) {</span>
+                                    <span class="s1">recordText = </span><span class="s0">`Partial&lt;</span><span class="s1">${recordText}</span><span class="s0">&gt;`</span><span class="s1">;</span>
+                                <span class="s1">}</span>
+                                <span class="s2">else if </span><span class="s1">(node.optional === </span><span class="s0">'-'</span><span class="s1">) {</span>
+                                    <span class="s1">recordText = </span><span class="s0">`Required&lt;</span><span class="s1">${recordText}</span><span class="s0">&gt;`</span><span class="s1">;</span>
+                                <span class="s1">}</span>
+                                <span class="s2">if </span><span class="s1">(node.readonly === </span><span class="s0">'+' </span><span class="s1">|| node.readonly === </span><span class="s2">true</span><span class="s1">) {</span>
+                                    <span class="s1">recordText = </span><span class="s0">`Readonly&lt;</span><span class="s1">${recordText}</span><span class="s0">&gt;`</span><span class="s1">;</span>
+                                <span class="s1">}</span>
+                                <span class="s2">return </span><span class="s1">fixer.replaceText(node, recordText);</span>
+                            <span class="s1">},</span>
+                        <span class="s1">}),</span>
+                    <span class="s1">});</span>
+                <span class="s1">},</span>
+                <span class="s1">TSTypeLiteral(node) {</span>
+                    <span class="s2">const </span><span class="s1">parent = findParentDeclaration(node);</span>
+                    <span class="s1">checkMembers(node.members, node, parent?.id, </span><span class="s0">''</span><span class="s1">, </span><span class="s0">''</span><span class="s1">);</span>
+                <span class="s1">},</span>
+            <span class="s1">}),</span>
+        <span class="s1">};</span>
+    <span class="s1">},</span>
+<span class="s1">});</span>
+<span class="s2">function </span><span class="s1">findParentDeclaration(node) {</span>
+    <span class="s2">if </span><span class="s1">(node.parent &amp;&amp; node.parent.type !== utils_1.AST_NODE_TYPES.TSTypeAnnotation) {</span>
+        <span class="s2">if </span><span class="s1">(node.parent.type === utils_1.AST_NODE_TYPES.TSTypeAliasDeclaration) {</span>
+            <span class="s2">return </span><span class="s1">node.parent;</span>
+        <span class="s1">}</span>
+        <span class="s2">return </span><span class="s1">findParentDeclaration(node.parent);</span>
+    <span class="s1">}</span>
+    <span class="s2">return </span><span class="s1">undefined;</span>
+<span class="s1">}</span>
+<span class="s2">function </span><span class="s1">isDeeplyReferencingType(node, superVar, visited) {</span>
+    <span class="s2">if </span><span class="s1">(visited.has(node)) {</span>
+        <span class="s4">// something on the chain is circular but it's not the reference being checked</span>
+        <span class="s2">return false</span><span class="s1">;</span>
+    <span class="s1">}</span>
+    <span class="s1">visited.add(node);</span>
+    <span class="s2">switch </span><span class="s1">(node.type) {</span>
+        <span class="s2">case </span><span class="s1">utils_1.AST_NODE_TYPES.TSTypeLiteral:</span>
+            <span class="s2">return </span><span class="s1">node.members.some(member =&gt; isDeeplyReferencingType(member, superVar, visited));</span>
+        <span class="s2">case </span><span class="s1">utils_1.AST_NODE_TYPES.TSTypeAliasDeclaration:</span>
+            <span class="s2">return </span><span class="s1">isDeeplyReferencingType(node.typeAnnotation, superVar, visited);</span>
+        <span class="s2">case </span><span class="s1">utils_1.AST_NODE_TYPES.TSIndexedAccessType:</span>
+            <span class="s2">return </span><span class="s1">[node.indexType, node.objectType].some(type =&gt; isDeeplyReferencingType(type, superVar, visited));</span>
+        <span class="s2">case </span><span class="s1">utils_1.AST_NODE_TYPES.TSMappedType:</span>
+            <span class="s2">if </span><span class="s1">(node.typeAnnotation) {</span>
+                <span class="s2">return </span><span class="s1">isDeeplyReferencingType(node.typeAnnotation, superVar, visited);</span>
+            <span class="s1">}</span>
+            <span class="s2">break</span><span class="s1">;</span>
+        <span class="s2">case </span><span class="s1">utils_1.AST_NODE_TYPES.TSConditionalType:</span>
+            <span class="s2">return </span><span class="s1">[</span>
+                <span class="s1">node.checkType,</span>
+                <span class="s1">node.extendsType,</span>
+                <span class="s1">node.falseType,</span>
+                <span class="s1">node.trueType,</span>
+            <span class="s1">].some(type =&gt; isDeeplyReferencingType(type, superVar, visited));</span>
+        <span class="s2">case </span><span class="s1">utils_1.AST_NODE_TYPES.TSUnionType:</span>
+        <span class="s2">case </span><span class="s1">utils_1.AST_NODE_TYPES.TSIntersectionType:</span>
+            <span class="s2">return </span><span class="s1">node.types.some(type =&gt; isDeeplyReferencingType(type, superVar, visited));</span>
+        <span class="s2">case </span><span class="s1">utils_1.AST_NODE_TYPES.TSInterfaceDeclaration:</span>
+            <span class="s2">return </span><span class="s1">node.body.body.some(type =&gt; isDeeplyReferencingType(type, superVar, visited));</span>
+        <span class="s2">case </span><span class="s1">utils_1.AST_NODE_TYPES.TSTypeAnnotation:</span>
+            <span class="s2">return </span><span class="s1">isDeeplyReferencingType(node.typeAnnotation, superVar, visited);</span>
+        <span class="s2">case </span><span class="s1">utils_1.AST_NODE_TYPES.TSIndexSignature: {</span>
+            <span class="s2">if </span><span class="s1">(node.typeAnnotation) {</span>
+                <span class="s2">return </span><span class="s1">isDeeplyReferencingType(node.typeAnnotation, superVar, visited);</span>
+            <span class="s1">}</span>
+            <span class="s2">break</span><span class="s1">;</span>
+        <span class="s1">}</span>
+        <span class="s2">case </span><span class="s1">utils_1.AST_NODE_TYPES.TSTypeParameterInstantiation: {</span>
+            <span class="s2">return </span><span class="s1">node.params.some(param =&gt; isDeeplyReferencingType(param, superVar, visited));</span>
+        <span class="s1">}</span>
+        <span class="s2">case </span><span class="s1">utils_1.AST_NODE_TYPES.TSTypeReference: {</span>
+            <span class="s2">if </span><span class="s1">(isDeeplyReferencingType(node.typeName, superVar, visited)) {</span>
+                <span class="s2">return true</span><span class="s1">;</span>
+            <span class="s1">}</span>
+            <span class="s2">if </span><span class="s1">(node.typeArguments &amp;&amp;</span>
+                <span class="s1">isDeeplyReferencingType(node.typeArguments, superVar, visited)) {</span>
+                <span class="s2">return true</span><span class="s1">;</span>
+            <span class="s1">}</span>
+            <span class="s2">break</span><span class="s1">;</span>
+        <span class="s1">}</span>
+        <span class="s2">case </span><span class="s1">utils_1.AST_NODE_TYPES.Identifier: {</span>
+            <span class="s4">// check if the identifier is a reference of the type being checked</span>
+            <span class="s2">if </span><span class="s1">(superVar.references.some(ref =&gt; (</span><span class="s3">0</span><span class="s1">, util_1.isNodeEqual)(ref.identifier, node))) {</span>
+                <span class="s2">return true</span><span class="s1">;</span>
+            <span class="s1">}</span>
+            <span class="s4">// otherwise, follow its definition(s)</span>
+            <span class="s2">const </span><span class="s1">refVar = utils_1.ASTUtils.findVariable(superVar.scope, node.name);</span>
+            <span class="s2">if </span><span class="s1">(refVar) {</span>
+                <span class="s2">return </span><span class="s1">refVar.defs.some(def =&gt; isDeeplyReferencingType(def.node, superVar, visited));</span>
+            <span class="s1">}</span>
+        <span class="s1">}</span>
+    <span class="s1">}</span>
+    <span class="s2">return false</span><span class="s1">;</span>
+<span class="s1">}</span>
+</pre>
+</body>
+</html>

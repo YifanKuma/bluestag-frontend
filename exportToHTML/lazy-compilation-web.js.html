@@ -1,0 +1,105 @@
+<html>
+<head>
+<title>lazy-compilation-web.js</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #8c8c8c; font-style: italic;}
+.s1 { color: #080808;}
+.s2 { color: #067d17;}
+.s3 { color: #0033b3;}
+.s4 { color: #1750eb;}
+.s5 { color: #8c8c8c; font-style: italic;}
+</style>
+</head>
+<body bgcolor="#ffffff">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#c0c0c0" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+lazy-compilation-web.js</font>
+</center></td></tr></table>
+<pre><span class="s0">/* global __resourceQuery */</span>
+
+<span class="s2">&quot;use strict&quot;</span><span class="s1">;</span>
+
+<span class="s3">if </span><span class="s1">(</span><span class="s3">typeof </span><span class="s1">EventSource !== </span><span class="s2">&quot;function&quot;</span><span class="s1">) {</span>
+	<span class="s3">throw new </span><span class="s1">Error(</span>
+		<span class="s2">&quot;Environment doesn't support lazy compilation (requires EventSource)&quot;</span>
+	<span class="s1">);</span>
+<span class="s1">}</span>
+
+<span class="s3">var </span><span class="s1">urlBase = decodeURIComponent(__resourceQuery.slice(</span><span class="s4">1</span><span class="s1">));</span>
+<span class="s0">/** </span><span class="s5">@type </span><span class="s0">{EventSource | undefined} */</span>
+<span class="s3">var </span><span class="s1">activeEventSource;</span>
+<span class="s3">var </span><span class="s1">activeKeys = </span><span class="s3">new </span><span class="s1">Map();</span>
+<span class="s3">var </span><span class="s1">errorHandlers = </span><span class="s3">new </span><span class="s1">Set();</span>
+
+<span class="s3">var </span><span class="s1">updateEventSource = </span><span class="s3">function </span><span class="s1">updateEventSource() {</span>
+	<span class="s3">if </span><span class="s1">(activeEventSource) activeEventSource.close();</span>
+	<span class="s3">if </span><span class="s1">(activeKeys.size) {</span>
+		<span class="s1">activeEventSource = </span><span class="s3">new </span><span class="s1">EventSource(</span>
+			<span class="s1">urlBase + Array.from(activeKeys.keys()).join(</span><span class="s2">&quot;@&quot;</span><span class="s1">)</span>
+		<span class="s1">);</span>
+		<span class="s0">/**</span>
+		 <span class="s0">* </span><span class="s5">@this </span><span class="s0">{EventSource}</span>
+		 <span class="s0">* </span><span class="s5">@param </span><span class="s0">{Event &amp; { message?: string, filename?: string, lineno?: number, colno?: number, error?: Error }} event event</span>
+		 <span class="s0">*/</span>
+		<span class="s1">activeEventSource.onerror = </span><span class="s3">function </span><span class="s1">(event) {</span>
+			<span class="s1">errorHandlers.forEach(</span><span class="s3">function </span><span class="s1">(onError) {</span>
+				<span class="s1">onError(</span>
+					<span class="s3">new </span><span class="s1">Error(</span>
+						<span class="s2">&quot;Problem communicating active modules to the server: &quot; </span><span class="s1">+</span>
+							<span class="s1">event.message +</span>
+							<span class="s2">&quot; &quot; </span><span class="s1">+</span>
+							<span class="s1">event.filename +</span>
+							<span class="s2">&quot;:&quot; </span><span class="s1">+</span>
+							<span class="s1">event.lineno +</span>
+							<span class="s2">&quot;:&quot; </span><span class="s1">+</span>
+							<span class="s1">event.colno +</span>
+							<span class="s2">&quot; &quot; </span><span class="s1">+</span>
+							<span class="s1">event.error</span>
+					<span class="s1">)</span>
+				<span class="s1">);</span>
+			<span class="s1">});</span>
+		<span class="s1">};</span>
+	<span class="s1">} </span><span class="s3">else </span><span class="s1">{</span>
+		<span class="s1">activeEventSource = undefined;</span>
+	<span class="s1">}</span>
+<span class="s1">};</span>
+
+<span class="s0">/**</span>
+ <span class="s0">* </span><span class="s5">@param </span><span class="s0">{{ data: string, onError: (err: Error) =&gt; void, active: boolean, module: module }} options options</span>
+ <span class="s0">* </span><span class="s5">@returns </span><span class="s0">{() =&gt; void} function to destroy response</span>
+ <span class="s0">*/</span>
+<span class="s1">exports.keepAlive = </span><span class="s3">function </span><span class="s1">(options) {</span>
+	<span class="s3">var </span><span class="s1">data = options.data;</span>
+	<span class="s3">var </span><span class="s1">onError = options.onError;</span>
+	<span class="s3">var </span><span class="s1">active = options.active;</span>
+	<span class="s3">var </span><span class="s1">module = options.module;</span>
+	<span class="s1">errorHandlers.add(onError);</span>
+	<span class="s3">var </span><span class="s1">value = activeKeys.get(data) || </span><span class="s4">0</span><span class="s1">;</span>
+	<span class="s1">activeKeys.set(data, value + </span><span class="s4">1</span><span class="s1">);</span>
+	<span class="s3">if </span><span class="s1">(value === </span><span class="s4">0</span><span class="s1">) {</span>
+		<span class="s1">updateEventSource();</span>
+	<span class="s1">}</span>
+	<span class="s3">if </span><span class="s1">(!active &amp;&amp; !module.hot) {</span>
+		<span class="s1">console.log(</span>
+			<span class="s2">&quot;Hot Module Replacement is not enabled. Waiting for process restart...&quot;</span>
+		<span class="s1">);</span>
+	<span class="s1">}</span>
+
+	<span class="s3">return function </span><span class="s1">() {</span>
+		<span class="s1">errorHandlers.delete(onError);</span>
+		<span class="s1">setTimeout(</span><span class="s3">function </span><span class="s1">() {</span>
+			<span class="s3">var </span><span class="s1">value = activeKeys.get(data);</span>
+			<span class="s3">if </span><span class="s1">(value === </span><span class="s4">1</span><span class="s1">) {</span>
+				<span class="s1">activeKeys.delete(data);</span>
+				<span class="s1">updateEventSource();</span>
+			<span class="s1">} </span><span class="s3">else </span><span class="s1">{</span>
+				<span class="s1">activeKeys.set(data, value - </span><span class="s4">1</span><span class="s1">);</span>
+			<span class="s1">}</span>
+		<span class="s1">}, </span><span class="s4">1000</span><span class="s1">);</span>
+	<span class="s1">};</span>
+<span class="s1">};</span>
+</pre>
+</body>
+</html>

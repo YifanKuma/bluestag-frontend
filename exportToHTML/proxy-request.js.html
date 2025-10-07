@@ -1,0 +1,138 @@
+<html>
+<head>
+<title>proxy-request.js</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #067d17;}
+.s1 { color: #080808;}
+.s2 { color: #0033b3;}
+.s3 { color: #8c8c8c; font-style: italic;}
+.s4 { color: #1750eb;}
+</style>
+</head>
+<body bgcolor="#ffffff">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#c0c0c0" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+proxy-request.js</font>
+</center></td></tr></table>
+<pre><span class="s0">&quot;use strict&quot;</span><span class="s1">;</span>
+<span class="s1">Object.defineProperty(exports, </span><span class="s0">&quot;__esModule&quot;</span><span class="s1">, {</span>
+    <span class="s1">value: </span><span class="s2">true</span>
+<span class="s1">});</span>
+<span class="s1">Object.defineProperty(exports, </span><span class="s0">&quot;proxyRequest&quot;</span><span class="s1">, {</span>
+    <span class="s1">enumerable: </span><span class="s2">true</span><span class="s1">,</span>
+    <span class="s1">get: </span><span class="s2">function</span><span class="s1">() {</span>
+        <span class="s2">return </span><span class="s1">proxyRequest;</span>
+    <span class="s1">}</span>
+<span class="s1">});</span>
+<span class="s2">const </span><span class="s1">_url = </span><span class="s3">/*#__PURE__*/ </span><span class="s1">_interop_require_default(require(</span><span class="s0">&quot;url&quot;</span><span class="s1">));</span>
+<span class="s2">const </span><span class="s1">_serverrouteutils = require(</span><span class="s0">&quot;../../server-route-utils&quot;</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">_stream = require(</span><span class="s0">&quot;stream&quot;</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">_detachedpromise = require(</span><span class="s0">&quot;../../../lib/detached-promise&quot;</span><span class="s1">);</span>
+<span class="s2">function </span><span class="s1">_interop_require_default(obj) {</span>
+    <span class="s2">return </span><span class="s1">obj &amp;&amp; obj.__esModule ? obj : {</span>
+        <span class="s2">default</span><span class="s1">: obj</span>
+    <span class="s1">};</span>
+<span class="s1">}</span>
+<span class="s1">async </span><span class="s2">function </span><span class="s1">proxyRequest(req, res, parsedUrl, upgradeHead, reqBody, proxyTimeout) {</span>
+    <span class="s2">const </span><span class="s1">{ query } = parsedUrl;</span>
+    <span class="s2">delete </span><span class="s1">parsedUrl.query;</span>
+    <span class="s1">parsedUrl.search = (</span><span class="s4">0</span><span class="s1">, _serverrouteutils.stringifyQuery)(req, query);</span>
+    <span class="s2">const </span><span class="s1">target = _url.default.format(parsedUrl);</span>
+    <span class="s2">const </span><span class="s1">HttpProxy = require(</span><span class="s0">'next/dist/compiled/http-proxy'</span><span class="s1">);</span>
+    <span class="s2">const </span><span class="s1">proxy = </span><span class="s2">new </span><span class="s1">HttpProxy({</span>
+        <span class="s1">target,</span>
+        <span class="s1">changeOrigin: </span><span class="s2">true</span><span class="s1">,</span>
+        <span class="s1">ignorePath: </span><span class="s2">true</span><span class="s1">,</span>
+        <span class="s1">ws: </span><span class="s2">true</span><span class="s1">,</span>
+        <span class="s3">// we limit proxy requests to 30s by default, in development</span>
+        <span class="s3">// we don't time out WebSocket requests to allow proxying</span>
+        <span class="s1">proxyTimeout: proxyTimeout === </span><span class="s2">null </span><span class="s1">? undefined : proxyTimeout || </span><span class="s4">30000</span><span class="s1">,</span>
+        <span class="s1">headers: {</span>
+            <span class="s0">'x-forwarded-host'</span><span class="s1">: req.headers.host || </span><span class="s0">''</span>
+        <span class="s1">}</span>
+    <span class="s1">});</span>
+    <span class="s2">let </span><span class="s1">finished = </span><span class="s2">false</span><span class="s1">;</span>
+    <span class="s3">// http-proxy does not properly detect a client disconnect in newer</span>
+    <span class="s3">// versions of Node.js. This is caused because it only listens for the</span>
+    <span class="s3">// `aborted` event on the our request object, but it also fully reads</span>
+    <span class="s3">// and closes the request object. Node **will not** fire `aborted` when</span>
+    <span class="s3">// the request is already closed. Listening for `close` on our response</span>
+    <span class="s3">// object will detect the disconnect, and we can abort the proxy's</span>
+    <span class="s3">// connection.</span>
+    <span class="s1">proxy.on(</span><span class="s0">'proxyReq'</span><span class="s1">, (proxyReq)=&gt;{</span>
+        <span class="s1">res.on(</span><span class="s0">'close'</span><span class="s1">, ()=&gt;proxyReq.destroy());</span>
+    <span class="s1">});</span>
+    <span class="s1">proxy.on(</span><span class="s0">'proxyRes'</span><span class="s1">, (proxyRes)=&gt;{</span>
+        <span class="s2">if </span><span class="s1">(res.destroyed) {</span>
+            <span class="s1">proxyRes.destroy();</span>
+        <span class="s1">} </span><span class="s2">else </span><span class="s1">{</span>
+            <span class="s1">res.on(</span><span class="s0">'close'</span><span class="s1">, ()=&gt;proxyRes.destroy());</span>
+        <span class="s1">}</span>
+    <span class="s1">});</span>
+    <span class="s1">proxy.on(</span><span class="s0">'proxyRes'</span><span class="s1">, (proxyRes, innerReq, innerRes)=&gt;{</span>
+        <span class="s2">const </span><span class="s1">cleanup = (err)=&gt;{</span>
+            <span class="s3">// cleanup event listeners to allow clean garbage collection</span>
+            <span class="s1">proxyRes.removeListener(</span><span class="s0">'error'</span><span class="s1">, cleanup);</span>
+            <span class="s1">proxyRes.removeListener(</span><span class="s0">'close'</span><span class="s1">, cleanup);</span>
+            <span class="s1">innerRes.removeListener(</span><span class="s0">'error'</span><span class="s1">, cleanup);</span>
+            <span class="s1">innerRes.removeListener(</span><span class="s0">'close'</span><span class="s1">, cleanup);</span>
+            <span class="s3">// destroy all source streams to propagate the caught event backward</span>
+            <span class="s1">innerReq.destroy(err);</span>
+            <span class="s1">proxyRes.destroy(err);</span>
+        <span class="s1">};</span>
+        <span class="s1">proxyRes.once(</span><span class="s0">'error'</span><span class="s1">, cleanup);</span>
+        <span class="s1">proxyRes.once(</span><span class="s0">'close'</span><span class="s1">, cleanup);</span>
+        <span class="s1">innerRes.once(</span><span class="s0">'error'</span><span class="s1">, cleanup);</span>
+        <span class="s1">innerRes.once(</span><span class="s0">'close'</span><span class="s1">, cleanup);</span>
+    <span class="s1">});</span>
+    <span class="s2">const </span><span class="s1">detached = </span><span class="s2">new </span><span class="s1">_detachedpromise.DetachedPromise();</span>
+    <span class="s1">proxy.on(</span><span class="s0">'error'</span><span class="s1">, (err)=&gt;{</span>
+        <span class="s1">console.error(</span><span class="s0">`Failed to proxy </span><span class="s1">${target}</span><span class="s0">`</span><span class="s1">, err);</span>
+        <span class="s2">if </span><span class="s1">(!finished) {</span>
+            <span class="s1">finished = </span><span class="s2">true</span><span class="s1">;</span>
+            <span class="s1">detached.reject(err);</span>
+            <span class="s2">if </span><span class="s1">(!res.destroyed) {</span>
+                <span class="s2">if </span><span class="s1">(!(res </span><span class="s2">instanceof </span><span class="s1">_stream.Duplex)) {</span>
+                    <span class="s1">res.statusCode = </span><span class="s4">500</span><span class="s1">;</span>
+                <span class="s1">}</span>
+                <span class="s1">res.end(</span><span class="s0">'Internal Server Error'</span><span class="s1">);</span>
+            <span class="s1">}</span>
+        <span class="s1">}</span>
+    <span class="s1">});</span>
+    <span class="s3">// If upgrade head is present or the response is a Duplex stream, treat as</span>
+    <span class="s3">// WebSocket request.</span>
+    <span class="s2">if </span><span class="s1">(upgradeHead || res </span><span class="s2">instanceof </span><span class="s1">_stream.Duplex) {</span>
+        <span class="s1">proxy.on(</span><span class="s0">'proxyReqWs'</span><span class="s1">, (proxyReq)=&gt;{</span>
+            <span class="s1">proxyReq.on(</span><span class="s0">'close'</span><span class="s1">, ()=&gt;{</span>
+                <span class="s2">if </span><span class="s1">(!finished) {</span>
+                    <span class="s1">finished = </span><span class="s2">true</span><span class="s1">;</span>
+                    <span class="s1">detached.resolve(</span><span class="s2">true</span><span class="s1">);</span>
+                <span class="s1">}</span>
+            <span class="s1">});</span>
+        <span class="s1">});</span>
+        <span class="s1">proxy.ws(req, res, upgradeHead);</span>
+        <span class="s1">detached.resolve(</span><span class="s2">true</span><span class="s1">);</span>
+    <span class="s1">} </span><span class="s2">else </span><span class="s1">{</span>
+        <span class="s1">proxy.on(</span><span class="s0">'proxyReq'</span><span class="s1">, (proxyReq)=&gt;{</span>
+            <span class="s1">proxyReq.on(</span><span class="s0">'close'</span><span class="s1">, ()=&gt;{</span>
+                <span class="s2">if </span><span class="s1">(!finished) {</span>
+                    <span class="s1">finished = </span><span class="s2">true</span><span class="s1">;</span>
+                    <span class="s1">detached.resolve(</span><span class="s2">true</span><span class="s1">);</span>
+                <span class="s1">}</span>
+            <span class="s1">});</span>
+        <span class="s1">});</span>
+        <span class="s1">proxy.web(req, res, {</span>
+            <span class="s1">buffer: reqBody</span>
+        <span class="s1">});</span>
+    <span class="s1">}</span>
+    <span class="s3">// When the proxy finishes proxying the request, shut down the proxy.</span>
+    <span class="s2">return </span><span class="s1">detached.promise.finally(()=&gt;{</span>
+        <span class="s1">proxy.close();</span>
+    <span class="s1">});</span>
+<span class="s1">}</span>
+
+<span class="s3">//# sourceMappingURL=proxy-request.js.map</span></pre>
+</body>
+</html>

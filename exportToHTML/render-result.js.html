@@ -1,0 +1,216 @@
+<html>
+<head>
+<title>render-result.js</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #067d17;}
+.s1 { color: #080808;}
+.s2 { color: #0033b3;}
+.s3 { color: #8c8c8c; font-style: italic;}
+.s4 { color: #8c8c8c; font-style: italic;}
+.s5 { color: #1750eb;}
+</style>
+</head>
+<body bgcolor="#ffffff">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#c0c0c0" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+render-result.js</font>
+</center></td></tr></table>
+<pre><span class="s0">&quot;use strict&quot;</span><span class="s1">;</span>
+<span class="s1">Object.defineProperty(exports, </span><span class="s0">&quot;__esModule&quot;</span><span class="s1">, {</span>
+    <span class="s1">value: </span><span class="s2">true</span>
+<span class="s1">});</span>
+<span class="s1">Object.defineProperty(exports, </span><span class="s0">&quot;default&quot;</span><span class="s1">, {</span>
+    <span class="s1">enumerable: </span><span class="s2">true</span><span class="s1">,</span>
+    <span class="s1">get: </span><span class="s2">function</span><span class="s1">() {</span>
+        <span class="s2">return </span><span class="s1">RenderResult;</span>
+    <span class="s1">}</span>
+<span class="s1">});</span>
+<span class="s2">const </span><span class="s1">_nodewebstreamshelper = require(</span><span class="s0">&quot;./stream-utils/node-web-streams-helper&quot;</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">_pipereadable = require(</span><span class="s0">&quot;./pipe-readable&quot;</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">_invarianterror = require(</span><span class="s0">&quot;../shared/lib/invariant-error&quot;</span><span class="s1">);</span>
+<span class="s2">class </span><span class="s1">RenderResult {</span>
+    <span class="s2">static </span><span class="s1">#_ = </span><span class="s3">/**</span>
+   <span class="s3">* A render result that represents an empty response. This is used to</span>
+   <span class="s3">* represent a response that was not found or was already sent.</span>
+   <span class="s3">*/ </span><span class="s2">this</span><span class="s1">.EMPTY = </span><span class="s2">new </span><span class="s1">RenderResult(</span><span class="s2">null</span><span class="s1">, {</span>
+        <span class="s1">metadata: {},</span>
+        <span class="s1">contentType: </span><span class="s2">null</span>
+    <span class="s1">});</span>
+    <span class="s3">/**</span>
+   <span class="s3">* Creates a new RenderResult instance from a static response.</span>
+   <span class="s3">*</span>
+   <span class="s3">* </span><span class="s4">@param </span><span class="s3">value the static response value</span>
+   <span class="s3">* </span><span class="s4">@param </span><span class="s3">contentType the content type of the response</span>
+   <span class="s3">* </span><span class="s4">@returns </span><span class="s3">a new RenderResult instance</span>
+   <span class="s3">*/ </span><span class="s2">static </span><span class="s1">fromStatic(value, contentType) {</span>
+        <span class="s2">return new </span><span class="s1">RenderResult(value, {</span>
+            <span class="s1">metadata: {},</span>
+            <span class="s1">contentType</span>
+        <span class="s1">});</span>
+    <span class="s1">}</span>
+    <span class="s1">constructor(response, { contentType, waitUntil, metadata }){</span>
+        <span class="s2">this</span><span class="s1">.response = response;</span>
+        <span class="s2">this</span><span class="s1">.contentType = contentType;</span>
+        <span class="s2">this</span><span class="s1">.metadata = metadata;</span>
+        <span class="s2">this</span><span class="s1">.waitUntil = waitUntil;</span>
+    <span class="s1">}</span>
+    <span class="s1">assignMetadata(metadata) {</span>
+        <span class="s1">Object.assign(</span><span class="s2">this</span><span class="s1">.metadata, metadata);</span>
+    <span class="s1">}</span>
+    <span class="s3">/**</span>
+   <span class="s3">* Returns true if the response is null. It can be null if the response was</span>
+   <span class="s3">* not found or was already sent.</span>
+   <span class="s3">*/ </span><span class="s1">get isNull() {</span>
+        <span class="s2">return this</span><span class="s1">.response === </span><span class="s2">null</span><span class="s1">;</span>
+    <span class="s1">}</span>
+    <span class="s3">/**</span>
+   <span class="s3">* Returns false if the response is a string. It can be a string if the page</span>
+   <span class="s3">* was prerendered. If it's not, then it was generated dynamically.</span>
+   <span class="s3">*/ </span><span class="s1">get isDynamic() {</span>
+        <span class="s2">return typeof this</span><span class="s1">.response !== </span><span class="s0">'string'</span><span class="s1">;</span>
+    <span class="s1">}</span>
+    <span class="s1">toUnchunkedString(stream = </span><span class="s2">false</span><span class="s1">) {</span>
+        <span class="s2">if </span><span class="s1">(</span><span class="s2">this</span><span class="s1">.response === </span><span class="s2">null</span><span class="s1">) {</span>
+            <span class="s3">// If the response is null, return an empty string. This behavior is</span>
+            <span class="s3">// intentional as we're now providing the `RenderResult.EMPTY` value.</span>
+            <span class="s2">return </span><span class="s0">''</span><span class="s1">;</span>
+        <span class="s1">}</span>
+        <span class="s2">if </span><span class="s1">(</span><span class="s2">typeof this</span><span class="s1">.response !== </span><span class="s0">'string'</span><span class="s1">) {</span>
+            <span class="s2">if </span><span class="s1">(!stream) {</span>
+                <span class="s2">throw </span><span class="s1">Object.defineProperty(</span><span class="s2">new </span><span class="s1">_invarianterror.InvariantError(</span><span class="s0">'dynamic responses cannot be unchunked. This is a bug in Next.js'</span><span class="s1">), </span><span class="s0">&quot;__NEXT_ERROR_CODE&quot;</span><span class="s1">, {</span>
+                    <span class="s1">value: </span><span class="s0">&quot;E732&quot;</span><span class="s1">,</span>
+                    <span class="s1">enumerable: </span><span class="s2">false</span><span class="s1">,</span>
+                    <span class="s1">configurable: </span><span class="s2">true</span>
+                <span class="s1">});</span>
+            <span class="s1">}</span>
+            <span class="s2">return </span><span class="s1">(</span><span class="s5">0</span><span class="s1">, _nodewebstreamshelper.streamToString)(</span><span class="s2">this</span><span class="s1">.readable);</span>
+        <span class="s1">}</span>
+        <span class="s2">return this</span><span class="s1">.response;</span>
+    <span class="s1">}</span>
+    <span class="s3">/**</span>
+   <span class="s3">* Returns a readable stream of the response.</span>
+   <span class="s3">*/ </span><span class="s1">get readable() {</span>
+        <span class="s2">if </span><span class="s1">(</span><span class="s2">this</span><span class="s1">.response === </span><span class="s2">null</span><span class="s1">) {</span>
+            <span class="s3">// If the response is null, return an empty stream. This behavior is</span>
+            <span class="s3">// intentional as we're now providing the `RenderResult.EMPTY` value.</span>
+            <span class="s2">return new </span><span class="s1">ReadableStream({</span>
+                <span class="s1">start (controller) {</span>
+                    <span class="s1">controller.close();</span>
+                <span class="s1">}</span>
+            <span class="s1">});</span>
+        <span class="s1">}</span>
+        <span class="s2">if </span><span class="s1">(</span><span class="s2">typeof this</span><span class="s1">.response === </span><span class="s0">'string'</span><span class="s1">) {</span>
+            <span class="s2">return </span><span class="s1">(</span><span class="s5">0</span><span class="s1">, _nodewebstreamshelper.streamFromString)(</span><span class="s2">this</span><span class="s1">.response);</span>
+        <span class="s1">}</span>
+        <span class="s2">if </span><span class="s1">(Buffer.isBuffer(</span><span class="s2">this</span><span class="s1">.response)) {</span>
+            <span class="s2">return </span><span class="s1">(</span><span class="s5">0</span><span class="s1">, _nodewebstreamshelper.streamFromBuffer)(</span><span class="s2">this</span><span class="s1">.response);</span>
+        <span class="s1">}</span>
+        <span class="s3">// If the response is an array of streams, then chain them together.</span>
+        <span class="s2">if </span><span class="s1">(Array.isArray(</span><span class="s2">this</span><span class="s1">.response)) {</span>
+            <span class="s2">return </span><span class="s1">(</span><span class="s5">0</span><span class="s1">, _nodewebstreamshelper.chainStreams)(...</span><span class="s2">this</span><span class="s1">.response);</span>
+        <span class="s1">}</span>
+        <span class="s2">return this</span><span class="s1">.response;</span>
+    <span class="s1">}</span>
+    <span class="s3">/**</span>
+   <span class="s3">* Coerces the response to an array of streams. This will convert the response</span>
+   <span class="s3">* to an array of streams if it is not already one.</span>
+   <span class="s3">*</span>
+   <span class="s3">* </span><span class="s4">@returns </span><span class="s3">An array of streams</span>
+   <span class="s3">*/ </span><span class="s1">coerce() {</span>
+        <span class="s2">if </span><span class="s1">(</span><span class="s2">this</span><span class="s1">.response === </span><span class="s2">null</span><span class="s1">) {</span>
+            <span class="s3">// If the response is null, return an empty stream. This behavior is</span>
+            <span class="s3">// intentional as we're now providing the `RenderResult.EMPTY` value.</span>
+            <span class="s2">return </span><span class="s1">[];</span>
+        <span class="s1">}</span>
+        <span class="s2">if </span><span class="s1">(</span><span class="s2">typeof this</span><span class="s1">.response === </span><span class="s0">'string'</span><span class="s1">) {</span>
+            <span class="s2">return </span><span class="s1">[</span>
+                <span class="s1">(</span><span class="s5">0</span><span class="s1">, _nodewebstreamshelper.streamFromString)(</span><span class="s2">this</span><span class="s1">.response)</span>
+            <span class="s1">];</span>
+        <span class="s1">} </span><span class="s2">else if </span><span class="s1">(Array.isArray(</span><span class="s2">this</span><span class="s1">.response)) {</span>
+            <span class="s2">return this</span><span class="s1">.response;</span>
+        <span class="s1">} </span><span class="s2">else if </span><span class="s1">(Buffer.isBuffer(</span><span class="s2">this</span><span class="s1">.response)) {</span>
+            <span class="s2">return </span><span class="s1">[</span>
+                <span class="s1">(</span><span class="s5">0</span><span class="s1">, _nodewebstreamshelper.streamFromBuffer)(</span><span class="s2">this</span><span class="s1">.response)</span>
+            <span class="s1">];</span>
+        <span class="s1">} </span><span class="s2">else </span><span class="s1">{</span>
+            <span class="s2">return </span><span class="s1">[</span>
+                <span class="s2">this</span><span class="s1">.response</span>
+            <span class="s1">];</span>
+        <span class="s1">}</span>
+    <span class="s1">}</span>
+    <span class="s3">/**</span>
+   <span class="s3">* Unshifts a new stream to the response. This will convert the response to an</span>
+   <span class="s3">* array of streams if it is not already one and will add the new stream to</span>
+   <span class="s3">* the start of the array. When this response is piped, all of the streams</span>
+   <span class="s3">* will be piped one after the other.</span>
+   <span class="s3">*</span>
+   <span class="s3">* </span><span class="s4">@param </span><span class="s3">readable The new stream to unshift</span>
+   <span class="s3">*/ </span><span class="s1">unshift(readable) {</span>
+        <span class="s3">// Coerce the response to an array of streams.</span>
+        <span class="s2">this</span><span class="s1">.response = </span><span class="s2">this</span><span class="s1">.coerce();</span>
+        <span class="s3">// Add the new stream to the start of the array.</span>
+        <span class="s2">this</span><span class="s1">.response.unshift(readable);</span>
+    <span class="s1">}</span>
+    <span class="s3">/**</span>
+   <span class="s3">* Chains a new stream to the response. This will convert the response to an</span>
+   <span class="s3">* array of streams if it is not already one and will add the new stream to</span>
+   <span class="s3">* the end. When this response is piped, all of the streams will be piped</span>
+   <span class="s3">* one after the other.</span>
+   <span class="s3">*</span>
+   <span class="s3">* </span><span class="s4">@param </span><span class="s3">readable The new stream to chain</span>
+   <span class="s3">*/ </span><span class="s1">push(readable) {</span>
+        <span class="s3">// Coerce the response to an array of streams.</span>
+        <span class="s2">this</span><span class="s1">.response = </span><span class="s2">this</span><span class="s1">.coerce();</span>
+        <span class="s3">// Add the new stream to the end of the array.</span>
+        <span class="s2">this</span><span class="s1">.response.push(readable);</span>
+    <span class="s1">}</span>
+    <span class="s3">/**</span>
+   <span class="s3">* Pipes the response to a writable stream. This will close/cancel the</span>
+   <span class="s3">* writable stream if an error is encountered. If this doesn't throw, then</span>
+   <span class="s3">* the writable stream will be closed or aborted.</span>
+   <span class="s3">*</span>
+   <span class="s3">* </span><span class="s4">@param </span><span class="s3">writable Writable stream to pipe the response to</span>
+   <span class="s3">*/ </span><span class="s1">async pipeTo(writable) {</span>
+        <span class="s2">try </span><span class="s1">{</span>
+            <span class="s2">await this</span><span class="s1">.readable.pipeTo(writable, {</span>
+                <span class="s3">// We want to close the writable stream ourselves so that we can wait</span>
+                <span class="s3">// for the waitUntil promise to resolve before closing it. If an error</span>
+                <span class="s3">// is encountered, we'll abort the writable stream if we swallowed the</span>
+                <span class="s3">// error.</span>
+                <span class="s1">preventClose: </span><span class="s2">true</span>
+            <span class="s1">});</span>
+            <span class="s3">// If there is a waitUntil promise, wait for it to resolve before</span>
+            <span class="s3">// closing the writable stream.</span>
+            <span class="s2">if </span><span class="s1">(</span><span class="s2">this</span><span class="s1">.waitUntil) </span><span class="s2">await this</span><span class="s1">.waitUntil;</span>
+            <span class="s3">// Close the writable stream.</span>
+            <span class="s2">await </span><span class="s1">writable.close();</span>
+        <span class="s1">} </span><span class="s2">catch </span><span class="s1">(err) {</span>
+            <span class="s3">// If this is an abort error, we should abort the writable stream (as we</span>
+            <span class="s3">// took ownership of it when we started piping). We don't need to re-throw</span>
+            <span class="s3">// because we handled the error.</span>
+            <span class="s2">if </span><span class="s1">((</span><span class="s5">0</span><span class="s1">, _pipereadable.isAbortError)(err)) {</span>
+                <span class="s3">// Abort the writable stream if an error is encountered.</span>
+                <span class="s2">await </span><span class="s1">writable.abort(err);</span>
+                <span class="s2">return</span><span class="s1">;</span>
+            <span class="s1">}</span>
+            <span class="s3">// We're not aborting the writer here as when this method throws it's not</span>
+            <span class="s3">// clear as to how so the caller should assume it's their responsibility</span>
+            <span class="s3">// to clean up the writer.</span>
+            <span class="s2">throw </span><span class="s1">err;</span>
+        <span class="s1">}</span>
+    <span class="s1">}</span>
+    <span class="s3">/**</span>
+   <span class="s3">* Pipes the response to a node response. This will close/cancel the node</span>
+   <span class="s3">* response if an error is encountered.</span>
+   <span class="s3">*</span>
+   <span class="s3">* </span><span class="s4">@param </span><span class="s3">res</span>
+   <span class="s3">*/ </span><span class="s1">async pipeToNodeResponse(res) {</span>
+        <span class="s2">await </span><span class="s1">(</span><span class="s5">0</span><span class="s1">, _pipereadable.pipeToNodeResponse)(</span><span class="s2">this</span><span class="s1">.readable, res, </span><span class="s2">this</span><span class="s1">.waitUntil);</span>
+    <span class="s1">}</span>
+<span class="s1">}</span>
+
+<span class="s3">//# sourceMappingURL=render-result.js.map</span></pre>
+</body>
+</html>

@@ -1,0 +1,695 @@
+<html>
+<head>
+<title>no-unknown-property.js</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #8c8c8c; font-style: italic;}
+.s1 { color: #8c8c8c; font-style: italic;}
+.s2 { color: #080808;}
+.s3 { color: #067d17;}
+.s4 { color: #0033b3;}
+.s5 { color: #264eff;}
+.s6 { color: #0037a6;}
+.s7 { color: #1750eb;}
+</style>
+</head>
+<body bgcolor="#ffffff">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#c0c0c0" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+no-unknown-property.js</font>
+</center></td></tr></table>
+<pre><span class="s0">/**</span>
+ <span class="s0">* </span><span class="s1">@fileoverview </span><span class="s0">Prevent usage of unknown DOM property</span>
+ <span class="s0">* </span><span class="s1">@author </span><span class="s0">Yannick Croissant</span>
+ <span class="s0">*/</span>
+
+<span class="s3">'use strict'</span><span class="s2">;</span>
+
+<span class="s4">const </span><span class="s2">has = require(</span><span class="s3">'hasown'</span><span class="s2">);</span>
+<span class="s4">const </span><span class="s2">docsUrl = require(</span><span class="s3">'../util/docsUrl'</span><span class="s2">);</span>
+<span class="s4">const </span><span class="s2">getText = require(</span><span class="s3">'../util/eslint'</span><span class="s2">).getText;</span>
+<span class="s4">const </span><span class="s2">testReactVersion = require(</span><span class="s3">'../util/version'</span><span class="s2">).testReactVersion;</span>
+<span class="s4">const </span><span class="s2">report = require(</span><span class="s3">'../util/report'</span><span class="s2">);</span>
+
+<span class="s0">// ------------------------------------------------------------------------------</span>
+<span class="s0">// Constants</span>
+<span class="s0">// ------------------------------------------------------------------------------</span>
+
+<span class="s4">const </span><span class="s2">DEFAULTS = {</span>
+  <span class="s2">ignore: [],</span>
+  <span class="s2">requireDataLowercase: </span><span class="s4">false</span><span class="s2">,</span>
+<span class="s2">};</span>
+
+<span class="s4">const </span><span class="s2">DOM_ATTRIBUTE_NAMES = {</span>
+  <span class="s3">'accept-charset'</span><span class="s2">: </span><span class="s3">'acceptCharset'</span><span class="s2">,</span>
+  <span class="s4">class</span><span class="s2">: </span><span class="s3">'className'</span><span class="s2">,</span>
+  <span class="s3">'http-equiv'</span><span class="s2">: </span><span class="s3">'httpEquiv'</span><span class="s2">,</span>
+  <span class="s2">crossorigin: </span><span class="s3">'crossOrigin'</span><span class="s2">,</span>
+  <span class="s4">for</span><span class="s2">: </span><span class="s3">'htmlFor'</span><span class="s2">,</span>
+  <span class="s2">nomodule: </span><span class="s3">'noModule'</span><span class="s2">,</span>
+<span class="s2">};</span>
+
+<span class="s4">const </span><span class="s2">ATTRIBUTE_TAGS_MAP = {</span>
+  <span class="s2">abbr: [</span><span class="s3">'th'</span><span class="s2">, </span><span class="s3">'td'</span><span class="s2">],</span>
+  <span class="s2">charset: [</span><span class="s3">'meta'</span><span class="s2">],</span>
+  <span class="s2">checked: [</span><span class="s3">'input'</span><span class="s2">],</span>
+  <span class="s0">// image is required for SVG support, all other tags are HTML.</span>
+  <span class="s2">crossOrigin: [</span><span class="s3">'script'</span><span class="s2">, </span><span class="s3">'img'</span><span class="s2">, </span><span class="s3">'video'</span><span class="s2">, </span><span class="s3">'audio'</span><span class="s2">, </span><span class="s3">'link'</span><span class="s2">, </span><span class="s3">'image'</span><span class="s2">],</span>
+  <span class="s2">displaystyle: [</span><span class="s3">'math'</span><span class="s2">],</span>
+  <span class="s0">// https://html.spec.whatwg.org/multipage/links.html#downloading-resources</span>
+  <span class="s2">download: [</span><span class="s3">'a'</span><span class="s2">, </span><span class="s3">'area'</span><span class="s2">],</span>
+  <span class="s2">fill: [ </span><span class="s0">// https://developer.mozilla.org/en-US/docs/Web/SVG/Attribute/fill</span>
+    <span class="s0">// Fill color</span>
+    <span class="s3">'altGlyph'</span><span class="s2">,</span>
+    <span class="s3">'circle'</span><span class="s2">,</span>
+    <span class="s3">'ellipse'</span><span class="s2">,</span>
+    <span class="s3">'g'</span><span class="s2">,</span>
+    <span class="s3">'line'</span><span class="s2">,</span>
+    <span class="s3">'marker'</span><span class="s2">,</span>
+    <span class="s3">'mask'</span><span class="s2">,</span>
+    <span class="s3">'path'</span><span class="s2">,</span>
+    <span class="s3">'polygon'</span><span class="s2">,</span>
+    <span class="s3">'polyline'</span><span class="s2">,</span>
+    <span class="s3">'rect'</span><span class="s2">,</span>
+    <span class="s3">'svg'</span><span class="s2">,</span>
+    <span class="s3">'symbol'</span><span class="s2">,</span>
+    <span class="s3">'text'</span><span class="s2">,</span>
+    <span class="s3">'textPath'</span><span class="s2">,</span>
+    <span class="s3">'tref'</span><span class="s2">,</span>
+    <span class="s3">'tspan'</span><span class="s2">,</span>
+    <span class="s3">'use'</span><span class="s2">,</span>
+    <span class="s0">// Animation final state</span>
+    <span class="s3">'animate'</span><span class="s2">,</span>
+    <span class="s3">'animateColor'</span><span class="s2">,</span>
+    <span class="s3">'animateMotion'</span><span class="s2">,</span>
+    <span class="s3">'animateTransform'</span><span class="s2">,</span>
+    <span class="s3">'set'</span><span class="s2">,</span>
+  <span class="s2">],</span>
+  <span class="s2">focusable: [</span><span class="s3">'svg'</span><span class="s2">],</span>
+  <span class="s2">imageSizes: [</span><span class="s3">'link'</span><span class="s2">],</span>
+  <span class="s2">imageSrcSet: [</span><span class="s3">'link'</span><span class="s2">],</span>
+  <span class="s2">property: [</span><span class="s3">'meta'</span><span class="s2">],</span>
+  <span class="s2">viewBox: [</span><span class="s3">'marker'</span><span class="s2">, </span><span class="s3">'pattern'</span><span class="s2">, </span><span class="s3">'svg'</span><span class="s2">, </span><span class="s3">'symbol'</span><span class="s2">, </span><span class="s3">'view'</span><span class="s2">],</span>
+  <span class="s2">as: [</span><span class="s3">'link'</span><span class="s2">],</span>
+  <span class="s2">align: [</span><span class="s3">'applet'</span><span class="s2">, </span><span class="s3">'caption'</span><span class="s2">, </span><span class="s3">'col'</span><span class="s2">, </span><span class="s3">'colgroup'</span><span class="s2">, </span><span class="s3">'hr'</span><span class="s2">, </span><span class="s3">'iframe'</span><span class="s2">, </span><span class="s3">'img'</span><span class="s2">, </span><span class="s3">'table'</span><span class="s2">, </span><span class="s3">'tbody'</span><span class="s2">, </span><span class="s3">'td'</span><span class="s2">, </span><span class="s3">'tfoot'</span><span class="s2">, </span><span class="s3">'th'</span><span class="s2">, </span><span class="s3">'thead'</span><span class="s2">, </span><span class="s3">'tr'</span><span class="s2">], </span><span class="s0">// deprecated, but known</span>
+  <span class="s2">valign: [</span><span class="s3">'tr'</span><span class="s2">, </span><span class="s3">'td'</span><span class="s2">, </span><span class="s3">'th'</span><span class="s2">, </span><span class="s3">'thead'</span><span class="s2">, </span><span class="s3">'tbody'</span><span class="s2">, </span><span class="s3">'tfoot'</span><span class="s2">, </span><span class="s3">'colgroup'</span><span class="s2">, </span><span class="s3">'col'</span><span class="s2">], </span><span class="s0">// deprecated, but known</span>
+  <span class="s2">noModule: [</span><span class="s3">'script'</span><span class="s2">],</span>
+  <span class="s0">// Media events allowed only on audio and video tags, see https://github.com/facebook/react/blob/256aefbea1449869620fb26f6ec695536ab453f5/CHANGELOG.md#notable-enhancements</span>
+  <span class="s2">onAbort: [</span><span class="s3">'audio'</span><span class="s2">, </span><span class="s3">'video'</span><span class="s2">],</span>
+  <span class="s2">onCancel: [</span><span class="s3">'dialog'</span><span class="s2">],</span>
+  <span class="s2">onCanPlay: [</span><span class="s3">'audio'</span><span class="s2">, </span><span class="s3">'video'</span><span class="s2">],</span>
+  <span class="s2">onCanPlayThrough: [</span><span class="s3">'audio'</span><span class="s2">, </span><span class="s3">'video'</span><span class="s2">],</span>
+  <span class="s2">onClose: [</span><span class="s3">'dialog'</span><span class="s2">],</span>
+  <span class="s2">onDurationChange: [</span><span class="s3">'audio'</span><span class="s2">, </span><span class="s3">'video'</span><span class="s2">],</span>
+  <span class="s2">onEmptied: [</span><span class="s3">'audio'</span><span class="s2">, </span><span class="s3">'video'</span><span class="s2">],</span>
+  <span class="s2">onEncrypted: [</span><span class="s3">'audio'</span><span class="s2">, </span><span class="s3">'video'</span><span class="s2">],</span>
+  <span class="s2">onEnded: [</span><span class="s3">'audio'</span><span class="s2">, </span><span class="s3">'video'</span><span class="s2">],</span>
+  <span class="s2">onError: [</span><span class="s3">'audio'</span><span class="s2">, </span><span class="s3">'video'</span><span class="s2">, </span><span class="s3">'img'</span><span class="s2">, </span><span class="s3">'link'</span><span class="s2">, </span><span class="s3">'source'</span><span class="s2">, </span><span class="s3">'script'</span><span class="s2">, </span><span class="s3">'picture'</span><span class="s2">, </span><span class="s3">'iframe'</span><span class="s2">],</span>
+  <span class="s2">onLoad: [</span><span class="s3">'script'</span><span class="s2">, </span><span class="s3">'img'</span><span class="s2">, </span><span class="s3">'link'</span><span class="s2">, </span><span class="s3">'picture'</span><span class="s2">, </span><span class="s3">'iframe'</span><span class="s2">, </span><span class="s3">'object'</span><span class="s2">, </span><span class="s3">'source'</span><span class="s2">],</span>
+  <span class="s2">onLoadedData: [</span><span class="s3">'audio'</span><span class="s2">, </span><span class="s3">'video'</span><span class="s2">],</span>
+  <span class="s2">onLoadedMetadata: [</span><span class="s3">'audio'</span><span class="s2">, </span><span class="s3">'video'</span><span class="s2">],</span>
+  <span class="s2">onLoadStart: [</span><span class="s3">'audio'</span><span class="s2">, </span><span class="s3">'video'</span><span class="s2">],</span>
+  <span class="s2">onPause: [</span><span class="s3">'audio'</span><span class="s2">, </span><span class="s3">'video'</span><span class="s2">],</span>
+  <span class="s2">onPlay: [</span><span class="s3">'audio'</span><span class="s2">, </span><span class="s3">'video'</span><span class="s2">],</span>
+  <span class="s2">onPlaying: [</span><span class="s3">'audio'</span><span class="s2">, </span><span class="s3">'video'</span><span class="s2">],</span>
+  <span class="s2">onProgress: [</span><span class="s3">'audio'</span><span class="s2">, </span><span class="s3">'video'</span><span class="s2">],</span>
+  <span class="s2">onRateChange: [</span><span class="s3">'audio'</span><span class="s2">, </span><span class="s3">'video'</span><span class="s2">],</span>
+  <span class="s2">onResize: [</span><span class="s3">'audio'</span><span class="s2">, </span><span class="s3">'video'</span><span class="s2">],</span>
+  <span class="s2">onSeeked: [</span><span class="s3">'audio'</span><span class="s2">, </span><span class="s3">'video'</span><span class="s2">],</span>
+  <span class="s2">onSeeking: [</span><span class="s3">'audio'</span><span class="s2">, </span><span class="s3">'video'</span><span class="s2">],</span>
+  <span class="s2">onStalled: [</span><span class="s3">'audio'</span><span class="s2">, </span><span class="s3">'video'</span><span class="s2">],</span>
+  <span class="s2">onSuspend: [</span><span class="s3">'audio'</span><span class="s2">, </span><span class="s3">'video'</span><span class="s2">],</span>
+  <span class="s2">onTimeUpdate: [</span><span class="s3">'audio'</span><span class="s2">, </span><span class="s3">'video'</span><span class="s2">],</span>
+  <span class="s2">onVolumeChange: [</span><span class="s3">'audio'</span><span class="s2">, </span><span class="s3">'video'</span><span class="s2">],</span>
+  <span class="s2">onWaiting: [</span><span class="s3">'audio'</span><span class="s2">, </span><span class="s3">'video'</span><span class="s2">],</span>
+  <span class="s2">autoPictureInPicture: [</span><span class="s3">'video'</span><span class="s2">],</span>
+  <span class="s2">controls: [</span><span class="s3">'audio'</span><span class="s2">, </span><span class="s3">'video'</span><span class="s2">],</span>
+  <span class="s2">controlsList: [</span><span class="s3">'audio'</span><span class="s2">, </span><span class="s3">'video'</span><span class="s2">],</span>
+  <span class="s2">disablePictureInPicture: [</span><span class="s3">'video'</span><span class="s2">],</span>
+  <span class="s2">disableRemotePlayback: [</span><span class="s3">'audio'</span><span class="s2">, </span><span class="s3">'video'</span><span class="s2">],</span>
+  <span class="s2">loop: [</span><span class="s3">'audio'</span><span class="s2">, </span><span class="s3">'video'</span><span class="s2">],</span>
+  <span class="s2">muted: [</span><span class="s3">'audio'</span><span class="s2">, </span><span class="s3">'video'</span><span class="s2">],</span>
+  <span class="s2">playsInline: [</span><span class="s3">'video'</span><span class="s2">],</span>
+  <span class="s2">allowFullScreen: [</span><span class="s3">'iframe'</span><span class="s2">, </span><span class="s3">'video'</span><span class="s2">],</span>
+  <span class="s2">webkitAllowFullScreen: [</span><span class="s3">'iframe'</span><span class="s2">, </span><span class="s3">'video'</span><span class="s2">],</span>
+  <span class="s2">mozAllowFullScreen: [</span><span class="s3">'iframe'</span><span class="s2">, </span><span class="s3">'video'</span><span class="s2">],</span>
+  <span class="s2">poster: [</span><span class="s3">'video'</span><span class="s2">],</span>
+  <span class="s2">preload: [</span><span class="s3">'audio'</span><span class="s2">, </span><span class="s3">'video'</span><span class="s2">],</span>
+  <span class="s2">scrolling: [</span><span class="s3">'iframe'</span><span class="s2">],</span>
+  <span class="s2">returnValue: [</span><span class="s3">'dialog'</span><span class="s2">],</span>
+  <span class="s2">webkitDirectory: [</span><span class="s3">'input'</span><span class="s2">],</span>
+  <span class="s2">shadowrootmode: [</span><span class="s3">'template'</span><span class="s2">],</span>
+  <span class="s2">shadowrootclonable: [</span><span class="s3">'template'</span><span class="s2">],</span>
+  <span class="s2">shadowrootdelegatesfocus: [</span><span class="s3">'template'</span><span class="s2">],</span>
+  <span class="s2">shadowrootserializable: [</span><span class="s3">'template'</span><span class="s2">],</span>
+  <span class="s3">'transform-origin'</span><span class="s2">: [</span><span class="s3">'rect'</span><span class="s2">],</span>
+<span class="s2">};</span>
+
+<span class="s4">const </span><span class="s2">SVGDOM_ATTRIBUTE_NAMES = {</span>
+  <span class="s3">'accent-height'</span><span class="s2">: </span><span class="s3">'accentHeight'</span><span class="s2">,</span>
+  <span class="s3">'alignment-baseline'</span><span class="s2">: </span><span class="s3">'alignmentBaseline'</span><span class="s2">,</span>
+  <span class="s3">'arabic-form'</span><span class="s2">: </span><span class="s3">'arabicForm'</span><span class="s2">,</span>
+  <span class="s3">'baseline-shift'</span><span class="s2">: </span><span class="s3">'baselineShift'</span><span class="s2">,</span>
+  <span class="s3">'cap-height'</span><span class="s2">: </span><span class="s3">'capHeight'</span><span class="s2">,</span>
+  <span class="s3">'clip-path'</span><span class="s2">: </span><span class="s3">'clipPath'</span><span class="s2">,</span>
+  <span class="s3">'clip-rule'</span><span class="s2">: </span><span class="s3">'clipRule'</span><span class="s2">,</span>
+  <span class="s3">'color-interpolation'</span><span class="s2">: </span><span class="s3">'colorInterpolation'</span><span class="s2">,</span>
+  <span class="s3">'color-interpolation-filters'</span><span class="s2">: </span><span class="s3">'colorInterpolationFilters'</span><span class="s2">,</span>
+  <span class="s3">'color-profile'</span><span class="s2">: </span><span class="s3">'colorProfile'</span><span class="s2">,</span>
+  <span class="s3">'color-rendering'</span><span class="s2">: </span><span class="s3">'colorRendering'</span><span class="s2">,</span>
+  <span class="s3">'dominant-baseline'</span><span class="s2">: </span><span class="s3">'dominantBaseline'</span><span class="s2">,</span>
+  <span class="s3">'enable-background'</span><span class="s2">: </span><span class="s3">'enableBackground'</span><span class="s2">,</span>
+  <span class="s3">'fill-opacity'</span><span class="s2">: </span><span class="s3">'fillOpacity'</span><span class="s2">,</span>
+  <span class="s3">'fill-rule'</span><span class="s2">: </span><span class="s3">'fillRule'</span><span class="s2">,</span>
+  <span class="s3">'flood-color'</span><span class="s2">: </span><span class="s3">'floodColor'</span><span class="s2">,</span>
+  <span class="s3">'flood-opacity'</span><span class="s2">: </span><span class="s3">'floodOpacity'</span><span class="s2">,</span>
+  <span class="s3">'font-family'</span><span class="s2">: </span><span class="s3">'fontFamily'</span><span class="s2">,</span>
+  <span class="s3">'font-size'</span><span class="s2">: </span><span class="s3">'fontSize'</span><span class="s2">,</span>
+  <span class="s3">'font-size-adjust'</span><span class="s2">: </span><span class="s3">'fontSizeAdjust'</span><span class="s2">,</span>
+  <span class="s3">'font-stretch'</span><span class="s2">: </span><span class="s3">'fontStretch'</span><span class="s2">,</span>
+  <span class="s3">'font-style'</span><span class="s2">: </span><span class="s3">'fontStyle'</span><span class="s2">,</span>
+  <span class="s3">'font-variant'</span><span class="s2">: </span><span class="s3">'fontVariant'</span><span class="s2">,</span>
+  <span class="s3">'font-weight'</span><span class="s2">: </span><span class="s3">'fontWeight'</span><span class="s2">,</span>
+  <span class="s3">'glyph-name'</span><span class="s2">: </span><span class="s3">'glyphName'</span><span class="s2">,</span>
+  <span class="s3">'glyph-orientation-horizontal'</span><span class="s2">: </span><span class="s3">'glyphOrientationHorizontal'</span><span class="s2">,</span>
+  <span class="s3">'glyph-orientation-vertical'</span><span class="s2">: </span><span class="s3">'glyphOrientationVertical'</span><span class="s2">,</span>
+  <span class="s3">'horiz-adv-x'</span><span class="s2">: </span><span class="s3">'horizAdvX'</span><span class="s2">,</span>
+  <span class="s3">'horiz-origin-x'</span><span class="s2">: </span><span class="s3">'horizOriginX'</span><span class="s2">,</span>
+  <span class="s3">'image-rendering'</span><span class="s2">: </span><span class="s3">'imageRendering'</span><span class="s2">,</span>
+  <span class="s3">'letter-spacing'</span><span class="s2">: </span><span class="s3">'letterSpacing'</span><span class="s2">,</span>
+  <span class="s3">'lighting-color'</span><span class="s2">: </span><span class="s3">'lightingColor'</span><span class="s2">,</span>
+  <span class="s3">'marker-end'</span><span class="s2">: </span><span class="s3">'markerEnd'</span><span class="s2">,</span>
+  <span class="s3">'marker-mid'</span><span class="s2">: </span><span class="s3">'markerMid'</span><span class="s2">,</span>
+  <span class="s3">'marker-start'</span><span class="s2">: </span><span class="s3">'markerStart'</span><span class="s2">,</span>
+  <span class="s3">'overline-position'</span><span class="s2">: </span><span class="s3">'overlinePosition'</span><span class="s2">,</span>
+  <span class="s3">'overline-thickness'</span><span class="s2">: </span><span class="s3">'overlineThickness'</span><span class="s2">,</span>
+  <span class="s3">'paint-order'</span><span class="s2">: </span><span class="s3">'paintOrder'</span><span class="s2">,</span>
+  <span class="s3">'panose-1'</span><span class="s2">: </span><span class="s3">'panose1'</span><span class="s2">,</span>
+  <span class="s3">'pointer-events'</span><span class="s2">: </span><span class="s3">'pointerEvents'</span><span class="s2">,</span>
+  <span class="s3">'rendering-intent'</span><span class="s2">: </span><span class="s3">'renderingIntent'</span><span class="s2">,</span>
+  <span class="s3">'shape-rendering'</span><span class="s2">: </span><span class="s3">'shapeRendering'</span><span class="s2">,</span>
+  <span class="s3">'stop-color'</span><span class="s2">: </span><span class="s3">'stopColor'</span><span class="s2">,</span>
+  <span class="s3">'stop-opacity'</span><span class="s2">: </span><span class="s3">'stopOpacity'</span><span class="s2">,</span>
+  <span class="s3">'strikethrough-position'</span><span class="s2">: </span><span class="s3">'strikethroughPosition'</span><span class="s2">,</span>
+  <span class="s3">'strikethrough-thickness'</span><span class="s2">: </span><span class="s3">'strikethroughThickness'</span><span class="s2">,</span>
+  <span class="s3">'stroke-dasharray'</span><span class="s2">: </span><span class="s3">'strokeDasharray'</span><span class="s2">,</span>
+  <span class="s3">'stroke-dashoffset'</span><span class="s2">: </span><span class="s3">'strokeDashoffset'</span><span class="s2">,</span>
+  <span class="s3">'stroke-linecap'</span><span class="s2">: </span><span class="s3">'strokeLinecap'</span><span class="s2">,</span>
+  <span class="s3">'stroke-linejoin'</span><span class="s2">: </span><span class="s3">'strokeLinejoin'</span><span class="s2">,</span>
+  <span class="s3">'stroke-miterlimit'</span><span class="s2">: </span><span class="s3">'strokeMiterlimit'</span><span class="s2">,</span>
+  <span class="s3">'stroke-opacity'</span><span class="s2">: </span><span class="s3">'strokeOpacity'</span><span class="s2">,</span>
+  <span class="s3">'stroke-width'</span><span class="s2">: </span><span class="s3">'strokeWidth'</span><span class="s2">,</span>
+  <span class="s3">'text-anchor'</span><span class="s2">: </span><span class="s3">'textAnchor'</span><span class="s2">,</span>
+  <span class="s3">'text-decoration'</span><span class="s2">: </span><span class="s3">'textDecoration'</span><span class="s2">,</span>
+  <span class="s3">'text-rendering'</span><span class="s2">: </span><span class="s3">'textRendering'</span><span class="s2">,</span>
+  <span class="s3">'underline-position'</span><span class="s2">: </span><span class="s3">'underlinePosition'</span><span class="s2">,</span>
+  <span class="s3">'underline-thickness'</span><span class="s2">: </span><span class="s3">'underlineThickness'</span><span class="s2">,</span>
+  <span class="s3">'unicode-bidi'</span><span class="s2">: </span><span class="s3">'unicodeBidi'</span><span class="s2">,</span>
+  <span class="s3">'unicode-range'</span><span class="s2">: </span><span class="s3">'unicodeRange'</span><span class="s2">,</span>
+  <span class="s3">'units-per-em'</span><span class="s2">: </span><span class="s3">'unitsPerEm'</span><span class="s2">,</span>
+  <span class="s3">'v-alphabetic'</span><span class="s2">: </span><span class="s3">'vAlphabetic'</span><span class="s2">,</span>
+  <span class="s3">'v-hanging'</span><span class="s2">: </span><span class="s3">'vHanging'</span><span class="s2">,</span>
+  <span class="s3">'v-ideographic'</span><span class="s2">: </span><span class="s3">'vIdeographic'</span><span class="s2">,</span>
+  <span class="s3">'v-mathematical'</span><span class="s2">: </span><span class="s3">'vMathematical'</span><span class="s2">,</span>
+  <span class="s3">'vector-effect'</span><span class="s2">: </span><span class="s3">'vectorEffect'</span><span class="s2">,</span>
+  <span class="s3">'vert-adv-y'</span><span class="s2">: </span><span class="s3">'vertAdvY'</span><span class="s2">,</span>
+  <span class="s3">'vert-origin-x'</span><span class="s2">: </span><span class="s3">'vertOriginX'</span><span class="s2">,</span>
+  <span class="s3">'vert-origin-y'</span><span class="s2">: </span><span class="s3">'vertOriginY'</span><span class="s2">,</span>
+  <span class="s3">'word-spacing'</span><span class="s2">: </span><span class="s3">'wordSpacing'</span><span class="s2">,</span>
+  <span class="s3">'writing-mode'</span><span class="s2">: </span><span class="s3">'writingMode'</span><span class="s2">,</span>
+  <span class="s3">'x-height'</span><span class="s2">: </span><span class="s3">'xHeight'</span><span class="s2">,</span>
+  <span class="s3">'xlink:actuate'</span><span class="s2">: </span><span class="s3">'xlinkActuate'</span><span class="s2">,</span>
+  <span class="s3">'xlink:arcrole'</span><span class="s2">: </span><span class="s3">'xlinkArcrole'</span><span class="s2">,</span>
+  <span class="s3">'xlink:href'</span><span class="s2">: </span><span class="s3">'xlinkHref'</span><span class="s2">,</span>
+  <span class="s3">'xlink:role'</span><span class="s2">: </span><span class="s3">'xlinkRole'</span><span class="s2">,</span>
+  <span class="s3">'xlink:show'</span><span class="s2">: </span><span class="s3">'xlinkShow'</span><span class="s2">,</span>
+  <span class="s3">'xlink:title'</span><span class="s2">: </span><span class="s3">'xlinkTitle'</span><span class="s2">,</span>
+  <span class="s3">'xlink:type'</span><span class="s2">: </span><span class="s3">'xlinkType'</span><span class="s2">,</span>
+  <span class="s3">'xml:base'</span><span class="s2">: </span><span class="s3">'xmlBase'</span><span class="s2">,</span>
+  <span class="s3">'xml:lang'</span><span class="s2">: </span><span class="s3">'xmlLang'</span><span class="s2">,</span>
+  <span class="s3">'xml:space'</span><span class="s2">: </span><span class="s3">'xmlSpace'</span><span class="s2">,</span>
+<span class="s2">};</span>
+
+<span class="s4">const </span><span class="s2">DOM_PROPERTY_NAMES_ONE_WORD = [</span>
+  <span class="s0">// Global attributes - can be used on any HTML/DOM element</span>
+  <span class="s0">// See https://developer.mozilla.org/en-US/docs/Web/HTML/Global_attributes</span>
+  <span class="s3">'dir'</span><span class="s2">, </span><span class="s3">'draggable'</span><span class="s2">, </span><span class="s3">'hidden'</span><span class="s2">, </span><span class="s3">'id'</span><span class="s2">, </span><span class="s3">'lang'</span><span class="s2">, </span><span class="s3">'nonce'</span><span class="s2">, </span><span class="s3">'part'</span><span class="s2">, </span><span class="s3">'slot'</span><span class="s2">, </span><span class="s3">'style'</span><span class="s2">, </span><span class="s3">'title'</span><span class="s2">, </span><span class="s3">'translate'</span><span class="s2">, </span><span class="s3">'inert'</span><span class="s2">,</span>
+  <span class="s0">// Element specific attributes</span>
+  <span class="s0">// See https://developer.mozilla.org/en-US/docs/Web/HTML/Attributes (includes global attributes too)</span>
+  <span class="s0">// To be considered if these should be added also to ATTRIBUTE_TAGS_MAP</span>
+  <span class="s3">'accept'</span><span class="s2">, </span><span class="s3">'action'</span><span class="s2">, </span><span class="s3">'allow'</span><span class="s2">, </span><span class="s3">'alt'</span><span class="s2">, </span><span class="s3">'as'</span><span class="s2">, </span><span class="s3">'async'</span><span class="s2">, </span><span class="s3">'buffered'</span><span class="s2">, </span><span class="s3">'capture'</span><span class="s2">, </span><span class="s3">'challenge'</span><span class="s2">, </span><span class="s3">'cite'</span><span class="s2">, </span><span class="s3">'code'</span><span class="s2">, </span><span class="s3">'cols'</span><span class="s2">,</span>
+  <span class="s3">'content'</span><span class="s2">, </span><span class="s3">'coords'</span><span class="s2">, </span><span class="s3">'csp'</span><span class="s2">, </span><span class="s3">'data'</span><span class="s2">, </span><span class="s3">'decoding'</span><span class="s2">, </span><span class="s3">'default'</span><span class="s2">, </span><span class="s3">'defer'</span><span class="s2">, </span><span class="s3">'disabled'</span><span class="s2">, </span><span class="s3">'form'</span><span class="s2">,</span>
+  <span class="s3">'headers'</span><span class="s2">, </span><span class="s3">'height'</span><span class="s2">, </span><span class="s3">'high'</span><span class="s2">, </span><span class="s3">'href'</span><span class="s2">, </span><span class="s3">'icon'</span><span class="s2">, </span><span class="s3">'importance'</span><span class="s2">, </span><span class="s3">'integrity'</span><span class="s2">, </span><span class="s3">'kind'</span><span class="s2">, </span><span class="s3">'label'</span><span class="s2">,</span>
+  <span class="s3">'language'</span><span class="s2">, </span><span class="s3">'loading'</span><span class="s2">, </span><span class="s3">'list'</span><span class="s2">, </span><span class="s3">'loop'</span><span class="s2">, </span><span class="s3">'low'</span><span class="s2">, </span><span class="s3">'manifest'</span><span class="s2">, </span><span class="s3">'max'</span><span class="s2">, </span><span class="s3">'media'</span><span class="s2">, </span><span class="s3">'method'</span><span class="s2">, </span><span class="s3">'min'</span><span class="s2">, </span><span class="s3">'multiple'</span><span class="s2">, </span><span class="s3">'muted'</span><span class="s2">,</span>
+  <span class="s3">'name'</span><span class="s2">, </span><span class="s3">'open'</span><span class="s2">, </span><span class="s3">'optimum'</span><span class="s2">, </span><span class="s3">'pattern'</span><span class="s2">, </span><span class="s3">'ping'</span><span class="s2">, </span><span class="s3">'placeholder'</span><span class="s2">, </span><span class="s3">'poster'</span><span class="s2">, </span><span class="s3">'preload'</span><span class="s2">, </span><span class="s3">'profile'</span><span class="s2">,</span>
+  <span class="s3">'rel'</span><span class="s2">, </span><span class="s3">'required'</span><span class="s2">, </span><span class="s3">'reversed'</span><span class="s2">, </span><span class="s3">'role'</span><span class="s2">, </span><span class="s3">'rows'</span><span class="s2">, </span><span class="s3">'sandbox'</span><span class="s2">, </span><span class="s3">'scope'</span><span class="s2">, </span><span class="s3">'seamless'</span><span class="s2">, </span><span class="s3">'selected'</span><span class="s2">, </span><span class="s3">'shape'</span><span class="s2">, </span><span class="s3">'size'</span><span class="s2">, </span><span class="s3">'sizes'</span><span class="s2">,</span>
+  <span class="s3">'span'</span><span class="s2">, </span><span class="s3">'src'</span><span class="s2">, </span><span class="s3">'start'</span><span class="s2">, </span><span class="s3">'step'</span><span class="s2">, </span><span class="s3">'summary'</span><span class="s2">, </span><span class="s3">'target'</span><span class="s2">, </span><span class="s3">'type'</span><span class="s2">, </span><span class="s3">'value'</span><span class="s2">, </span><span class="s3">'width'</span><span class="s2">, </span><span class="s3">'wmode'</span><span class="s2">, </span><span class="s3">'wrap'</span><span class="s2">,</span>
+  <span class="s0">// SVG attributes</span>
+  <span class="s0">// See https://developer.mozilla.org/en-US/docs/Web/SVG/Attribute</span>
+  <span class="s3">'accumulate'</span><span class="s2">, </span><span class="s3">'additive'</span><span class="s2">, </span><span class="s3">'alphabetic'</span><span class="s2">, </span><span class="s3">'amplitude'</span><span class="s2">, </span><span class="s3">'ascent'</span><span class="s2">, </span><span class="s3">'azimuth'</span><span class="s2">, </span><span class="s3">'bbox'</span><span class="s2">, </span><span class="s3">'begin'</span><span class="s2">,</span>
+  <span class="s3">'bias'</span><span class="s2">, </span><span class="s3">'by'</span><span class="s2">, </span><span class="s3">'clip'</span><span class="s2">, </span><span class="s3">'color'</span><span class="s2">, </span><span class="s3">'cursor'</span><span class="s2">, </span><span class="s3">'cx'</span><span class="s2">, </span><span class="s3">'cy'</span><span class="s2">, </span><span class="s3">'d'</span><span class="s2">, </span><span class="s3">'decelerate'</span><span class="s2">, </span><span class="s3">'descent'</span><span class="s2">, </span><span class="s3">'direction'</span><span class="s2">,</span>
+  <span class="s3">'display'</span><span class="s2">, </span><span class="s3">'divisor'</span><span class="s2">, </span><span class="s3">'dur'</span><span class="s2">, </span><span class="s3">'dx'</span><span class="s2">, </span><span class="s3">'dy'</span><span class="s2">, </span><span class="s3">'elevation'</span><span class="s2">, </span><span class="s3">'end'</span><span class="s2">, </span><span class="s3">'exponent'</span><span class="s2">, </span><span class="s3">'fill'</span><span class="s2">, </span><span class="s3">'filter'</span><span class="s2">,</span>
+  <span class="s3">'format'</span><span class="s2">, </span><span class="s3">'from'</span><span class="s2">, </span><span class="s3">'fr'</span><span class="s2">, </span><span class="s3">'fx'</span><span class="s2">, </span><span class="s3">'fy'</span><span class="s2">, </span><span class="s3">'g1'</span><span class="s2">, </span><span class="s3">'g2'</span><span class="s2">, </span><span class="s3">'hanging'</span><span class="s2">, </span><span class="s3">'height'</span><span class="s2">, </span><span class="s3">'hreflang'</span><span class="s2">, </span><span class="s3">'ideographic'</span><span class="s2">,</span>
+  <span class="s3">'in'</span><span class="s2">, </span><span class="s3">'in2'</span><span class="s2">, </span><span class="s3">'intercept'</span><span class="s2">, </span><span class="s3">'k'</span><span class="s2">, </span><span class="s3">'k1'</span><span class="s2">, </span><span class="s3">'k2'</span><span class="s2">, </span><span class="s3">'k3'</span><span class="s2">, </span><span class="s3">'k4'</span><span class="s2">, </span><span class="s3">'kerning'</span><span class="s2">, </span><span class="s3">'local'</span><span class="s2">, </span><span class="s3">'mask'</span><span class="s2">, </span><span class="s3">'mode'</span><span class="s2">,</span>
+  <span class="s3">'offset'</span><span class="s2">, </span><span class="s3">'opacity'</span><span class="s2">, </span><span class="s3">'operator'</span><span class="s2">, </span><span class="s3">'order'</span><span class="s2">, </span><span class="s3">'orient'</span><span class="s2">, </span><span class="s3">'orientation'</span><span class="s2">, </span><span class="s3">'origin'</span><span class="s2">, </span><span class="s3">'overflow'</span><span class="s2">, </span><span class="s3">'path'</span><span class="s2">,</span>
+  <span class="s3">'ping'</span><span class="s2">, </span><span class="s3">'points'</span><span class="s2">, </span><span class="s3">'r'</span><span class="s2">, </span><span class="s3">'radius'</span><span class="s2">, </span><span class="s3">'rel'</span><span class="s2">, </span><span class="s3">'restart'</span><span class="s2">, </span><span class="s3">'result'</span><span class="s2">, </span><span class="s3">'rotate'</span><span class="s2">, </span><span class="s3">'rx'</span><span class="s2">, </span><span class="s3">'ry'</span><span class="s2">, </span><span class="s3">'scale'</span><span class="s2">,</span>
+  <span class="s3">'seed'</span><span class="s2">, </span><span class="s3">'slope'</span><span class="s2">, </span><span class="s3">'spacing'</span><span class="s2">, </span><span class="s3">'speed'</span><span class="s2">, </span><span class="s3">'stemh'</span><span class="s2">, </span><span class="s3">'stemv'</span><span class="s2">, </span><span class="s3">'string'</span><span class="s2">, </span><span class="s3">'stroke'</span><span class="s2">, </span><span class="s3">'to'</span><span class="s2">, </span><span class="s3">'transform'</span><span class="s2">,</span>
+  <span class="s3">'u1'</span><span class="s2">, </span><span class="s3">'u2'</span><span class="s2">, </span><span class="s3">'unicode'</span><span class="s2">, </span><span class="s3">'values'</span><span class="s2">, </span><span class="s3">'version'</span><span class="s2">, </span><span class="s3">'visibility'</span><span class="s2">, </span><span class="s3">'widths'</span><span class="s2">, </span><span class="s3">'x'</span><span class="s2">, </span><span class="s3">'x1'</span><span class="s2">, </span><span class="s3">'x2'</span><span class="s2">, </span><span class="s3">'xmlns'</span><span class="s2">,</span>
+  <span class="s3">'y'</span><span class="s2">, </span><span class="s3">'y1'</span><span class="s2">, </span><span class="s3">'y2'</span><span class="s2">, </span><span class="s3">'z'</span><span class="s2">,</span>
+  <span class="s0">// OpenGraph meta tag attributes</span>
+  <span class="s3">'property'</span><span class="s2">,</span>
+  <span class="s0">// React specific attributes</span>
+  <span class="s3">'ref'</span><span class="s2">, </span><span class="s3">'key'</span><span class="s2">, </span><span class="s3">'children'</span><span class="s2">,</span>
+  <span class="s0">// Non-standard</span>
+  <span class="s3">'results'</span><span class="s2">, </span><span class="s3">'security'</span><span class="s2">,</span>
+  <span class="s0">// Video specific</span>
+  <span class="s3">'controls'</span><span class="s2">,</span>
+  <span class="s0">// popovers</span>
+  <span class="s3">'popover'</span><span class="s2">, </span><span class="s3">'popovertarget'</span><span class="s2">, </span><span class="s3">'popovertargetaction'</span><span class="s2">,</span>
+<span class="s2">];</span>
+
+<span class="s4">const </span><span class="s2">DOM_PROPERTY_NAMES_TWO_WORDS = [</span>
+  <span class="s0">// Global attributes - can be used on any HTML/DOM element</span>
+  <span class="s0">// See https://developer.mozilla.org/en-US/docs/Web/HTML/Global_attributes</span>
+  <span class="s3">'accessKey'</span><span class="s2">, </span><span class="s3">'autoCapitalize'</span><span class="s2">, </span><span class="s3">'autoFocus'</span><span class="s2">, </span><span class="s3">'contentEditable'</span><span class="s2">, </span><span class="s3">'enterKeyHint'</span><span class="s2">, </span><span class="s3">'exportParts'</span><span class="s2">,</span>
+  <span class="s3">'inputMode'</span><span class="s2">, </span><span class="s3">'itemID'</span><span class="s2">, </span><span class="s3">'itemRef'</span><span class="s2">, </span><span class="s3">'itemProp'</span><span class="s2">, </span><span class="s3">'itemScope'</span><span class="s2">, </span><span class="s3">'itemType'</span><span class="s2">, </span><span class="s3">'spellCheck'</span><span class="s2">, </span><span class="s3">'tabIndex'</span><span class="s2">,</span>
+  <span class="s0">// Element specific attributes</span>
+  <span class="s0">// See https://developer.mozilla.org/en-US/docs/Web/HTML/Attributes (includes global attributes too)</span>
+  <span class="s0">// To be considered if these should be added also to ATTRIBUTE_TAGS_MAP</span>
+  <span class="s3">'acceptCharset'</span><span class="s2">, </span><span class="s3">'autoComplete'</span><span class="s2">, </span><span class="s3">'autoPlay'</span><span class="s2">, </span><span class="s3">'border'</span><span class="s2">, </span><span class="s3">'cellPadding'</span><span class="s2">, </span><span class="s3">'cellSpacing'</span><span class="s2">, </span><span class="s3">'classID'</span><span class="s2">, </span><span class="s3">'codeBase'</span><span class="s2">,</span>
+  <span class="s3">'colSpan'</span><span class="s2">, </span><span class="s3">'contextMenu'</span><span class="s2">, </span><span class="s3">'dateTime'</span><span class="s2">, </span><span class="s3">'encType'</span><span class="s2">, </span><span class="s3">'formAction'</span><span class="s2">, </span><span class="s3">'formEncType'</span><span class="s2">, </span><span class="s3">'formMethod'</span><span class="s2">, </span><span class="s3">'formNoValidate'</span><span class="s2">, </span><span class="s3">'formTarget'</span><span class="s2">,</span>
+  <span class="s3">'frameBorder'</span><span class="s2">, </span><span class="s3">'hrefLang'</span><span class="s2">, </span><span class="s3">'httpEquiv'</span><span class="s2">, </span><span class="s3">'imageSizes'</span><span class="s2">, </span><span class="s3">'imageSrcSet'</span><span class="s2">, </span><span class="s3">'isMap'</span><span class="s2">, </span><span class="s3">'keyParams'</span><span class="s2">, </span><span class="s3">'keyType'</span><span class="s2">, </span><span class="s3">'marginHeight'</span><span class="s2">, </span><span class="s3">'marginWidth'</span><span class="s2">,</span>
+  <span class="s3">'maxLength'</span><span class="s2">, </span><span class="s3">'mediaGroup'</span><span class="s2">, </span><span class="s3">'minLength'</span><span class="s2">, </span><span class="s3">'noValidate'</span><span class="s2">, </span><span class="s3">'onAnimationEnd'</span><span class="s2">, </span><span class="s3">'onAnimationIteration'</span><span class="s2">, </span><span class="s3">'onAnimationStart'</span><span class="s2">,</span>
+  <span class="s3">'onBlur'</span><span class="s2">, </span><span class="s3">'onChange'</span><span class="s2">, </span><span class="s3">'onClick'</span><span class="s2">, </span><span class="s3">'onContextMenu'</span><span class="s2">, </span><span class="s3">'onCopy'</span><span class="s2">, </span><span class="s3">'onCompositionEnd'</span><span class="s2">, </span><span class="s3">'onCompositionStart'</span><span class="s2">,</span>
+  <span class="s3">'onCompositionUpdate'</span><span class="s2">, </span><span class="s3">'onCut'</span><span class="s2">, </span><span class="s3">'onDoubleClick'</span><span class="s2">, </span><span class="s3">'onDrag'</span><span class="s2">, </span><span class="s3">'onDragEnd'</span><span class="s2">, </span><span class="s3">'onDragEnter'</span><span class="s2">, </span><span class="s3">'onDragExit'</span><span class="s2">, </span><span class="s3">'onDragLeave'</span><span class="s2">,</span>
+  <span class="s3">'onError'</span><span class="s2">, </span><span class="s3">'onFocus'</span><span class="s2">, </span><span class="s3">'onInput'</span><span class="s2">, </span><span class="s3">'onKeyDown'</span><span class="s2">, </span><span class="s3">'onKeyPress'</span><span class="s2">, </span><span class="s3">'onKeyUp'</span><span class="s2">, </span><span class="s3">'onLoad'</span><span class="s2">, </span><span class="s3">'onWheel'</span><span class="s2">, </span><span class="s3">'onDragOver'</span><span class="s2">,</span>
+  <span class="s3">'onDragStart'</span><span class="s2">, </span><span class="s3">'onDrop'</span><span class="s2">, </span><span class="s3">'onMouseDown'</span><span class="s2">, </span><span class="s3">'onMouseEnter'</span><span class="s2">, </span><span class="s3">'onMouseLeave'</span><span class="s2">, </span><span class="s3">'onMouseMove'</span><span class="s2">, </span><span class="s3">'onMouseOut'</span><span class="s2">, </span><span class="s3">'onMouseOver'</span><span class="s2">,</span>
+  <span class="s3">'onMouseUp'</span><span class="s2">, </span><span class="s3">'onPaste'</span><span class="s2">, </span><span class="s3">'onScroll'</span><span class="s2">, </span><span class="s3">'onSelect'</span><span class="s2">, </span><span class="s3">'onSubmit'</span><span class="s2">, </span><span class="s3">'onBeforeToggle'</span><span class="s2">, </span><span class="s3">'onToggle'</span><span class="s2">, </span><span class="s3">'onTransitionEnd'</span><span class="s2">, </span><span class="s3">'radioGroup'</span><span class="s2">,</span>
+  <span class="s3">'readOnly'</span><span class="s2">, </span><span class="s3">'referrerPolicy'</span><span class="s2">, </span><span class="s3">'rowSpan'</span><span class="s2">, </span><span class="s3">'srcDoc'</span><span class="s2">, </span><span class="s3">'srcLang'</span><span class="s2">, </span><span class="s3">'srcSet'</span><span class="s2">, </span><span class="s3">'useMap'</span><span class="s2">, </span><span class="s3">'fetchPriority'</span><span class="s2">,</span>
+  <span class="s0">// SVG attributes</span>
+  <span class="s0">// See https://developer.mozilla.org/en-US/docs/Web/SVG/Attribute</span>
+  <span class="s3">'crossOrigin'</span><span class="s2">, </span><span class="s3">'accentHeight'</span><span class="s2">, </span><span class="s3">'alignmentBaseline'</span><span class="s2">, </span><span class="s3">'arabicForm'</span><span class="s2">, </span><span class="s3">'attributeName'</span><span class="s2">,</span>
+  <span class="s3">'attributeType'</span><span class="s2">, </span><span class="s3">'baseFrequency'</span><span class="s2">, </span><span class="s3">'baselineShift'</span><span class="s2">, </span><span class="s3">'baseProfile'</span><span class="s2">, </span><span class="s3">'calcMode'</span><span class="s2">, </span><span class="s3">'capHeight'</span><span class="s2">,</span>
+  <span class="s3">'clipPathUnits'</span><span class="s2">, </span><span class="s3">'clipPath'</span><span class="s2">, </span><span class="s3">'clipRule'</span><span class="s2">, </span><span class="s3">'colorInterpolation'</span><span class="s2">, </span><span class="s3">'colorInterpolationFilters'</span><span class="s2">,</span>
+  <span class="s3">'colorProfile'</span><span class="s2">, </span><span class="s3">'colorRendering'</span><span class="s2">, </span><span class="s3">'contentScriptType'</span><span class="s2">, </span><span class="s3">'contentStyleType'</span><span class="s2">, </span><span class="s3">'diffuseConstant'</span><span class="s2">,</span>
+  <span class="s3">'dominantBaseline'</span><span class="s2">, </span><span class="s3">'edgeMode'</span><span class="s2">, </span><span class="s3">'enableBackground'</span><span class="s2">, </span><span class="s3">'fillOpacity'</span><span class="s2">, </span><span class="s3">'fillRule'</span><span class="s2">, </span><span class="s3">'filterRes'</span><span class="s2">,</span>
+  <span class="s3">'filterUnits'</span><span class="s2">, </span><span class="s3">'floodColor'</span><span class="s2">, </span><span class="s3">'floodOpacity'</span><span class="s2">, </span><span class="s3">'fontFamily'</span><span class="s2">, </span><span class="s3">'fontSize'</span><span class="s2">, </span><span class="s3">'fontSizeAdjust'</span><span class="s2">,</span>
+  <span class="s3">'fontStretch'</span><span class="s2">, </span><span class="s3">'fontStyle'</span><span class="s2">, </span><span class="s3">'fontVariant'</span><span class="s2">, </span><span class="s3">'fontWeight'</span><span class="s2">, </span><span class="s3">'glyphName'</span><span class="s2">,</span>
+  <span class="s3">'glyphOrientationHorizontal'</span><span class="s2">, </span><span class="s3">'glyphOrientationVertical'</span><span class="s2">, </span><span class="s3">'glyphRef'</span><span class="s2">, </span><span class="s3">'gradientTransform'</span><span class="s2">,</span>
+  <span class="s3">'gradientUnits'</span><span class="s2">, </span><span class="s3">'horizAdvX'</span><span class="s2">, </span><span class="s3">'horizOriginX'</span><span class="s2">, </span><span class="s3">'imageRendering'</span><span class="s2">, </span><span class="s3">'kernelMatrix'</span><span class="s2">,</span>
+  <span class="s3">'kernelUnitLength'</span><span class="s2">, </span><span class="s3">'keyPoints'</span><span class="s2">, </span><span class="s3">'keySplines'</span><span class="s2">, </span><span class="s3">'keyTimes'</span><span class="s2">, </span><span class="s3">'lengthAdjust'</span><span class="s2">, </span><span class="s3">'letterSpacing'</span><span class="s2">,</span>
+  <span class="s3">'lightingColor'</span><span class="s2">, </span><span class="s3">'limitingConeAngle'</span><span class="s2">, </span><span class="s3">'markerEnd'</span><span class="s2">, </span><span class="s3">'markerMid'</span><span class="s2">, </span><span class="s3">'markerStart'</span><span class="s2">, </span><span class="s3">'markerHeight'</span><span class="s2">,</span>
+  <span class="s3">'markerUnits'</span><span class="s2">, </span><span class="s3">'markerWidth'</span><span class="s2">, </span><span class="s3">'maskContentUnits'</span><span class="s2">, </span><span class="s3">'maskUnits'</span><span class="s2">, </span><span class="s3">'mathematical'</span><span class="s2">, </span><span class="s3">'numOctaves'</span><span class="s2">,</span>
+  <span class="s3">'overlinePosition'</span><span class="s2">, </span><span class="s3">'overlineThickness'</span><span class="s2">, </span><span class="s3">'panose1'</span><span class="s2">, </span><span class="s3">'paintOrder'</span><span class="s2">, </span><span class="s3">'pathLength'</span><span class="s2">,</span>
+  <span class="s3">'patternContentUnits'</span><span class="s2">, </span><span class="s3">'patternTransform'</span><span class="s2">, </span><span class="s3">'patternUnits'</span><span class="s2">, </span><span class="s3">'pointerEvents'</span><span class="s2">, </span><span class="s3">'pointsAtX'</span><span class="s2">,</span>
+  <span class="s3">'pointsAtY'</span><span class="s2">, </span><span class="s3">'pointsAtZ'</span><span class="s2">, </span><span class="s3">'preserveAlpha'</span><span class="s2">, </span><span class="s3">'preserveAspectRatio'</span><span class="s2">, </span><span class="s3">'primitiveUnits'</span><span class="s2">,</span>
+  <span class="s3">'referrerPolicy'</span><span class="s2">, </span><span class="s3">'refX'</span><span class="s2">, </span><span class="s3">'refY'</span><span class="s2">, </span><span class="s3">'rendering-intent'</span><span class="s2">, </span><span class="s3">'repeatCount'</span><span class="s2">, </span><span class="s3">'repeatDur'</span><span class="s2">,</span>
+  <span class="s3">'requiredExtensions'</span><span class="s2">, </span><span class="s3">'requiredFeatures'</span><span class="s2">, </span><span class="s3">'shapeRendering'</span><span class="s2">, </span><span class="s3">'specularConstant'</span><span class="s2">,</span>
+  <span class="s3">'specularExponent'</span><span class="s2">, </span><span class="s3">'spreadMethod'</span><span class="s2">, </span><span class="s3">'startOffset'</span><span class="s2">, </span><span class="s3">'stdDeviation'</span><span class="s2">, </span><span class="s3">'stitchTiles'</span><span class="s2">, </span><span class="s3">'stopColor'</span><span class="s2">,</span>
+  <span class="s3">'stopOpacity'</span><span class="s2">, </span><span class="s3">'strikethroughPosition'</span><span class="s2">, </span><span class="s3">'strikethroughThickness'</span><span class="s2">, </span><span class="s3">'strokeDasharray'</span><span class="s2">,</span>
+  <span class="s3">'strokeDashoffset'</span><span class="s2">, </span><span class="s3">'strokeLinecap'</span><span class="s2">, </span><span class="s3">'strokeLinejoin'</span><span class="s2">, </span><span class="s3">'strokeMiterlimit'</span><span class="s2">, </span><span class="s3">'strokeOpacity'</span><span class="s2">,</span>
+  <span class="s3">'strokeWidth'</span><span class="s2">, </span><span class="s3">'surfaceScale'</span><span class="s2">, </span><span class="s3">'systemLanguage'</span><span class="s2">, </span><span class="s3">'tableValues'</span><span class="s2">, </span><span class="s3">'targetX'</span><span class="s2">, </span><span class="s3">'targetY'</span><span class="s2">,</span>
+  <span class="s3">'textAnchor'</span><span class="s2">, </span><span class="s3">'textDecoration'</span><span class="s2">, </span><span class="s3">'textRendering'</span><span class="s2">, </span><span class="s3">'textLength'</span><span class="s2">, </span><span class="s3">'transformOrigin'</span><span class="s2">,</span>
+  <span class="s3">'underlinePosition'</span><span class="s2">, </span><span class="s3">'underlineThickness'</span><span class="s2">, </span><span class="s3">'unicodeBidi'</span><span class="s2">, </span><span class="s3">'unicodeRange'</span><span class="s2">, </span><span class="s3">'unitsPerEm'</span><span class="s2">,</span>
+  <span class="s3">'vAlphabetic'</span><span class="s2">, </span><span class="s3">'vHanging'</span><span class="s2">, </span><span class="s3">'vIdeographic'</span><span class="s2">, </span><span class="s3">'vMathematical'</span><span class="s2">, </span><span class="s3">'vectorEffect'</span><span class="s2">, </span><span class="s3">'vertAdvY'</span><span class="s2">,</span>
+  <span class="s3">'vertOriginX'</span><span class="s2">, </span><span class="s3">'vertOriginY'</span><span class="s2">, </span><span class="s3">'viewBox'</span><span class="s2">, </span><span class="s3">'viewTarget'</span><span class="s2">, </span><span class="s3">'wordSpacing'</span><span class="s2">, </span><span class="s3">'writingMode'</span><span class="s2">, </span><span class="s3">'xHeight'</span><span class="s2">,</span>
+  <span class="s3">'xChannelSelector'</span><span class="s2">, </span><span class="s3">'xlinkActuate'</span><span class="s2">, </span><span class="s3">'xlinkArcrole'</span><span class="s2">, </span><span class="s3">'xlinkHref'</span><span class="s2">, </span><span class="s3">'xlinkRole'</span><span class="s2">, </span><span class="s3">'xlinkShow'</span><span class="s2">,</span>
+  <span class="s3">'xlinkTitle'</span><span class="s2">, </span><span class="s3">'xlinkType'</span><span class="s2">, </span><span class="s3">'xmlBase'</span><span class="s2">, </span><span class="s3">'xmlLang'</span><span class="s2">, </span><span class="s3">'xmlnsXlink'</span><span class="s2">, </span><span class="s3">'xmlSpace'</span><span class="s2">, </span><span class="s3">'yChannelSelector'</span><span class="s2">,</span>
+  <span class="s3">'zoomAndPan'</span><span class="s2">,</span>
+  <span class="s0">// Safari/Apple specific, no listing available</span>
+  <span class="s3">'autoCorrect'</span><span class="s2">, </span><span class="s0">// https://stackoverflow.com/questions/47985384/html-autocorrect-for-text-input-is-not-working</span>
+  <span class="s3">'autoSave'</span><span class="s2">, </span><span class="s0">// https://stackoverflow.com/questions/25456396/what-is-autosave-attribute-supposed-to-do-how-do-i-use-it</span>
+  <span class="s0">// React specific attributes https://reactjs.org/docs/dom-elements.html#differences-in-attributes</span>
+  <span class="s3">'className'</span><span class="s2">, </span><span class="s3">'dangerouslySetInnerHTML'</span><span class="s2">, </span><span class="s3">'defaultValue'</span><span class="s2">, </span><span class="s3">'defaultChecked'</span><span class="s2">, </span><span class="s3">'htmlFor'</span><span class="s2">,</span>
+  <span class="s0">// Events' capture events</span>
+  <span class="s3">'onBeforeInput'</span><span class="s2">, </span><span class="s3">'onChange'</span><span class="s2">,</span>
+  <span class="s3">'onInvalid'</span><span class="s2">, </span><span class="s3">'onReset'</span><span class="s2">, </span><span class="s3">'onTouchCancel'</span><span class="s2">, </span><span class="s3">'onTouchEnd'</span><span class="s2">, </span><span class="s3">'onTouchMove'</span><span class="s2">, </span><span class="s3">'onTouchStart'</span><span class="s2">, </span><span class="s3">'suppressContentEditableWarning'</span><span class="s2">, </span><span class="s3">'suppressHydrationWarning'</span><span class="s2">,</span>
+  <span class="s3">'onAbort'</span><span class="s2">, </span><span class="s3">'onCanPlay'</span><span class="s2">, </span><span class="s3">'onCanPlayThrough'</span><span class="s2">, </span><span class="s3">'onDurationChange'</span><span class="s2">, </span><span class="s3">'onEmptied'</span><span class="s2">, </span><span class="s3">'onEncrypted'</span><span class="s2">, </span><span class="s3">'onEnded'</span><span class="s2">,</span>
+  <span class="s3">'onLoadedData'</span><span class="s2">, </span><span class="s3">'onLoadedMetadata'</span><span class="s2">, </span><span class="s3">'onLoadStart'</span><span class="s2">, </span><span class="s3">'onPause'</span><span class="s2">, </span><span class="s3">'onPlay'</span><span class="s2">, </span><span class="s3">'onPlaying'</span><span class="s2">, </span><span class="s3">'onProgress'</span><span class="s2">, </span><span class="s3">'onRateChange'</span><span class="s2">, </span><span class="s3">'onResize'</span><span class="s2">,</span>
+  <span class="s3">'onSeeked'</span><span class="s2">, </span><span class="s3">'onSeeking'</span><span class="s2">, </span><span class="s3">'onStalled'</span><span class="s2">, </span><span class="s3">'onSuspend'</span><span class="s2">, </span><span class="s3">'onTimeUpdate'</span><span class="s2">, </span><span class="s3">'onVolumeChange'</span><span class="s2">, </span><span class="s3">'onWaiting'</span><span class="s2">,</span>
+  <span class="s3">'onCopyCapture'</span><span class="s2">, </span><span class="s3">'onCutCapture'</span><span class="s2">, </span><span class="s3">'onPasteCapture'</span><span class="s2">, </span><span class="s3">'onCompositionEndCapture'</span><span class="s2">, </span><span class="s3">'onCompositionStartCapture'</span><span class="s2">, </span><span class="s3">'onCompositionUpdateCapture'</span><span class="s2">,</span>
+  <span class="s3">'onFocusCapture'</span><span class="s2">, </span><span class="s3">'onBlurCapture'</span><span class="s2">, </span><span class="s3">'onChangeCapture'</span><span class="s2">, </span><span class="s3">'onBeforeInputCapture'</span><span class="s2">, </span><span class="s3">'onInputCapture'</span><span class="s2">, </span><span class="s3">'onResetCapture'</span><span class="s2">, </span><span class="s3">'onSubmitCapture'</span><span class="s2">,</span>
+  <span class="s3">'onInvalidCapture'</span><span class="s2">, </span><span class="s3">'onLoadCapture'</span><span class="s2">, </span><span class="s3">'onErrorCapture'</span><span class="s2">, </span><span class="s3">'onKeyDownCapture'</span><span class="s2">, </span><span class="s3">'onKeyPressCapture'</span><span class="s2">, </span><span class="s3">'onKeyUpCapture'</span><span class="s2">,</span>
+  <span class="s3">'onAbortCapture'</span><span class="s2">, </span><span class="s3">'onCanPlayCapture'</span><span class="s2">, </span><span class="s3">'onCanPlayThroughCapture'</span><span class="s2">, </span><span class="s3">'onDurationChangeCapture'</span><span class="s2">, </span><span class="s3">'onEmptiedCapture'</span><span class="s2">, </span><span class="s3">'onEncryptedCapture'</span><span class="s2">,</span>
+  <span class="s3">'onEndedCapture'</span><span class="s2">, </span><span class="s3">'onLoadedDataCapture'</span><span class="s2">, </span><span class="s3">'onLoadedMetadataCapture'</span><span class="s2">, </span><span class="s3">'onLoadStartCapture'</span><span class="s2">, </span><span class="s3">'onPauseCapture'</span><span class="s2">, </span><span class="s3">'onPlayCapture'</span><span class="s2">,</span>
+  <span class="s3">'onPlayingCapture'</span><span class="s2">, </span><span class="s3">'onProgressCapture'</span><span class="s2">, </span><span class="s3">'onRateChangeCapture'</span><span class="s2">, </span><span class="s3">'onSeekedCapture'</span><span class="s2">, </span><span class="s3">'onSeekingCapture'</span><span class="s2">, </span><span class="s3">'onStalledCapture'</span><span class="s2">, </span><span class="s3">'onSuspendCapture'</span><span class="s2">,</span>
+  <span class="s3">'onTimeUpdateCapture'</span><span class="s2">, </span><span class="s3">'onVolumeChangeCapture'</span><span class="s2">, </span><span class="s3">'onWaitingCapture'</span><span class="s2">, </span><span class="s3">'onSelectCapture'</span><span class="s2">, </span><span class="s3">'onTouchCancelCapture'</span><span class="s2">, </span><span class="s3">'onTouchEndCapture'</span><span class="s2">,</span>
+  <span class="s3">'onTouchMoveCapture'</span><span class="s2">, </span><span class="s3">'onTouchStartCapture'</span><span class="s2">, </span><span class="s3">'onScrollCapture'</span><span class="s2">, </span><span class="s3">'onWheelCapture'</span><span class="s2">, </span><span class="s3">'onAnimationEndCapture'</span><span class="s2">, </span><span class="s3">'onAnimationIteration'</span><span class="s2">,</span>
+  <span class="s3">'onAnimationStartCapture'</span><span class="s2">, </span><span class="s3">'onTransitionEndCapture'</span><span class="s2">,</span>
+  <span class="s3">'onAuxClick'</span><span class="s2">, </span><span class="s3">'onAuxClickCapture'</span><span class="s2">, </span><span class="s3">'onClickCapture'</span><span class="s2">, </span><span class="s3">'onContextMenuCapture'</span><span class="s2">, </span><span class="s3">'onDoubleClickCapture'</span><span class="s2">,</span>
+  <span class="s3">'onDragCapture'</span><span class="s2">, </span><span class="s3">'onDragEndCapture'</span><span class="s2">, </span><span class="s3">'onDragEnterCapture'</span><span class="s2">, </span><span class="s3">'onDragExitCapture'</span><span class="s2">, </span><span class="s3">'onDragLeaveCapture'</span><span class="s2">,</span>
+  <span class="s3">'onDragOverCapture'</span><span class="s2">, </span><span class="s3">'onDragStartCapture'</span><span class="s2">, </span><span class="s3">'onDropCapture'</span><span class="s2">, </span><span class="s3">'onMouseDown'</span><span class="s2">, </span><span class="s3">'onMouseDownCapture'</span><span class="s2">,</span>
+  <span class="s3">'onMouseMoveCapture'</span><span class="s2">, </span><span class="s3">'onMouseOutCapture'</span><span class="s2">, </span><span class="s3">'onMouseOverCapture'</span><span class="s2">, </span><span class="s3">'onMouseUpCapture'</span><span class="s2">,</span>
+  <span class="s0">// Video specific</span>
+  <span class="s3">'autoPictureInPicture'</span><span class="s2">, </span><span class="s3">'controlsList'</span><span class="s2">, </span><span class="s3">'disablePictureInPicture'</span><span class="s2">, </span><span class="s3">'disableRemotePlayback'</span><span class="s2">,</span>
+  <span class="s0">// popovers</span>
+  <span class="s3">'popoverTarget'</span><span class="s2">, </span><span class="s3">'popoverTargetAction'</span><span class="s2">,</span>
+<span class="s2">];</span>
+
+<span class="s4">const </span><span class="s2">DOM_PROPERTIES_IGNORE_CASE = [</span><span class="s3">'charset'</span><span class="s2">, </span><span class="s3">'allowFullScreen'</span><span class="s2">, </span><span class="s3">'webkitAllowFullScreen'</span><span class="s2">, </span><span class="s3">'mozAllowFullScreen'</span><span class="s2">, </span><span class="s3">'webkitDirectory'</span><span class="s2">, </span><span class="s3">'popoverTarget'</span><span class="s2">, </span><span class="s3">'popoverTargetAction'</span><span class="s2">];</span>
+
+<span class="s4">const </span><span class="s2">ARIA_PROPERTIES = [</span>
+  <span class="s0">// See https://developer.mozilla.org/en-US/docs/Web/Accessibility/ARIA/Attributes</span>
+  <span class="s0">// Global attributes</span>
+  <span class="s3">'aria-atomic'</span><span class="s2">, </span><span class="s3">'aria-braillelabel'</span><span class="s2">, </span><span class="s3">'aria-brailleroledescription'</span><span class="s2">, </span><span class="s3">'aria-busy'</span><span class="s2">, </span><span class="s3">'aria-controls'</span><span class="s2">, </span><span class="s3">'aria-current'</span><span class="s2">,</span>
+  <span class="s3">'aria-describedby'</span><span class="s2">, </span><span class="s3">'aria-description'</span><span class="s2">, </span><span class="s3">'aria-details'</span><span class="s2">,</span>
+  <span class="s3">'aria-disabled'</span><span class="s2">, </span><span class="s3">'aria-dropeffect'</span><span class="s2">, </span><span class="s3">'aria-errormessage'</span><span class="s2">, </span><span class="s3">'aria-flowto'</span><span class="s2">, </span><span class="s3">'aria-grabbed'</span><span class="s2">, </span><span class="s3">'aria-haspopup'</span><span class="s2">,</span>
+  <span class="s3">'aria-hidden'</span><span class="s2">, </span><span class="s3">'aria-invalid'</span><span class="s2">, </span><span class="s3">'aria-keyshortcuts'</span><span class="s2">, </span><span class="s3">'aria-label'</span><span class="s2">, </span><span class="s3">'aria-labelledby'</span><span class="s2">, </span><span class="s3">'aria-live'</span><span class="s2">,</span>
+  <span class="s3">'aria-owns'</span><span class="s2">, </span><span class="s3">'aria-relevant'</span><span class="s2">, </span><span class="s3">'aria-roledescription'</span><span class="s2">,</span>
+  <span class="s0">// Widget attributes</span>
+  <span class="s3">'aria-autocomplete'</span><span class="s2">, </span><span class="s3">'aria-checked'</span><span class="s2">, </span><span class="s3">'aria-expanded'</span><span class="s2">, </span><span class="s3">'aria-level'</span><span class="s2">, </span><span class="s3">'aria-modal'</span><span class="s2">, </span><span class="s3">'aria-multiline'</span><span class="s2">, </span><span class="s3">'aria-multiselectable'</span><span class="s2">,</span>
+  <span class="s3">'aria-orientation'</span><span class="s2">, </span><span class="s3">'aria-placeholder'</span><span class="s2">, </span><span class="s3">'aria-pressed'</span><span class="s2">, </span><span class="s3">'aria-readonly'</span><span class="s2">, </span><span class="s3">'aria-required'</span><span class="s2">, </span><span class="s3">'aria-selected'</span><span class="s2">,</span>
+  <span class="s3">'aria-sort'</span><span class="s2">, </span><span class="s3">'aria-valuemax'</span><span class="s2">, </span><span class="s3">'aria-valuemin'</span><span class="s2">, </span><span class="s3">'aria-valuenow'</span><span class="s2">, </span><span class="s3">'aria-valuetext'</span><span class="s2">,</span>
+  <span class="s0">// Relationship attributes</span>
+  <span class="s3">'aria-activedescendant'</span><span class="s2">, </span><span class="s3">'aria-colcount'</span><span class="s2">, </span><span class="s3">'aria-colindex'</span><span class="s2">, </span><span class="s3">'aria-colindextext'</span><span class="s2">, </span><span class="s3">'aria-colspan'</span><span class="s2">,</span>
+  <span class="s3">'aria-posinset'</span><span class="s2">, </span><span class="s3">'aria-rowcount'</span><span class="s2">, </span><span class="s3">'aria-rowindex'</span><span class="s2">, </span><span class="s3">'aria-rowindextext'</span><span class="s2">, </span><span class="s3">'aria-rowspan'</span><span class="s2">, </span><span class="s3">'aria-setsize'</span><span class="s2">,</span>
+<span class="s2">];</span>
+
+<span class="s4">const </span><span class="s2">REACT_ON_PROPS = [</span>
+  <span class="s3">'onGotPointerCapture'</span><span class="s2">,</span>
+  <span class="s3">'onGotPointerCaptureCapture'</span><span class="s2">,</span>
+  <span class="s3">'onLostPointerCapture'</span><span class="s2">,</span>
+  <span class="s3">'onLostPointerCapture'</span><span class="s2">,</span>
+  <span class="s3">'onLostPointerCaptureCapture'</span><span class="s2">,</span>
+  <span class="s3">'onPointerCancel'</span><span class="s2">,</span>
+  <span class="s3">'onPointerCancelCapture'</span><span class="s2">,</span>
+  <span class="s3">'onPointerDown'</span><span class="s2">,</span>
+  <span class="s3">'onPointerDownCapture'</span><span class="s2">,</span>
+  <span class="s3">'onPointerEnter'</span><span class="s2">,</span>
+  <span class="s3">'onPointerEnterCapture'</span><span class="s2">,</span>
+  <span class="s3">'onPointerLeave'</span><span class="s2">,</span>
+  <span class="s3">'onPointerLeaveCapture'</span><span class="s2">,</span>
+  <span class="s3">'onPointerMove'</span><span class="s2">,</span>
+  <span class="s3">'onPointerMoveCapture'</span><span class="s2">,</span>
+  <span class="s3">'onPointerOut'</span><span class="s2">,</span>
+  <span class="s3">'onPointerOutCapture'</span><span class="s2">,</span>
+  <span class="s3">'onPointerOver'</span><span class="s2">,</span>
+  <span class="s3">'onPointerOverCapture'</span><span class="s2">,</span>
+  <span class="s3">'onPointerUp'</span><span class="s2">,</span>
+  <span class="s3">'onPointerUpCapture'</span><span class="s2">,</span>
+<span class="s2">];</span>
+
+<span class="s4">function </span><span class="s2">getDOMPropertyNames(context) {</span>
+  <span class="s4">return </span><span class="s2">[].concat(</span>
+    <span class="s2">DOM_PROPERTY_NAMES_TWO_WORDS,</span>
+    <span class="s2">DOM_PROPERTY_NAMES_ONE_WORD,</span>
+
+    <span class="s2">testReactVersion(context, </span><span class="s3">'&gt;= 16.1.0'</span><span class="s2">) ? [].concat(</span>
+      <span class="s2">testReactVersion(context, </span><span class="s3">'&gt;= 16.4.0'</span><span class="s2">) ? [].concat(</span>
+        <span class="s0">// these were added in React v16.4.0, see https://reactjs.org/blog/2018/05/23/react-v-16-4.html and https://github.com/facebook/react/pull/12507</span>
+        <span class="s2">REACT_ON_PROPS,</span>
+        <span class="s2">testReactVersion(context, </span><span class="s3">'&gt;= 19'</span><span class="s2">) ? [</span>
+          <span class="s0">// precedence was added in React v19, see https://react.dev/blog/2024/04/25/react-19#support-for-stylesheets</span>
+          <span class="s3">'precedence'</span><span class="s2">,</span>
+        <span class="s2">] : []</span>
+      <span class="s2">) : []</span>
+    <span class="s2">) : [</span>
+      <span class="s0">// this was removed in React v16.1+, see https://github.com/facebook/react/pull/10823</span>
+      <span class="s3">'allowTransparency'</span><span class="s2">,</span>
+    <span class="s2">]</span>
+  <span class="s2">);</span>
+<span class="s2">}</span>
+
+<span class="s0">// ------------------------------------------------------------------------------</span>
+<span class="s0">// Helpers</span>
+<span class="s0">// ------------------------------------------------------------------------------</span>
+
+<span class="s0">/**</span>
+ <span class="s0">* Checks if a node's parent is a JSX tag that is written with lowercase letters,</span>
+ <span class="s0">* and is not a custom web component. Custom web components have a hyphen in tag name,</span>
+ <span class="s0">* or have an `is=&quot;some-elem&quot;` attribute.</span>
+ <span class="s0">*</span>
+ <span class="s0">* Note: does not check if a tag's parent against a list of standard HTML/DOM tags. For example,</span>
+ <span class="s0">* a `&lt;fake&gt;`'s child would return `true` because &quot;fake&quot; is written only with lowercase letters</span>
+ <span class="s0">* without a hyphen and does not have a `is=&quot;some-elem&quot;` attribute.</span>
+ <span class="s0">*</span>
+ <span class="s0">* </span><span class="s1">@param </span><span class="s0">{Object} childNode - JSX element being tested.</span>
+ <span class="s0">* </span><span class="s1">@returns </span><span class="s0">{boolean} Whether or not the node name match the JSX tag convention.</span>
+ <span class="s0">*/</span>
+<span class="s4">function </span><span class="s2">isValidHTMLTagInJSX(childNode) {</span>
+  <span class="s4">const </span><span class="s2">tagConvention = </span><span class="s5">/^[a-z][^-]*$/</span><span class="s2">;</span>
+  <span class="s4">if </span><span class="s2">(tagConvention.test(childNode.parent.name.name)) {</span>
+    <span class="s4">return </span><span class="s2">!childNode.parent.attributes.some((attrNode) =&gt; (</span>
+      <span class="s2">attrNode.type === </span><span class="s3">'JSXAttribute'</span>
+        <span class="s2">&amp;&amp; attrNode.name.type === </span><span class="s3">'JSXIdentifier'</span>
+        <span class="s2">&amp;&amp; attrNode.name.name === </span><span class="s3">'is'</span>
+        <span class="s0">// To learn more about custom web components and `is` attribute,</span>
+        <span class="s0">// see https://html.spec.whatwg.org/multipage/custom-elements.html#custom-elements-customized-builtin-example</span>
+
+    <span class="s2">));</span>
+  <span class="s2">}</span>
+  <span class="s4">return false</span><span class="s2">;</span>
+<span class="s2">}</span>
+
+<span class="s0">/**</span>
+ <span class="s0">* Checks if the attribute name is included in the attributes that are excluded</span>
+ <span class="s0">* from the camel casing.</span>
+ <span class="s0">*</span>
+ <span class="s0">* // returns 'charSet'</span>
+ <span class="s0">* </span><span class="s1">@example </span><span class="s0">normalizeAttributeCase('charset')</span>
+ <span class="s0">*</span>
+ <span class="s0">* Note - these exclusions are not made by React core team, but `eslint-plugin-react` community.</span>
+ <span class="s0">*</span>
+ <span class="s0">* </span><span class="s1">@param </span><span class="s0">{string} name - Attribute name to be normalized</span>
+ <span class="s0">* </span><span class="s1">@returns </span><span class="s0">{string} Result</span>
+ <span class="s0">*/</span>
+<span class="s4">function </span><span class="s2">normalizeAttributeCase(name) {</span>
+  <span class="s4">return </span><span class="s2">DOM_PROPERTIES_IGNORE_CASE.find((element) =&gt; element.toLowerCase() === name.toLowerCase()) || name;</span>
+<span class="s2">}</span>
+
+<span class="s0">/**</span>
+ <span class="s0">* Checks if an attribute name is a valid `data-*` attribute:</span>
+ <span class="s0">* if the name starts with &quot;data-&quot; and has alphanumeric words (browsers require lowercase, but React and TS lowercase them),</span>
+ <span class="s0">* not start with any casing of &quot;xml&quot;, and separated by hyphens (-) (which is also called &quot;kebab case&quot; or &quot;dash case&quot;),</span>
+ <span class="s0">* then the attribute is a valid data attribute.</span>
+ <span class="s0">*</span>
+ <span class="s0">* </span><span class="s1">@param </span><span class="s0">{string} name - Attribute name to be tested</span>
+ <span class="s0">* </span><span class="s1">@returns </span><span class="s0">{boolean} Result</span>
+ <span class="s0">*/</span>
+<span class="s4">function </span><span class="s2">isValidDataAttribute(name) {</span>
+  <span class="s4">return </span><span class="s2">!</span><span class="s5">/^data-xml/i</span><span class="s2">.test(name) &amp;&amp; </span><span class="s5">/^data-[^:]*$/</span><span class="s2">.test(name);</span>
+<span class="s2">}</span>
+
+<span class="s0">/**</span>
+ <span class="s0">* Checks if an attribute name has at least one uppercase characters</span>
+ <span class="s0">*</span>
+ <span class="s0">* </span><span class="s1">@param </span><span class="s0">{string} name</span>
+ <span class="s0">* </span><span class="s1">@returns </span><span class="s0">{boolean} Result</span>
+ <span class="s0">*/</span>
+<span class="s4">function </span><span class="s2">hasUpperCaseCharacter(name) {</span>
+  <span class="s4">return </span><span class="s2">name.toLowerCase() !== name;</span>
+<span class="s2">}</span>
+
+<span class="s0">/**</span>
+ <span class="s0">* Checks if an attribute name is a standard aria attribute by compering it to a list</span>
+ <span class="s0">* of standard aria property names</span>
+ <span class="s0">*</span>
+ <span class="s0">* </span><span class="s1">@param </span><span class="s0">{string} name - Attribute name to be tested</span>
+ <span class="s0">* </span><span class="s1">@returns </span><span class="s0">{boolean} Result</span>
+ <span class="s0">*/</span>
+
+<span class="s4">function </span><span class="s2">isValidAriaAttribute(name) {</span>
+  <span class="s4">return </span><span class="s2">ARIA_PROPERTIES.some((element) =&gt; element === name);</span>
+<span class="s2">}</span>
+
+<span class="s0">/**</span>
+ <span class="s0">* Extracts the tag name for the JSXAttribute</span>
+ <span class="s0">* </span><span class="s1">@param </span><span class="s0">{JSXAttribute} node - JSXAttribute being tested.</span>
+ <span class="s0">* </span><span class="s1">@returns </span><span class="s0">{string | null} tag name</span>
+ <span class="s0">*/</span>
+<span class="s4">function </span><span class="s2">getTagName(node) {</span>
+  <span class="s4">if </span><span class="s2">(</span>
+    <span class="s2">node</span>
+    <span class="s2">&amp;&amp; node.parent</span>
+    <span class="s2">&amp;&amp; node.parent.name</span>
+  <span class="s2">) {</span>
+    <span class="s4">return </span><span class="s2">node.parent.name.name;</span>
+  <span class="s2">}</span>
+  <span class="s4">return null</span><span class="s2">;</span>
+<span class="s2">}</span>
+
+<span class="s0">/**</span>
+ <span class="s0">* Test wether the tag name for the JSXAttribute is</span>
+ <span class="s0">* something like &lt;Foo.bar /&gt;</span>
+ <span class="s0">* </span><span class="s1">@param </span><span class="s0">{JSXAttribute} node - JSXAttribute being tested.</span>
+ <span class="s0">* </span><span class="s1">@returns </span><span class="s0">{boolean} result</span>
+ <span class="s0">*/</span>
+<span class="s4">function </span><span class="s2">tagNameHasDot(node) {</span>
+  <span class="s4">return </span><span class="s2">!!(</span>
+    <span class="s2">node.parent</span>
+    <span class="s2">&amp;&amp; node.parent.name</span>
+    <span class="s2">&amp;&amp; node.parent.name.type === </span><span class="s3">'JSXMemberExpression'</span>
+  <span class="s2">);</span>
+<span class="s2">}</span>
+
+<span class="s0">/**</span>
+ <span class="s0">* Get the standard name of the attribute.</span>
+ <span class="s0">* </span><span class="s1">@param </span><span class="s0">{string} name - Name of the attribute.</span>
+ <span class="s0">* </span><span class="s1">@param </span><span class="s0">{object} context - eslint context</span>
+ <span class="s0">* </span><span class="s1">@returns </span><span class="s0">{string | undefined} The standard name of the attribute, or undefined if no standard name was found.</span>
+ <span class="s0">*/</span>
+<span class="s4">function </span><span class="s2">getStandardName(name, context) {</span>
+  <span class="s4">if </span><span class="s2">(has(DOM_ATTRIBUTE_NAMES, name)) {</span>
+    <span class="s4">return </span><span class="s2">DOM_ATTRIBUTE_NAMES[</span><span class="s0">/** </span><span class="s1">@type </span><span class="s0">{keyof DOM_ATTRIBUTE_NAMES} */ </span><span class="s2">(name)];</span>
+  <span class="s2">}</span>
+  <span class="s4">if </span><span class="s2">(has(SVGDOM_ATTRIBUTE_NAMES, name)) {</span>
+    <span class="s4">return </span><span class="s2">SVGDOM_ATTRIBUTE_NAMES[</span><span class="s0">/** </span><span class="s1">@type </span><span class="s0">{keyof SVGDOM_ATTRIBUTE_NAMES} */ </span><span class="s2">(name)];</span>
+  <span class="s2">}</span>
+  <span class="s4">const </span><span class="s2">names = getDOMPropertyNames(context);</span>
+
+  <span class="s0">// Let's find a possible attribute match with a case-insensitive search.</span>
+  <span class="s4">return </span><span class="s2">names.find((element) =&gt; element.toLowerCase() === name.toLowerCase());</span>
+<span class="s2">}</span>
+
+<span class="s0">// ------------------------------------------------------------------------------</span>
+<span class="s0">// Rule Definition</span>
+<span class="s0">// ------------------------------------------------------------------------------</span>
+
+<span class="s4">const </span><span class="s2">messages = {</span>
+  <span class="s2">invalidPropOnTag: </span><span class="s3">'Invalid property </span><span class="s6">\'</span><span class="s3">{{name}}</span><span class="s6">\' </span><span class="s3">found on tag </span><span class="s6">\'</span><span class="s3">{{tagName}}</span><span class="s6">\'</span><span class="s3">, but it is only allowed on: {{allowedTags}}'</span><span class="s2">,</span>
+  <span class="s2">unknownPropWithStandardName: </span><span class="s3">'Unknown property </span><span class="s6">\'</span><span class="s3">{{name}}</span><span class="s6">\' </span><span class="s3">found, use </span><span class="s6">\'</span><span class="s3">{{standardName}}</span><span class="s6">\' </span><span class="s3">instead'</span><span class="s2">,</span>
+  <span class="s2">unknownProp: </span><span class="s3">'Unknown property </span><span class="s6">\'</span><span class="s3">{{name}}</span><span class="s6">\' </span><span class="s3">found'</span><span class="s2">,</span>
+  <span class="s2">dataLowercaseRequired: </span><span class="s3">'React does not recognize data-* props with uppercase characters on a DOM element. Found </span><span class="s6">\'</span><span class="s3">{{name}}</span><span class="s6">\'</span><span class="s3">, use </span><span class="s6">\'</span><span class="s3">{{lowerCaseName}}</span><span class="s6">\' </span><span class="s3">instead'</span><span class="s2">,</span>
+<span class="s2">};</span>
+
+<span class="s0">/** </span><span class="s1">@type </span><span class="s0">{import('eslint').Rule.RuleModule} */</span>
+<span class="s2">module.exports = {</span>
+  <span class="s2">meta: {</span>
+    <span class="s2">docs: {</span>
+      <span class="s2">description: </span><span class="s3">'Disallow usage of unknown DOM property'</span><span class="s2">,</span>
+      <span class="s2">category: </span><span class="s3">'Possible Errors'</span><span class="s2">,</span>
+      <span class="s2">recommended: </span><span class="s4">true</span><span class="s2">,</span>
+      <span class="s2">url: docsUrl(</span><span class="s3">'no-unknown-property'</span><span class="s2">),</span>
+    <span class="s2">},</span>
+    <span class="s2">fixable: </span><span class="s3">'code'</span><span class="s2">,</span>
+
+    <span class="s2">messages,</span>
+
+    <span class="s2">schema: [{</span>
+      <span class="s2">type: </span><span class="s3">'object'</span><span class="s2">,</span>
+      <span class="s2">properties: {</span>
+        <span class="s2">ignore: {</span>
+          <span class="s2">type: </span><span class="s3">'array'</span><span class="s2">,</span>
+          <span class="s2">items: {</span>
+            <span class="s2">type: </span><span class="s3">'string'</span><span class="s2">,</span>
+          <span class="s2">},</span>
+        <span class="s2">},</span>
+        <span class="s2">requireDataLowercase: {</span>
+          <span class="s2">type: </span><span class="s3">'boolean'</span><span class="s2">,</span>
+          <span class="s4">default</span><span class="s2">: </span><span class="s4">false</span><span class="s2">,</span>
+        <span class="s2">},</span>
+      <span class="s2">},</span>
+      <span class="s2">additionalProperties: </span><span class="s4">false</span><span class="s2">,</span>
+    <span class="s2">}],</span>
+  <span class="s2">},</span>
+
+  <span class="s2">create(context) {</span>
+    <span class="s4">function </span><span class="s2">getIgnoreConfig() {</span>
+      <span class="s4">return </span><span class="s2">(context.options[</span><span class="s7">0</span><span class="s2">] &amp;&amp; context.options[</span><span class="s7">0</span><span class="s2">].ignore) || DEFAULTS.ignore;</span>
+    <span class="s2">}</span>
+
+    <span class="s4">function </span><span class="s2">getRequireDataLowercase() {</span>
+      <span class="s4">return </span><span class="s2">(context.options[</span><span class="s7">0</span><span class="s2">] &amp;&amp; </span><span class="s4">typeof </span><span class="s2">context.options[</span><span class="s7">0</span><span class="s2">].requireDataLowercase !== </span><span class="s3">'undefined'</span><span class="s2">)</span>
+        <span class="s2">? !!context.options[</span><span class="s7">0</span><span class="s2">].requireDataLowercase</span>
+        <span class="s2">: DEFAULTS.requireDataLowercase;</span>
+    <span class="s2">}</span>
+
+    <span class="s4">return </span><span class="s2">{</span>
+      <span class="s2">JSXAttribute(node) {</span>
+        <span class="s4">const </span><span class="s2">ignoreNames = getIgnoreConfig();</span>
+        <span class="s4">const </span><span class="s2">actualName = getText(context, node.name);</span>
+        <span class="s4">if </span><span class="s2">(ignoreNames.indexOf(actualName) &gt;= </span><span class="s7">0</span><span class="s2">) {</span>
+          <span class="s4">return</span><span class="s2">;</span>
+        <span class="s2">}</span>
+        <span class="s4">const </span><span class="s2">name = normalizeAttributeCase(actualName);</span>
+
+        <span class="s0">// Ignore tags like &lt;Foo.bar /&gt;</span>
+        <span class="s4">if </span><span class="s2">(tagNameHasDot(node)) {</span>
+          <span class="s4">return</span><span class="s2">;</span>
+        <span class="s2">}</span>
+
+        <span class="s4">if </span><span class="s2">(isValidDataAttribute(name)) {</span>
+          <span class="s4">if </span><span class="s2">(getRequireDataLowercase() &amp;&amp; hasUpperCaseCharacter(name)) {</span>
+            <span class="s2">report(context, messages.dataLowercaseRequired, </span><span class="s3">'dataLowercaseRequired'</span><span class="s2">, {</span>
+              <span class="s2">node,</span>
+              <span class="s2">data: {</span>
+                <span class="s2">name: actualName,</span>
+                <span class="s2">lowerCaseName: actualName.toLowerCase(),</span>
+              <span class="s2">},</span>
+            <span class="s2">});</span>
+          <span class="s2">}</span>
+
+          <span class="s4">return</span><span class="s2">;</span>
+        <span class="s2">}</span>
+
+        <span class="s4">if </span><span class="s2">(isValidAriaAttribute(name)) { </span><span class="s4">return</span><span class="s2">; }</span>
+
+        <span class="s4">const </span><span class="s2">tagName = getTagName(node);</span>
+
+        <span class="s4">if </span><span class="s2">(tagName === </span><span class="s3">'fbt' </span><span class="s2">|| tagName === </span><span class="s3">'fbs'</span><span class="s2">) { </span><span class="s4">return</span><span class="s2">; } </span><span class="s0">// fbt/fbs nodes are bonkers, let's not go there</span>
+
+        <span class="s4">if </span><span class="s2">(!isValidHTMLTagInJSX(node)) { </span><span class="s4">return</span><span class="s2">; }</span>
+
+        <span class="s0">// Let's dive deeper into tags that are HTML/DOM elements (`&lt;button&gt;`), and not React components (`&lt;Button /&gt;`)</span>
+
+        <span class="s0">// Some attributes are allowed on some tags only</span>
+        <span class="s4">const </span><span class="s2">allowedTags = has(ATTRIBUTE_TAGS_MAP, name)</span>
+          <span class="s2">? ATTRIBUTE_TAGS_MAP[</span><span class="s0">/** </span><span class="s1">@type </span><span class="s0">{keyof ATTRIBUTE_TAGS_MAP} */ </span><span class="s2">(name)]</span>
+          <span class="s2">: </span><span class="s4">null</span><span class="s2">;</span>
+        <span class="s4">if </span><span class="s2">(tagName &amp;&amp; allowedTags) {</span>
+          <span class="s0">// Scenario 1A: Allowed attribute found where not supposed to, report it</span>
+          <span class="s4">if </span><span class="s2">(allowedTags.indexOf(tagName) === -</span><span class="s7">1</span><span class="s2">) {</span>
+            <span class="s2">report(context, messages.invalidPropOnTag, </span><span class="s3">'invalidPropOnTag'</span><span class="s2">, {</span>
+              <span class="s2">node,</span>
+              <span class="s2">data: {</span>
+                <span class="s2">name: actualName,</span>
+                <span class="s2">tagName,</span>
+                <span class="s2">allowedTags: allowedTags.join(</span><span class="s3">', '</span><span class="s2">),</span>
+              <span class="s2">},</span>
+            <span class="s2">});</span>
+          <span class="s2">}</span>
+          <span class="s0">// Scenario 1B: There are allowed attributes on allowed tags, no need to report it</span>
+          <span class="s4">return</span><span class="s2">;</span>
+        <span class="s2">}</span>
+
+        <span class="s0">// Let's see if the attribute is a close version to some standard property name</span>
+        <span class="s4">const </span><span class="s2">standardName = getStandardName(name, context);</span>
+
+        <span class="s4">const </span><span class="s2">hasStandardNameButIsNotUsed = standardName &amp;&amp; standardName !== name;</span>
+        <span class="s4">const </span><span class="s2">usesStandardName = standardName &amp;&amp; standardName === name;</span>
+
+        <span class="s4">if </span><span class="s2">(usesStandardName) {</span>
+          <span class="s0">// Scenario 2A: The attribute name is the standard name, no need to report it</span>
+          <span class="s4">return</span><span class="s2">;</span>
+        <span class="s2">}</span>
+
+        <span class="s4">if </span><span class="s2">(hasStandardNameButIsNotUsed) {</span>
+          <span class="s0">// Scenario 2B: The name of the attribute is close to a standard one, report it with the standard name</span>
+          <span class="s2">report(context, messages.unknownPropWithStandardName, </span><span class="s3">'unknownPropWithStandardName'</span><span class="s2">, {</span>
+            <span class="s2">node,</span>
+            <span class="s2">data: {</span>
+              <span class="s2">name: actualName,</span>
+              <span class="s2">standardName,</span>
+            <span class="s2">},</span>
+            <span class="s2">fix(fixer) {</span>
+              <span class="s4">return </span><span class="s2">fixer.replaceText(node.name, standardName);</span>
+            <span class="s2">},</span>
+          <span class="s2">});</span>
+          <span class="s4">return</span><span class="s2">;</span>
+        <span class="s2">}</span>
+
+        <span class="s0">// Scenario 3: We have an attribute that is unknown, report it</span>
+        <span class="s2">report(context, messages.unknownProp, </span><span class="s3">'unknownProp'</span><span class="s2">, {</span>
+          <span class="s2">node,</span>
+          <span class="s2">data: {</span>
+            <span class="s2">name: actualName,</span>
+          <span class="s2">},</span>
+        <span class="s2">});</span>
+      <span class="s2">},</span>
+    <span class="s2">};</span>
+  <span class="s2">},</span>
+<span class="s2">};</span>
+</pre>
+</body>
+</html>

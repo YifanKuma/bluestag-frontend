@@ -1,0 +1,121 @@
+<html>
+<head>
+<title>resolveProjectList.js</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #067d17;}
+.s1 { color: #080808;}
+.s2 { color: #0033b3;}
+.s3 { color: #1750eb;}
+.s4 { color: #8c8c8c; font-style: italic;}
+.s5 { color: #8c8c8c; font-style: italic;}
+</style>
+</head>
+<body bgcolor="#ffffff">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#c0c0c0" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+resolveProjectList.js</font>
+</center></td></tr></table>
+<pre><span class="s0">&quot;use strict&quot;</span><span class="s1">;</span>
+<span class="s2">var </span><span class="s1">__importDefault = (</span><span class="s2">this </span><span class="s1">&amp;&amp; </span><span class="s2">this</span><span class="s1">.__importDefault) || </span><span class="s2">function </span><span class="s1">(mod) {</span>
+    <span class="s2">return </span><span class="s1">(mod &amp;&amp; mod.__esModule) ? mod : { </span><span class="s0">&quot;default&quot;</span><span class="s1">: mod };</span>
+<span class="s1">};</span>
+<span class="s1">Object.defineProperty(exports, </span><span class="s0">&quot;__esModule&quot;</span><span class="s1">, { value: </span><span class="s2">true </span><span class="s1">});</span>
+<span class="s1">exports.clearGlobCache = clearGlobCache;</span>
+<span class="s1">exports.resolveProjectList = resolveProjectList;</span>
+<span class="s1">exports.clearGlobResolutionCache = clearGlobResolutionCache;</span>
+<span class="s2">const </span><span class="s1">debug_1 = __importDefault(require(</span><span class="s0">&quot;debug&quot;</span><span class="s1">));</span>
+<span class="s2">const </span><span class="s1">fast_glob_1 = require(</span><span class="s0">&quot;fast-glob&quot;</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">is_glob_1 = __importDefault(require(</span><span class="s0">&quot;is-glob&quot;</span><span class="s1">));</span>
+<span class="s2">const </span><span class="s1">shared_1 = require(</span><span class="s0">&quot;../create-program/shared&quot;</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">ExpiringCache_1 = require(</span><span class="s0">&quot;./ExpiringCache&quot;</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">log = (</span><span class="s3">0</span><span class="s1">, debug_1.default)(</span><span class="s0">'typescript-eslint:typescript-estree:parseSettings:resolveProjectList'</span><span class="s1">);</span>
+<span class="s2">let </span><span class="s1">RESOLUTION_CACHE = </span><span class="s2">null</span><span class="s1">;</span>
+<span class="s2">function </span><span class="s1">clearGlobCache() {</span>
+    <span class="s1">RESOLUTION_CACHE?.clear();</span>
+<span class="s1">}</span>
+<span class="s4">/**</span>
+ <span class="s4">* Normalizes, sanitizes, resolves and filters the provided project paths</span>
+ <span class="s4">*/</span>
+<span class="s2">function </span><span class="s1">resolveProjectList(options) {</span>
+    <span class="s2">const </span><span class="s1">sanitizedProjects = [];</span>
+    <span class="s4">// Normalize and sanitize the project paths</span>
+    <span class="s2">if </span><span class="s1">(options.project != </span><span class="s2">null</span><span class="s1">) {</span>
+        <span class="s2">for </span><span class="s1">(</span><span class="s2">const </span><span class="s1">project of options.project) {</span>
+            <span class="s2">if </span><span class="s1">(</span><span class="s2">typeof </span><span class="s1">project === </span><span class="s0">'string'</span><span class="s1">) {</span>
+                <span class="s1">sanitizedProjects.push(project);</span>
+            <span class="s1">}</span>
+        <span class="s1">}</span>
+    <span class="s1">}</span>
+    <span class="s2">if </span><span class="s1">(sanitizedProjects.length === </span><span class="s3">0</span><span class="s1">) {</span>
+        <span class="s2">return new </span><span class="s1">Map();</span>
+    <span class="s1">}</span>
+    <span class="s2">const </span><span class="s1">projectFolderIgnoreList = (options.projectFolderIgnoreList ?? [</span><span class="s0">'**/node_modules/**'</span><span class="s1">])</span>
+        <span class="s1">.filter(folder =&gt; </span><span class="s2">typeof </span><span class="s1">folder === </span><span class="s0">'string'</span><span class="s1">)</span>
+        <span class="s4">// prefix with a ! for not match glob</span>
+        <span class="s1">.map(folder =&gt; (folder.startsWith(</span><span class="s0">'!'</span><span class="s1">) ? folder : </span><span class="s0">`!</span><span class="s1">${folder}</span><span class="s0">`</span><span class="s1">));</span>
+    <span class="s2">const </span><span class="s1">cacheKey = getHash({</span>
+        <span class="s1">project: sanitizedProjects,</span>
+        <span class="s1">projectFolderIgnoreList,</span>
+        <span class="s1">tsconfigRootDir: options.tsconfigRootDir,</span>
+    <span class="s1">});</span>
+    <span class="s2">if </span><span class="s1">(RESOLUTION_CACHE == </span><span class="s2">null</span><span class="s1">) {</span>
+        <span class="s4">// note - we initialize the global cache based on the first config we encounter.</span>
+        <span class="s4">//        this does mean that you can't have multiple lifetimes set per folder</span>
+        <span class="s4">//        I doubt that anyone will really bother reconfiguring this, let alone</span>
+        <span class="s4">//        try to do complicated setups, so we'll deal with this later if ever.</span>
+        <span class="s1">RESOLUTION_CACHE = </span><span class="s2">new </span><span class="s1">ExpiringCache_1.ExpiringCache(options.singleRun</span>
+            <span class="s1">? </span><span class="s0">'Infinity'</span>
+            <span class="s1">: (options.cacheLifetime?.glob ??</span>
+                <span class="s1">ExpiringCache_1.DEFAULT_TSCONFIG_CACHE_DURATION_SECONDS));</span>
+    <span class="s1">}</span>
+    <span class="s2">else </span><span class="s1">{</span>
+        <span class="s2">const </span><span class="s1">cached = RESOLUTION_CACHE.get(cacheKey);</span>
+        <span class="s2">if </span><span class="s1">(cached) {</span>
+            <span class="s2">return </span><span class="s1">cached;</span>
+        <span class="s1">}</span>
+    <span class="s1">}</span>
+    <span class="s4">// Transform glob patterns into paths</span>
+    <span class="s2">const </span><span class="s1">nonGlobProjects = sanitizedProjects.filter(project =&gt; !(</span><span class="s3">0</span><span class="s1">, is_glob_1.default)(project));</span>
+    <span class="s2">const </span><span class="s1">globProjects = sanitizedProjects.filter(project =&gt; (</span><span class="s3">0</span><span class="s1">, is_glob_1.default)(project));</span>
+    <span class="s2">let </span><span class="s1">globProjectPaths = [];</span>
+    <span class="s2">if </span><span class="s1">(globProjects.length &gt; </span><span class="s3">0</span><span class="s1">) {</span>
+        <span class="s4">// Although fast-glob supports multiple patterns, fast-glob returns arbitrary order of results</span>
+        <span class="s4">// to improve performance. To ensure the order is correct, we need to call fast-glob for each pattern</span>
+        <span class="s4">// separately and then concatenate the results in patterns' order.</span>
+        <span class="s1">globProjectPaths = globProjects.flatMap(pattern =&gt; (</span><span class="s3">0</span><span class="s1">, fast_glob_1.sync)(pattern, {</span>
+            <span class="s1">cwd: options.tsconfigRootDir,</span>
+            <span class="s1">ignore: projectFolderIgnoreList,</span>
+        <span class="s1">}));</span>
+    <span class="s1">}</span>
+    <span class="s2">const </span><span class="s1">uniqueCanonicalProjectPaths = </span><span class="s2">new </span><span class="s1">Map([...nonGlobProjects, ...globProjectPaths].map(project =&gt; [</span>
+        <span class="s1">(</span><span class="s3">0</span><span class="s1">, shared_1.getCanonicalFileName)((</span><span class="s3">0</span><span class="s1">, shared_1.ensureAbsolutePath)(project, options.tsconfigRootDir)),</span>
+        <span class="s1">(</span><span class="s3">0</span><span class="s1">, shared_1.ensureAbsolutePath)(project, options.tsconfigRootDir),</span>
+    <span class="s1">]));</span>
+    <span class="s1">log(</span><span class="s0">'parserOptions.project (excluding ignored) matched projects: %s'</span><span class="s1">, uniqueCanonicalProjectPaths);</span>
+    <span class="s1">RESOLUTION_CACHE.set(cacheKey, uniqueCanonicalProjectPaths);</span>
+    <span class="s2">return </span><span class="s1">uniqueCanonicalProjectPaths;</span>
+<span class="s1">}</span>
+<span class="s2">function </span><span class="s1">getHash({ project, projectFolderIgnoreList, tsconfigRootDir, }) {</span>
+    <span class="s4">// create a stable representation of the config</span>
+    <span class="s2">const </span><span class="s1">hashObject = {</span>
+        <span class="s1">tsconfigRootDir,</span>
+        <span class="s4">// the project order does matter and can impact the resolved globs</span>
+        <span class="s1">project,</span>
+        <span class="s4">// the ignore order won't doesn't ever matter</span>
+        <span class="s1">projectFolderIgnoreList: [...projectFolderIgnoreList].sort(),</span>
+    <span class="s1">};</span>
+    <span class="s2">return </span><span class="s1">(</span><span class="s3">0</span><span class="s1">, shared_1.createHash)(JSON.stringify(hashObject));</span>
+<span class="s1">}</span>
+<span class="s4">/**</span>
+ <span class="s4">* Exported for testing purposes only</span>
+ <span class="s4">* </span><span class="s5">@internal</span>
+ <span class="s4">*/</span>
+<span class="s2">function </span><span class="s1">clearGlobResolutionCache() {</span>
+    <span class="s1">RESOLUTION_CACHE?.clear();</span>
+    <span class="s1">RESOLUTION_CACHE = </span><span class="s2">null</span><span class="s1">;</span>
+<span class="s1">}</span>
+</pre>
+</body>
+</html>

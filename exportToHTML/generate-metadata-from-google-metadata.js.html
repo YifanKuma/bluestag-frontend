@@ -1,0 +1,95 @@
+<html>
+<head>
+<title>generate-metadata-from-google-metadata.js</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #8c8c8c; font-style: italic;}
+.s1 { color: #080808;}
+.s2 { color: #0033b3;}
+.s3 { color: #067d17;}
+.s4 { color: #1750eb;}
+</style>
+</head>
+<body bgcolor="#ffffff">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#c0c0c0" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+generate-metadata-from-google-metadata.js</font>
+</center></td></tr></table>
+<pre><span class="s0">// Generates JSON metadata from Google's `PhoneNumberMetadata.xml` file.</span>
+
+<span class="s2">import </span><span class="s1">minimist from </span><span class="s3">'minimist'</span>
+<span class="s2">import </span><span class="s1">fs from </span><span class="s3">'fs'</span>
+
+<span class="s2">import </span><span class="s1">{ version, generate, compress } from </span><span class="s3">'libphonenumber-metadata-generator'</span>
+
+<span class="s0">// const REGION_CODE_FOR_NON_GEO_ENTITY = '001'</span>
+
+<span class="s2">const </span><span class="s1">input_file = process.argv[</span><span class="s4">2</span><span class="s1">]</span>
+<span class="s2">const </span><span class="s1">output_file = process.argv[</span><span class="s4">3</span><span class="s1">]</span>
+
+<span class="s2">const </span><span class="s1">input = fs.readFileSync(input_file, </span><span class="s3">'utf8'</span><span class="s1">)</span>
+
+<span class="s2">const </span><span class="s1">command_line_arguments = minimist(process.argv.slice(</span><span class="s4">4</span><span class="s1">))</span>
+
+<span class="s0">// Included countries</span>
+<span class="s2">let </span><span class="s1">included_countries</span>
+<span class="s2">if </span><span class="s1">(command_line_arguments.countries) {</span>
+	<span class="s1">included_countries = command_line_arguments.countries.split(</span><span class="s3">','</span><span class="s1">)</span>
+	<span class="s1">console.log(</span><span class="s3">'Included countries:'</span><span class="s1">, included_countries)</span>
+	<span class="s1">included_countries = </span><span class="s2">new </span><span class="s1">Set(included_countries)</span>
+<span class="s1">}</span>
+
+<span class="s0">// Include all regular expressions</span>
+<span class="s2">let </span><span class="s1">extended = </span><span class="s2">false</span>
+<span class="s2">if </span><span class="s1">(command_line_arguments.extended) {</span>
+	<span class="s1">console.log(</span><span class="s3">'Include extra validation regular expressions'</span><span class="s1">)</span>
+	<span class="s1">extended = </span><span class="s2">true</span>
+<span class="s1">}</span>
+
+<span class="s0">// Included phone number types</span>
+<span class="s2">let </span><span class="s1">included_phone_number_types</span>
+<span class="s2">if </span><span class="s1">(command_line_arguments.types) {</span>
+	<span class="s1">included_phone_number_types = command_line_arguments.types.split(</span><span class="s3">','</span><span class="s1">)</span>
+	<span class="s1">console.log(</span><span class="s3">'Included phone number types:'</span><span class="s1">, included_phone_number_types)</span>
+	<span class="s1">included_phone_number_types = </span><span class="s2">new </span><span class="s1">Set(included_phone_number_types)</span>
+<span class="s1">}</span>
+
+<span class="s0">// Generate and compress metadata</span>
+<span class="s1">generate(input, version, included_countries, extended, included_phone_number_types).then((output) =&gt; {</span>
+	<span class="s0">// Write uncompressed metadata into a file for easier debugging</span>
+	<span class="s2">if </span><span class="s1">(command_line_arguments.debug) {</span>
+		<span class="s1">console.log(</span><span class="s3">'Output uncompressed JSON for debugging'</span><span class="s1">)</span>
+		<span class="s1">fs.writeFileSync(</span><span class="s3">'./metadata.json'</span><span class="s1">, JSON.stringify(output, undefined, </span><span class="s4">3</span><span class="s1">))</span>
+	<span class="s1">}</span>
+
+	<span class="s0">// Compress the generated metadata</span>
+	<span class="s1">fs.writeFileSync(output_file, JSON.stringify(compress(output)))</span>
+
+	<span class="s0">// Output mobile phone number type examples</span>
+	<span class="s2">if </span><span class="s1">(command_line_arguments.examples === </span><span class="s3">'mobile'</span><span class="s1">) {</span>
+		<span class="s2">var </span><span class="s1">examples = Object.keys(output.countries).reduce(</span><span class="s2">function</span><span class="s1">(out, country_code) {</span>
+			<span class="s0">// if (country_code === REGION_CODE_FOR_NON_GEO_ENTITY) {</span>
+			<span class="s0">//  return out</span>
+			<span class="s0">// }</span>
+			<span class="s2">var </span><span class="s1">mobile = output.countries[country_code].examples.mobile</span>
+			<span class="s2">var </span><span class="s1">fixed_line = output.countries[country_code].examples.fixed_line</span>
+			<span class="s2">if </span><span class="s1">(mobile) {</span>
+				<span class="s1">out[country_code] = mobile</span>
+			<span class="s1">}</span>
+			<span class="s0">// &quot;TA&quot; country doesn't have any mobile phone number example</span>
+			<span class="s2">else if </span><span class="s1">(fixed_line) {</span>
+				<span class="s1">console.warn(</span><span class="s3">`Country </span><span class="s1">${country_code} </span><span class="s3">doesn't have a mobile phone number example. Substituting with a fixed line phone number example.`</span><span class="s1">)</span>
+				<span class="s1">out[country_code] = fixed_line</span>
+			<span class="s1">} </span><span class="s2">else </span><span class="s1">{</span>
+				<span class="s1">console.error(</span><span class="s3">`Country </span><span class="s1">${country_code} </span><span class="s3">doesn't have neither a mobile phone number example nor a fixed line phone number example.`</span><span class="s1">)</span>
+				<span class="s0">// `async` errors aren't being caught at the top level in Node.js</span>
+				<span class="s1">process.exit(</span><span class="s4">1</span><span class="s1">)</span>
+			<span class="s1">}</span>
+			<span class="s2">return </span><span class="s1">out</span>
+		<span class="s1">}, {})</span>
+		<span class="s1">fs.writeFileSync(</span><span class="s3">'./examples.mobile.json'</span><span class="s1">, JSON.stringify(examples))</span>
+	<span class="s1">}</span>
+<span class="s1">})</span></pre>
+</body>
+</html>

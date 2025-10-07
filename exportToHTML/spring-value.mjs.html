@@ -1,0 +1,98 @@
+<html>
+<head>
+<title>spring-value.mjs</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #0033b3;}
+.s1 { color: #080808;}
+.s2 { color: #067d17;}
+.s3 { color: #8c8c8c; font-style: italic;}
+.s4 { color: #8c8c8c; font-style: italic;}
+.s5 { color: #264eff;}
+.s6 { color: #1750eb;}
+</style>
+</head>
+<body bgcolor="#ffffff">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#c0c0c0" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+spring-value.mjs</font>
+</center></td></tr></table>
+<pre><span class="s0">import </span><span class="s1">{ motionValue } from </span><span class="s2">'./index.mjs'</span><span class="s1">;</span>
+<span class="s0">import </span><span class="s1">{ JSAnimation } from </span><span class="s2">'../animation/JSAnimation.mjs'</span><span class="s1">;</span>
+<span class="s0">import </span><span class="s1">{ isMotionValue } from </span><span class="s2">'./utils/is-motion-value.mjs'</span><span class="s1">;</span>
+<span class="s0">import </span><span class="s1">{ frame } from </span><span class="s2">'../frameloop/frame.mjs'</span><span class="s1">;</span>
+
+<span class="s3">/**</span>
+ <span class="s3">* Create a `MotionValue` that animates to its latest value using a spring.</span>
+ <span class="s3">* Can either be a value or track another `MotionValue`.</span>
+ <span class="s3">*</span>
+ <span class="s3">* ```jsx</span>
+ <span class="s3">* const x = motionValue(0)</span>
+ <span class="s3">* const y = transformValue(() =&gt; x.get() * 2) // double x</span>
+ <span class="s3">* ```</span>
+ <span class="s3">*</span>
+ <span class="s3">* </span><span class="s4">@param </span><span class="s3">transformer - A transform function. This function must be pure with no side-effects or conditional statements.</span>
+ <span class="s3">* </span><span class="s4">@returns </span><span class="s3">`MotionValue`</span>
+ <span class="s3">*</span>
+ <span class="s3">* </span><span class="s4">@public</span>
+ <span class="s3">*/</span>
+<span class="s0">function </span><span class="s1">springValue(source, options) {</span>
+    <span class="s0">const </span><span class="s1">initialValue = isMotionValue(source) ? source.get() : source;</span>
+    <span class="s0">const </span><span class="s1">value = motionValue(initialValue);</span>
+    <span class="s1">attachSpring(value, source, options);</span>
+    <span class="s0">return </span><span class="s1">value;</span>
+<span class="s1">}</span>
+<span class="s0">function </span><span class="s1">attachSpring(value, source, options) {</span>
+    <span class="s0">const </span><span class="s1">initialValue = value.get();</span>
+    <span class="s0">let </span><span class="s1">activeAnimation = </span><span class="s0">null</span><span class="s1">;</span>
+    <span class="s0">let </span><span class="s1">latestValue = initialValue;</span>
+    <span class="s0">let </span><span class="s1">latestSetter;</span>
+    <span class="s0">const </span><span class="s1">unit = </span><span class="s0">typeof </span><span class="s1">initialValue === </span><span class="s2">&quot;string&quot;</span>
+        <span class="s1">? initialValue.replace(</span><span class="s5">/[\d.-]/g</span><span class="s1">, </span><span class="s2">&quot;&quot;</span><span class="s1">)</span>
+        <span class="s1">: undefined;</span>
+    <span class="s0">const </span><span class="s1">stopAnimation = () =&gt; {</span>
+        <span class="s0">if </span><span class="s1">(activeAnimation) {</span>
+            <span class="s1">activeAnimation.stop();</span>
+            <span class="s1">activeAnimation = </span><span class="s0">null</span><span class="s1">;</span>
+        <span class="s1">}</span>
+    <span class="s1">};</span>
+    <span class="s0">const </span><span class="s1">startAnimation = () =&gt; {</span>
+        <span class="s1">stopAnimation();</span>
+        <span class="s1">activeAnimation = </span><span class="s0">new </span><span class="s1">JSAnimation({</span>
+            <span class="s1">keyframes: [asNumber(value.get()), asNumber(latestValue)],</span>
+            <span class="s1">velocity: value.getVelocity(),</span>
+            <span class="s1">type: </span><span class="s2">&quot;spring&quot;</span><span class="s1">,</span>
+            <span class="s1">restDelta: </span><span class="s6">0.001</span><span class="s1">,</span>
+            <span class="s1">restSpeed: </span><span class="s6">0.01</span><span class="s1">,</span>
+            <span class="s1">...options,</span>
+            <span class="s1">onUpdate: latestSetter,</span>
+        <span class="s1">});</span>
+    <span class="s1">};</span>
+    <span class="s1">value.attach((v, set) =&gt; {</span>
+        <span class="s1">latestValue = v;</span>
+        <span class="s1">latestSetter = (latest) =&gt; set(parseValue(latest, unit));</span>
+        <span class="s1">frame.postRender(startAnimation);</span>
+        <span class="s0">return </span><span class="s1">value.get();</span>
+    <span class="s1">}, stopAnimation);</span>
+    <span class="s0">if </span><span class="s1">(isMotionValue(source)) {</span>
+        <span class="s0">const </span><span class="s1">removeSourceOnChange = source.on(</span><span class="s2">&quot;change&quot;</span><span class="s1">, (v) =&gt; value.set(parseValue(v, unit)));</span>
+        <span class="s0">const </span><span class="s1">removeValueOnDestroy = value.on(</span><span class="s2">&quot;destroy&quot;</span><span class="s1">, removeSourceOnChange);</span>
+        <span class="s0">return </span><span class="s1">() =&gt; {</span>
+            <span class="s1">removeSourceOnChange();</span>
+            <span class="s1">removeValueOnDestroy();</span>
+        <span class="s1">};</span>
+    <span class="s1">}</span>
+    <span class="s0">return </span><span class="s1">stopAnimation;</span>
+<span class="s1">}</span>
+<span class="s0">function </span><span class="s1">parseValue(v, unit) {</span>
+    <span class="s0">return </span><span class="s1">unit ? v + unit : v;</span>
+<span class="s1">}</span>
+<span class="s0">function </span><span class="s1">asNumber(v) {</span>
+    <span class="s0">return typeof </span><span class="s1">v === </span><span class="s2">&quot;number&quot; </span><span class="s1">? v : parseFloat(v);</span>
+<span class="s1">}</span>
+
+<span class="s0">export </span><span class="s1">{ attachSpring, springValue };</span>
+</pre>
+</body>
+</html>

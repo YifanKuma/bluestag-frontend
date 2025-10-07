@@ -1,0 +1,125 @@
+<html>
+<head>
+<title>apply-router-state-patch-to-tree.js</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #067d17;}
+.s1 { color: #080808;}
+.s2 { color: #0033b3;}
+.s3 { color: #8c8c8c; font-style: italic;}
+.s4 { color: #1750eb;}
+</style>
+</head>
+<body bgcolor="#ffffff">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#c0c0c0" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+apply-router-state-patch-to-tree.js</font>
+</center></td></tr></table>
+<pre><span class="s0">&quot;use strict&quot;</span><span class="s1">;</span>
+<span class="s1">Object.defineProperty(exports, </span><span class="s0">&quot;__esModule&quot;</span><span class="s1">, {</span>
+    <span class="s1">value: </span><span class="s2">true</span>
+<span class="s1">});</span>
+<span class="s1">Object.defineProperty(exports, </span><span class="s0">&quot;applyRouterStatePatchToTree&quot;</span><span class="s1">, {</span>
+    <span class="s1">enumerable: </span><span class="s2">true</span><span class="s1">,</span>
+    <span class="s1">get: </span><span class="s2">function</span><span class="s1">() {</span>
+        <span class="s2">return </span><span class="s1">applyRouterStatePatchToTree;</span>
+    <span class="s1">}</span>
+<span class="s1">});</span>
+<span class="s2">const </span><span class="s1">_segment = require(</span><span class="s0">&quot;../../../shared/lib/segment&quot;</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">_flightdatahelpers = require(</span><span class="s0">&quot;../../flight-data-helpers&quot;</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">_matchsegments = require(</span><span class="s0">&quot;../match-segments&quot;</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">_refetchinactiveparallelsegments = require(</span><span class="s0">&quot;./refetch-inactive-parallel-segments&quot;</span><span class="s1">);</span>
+<span class="s3">/**</span>
+ <span class="s3">* Deep merge of the two router states. Parallel route keys are preserved if the patch doesn't have them.</span>
+ <span class="s3">*/ </span><span class="s2">function </span><span class="s1">applyPatch(initialTree, patchTree) {</span>
+    <span class="s2">const </span><span class="s1">[initialSegment, initialParallelRoutes] = initialTree;</span>
+    <span class="s2">const </span><span class="s1">[patchSegment, patchParallelRoutes] = patchTree;</span>
+    <span class="s3">// if the applied patch segment is __DEFAULT__ then it can be ignored in favor of the initial tree</span>
+    <span class="s3">// this is because the __DEFAULT__ segment is used as a placeholder on navigation</span>
+    <span class="s2">if </span><span class="s1">(patchSegment === _segment.DEFAULT_SEGMENT_KEY &amp;&amp; initialSegment !== _segment.DEFAULT_SEGMENT_KEY) {</span>
+        <span class="s2">return </span><span class="s1">initialTree;</span>
+    <span class="s1">}</span>
+    <span class="s2">if </span><span class="s1">((</span><span class="s4">0</span><span class="s1">, _matchsegments.matchSegment)(initialSegment, patchSegment)) {</span>
+        <span class="s2">const </span><span class="s1">newParallelRoutes = {};</span>
+        <span class="s2">for</span><span class="s1">(</span><span class="s2">const </span><span class="s1">key </span><span class="s2">in </span><span class="s1">initialParallelRoutes){</span>
+            <span class="s2">const </span><span class="s1">isInPatchTreeParallelRoutes = </span><span class="s2">typeof </span><span class="s1">patchParallelRoutes[key] !== </span><span class="s0">'undefined'</span><span class="s1">;</span>
+            <span class="s2">if </span><span class="s1">(isInPatchTreeParallelRoutes) {</span>
+                <span class="s1">newParallelRoutes[key] = applyPatch(initialParallelRoutes[key], patchParallelRoutes[key]);</span>
+            <span class="s1">} </span><span class="s2">else </span><span class="s1">{</span>
+                <span class="s1">newParallelRoutes[key] = initialParallelRoutes[key];</span>
+            <span class="s1">}</span>
+        <span class="s1">}</span>
+        <span class="s2">for</span><span class="s1">(</span><span class="s2">const </span><span class="s1">key </span><span class="s2">in </span><span class="s1">patchParallelRoutes){</span>
+            <span class="s2">if </span><span class="s1">(newParallelRoutes[key]) {</span>
+                <span class="s2">continue</span><span class="s1">;</span>
+            <span class="s1">}</span>
+            <span class="s1">newParallelRoutes[key] = patchParallelRoutes[key];</span>
+        <span class="s1">}</span>
+        <span class="s2">const </span><span class="s1">tree = [</span>
+            <span class="s1">initialSegment,</span>
+            <span class="s1">newParallelRoutes</span>
+        <span class="s1">];</span>
+        <span class="s3">// Copy over the existing tree</span>
+        <span class="s2">if </span><span class="s1">(initialTree[</span><span class="s4">2</span><span class="s1">]) {</span>
+            <span class="s1">tree[</span><span class="s4">2</span><span class="s1">] = initialTree[</span><span class="s4">2</span><span class="s1">];</span>
+        <span class="s1">}</span>
+        <span class="s2">if </span><span class="s1">(initialTree[</span><span class="s4">3</span><span class="s1">]) {</span>
+            <span class="s1">tree[</span><span class="s4">3</span><span class="s1">] = initialTree[</span><span class="s4">3</span><span class="s1">];</span>
+        <span class="s1">}</span>
+        <span class="s2">if </span><span class="s1">(initialTree[</span><span class="s4">4</span><span class="s1">]) {</span>
+            <span class="s1">tree[</span><span class="s4">4</span><span class="s1">] = initialTree[</span><span class="s4">4</span><span class="s1">];</span>
+        <span class="s1">}</span>
+        <span class="s2">return </span><span class="s1">tree;</span>
+    <span class="s1">}</span>
+    <span class="s2">return </span><span class="s1">patchTree;</span>
+<span class="s1">}</span>
+<span class="s2">function </span><span class="s1">applyRouterStatePatchToTree(flightSegmentPath, flightRouterState, treePatch, path) {</span>
+    <span class="s2">const </span><span class="s1">[segment, parallelRoutes, url, refetch, isRootLayout] = flightRouterState;</span>
+    <span class="s3">// Root refresh</span>
+    <span class="s2">if </span><span class="s1">(flightSegmentPath.length === </span><span class="s4">1</span><span class="s1">) {</span>
+        <span class="s2">const </span><span class="s1">tree = applyPatch(flightRouterState, treePatch);</span>
+        <span class="s1">(</span><span class="s4">0</span><span class="s1">, _refetchinactiveparallelsegments.addRefreshMarkerToActiveParallelSegments)(tree, path);</span>
+        <span class="s2">return </span><span class="s1">tree;</span>
+    <span class="s1">}</span>
+    <span class="s2">const </span><span class="s1">[currentSegment, parallelRouteKey] = flightSegmentPath;</span>
+    <span class="s3">// Tree path returned from the server should always match up with the current tree in the browser</span>
+    <span class="s2">if </span><span class="s1">(!(</span><span class="s4">0</span><span class="s1">, _matchsegments.matchSegment)(currentSegment, segment)) {</span>
+        <span class="s2">return null</span><span class="s1">;</span>
+    <span class="s1">}</span>
+    <span class="s2">const </span><span class="s1">lastSegment = flightSegmentPath.length === </span><span class="s4">2</span><span class="s1">;</span>
+    <span class="s2">let </span><span class="s1">parallelRoutePatch;</span>
+    <span class="s2">if </span><span class="s1">(lastSegment) {</span>
+        <span class="s1">parallelRoutePatch = applyPatch(parallelRoutes[parallelRouteKey], treePatch);</span>
+    <span class="s1">} </span><span class="s2">else </span><span class="s1">{</span>
+        <span class="s1">parallelRoutePatch = applyRouterStatePatchToTree((</span><span class="s4">0</span><span class="s1">, _flightdatahelpers.getNextFlightSegmentPath)(flightSegmentPath), parallelRoutes[parallelRouteKey], treePatch, path);</span>
+        <span class="s2">if </span><span class="s1">(parallelRoutePatch === </span><span class="s2">null</span><span class="s1">) {</span>
+            <span class="s2">return null</span><span class="s1">;</span>
+        <span class="s1">}</span>
+    <span class="s1">}</span>
+    <span class="s2">const </span><span class="s1">tree = [</span>
+        <span class="s1">flightSegmentPath[</span><span class="s4">0</span><span class="s1">],</span>
+        <span class="s1">{</span>
+            <span class="s1">...parallelRoutes,</span>
+            <span class="s1">[parallelRouteKey]: parallelRoutePatch</span>
+        <span class="s1">},</span>
+        <span class="s1">url,</span>
+        <span class="s1">refetch</span>
+    <span class="s1">];</span>
+    <span class="s3">// Current segment is the root layout</span>
+    <span class="s2">if </span><span class="s1">(isRootLayout) {</span>
+        <span class="s1">tree[</span><span class="s4">4</span><span class="s1">] = </span><span class="s2">true</span><span class="s1">;</span>
+    <span class="s1">}</span>
+    <span class="s1">(</span><span class="s4">0</span><span class="s1">, _refetchinactiveparallelsegments.addRefreshMarkerToActiveParallelSegments)(tree, path);</span>
+    <span class="s2">return </span><span class="s1">tree;</span>
+<span class="s1">}</span>
+
+<span class="s2">if </span><span class="s1">((</span><span class="s2">typeof </span><span class="s1">exports.default === </span><span class="s0">'function' </span><span class="s1">|| (</span><span class="s2">typeof </span><span class="s1">exports.default === </span><span class="s0">'object' </span><span class="s1">&amp;&amp; exports.default !== </span><span class="s2">null</span><span class="s1">)) &amp;&amp; </span><span class="s2">typeof </span><span class="s1">exports.default.__esModule === </span><span class="s0">'undefined'</span><span class="s1">) {</span>
+  <span class="s1">Object.defineProperty(exports.default, </span><span class="s0">'__esModule'</span><span class="s1">, { value: </span><span class="s2">true </span><span class="s1">});</span>
+  <span class="s1">Object.assign(exports.default, exports);</span>
+  <span class="s1">module.exports = exports.default;</span>
+<span class="s1">}</span>
+
+<span class="s3">//# sourceMappingURL=apply-router-state-patch-to-tree.js.map</span></pre>
+</body>
+</html>

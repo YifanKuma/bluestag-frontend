@@ -1,0 +1,186 @@
+<html>
+<head>
+<title>jsx-pascal-case.js</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #8c8c8c; font-style: italic;}
+.s1 { color: #8c8c8c; font-style: italic;}
+.s2 { color: #080808;}
+.s3 { color: #067d17;}
+.s4 { color: #0033b3;}
+.s5 { color: #1750eb;}
+</style>
+</head>
+<body bgcolor="#ffffff">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#c0c0c0" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+jsx-pascal-case.js</font>
+</center></td></tr></table>
+<pre><span class="s0">/**</span>
+ <span class="s0">* </span><span class="s1">@fileoverview </span><span class="s0">Enforce PascalCase for user-defined JSX components</span>
+ <span class="s0">* </span><span class="s1">@author </span><span class="s0">Jake Marsh</span>
+ <span class="s0">*/</span>
+
+<span class="s3">'use strict'</span><span class="s2">;</span>
+
+<span class="s4">const </span><span class="s2">elementType = require(</span><span class="s3">'jsx-ast-utils/elementType'</span><span class="s2">);</span>
+<span class="s4">const </span><span class="s2">minimatch = require(</span><span class="s3">'minimatch'</span><span class="s2">);</span>
+<span class="s4">const </span><span class="s2">docsUrl = require(</span><span class="s3">'../util/docsUrl'</span><span class="s2">);</span>
+<span class="s4">const </span><span class="s2">jsxUtil = require(</span><span class="s3">'../util/jsx'</span><span class="s2">);</span>
+<span class="s4">const </span><span class="s2">report = require(</span><span class="s3">'../util/report'</span><span class="s2">);</span>
+
+<span class="s4">function </span><span class="s2">testDigit(char) {</span>
+  <span class="s4">const </span><span class="s2">charCode = char.charCodeAt(</span><span class="s5">0</span><span class="s2">);</span>
+  <span class="s4">return </span><span class="s2">charCode &gt;= </span><span class="s5">48 </span><span class="s2">&amp;&amp; charCode &lt;= </span><span class="s5">57</span><span class="s2">;</span>
+<span class="s2">}</span>
+
+<span class="s4">function </span><span class="s2">testUpperCase(char) {</span>
+  <span class="s4">const </span><span class="s2">upperCase = char.toUpperCase();</span>
+  <span class="s4">return </span><span class="s2">char === upperCase &amp;&amp; upperCase !== char.toLowerCase();</span>
+<span class="s2">}</span>
+
+<span class="s4">function </span><span class="s2">testLowerCase(char) {</span>
+  <span class="s4">const </span><span class="s2">lowerCase = char.toLowerCase();</span>
+  <span class="s4">return </span><span class="s2">char === lowerCase &amp;&amp; lowerCase !== char.toUpperCase();</span>
+<span class="s2">}</span>
+
+<span class="s4">function </span><span class="s2">testPascalCase(name) {</span>
+  <span class="s4">if </span><span class="s2">(!testUpperCase(name.charAt(</span><span class="s5">0</span><span class="s2">))) {</span>
+    <span class="s4">return false</span><span class="s2">;</span>
+  <span class="s2">}</span>
+  <span class="s4">const </span><span class="s2">anyNonAlphaNumeric = Array.prototype.some.call(</span>
+    <span class="s2">name.slice(</span><span class="s5">1</span><span class="s2">),</span>
+    <span class="s2">(char) =&gt; char.toLowerCase() === char.toUpperCase() &amp;&amp; !testDigit(char)</span>
+  <span class="s2">);</span>
+  <span class="s4">if </span><span class="s2">(anyNonAlphaNumeric) {</span>
+    <span class="s4">return false</span><span class="s2">;</span>
+  <span class="s2">}</span>
+  <span class="s4">return </span><span class="s2">Array.prototype.some.call(</span>
+    <span class="s2">name.slice(</span><span class="s5">1</span><span class="s2">),</span>
+    <span class="s2">(char) =&gt; testLowerCase(char) || testDigit(char)</span>
+  <span class="s2">);</span>
+<span class="s2">}</span>
+
+<span class="s4">function </span><span class="s2">testAllCaps(name) {</span>
+  <span class="s4">const </span><span class="s2">firstChar = name.charAt(</span><span class="s5">0</span><span class="s2">);</span>
+  <span class="s4">if </span><span class="s2">(!(testUpperCase(firstChar) || testDigit(firstChar))) {</span>
+    <span class="s4">return false</span><span class="s2">;</span>
+  <span class="s2">}</span>
+  <span class="s4">for </span><span class="s2">(</span><span class="s4">let </span><span class="s2">i = </span><span class="s5">1</span><span class="s2">; i &lt; name.length - </span><span class="s5">1</span><span class="s2">; i += </span><span class="s5">1</span><span class="s2">) {</span>
+    <span class="s4">const </span><span class="s2">char = name.charAt(i);</span>
+    <span class="s4">if </span><span class="s2">(!(testUpperCase(char) || testDigit(char) || char === </span><span class="s3">'_'</span><span class="s2">)) {</span>
+      <span class="s4">return false</span><span class="s2">;</span>
+    <span class="s2">}</span>
+  <span class="s2">}</span>
+  <span class="s4">const </span><span class="s2">lastChar = name.charAt(name.length - </span><span class="s5">1</span><span class="s2">);</span>
+  <span class="s4">if </span><span class="s2">(!(testUpperCase(lastChar) || testDigit(lastChar))) {</span>
+    <span class="s4">return false</span><span class="s2">;</span>
+  <span class="s2">}</span>
+  <span class="s4">return true</span><span class="s2">;</span>
+<span class="s2">}</span>
+
+<span class="s4">function </span><span class="s2">ignoreCheck(ignore, name) {</span>
+  <span class="s4">return </span><span class="s2">ignore.some(</span>
+    <span class="s2">(entry) =&gt; name === entry || minimatch(name, entry, { noglobstar: </span><span class="s4">true </span><span class="s2">})</span>
+  <span class="s2">);</span>
+<span class="s2">}</span>
+
+<span class="s0">// ------------------------------------------------------------------------------</span>
+<span class="s0">// Rule Definition</span>
+<span class="s0">// ------------------------------------------------------------------------------</span>
+
+<span class="s4">const </span><span class="s2">messages = {</span>
+  <span class="s2">usePascalCase: </span><span class="s3">'Imported JSX component {{name}} must be in PascalCase'</span><span class="s2">,</span>
+  <span class="s2">usePascalOrSnakeCase: </span><span class="s3">'Imported JSX component {{name}} must be in PascalCase or SCREAMING_SNAKE_CASE'</span><span class="s2">,</span>
+<span class="s2">};</span>
+
+<span class="s0">/** </span><span class="s1">@type </span><span class="s0">{import('eslint').Rule.RuleModule} */</span>
+<span class="s2">module.exports = {</span>
+  <span class="s2">meta: {</span>
+    <span class="s2">docs: {</span>
+      <span class="s2">description: </span><span class="s3">'Enforce PascalCase for user-defined JSX components'</span><span class="s2">,</span>
+      <span class="s2">category: </span><span class="s3">'Stylistic Issues'</span><span class="s2">,</span>
+      <span class="s2">recommended: </span><span class="s4">false</span><span class="s2">,</span>
+      <span class="s2">url: docsUrl(</span><span class="s3">'jsx-pascal-case'</span><span class="s2">),</span>
+    <span class="s2">},</span>
+
+    <span class="s2">messages,</span>
+
+    <span class="s2">schema: [{</span>
+      <span class="s2">type: </span><span class="s3">'object'</span><span class="s2">,</span>
+      <span class="s2">properties: {</span>
+        <span class="s2">allowAllCaps: {</span>
+          <span class="s2">type: </span><span class="s3">'boolean'</span><span class="s2">,</span>
+        <span class="s2">},</span>
+        <span class="s2">allowLeadingUnderscore: {</span>
+          <span class="s2">type: </span><span class="s3">'boolean'</span><span class="s2">,</span>
+        <span class="s2">},</span>
+        <span class="s2">allowNamespace: {</span>
+          <span class="s2">type: </span><span class="s3">'boolean'</span><span class="s2">,</span>
+        <span class="s2">},</span>
+        <span class="s2">ignore: {</span>
+          <span class="s2">items: [</span>
+            <span class="s2">{</span>
+              <span class="s2">type: </span><span class="s3">'string'</span><span class="s2">,</span>
+            <span class="s2">},</span>
+          <span class="s2">],</span>
+          <span class="s2">minItems: </span><span class="s5">0</span><span class="s2">,</span>
+          <span class="s2">type: </span><span class="s3">'array'</span><span class="s2">,</span>
+          <span class="s2">uniqueItems: </span><span class="s4">true</span><span class="s2">,</span>
+        <span class="s2">},</span>
+      <span class="s2">},</span>
+      <span class="s2">additionalProperties: </span><span class="s4">false</span><span class="s2">,</span>
+    <span class="s2">}],</span>
+  <span class="s2">},</span>
+
+  <span class="s2">create(context) {</span>
+    <span class="s4">const </span><span class="s2">configuration = context.options[</span><span class="s5">0</span><span class="s2">] || {};</span>
+    <span class="s4">const </span><span class="s2">allowAllCaps = configuration.allowAllCaps || </span><span class="s4">false</span><span class="s2">;</span>
+    <span class="s4">const </span><span class="s2">allowLeadingUnderscore = configuration.allowLeadingUnderscore || </span><span class="s4">false</span><span class="s2">;</span>
+    <span class="s4">const </span><span class="s2">allowNamespace = configuration.allowNamespace || </span><span class="s4">false</span><span class="s2">;</span>
+    <span class="s4">const </span><span class="s2">ignore = configuration.ignore || [];</span>
+
+    <span class="s4">return </span><span class="s2">{</span>
+      <span class="s2">JSXOpeningElement(node) {</span>
+        <span class="s4">const </span><span class="s2">isCompatTag = jsxUtil.isDOMComponent(node);</span>
+        <span class="s4">if </span><span class="s2">(isCompatTag) </span><span class="s4">return </span><span class="s2">undefined;</span>
+
+        <span class="s4">const </span><span class="s2">name = elementType(node);</span>
+        <span class="s4">let </span><span class="s2">checkNames = [name];</span>
+        <span class="s4">let </span><span class="s2">index = </span><span class="s5">0</span><span class="s2">;</span>
+
+        <span class="s4">if </span><span class="s2">(name.lastIndexOf(</span><span class="s3">':'</span><span class="s2">) &gt; -</span><span class="s5">1</span><span class="s2">) {</span>
+          <span class="s2">checkNames = name.split(</span><span class="s3">':'</span><span class="s2">);</span>
+        <span class="s2">} </span><span class="s4">else if </span><span class="s2">(name.lastIndexOf(</span><span class="s3">'.'</span><span class="s2">) &gt; -</span><span class="s5">1</span><span class="s2">) {</span>
+          <span class="s2">checkNames = name.split(</span><span class="s3">'.'</span><span class="s2">);</span>
+        <span class="s2">}</span>
+
+        <span class="s4">do </span><span class="s2">{</span>
+          <span class="s4">const </span><span class="s2">splitName = checkNames[index];</span>
+          <span class="s4">if </span><span class="s2">(splitName.length === </span><span class="s5">1</span><span class="s2">) </span><span class="s4">return </span><span class="s2">undefined;</span>
+          <span class="s4">const </span><span class="s2">isIgnored = ignoreCheck(ignore, splitName);</span>
+
+          <span class="s4">const </span><span class="s2">checkName = allowLeadingUnderscore &amp;&amp; splitName.startsWith(</span><span class="s3">'_'</span><span class="s2">) ? splitName.slice(</span><span class="s5">1</span><span class="s2">) : splitName;</span>
+          <span class="s4">const </span><span class="s2">isPascalCase = testPascalCase(checkName);</span>
+          <span class="s4">const </span><span class="s2">isAllowedAllCaps = allowAllCaps &amp;&amp; testAllCaps(checkName);</span>
+
+          <span class="s4">if </span><span class="s2">(!isPascalCase &amp;&amp; !isAllowedAllCaps &amp;&amp; !isIgnored) {</span>
+            <span class="s4">const </span><span class="s2">messageId = allowAllCaps ? </span><span class="s3">'usePascalOrSnakeCase' </span><span class="s2">: </span><span class="s3">'usePascalCase'</span><span class="s2">;</span>
+            <span class="s2">report(context, messages[messageId], messageId, {</span>
+              <span class="s2">node,</span>
+              <span class="s2">data: {</span>
+                <span class="s2">name: splitName,</span>
+              <span class="s2">},</span>
+            <span class="s2">});</span>
+            <span class="s4">break</span><span class="s2">;</span>
+          <span class="s2">}</span>
+          <span class="s2">index += </span><span class="s5">1</span><span class="s2">;</span>
+        <span class="s2">} </span><span class="s4">while </span><span class="s2">(index &lt; checkNames.length &amp;&amp; !allowNamespace);</span>
+      <span class="s2">},</span>
+    <span class="s2">};</span>
+  <span class="s2">},</span>
+<span class="s2">};</span>
+</pre>
+</body>
+</html>

@@ -1,0 +1,288 @@
+<html>
+<head>
+<title>tokenize.js</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #067d17;}
+.s1 { color: #080808;}
+.s2 { color: #0033b3;}
+.s3 { color: #1750eb;}
+.s4 { color: #0037a6;}
+.s5 { color: #264eff;}
+</style>
+</head>
+<body bgcolor="#ffffff">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#c0c0c0" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+tokenize.js</font>
+</center></td></tr></table>
+<pre><span class="s0">'use strict'</span>
+
+<span class="s2">const </span><span class="s1">SINGLE_QUOTE = </span><span class="s0">&quot;'&quot;</span><span class="s1">.charCodeAt(</span><span class="s3">0</span><span class="s1">)</span>
+<span class="s2">const </span><span class="s1">DOUBLE_QUOTE = </span><span class="s0">'&quot;'</span><span class="s1">.charCodeAt(</span><span class="s3">0</span><span class="s1">)</span>
+<span class="s2">const </span><span class="s1">BACKSLASH = </span><span class="s0">'</span><span class="s4">\\</span><span class="s0">'</span><span class="s1">.charCodeAt(</span><span class="s3">0</span><span class="s1">)</span>
+<span class="s2">const </span><span class="s1">SLASH = </span><span class="s0">'/'</span><span class="s1">.charCodeAt(</span><span class="s3">0</span><span class="s1">)</span>
+<span class="s2">const </span><span class="s1">NEWLINE = </span><span class="s0">'</span><span class="s4">\n</span><span class="s0">'</span><span class="s1">.charCodeAt(</span><span class="s3">0</span><span class="s1">)</span>
+<span class="s2">const </span><span class="s1">SPACE = </span><span class="s0">' '</span><span class="s1">.charCodeAt(</span><span class="s3">0</span><span class="s1">)</span>
+<span class="s2">const </span><span class="s1">FEED = </span><span class="s0">'</span><span class="s4">\f</span><span class="s0">'</span><span class="s1">.charCodeAt(</span><span class="s3">0</span><span class="s1">)</span>
+<span class="s2">const </span><span class="s1">TAB = </span><span class="s0">'</span><span class="s4">\t</span><span class="s0">'</span><span class="s1">.charCodeAt(</span><span class="s3">0</span><span class="s1">)</span>
+<span class="s2">const </span><span class="s1">CR = </span><span class="s0">'</span><span class="s4">\r</span><span class="s0">'</span><span class="s1">.charCodeAt(</span><span class="s3">0</span><span class="s1">)</span>
+<span class="s2">const </span><span class="s1">OPEN_SQUARE = </span><span class="s0">'['</span><span class="s1">.charCodeAt(</span><span class="s3">0</span><span class="s1">)</span>
+<span class="s2">const </span><span class="s1">CLOSE_SQUARE = </span><span class="s0">']'</span><span class="s1">.charCodeAt(</span><span class="s3">0</span><span class="s1">)</span>
+<span class="s2">const </span><span class="s1">OPEN_PARENTHESES = </span><span class="s0">'('</span><span class="s1">.charCodeAt(</span><span class="s3">0</span><span class="s1">)</span>
+<span class="s2">const </span><span class="s1">CLOSE_PARENTHESES = </span><span class="s0">')'</span><span class="s1">.charCodeAt(</span><span class="s3">0</span><span class="s1">)</span>
+<span class="s2">const </span><span class="s1">OPEN_CURLY = </span><span class="s0">'{'</span><span class="s1">.charCodeAt(</span><span class="s3">0</span><span class="s1">)</span>
+<span class="s2">const </span><span class="s1">CLOSE_CURLY = </span><span class="s0">'}'</span><span class="s1">.charCodeAt(</span><span class="s3">0</span><span class="s1">)</span>
+<span class="s2">const </span><span class="s1">SEMICOLON = </span><span class="s0">';'</span><span class="s1">.charCodeAt(</span><span class="s3">0</span><span class="s1">)</span>
+<span class="s2">const </span><span class="s1">ASTERISK = </span><span class="s0">'*'</span><span class="s1">.charCodeAt(</span><span class="s3">0</span><span class="s1">)</span>
+<span class="s2">const </span><span class="s1">COLON = </span><span class="s0">':'</span><span class="s1">.charCodeAt(</span><span class="s3">0</span><span class="s1">)</span>
+<span class="s2">const </span><span class="s1">AT = </span><span class="s0">'@'</span><span class="s1">.charCodeAt(</span><span class="s3">0</span><span class="s1">)</span>
+
+<span class="s2">const </span><span class="s1">RE_AT_END = </span><span class="s5">/[\t\n\f\r &quot;#'()/;[\\\]{}]/g</span>
+<span class="s2">const </span><span class="s1">RE_WORD_END = </span><span class="s5">/[\t\n\f\r !&quot;#'():;@[\\\]{}]|\/(?=\*)/g</span>
+<span class="s2">const </span><span class="s1">RE_BAD_BRACKET = </span><span class="s5">/.[\r\n&quot;'(/\\]/</span>
+<span class="s2">const </span><span class="s1">RE_HEX_ESCAPE = </span><span class="s5">/[\da-f]/i</span>
+
+<span class="s1">module.exports = </span><span class="s2">function </span><span class="s1">tokenizer(input, options = {}) {</span>
+  <span class="s2">let </span><span class="s1">css = input.css.valueOf()</span>
+  <span class="s2">let </span><span class="s1">ignore = options.ignoreErrors</span>
+
+  <span class="s2">let </span><span class="s1">code, content, escape, next, quote</span>
+  <span class="s2">let </span><span class="s1">currentToken, escaped, escapePos, n, prev</span>
+
+  <span class="s2">let </span><span class="s1">length = css.length</span>
+  <span class="s2">let </span><span class="s1">pos = </span><span class="s3">0</span>
+  <span class="s2">let </span><span class="s1">buffer = []</span>
+  <span class="s2">let </span><span class="s1">returned = []</span>
+
+  <span class="s2">function </span><span class="s1">position() {</span>
+    <span class="s2">return </span><span class="s1">pos</span>
+  <span class="s1">}</span>
+
+  <span class="s2">function </span><span class="s1">unclosed(what) {</span>
+    <span class="s2">throw </span><span class="s1">input.error(</span><span class="s0">'Unclosed ' </span><span class="s1">+ what, pos)</span>
+  <span class="s1">}</span>
+
+  <span class="s2">function </span><span class="s1">endOfFile() {</span>
+    <span class="s2">return </span><span class="s1">returned.length === </span><span class="s3">0 </span><span class="s1">&amp;&amp; pos &gt;= length</span>
+  <span class="s1">}</span>
+
+  <span class="s2">function </span><span class="s1">nextToken(opts) {</span>
+    <span class="s2">if </span><span class="s1">(returned.length) </span><span class="s2">return </span><span class="s1">returned.pop()</span>
+    <span class="s2">if </span><span class="s1">(pos &gt;= length) </span><span class="s2">return</span>
+
+    <span class="s2">let </span><span class="s1">ignoreUnclosed = opts ? opts.ignoreUnclosed : </span><span class="s2">false</span>
+
+    <span class="s1">code = css.charCodeAt(pos)</span>
+
+    <span class="s2">switch </span><span class="s1">(code) {</span>
+      <span class="s2">case </span><span class="s1">NEWLINE:</span>
+      <span class="s2">case </span><span class="s1">SPACE:</span>
+      <span class="s2">case </span><span class="s1">TAB:</span>
+      <span class="s2">case </span><span class="s1">CR:</span>
+      <span class="s2">case </span><span class="s1">FEED: {</span>
+        <span class="s1">next = pos</span>
+        <span class="s2">do </span><span class="s1">{</span>
+          <span class="s1">next += </span><span class="s3">1</span>
+          <span class="s1">code = css.charCodeAt(next)</span>
+        <span class="s1">} </span><span class="s2">while </span><span class="s1">(</span>
+          <span class="s1">code === SPACE ||</span>
+          <span class="s1">code === NEWLINE ||</span>
+          <span class="s1">code === TAB ||</span>
+          <span class="s1">code === CR ||</span>
+          <span class="s1">code === FEED</span>
+        <span class="s1">)</span>
+
+        <span class="s1">currentToken = [</span><span class="s0">'space'</span><span class="s1">, css.slice(pos, next)]</span>
+        <span class="s1">pos = next - </span><span class="s3">1</span>
+        <span class="s2">break</span>
+      <span class="s1">}</span>
+
+      <span class="s2">case </span><span class="s1">OPEN_SQUARE:</span>
+      <span class="s2">case </span><span class="s1">CLOSE_SQUARE:</span>
+      <span class="s2">case </span><span class="s1">OPEN_CURLY:</span>
+      <span class="s2">case </span><span class="s1">CLOSE_CURLY:</span>
+      <span class="s2">case </span><span class="s1">COLON:</span>
+      <span class="s2">case </span><span class="s1">SEMICOLON:</span>
+      <span class="s2">case </span><span class="s1">CLOSE_PARENTHESES: {</span>
+        <span class="s2">let </span><span class="s1">controlChar = String.fromCharCode(code)</span>
+        <span class="s1">currentToken = [controlChar, controlChar, pos]</span>
+        <span class="s2">break</span>
+      <span class="s1">}</span>
+
+      <span class="s2">case </span><span class="s1">OPEN_PARENTHESES: {</span>
+        <span class="s1">prev = buffer.length ? buffer.pop()[</span><span class="s3">1</span><span class="s1">] : </span><span class="s0">''</span>
+        <span class="s1">n = css.charCodeAt(pos + </span><span class="s3">1</span><span class="s1">)</span>
+        <span class="s2">if </span><span class="s1">(</span>
+          <span class="s1">prev === </span><span class="s0">'url' </span><span class="s1">&amp;&amp;</span>
+          <span class="s1">n !== SINGLE_QUOTE &amp;&amp;</span>
+          <span class="s1">n !== DOUBLE_QUOTE &amp;&amp;</span>
+          <span class="s1">n !== SPACE &amp;&amp;</span>
+          <span class="s1">n !== NEWLINE &amp;&amp;</span>
+          <span class="s1">n !== TAB &amp;&amp;</span>
+          <span class="s1">n !== FEED &amp;&amp;</span>
+          <span class="s1">n !== CR</span>
+        <span class="s1">) {</span>
+          <span class="s1">next = pos</span>
+          <span class="s2">do </span><span class="s1">{</span>
+            <span class="s1">escaped = </span><span class="s2">false</span>
+            <span class="s1">next = css.indexOf(</span><span class="s0">')'</span><span class="s1">, next + </span><span class="s3">1</span><span class="s1">)</span>
+            <span class="s2">if </span><span class="s1">(next === -</span><span class="s3">1</span><span class="s1">) {</span>
+              <span class="s2">if </span><span class="s1">(ignore || ignoreUnclosed) {</span>
+                <span class="s1">next = pos</span>
+                <span class="s2">break</span>
+              <span class="s1">} </span><span class="s2">else </span><span class="s1">{</span>
+                <span class="s1">unclosed(</span><span class="s0">'bracket'</span><span class="s1">)</span>
+              <span class="s1">}</span>
+            <span class="s1">}</span>
+            <span class="s1">escapePos = next</span>
+            <span class="s2">while </span><span class="s1">(css.charCodeAt(escapePos - </span><span class="s3">1</span><span class="s1">) === BACKSLASH) {</span>
+              <span class="s1">escapePos -= </span><span class="s3">1</span>
+              <span class="s1">escaped = !escaped</span>
+            <span class="s1">}</span>
+          <span class="s1">} </span><span class="s2">while </span><span class="s1">(escaped)</span>
+
+          <span class="s1">currentToken = [</span><span class="s0">'brackets'</span><span class="s1">, css.slice(pos, next + </span><span class="s3">1</span><span class="s1">), pos, next]</span>
+
+          <span class="s1">pos = next</span>
+        <span class="s1">} </span><span class="s2">else </span><span class="s1">{</span>
+          <span class="s1">next = css.indexOf(</span><span class="s0">')'</span><span class="s1">, pos + </span><span class="s3">1</span><span class="s1">)</span>
+          <span class="s1">content = css.slice(pos, next + </span><span class="s3">1</span><span class="s1">)</span>
+
+          <span class="s2">if </span><span class="s1">(next === -</span><span class="s3">1 </span><span class="s1">|| RE_BAD_BRACKET.test(content)) {</span>
+            <span class="s1">currentToken = [</span><span class="s0">'('</span><span class="s1">, </span><span class="s0">'('</span><span class="s1">, pos]</span>
+          <span class="s1">} </span><span class="s2">else </span><span class="s1">{</span>
+            <span class="s1">currentToken = [</span><span class="s0">'brackets'</span><span class="s1">, content, pos, next]</span>
+            <span class="s1">pos = next</span>
+          <span class="s1">}</span>
+        <span class="s1">}</span>
+
+        <span class="s2">break</span>
+      <span class="s1">}</span>
+
+      <span class="s2">case </span><span class="s1">SINGLE_QUOTE:</span>
+      <span class="s2">case </span><span class="s1">DOUBLE_QUOTE: {</span>
+        <span class="s1">quote = code === SINGLE_QUOTE ? </span><span class="s0">&quot;'&quot; </span><span class="s1">: </span><span class="s0">'&quot;'</span>
+        <span class="s1">next = pos</span>
+        <span class="s2">do </span><span class="s1">{</span>
+          <span class="s1">escaped = </span><span class="s2">false</span>
+          <span class="s1">next = css.indexOf(quote, next + </span><span class="s3">1</span><span class="s1">)</span>
+          <span class="s2">if </span><span class="s1">(next === -</span><span class="s3">1</span><span class="s1">) {</span>
+            <span class="s2">if </span><span class="s1">(ignore || ignoreUnclosed) {</span>
+              <span class="s1">next = pos + </span><span class="s3">1</span>
+              <span class="s2">break</span>
+            <span class="s1">} </span><span class="s2">else </span><span class="s1">{</span>
+              <span class="s1">unclosed(</span><span class="s0">'string'</span><span class="s1">)</span>
+            <span class="s1">}</span>
+          <span class="s1">}</span>
+          <span class="s1">escapePos = next</span>
+          <span class="s2">while </span><span class="s1">(css.charCodeAt(escapePos - </span><span class="s3">1</span><span class="s1">) === BACKSLASH) {</span>
+            <span class="s1">escapePos -= </span><span class="s3">1</span>
+            <span class="s1">escaped = !escaped</span>
+          <span class="s1">}</span>
+        <span class="s1">} </span><span class="s2">while </span><span class="s1">(escaped)</span>
+
+        <span class="s1">currentToken = [</span><span class="s0">'string'</span><span class="s1">, css.slice(pos, next + </span><span class="s3">1</span><span class="s1">), pos, next]</span>
+        <span class="s1">pos = next</span>
+        <span class="s2">break</span>
+      <span class="s1">}</span>
+
+      <span class="s2">case </span><span class="s1">AT: {</span>
+        <span class="s1">RE_AT_END.lastIndex = pos + </span><span class="s3">1</span>
+        <span class="s1">RE_AT_END.test(css)</span>
+        <span class="s2">if </span><span class="s1">(RE_AT_END.lastIndex === </span><span class="s3">0</span><span class="s1">) {</span>
+          <span class="s1">next = css.length - </span><span class="s3">1</span>
+        <span class="s1">} </span><span class="s2">else </span><span class="s1">{</span>
+          <span class="s1">next = RE_AT_END.lastIndex - </span><span class="s3">2</span>
+        <span class="s1">}</span>
+
+        <span class="s1">currentToken = [</span><span class="s0">'at-word'</span><span class="s1">, css.slice(pos, next + </span><span class="s3">1</span><span class="s1">), pos, next]</span>
+
+        <span class="s1">pos = next</span>
+        <span class="s2">break</span>
+      <span class="s1">}</span>
+
+      <span class="s2">case </span><span class="s1">BACKSLASH: {</span>
+        <span class="s1">next = pos</span>
+        <span class="s1">escape = </span><span class="s2">true</span>
+        <span class="s2">while </span><span class="s1">(css.charCodeAt(next + </span><span class="s3">1</span><span class="s1">) === BACKSLASH) {</span>
+          <span class="s1">next += </span><span class="s3">1</span>
+          <span class="s1">escape = !escape</span>
+        <span class="s1">}</span>
+        <span class="s1">code = css.charCodeAt(next + </span><span class="s3">1</span><span class="s1">)</span>
+        <span class="s2">if </span><span class="s1">(</span>
+          <span class="s1">escape &amp;&amp;</span>
+          <span class="s1">code !== SLASH &amp;&amp;</span>
+          <span class="s1">code !== SPACE &amp;&amp;</span>
+          <span class="s1">code !== NEWLINE &amp;&amp;</span>
+          <span class="s1">code !== TAB &amp;&amp;</span>
+          <span class="s1">code !== CR &amp;&amp;</span>
+          <span class="s1">code !== FEED</span>
+        <span class="s1">) {</span>
+          <span class="s1">next += </span><span class="s3">1</span>
+          <span class="s2">if </span><span class="s1">(RE_HEX_ESCAPE.test(css.charAt(next))) {</span>
+            <span class="s2">while </span><span class="s1">(RE_HEX_ESCAPE.test(css.charAt(next + </span><span class="s3">1</span><span class="s1">))) {</span>
+              <span class="s1">next += </span><span class="s3">1</span>
+            <span class="s1">}</span>
+            <span class="s2">if </span><span class="s1">(css.charCodeAt(next + </span><span class="s3">1</span><span class="s1">) === SPACE) {</span>
+              <span class="s1">next += </span><span class="s3">1</span>
+            <span class="s1">}</span>
+          <span class="s1">}</span>
+        <span class="s1">}</span>
+
+        <span class="s1">currentToken = [</span><span class="s0">'word'</span><span class="s1">, css.slice(pos, next + </span><span class="s3">1</span><span class="s1">), pos, next]</span>
+
+        <span class="s1">pos = next</span>
+        <span class="s2">break</span>
+      <span class="s1">}</span>
+
+      <span class="s2">default</span><span class="s1">: {</span>
+        <span class="s2">if </span><span class="s1">(code === SLASH &amp;&amp; css.charCodeAt(pos + </span><span class="s3">1</span><span class="s1">) === ASTERISK) {</span>
+          <span class="s1">next = css.indexOf(</span><span class="s0">'*/'</span><span class="s1">, pos + </span><span class="s3">2</span><span class="s1">) + </span><span class="s3">1</span>
+          <span class="s2">if </span><span class="s1">(next === </span><span class="s3">0</span><span class="s1">) {</span>
+            <span class="s2">if </span><span class="s1">(ignore || ignoreUnclosed) {</span>
+              <span class="s1">next = css.length</span>
+            <span class="s1">} </span><span class="s2">else </span><span class="s1">{</span>
+              <span class="s1">unclosed(</span><span class="s0">'comment'</span><span class="s1">)</span>
+            <span class="s1">}</span>
+          <span class="s1">}</span>
+
+          <span class="s1">currentToken = [</span><span class="s0">'comment'</span><span class="s1">, css.slice(pos, next + </span><span class="s3">1</span><span class="s1">), pos, next]</span>
+          <span class="s1">pos = next</span>
+        <span class="s1">} </span><span class="s2">else </span><span class="s1">{</span>
+          <span class="s1">RE_WORD_END.lastIndex = pos + </span><span class="s3">1</span>
+          <span class="s1">RE_WORD_END.test(css)</span>
+          <span class="s2">if </span><span class="s1">(RE_WORD_END.lastIndex === </span><span class="s3">0</span><span class="s1">) {</span>
+            <span class="s1">next = css.length - </span><span class="s3">1</span>
+          <span class="s1">} </span><span class="s2">else </span><span class="s1">{</span>
+            <span class="s1">next = RE_WORD_END.lastIndex - </span><span class="s3">2</span>
+          <span class="s1">}</span>
+
+          <span class="s1">currentToken = [</span><span class="s0">'word'</span><span class="s1">, css.slice(pos, next + </span><span class="s3">1</span><span class="s1">), pos, next]</span>
+          <span class="s1">buffer.push(currentToken)</span>
+          <span class="s1">pos = next</span>
+        <span class="s1">}</span>
+
+        <span class="s2">break</span>
+      <span class="s1">}</span>
+    <span class="s1">}</span>
+
+    <span class="s1">pos++</span>
+    <span class="s2">return </span><span class="s1">currentToken</span>
+  <span class="s1">}</span>
+
+  <span class="s2">function </span><span class="s1">back(token) {</span>
+    <span class="s1">returned.push(token)</span>
+  <span class="s1">}</span>
+
+  <span class="s2">return </span><span class="s1">{</span>
+    <span class="s1">back,</span>
+    <span class="s1">endOfFile,</span>
+    <span class="s1">nextToken,</span>
+    <span class="s1">position</span>
+  <span class="s1">}</span>
+<span class="s1">}</span>
+</pre>
+</body>
+</html>

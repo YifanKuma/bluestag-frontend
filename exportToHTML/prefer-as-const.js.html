@@ -1,0 +1,92 @@
+<html>
+<head>
+<title>prefer-as-const.js</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #067d17;}
+.s1 { color: #080808;}
+.s2 { color: #0033b3;}
+.s3 { color: #1750eb;}
+</style>
+</head>
+<body bgcolor="#ffffff">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#c0c0c0" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+prefer-as-const.js</font>
+</center></td></tr></table>
+<pre><span class="s0">&quot;use strict&quot;</span><span class="s1">;</span>
+<span class="s1">Object.defineProperty(exports, </span><span class="s0">&quot;__esModule&quot;</span><span class="s1">, { value: </span><span class="s2">true </span><span class="s1">});</span>
+<span class="s2">const </span><span class="s1">utils_1 = require(</span><span class="s0">&quot;@typescript-eslint/utils&quot;</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">util_1 = require(</span><span class="s0">&quot;../util&quot;</span><span class="s1">);</span>
+<span class="s1">exports.default = (</span><span class="s3">0</span><span class="s1">, util_1.createRule)({</span>
+    <span class="s1">name: </span><span class="s0">'prefer-as-const'</span><span class="s1">,</span>
+    <span class="s1">meta: {</span>
+        <span class="s1">type: </span><span class="s0">'suggestion'</span><span class="s1">,</span>
+        <span class="s1">docs: {</span>
+            <span class="s1">description: </span><span class="s0">'Enforce the use of `as const` over literal type'</span><span class="s1">,</span>
+            <span class="s1">recommended: </span><span class="s0">'recommended'</span><span class="s1">,</span>
+        <span class="s1">},</span>
+        <span class="s1">fixable: </span><span class="s0">'code'</span><span class="s1">,</span>
+        <span class="s1">hasSuggestions: </span><span class="s2">true</span><span class="s1">,</span>
+        <span class="s1">messages: {</span>
+            <span class="s1">preferConstAssertion: </span><span class="s0">'Expected a `const` instead of a literal type assertion.'</span><span class="s1">,</span>
+            <span class="s1">variableConstAssertion: </span><span class="s0">'Expected a `const` assertion instead of a literal type annotation.'</span><span class="s1">,</span>
+            <span class="s1">variableSuggest: </span><span class="s0">'You should use `as const` instead of type annotation.'</span><span class="s1">,</span>
+        <span class="s1">},</span>
+        <span class="s1">schema: [],</span>
+    <span class="s1">},</span>
+    <span class="s1">defaultOptions: [],</span>
+    <span class="s1">create(context) {</span>
+        <span class="s2">function </span><span class="s1">compareTypes(valueNode, typeNode, canFix) {</span>
+            <span class="s2">if </span><span class="s1">(valueNode.type === utils_1.AST_NODE_TYPES.Literal &amp;&amp;</span>
+                <span class="s1">typeNode.type === utils_1.AST_NODE_TYPES.TSLiteralType &amp;&amp;</span>
+                <span class="s1">typeNode.literal.type === utils_1.AST_NODE_TYPES.Literal &amp;&amp;</span>
+                <span class="s1">valueNode.raw === typeNode.literal.raw) {</span>
+                <span class="s2">if </span><span class="s1">(canFix) {</span>
+                    <span class="s1">context.report({</span>
+                        <span class="s1">node: typeNode,</span>
+                        <span class="s1">messageId: </span><span class="s0">'preferConstAssertion'</span><span class="s1">,</span>
+                        <span class="s1">fix: fixer =&gt; fixer.replaceText(typeNode, </span><span class="s0">'const'</span><span class="s1">),</span>
+                    <span class="s1">});</span>
+                <span class="s1">}</span>
+                <span class="s2">else </span><span class="s1">{</span>
+                    <span class="s1">context.report({</span>
+                        <span class="s1">node: typeNode,</span>
+                        <span class="s1">messageId: </span><span class="s0">'variableConstAssertion'</span><span class="s1">,</span>
+                        <span class="s1">suggest: [</span>
+                            <span class="s1">{</span>
+                                <span class="s1">messageId: </span><span class="s0">'variableSuggest'</span><span class="s1">,</span>
+                                <span class="s1">fix: (fixer) =&gt; [</span>
+                                    <span class="s1">fixer.remove(typeNode.parent),</span>
+                                    <span class="s1">fixer.insertTextAfter(valueNode, </span><span class="s0">' as const'</span><span class="s1">),</span>
+                                <span class="s1">],</span>
+                            <span class="s1">},</span>
+                        <span class="s1">],</span>
+                    <span class="s1">});</span>
+                <span class="s1">}</span>
+            <span class="s1">}</span>
+        <span class="s1">}</span>
+        <span class="s2">return </span><span class="s1">{</span>
+            <span class="s1">PropertyDefinition(node) {</span>
+                <span class="s2">if </span><span class="s1">(node.value &amp;&amp; node.typeAnnotation) {</span>
+                    <span class="s1">compareTypes(node.value, node.typeAnnotation.typeAnnotation, </span><span class="s2">false</span><span class="s1">);</span>
+                <span class="s1">}</span>
+            <span class="s1">},</span>
+            <span class="s1">TSAsExpression(node) {</span>
+                <span class="s1">compareTypes(node.expression, node.typeAnnotation, </span><span class="s2">true</span><span class="s1">);</span>
+            <span class="s1">},</span>
+            <span class="s1">TSTypeAssertion(node) {</span>
+                <span class="s1">compareTypes(node.expression, node.typeAnnotation, </span><span class="s2">true</span><span class="s1">);</span>
+            <span class="s1">},</span>
+            <span class="s1">VariableDeclarator(node) {</span>
+                <span class="s2">if </span><span class="s1">(node.init &amp;&amp; node.id.typeAnnotation) {</span>
+                    <span class="s1">compareTypes(node.init, node.id.typeAnnotation.typeAnnotation, </span><span class="s2">false</span><span class="s1">);</span>
+                <span class="s1">}</span>
+            <span class="s1">},</span>
+        <span class="s1">};</span>
+    <span class="s1">},</span>
+<span class="s1">});</span>
+</pre>
+</body>
+</html>

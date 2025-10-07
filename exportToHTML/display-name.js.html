@@ -1,0 +1,307 @@
+<html>
+<head>
+<title>display-name.js</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #8c8c8c; font-style: italic;}
+.s1 { color: #8c8c8c; font-style: italic;}
+.s2 { color: #080808;}
+.s3 { color: #067d17;}
+.s4 { color: #0033b3;}
+.s5 { color: #1750eb;}
+</style>
+</head>
+<body bgcolor="#ffffff">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#c0c0c0" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+display-name.js</font>
+</center></td></tr></table>
+<pre><span class="s0">/**</span>
+ <span class="s0">* </span><span class="s1">@fileoverview </span><span class="s0">Prevent missing displayName in a React component definition</span>
+ <span class="s0">* </span><span class="s1">@author </span><span class="s0">Yannick Croissant</span>
+ <span class="s0">*/</span>
+
+<span class="s3">'use strict'</span><span class="s2">;</span>
+
+<span class="s4">const </span><span class="s2">values = require(</span><span class="s3">'object.values'</span><span class="s2">);</span>
+<span class="s4">const </span><span class="s2">filter = require(</span><span class="s3">'es-iterator-helpers/Iterator.prototype.filter'</span><span class="s2">);</span>
+<span class="s4">const </span><span class="s2">forEach = require(</span><span class="s3">'es-iterator-helpers/Iterator.prototype.forEach'</span><span class="s2">);</span>
+
+<span class="s4">const </span><span class="s2">Components = require(</span><span class="s3">'../util/Components'</span><span class="s2">);</span>
+<span class="s4">const </span><span class="s2">isCreateContext = require(</span><span class="s3">'../util/isCreateContext'</span><span class="s2">);</span>
+<span class="s4">const </span><span class="s2">astUtil = require(</span><span class="s3">'../util/ast'</span><span class="s2">);</span>
+<span class="s4">const </span><span class="s2">componentUtil = require(</span><span class="s3">'../util/componentUtil'</span><span class="s2">);</span>
+<span class="s4">const </span><span class="s2">docsUrl = require(</span><span class="s3">'../util/docsUrl'</span><span class="s2">);</span>
+<span class="s4">const </span><span class="s2">testReactVersion = require(</span><span class="s3">'../util/version'</span><span class="s2">).testReactVersion;</span>
+<span class="s4">const </span><span class="s2">propsUtil = require(</span><span class="s3">'../util/props'</span><span class="s2">);</span>
+<span class="s4">const </span><span class="s2">report = require(</span><span class="s3">'../util/report'</span><span class="s2">);</span>
+
+<span class="s0">// ------------------------------------------------------------------------------</span>
+<span class="s0">// Rule Definition</span>
+<span class="s0">// ------------------------------------------------------------------------------</span>
+
+<span class="s4">const </span><span class="s2">messages = {</span>
+  <span class="s2">noDisplayName: </span><span class="s3">'Component definition is missing display name'</span><span class="s2">,</span>
+  <span class="s2">noContextDisplayName: </span><span class="s3">'Context definition is missing display name'</span><span class="s2">,</span>
+<span class="s2">};</span>
+
+<span class="s0">/** </span><span class="s1">@type </span><span class="s0">{import('eslint').Rule.RuleModule} */</span>
+<span class="s2">module.exports = {</span>
+  <span class="s2">meta: {</span>
+    <span class="s2">docs: {</span>
+      <span class="s2">description: </span><span class="s3">'Disallow missing displayName in a React component definition'</span><span class="s2">,</span>
+      <span class="s2">category: </span><span class="s3">'Best Practices'</span><span class="s2">,</span>
+      <span class="s2">recommended: </span><span class="s4">true</span><span class="s2">,</span>
+      <span class="s2">url: docsUrl(</span><span class="s3">'display-name'</span><span class="s2">),</span>
+    <span class="s2">},</span>
+
+    <span class="s2">messages,</span>
+
+    <span class="s2">schema: [{</span>
+      <span class="s2">type: </span><span class="s3">'object'</span><span class="s2">,</span>
+      <span class="s2">properties: {</span>
+        <span class="s2">ignoreTranspilerName: {</span>
+          <span class="s2">type: </span><span class="s3">'boolean'</span><span class="s2">,</span>
+        <span class="s2">},</span>
+        <span class="s2">checkContextObjects: {</span>
+          <span class="s2">type: </span><span class="s3">'boolean'</span><span class="s2">,</span>
+        <span class="s2">},</span>
+      <span class="s2">},</span>
+      <span class="s2">additionalProperties: </span><span class="s4">false</span><span class="s2">,</span>
+    <span class="s2">}],</span>
+  <span class="s2">},</span>
+
+  <span class="s2">create: Components.detect((context, components, utils) =&gt; {</span>
+    <span class="s4">const </span><span class="s2">config = context.options[</span><span class="s5">0</span><span class="s2">] || {};</span>
+    <span class="s4">const </span><span class="s2">ignoreTranspilerName = config.ignoreTranspilerName || </span><span class="s4">false</span><span class="s2">;</span>
+    <span class="s4">const </span><span class="s2">checkContextObjects = (config.checkContextObjects || </span><span class="s4">false</span><span class="s2">) &amp;&amp; testReactVersion(context, </span><span class="s3">'&gt;= 16.3.0'</span><span class="s2">);</span>
+
+    <span class="s4">const </span><span class="s2">contextObjects = </span><span class="s4">new </span><span class="s2">Map();</span>
+
+    <span class="s0">/**</span>
+     <span class="s0">* Mark a prop type as declared</span>
+     <span class="s0">* </span><span class="s1">@param </span><span class="s0">{ASTNode} node The AST node being checked.</span>
+     <span class="s0">*/</span>
+    <span class="s4">function </span><span class="s2">markDisplayNameAsDeclared(node) {</span>
+      <span class="s2">components.set(node, {</span>
+        <span class="s2">hasDisplayName: </span><span class="s4">true</span><span class="s2">,</span>
+      <span class="s2">});</span>
+    <span class="s2">}</span>
+
+    <span class="s0">/**</span>
+     <span class="s0">* Checks if React.forwardRef is nested inside React.memo</span>
+     <span class="s0">* </span><span class="s1">@param </span><span class="s0">{ASTNode} node The AST node being checked.</span>
+     <span class="s0">* </span><span class="s1">@returns </span><span class="s0">{boolean} True if React.forwardRef is nested inside React.memo, false if not.</span>
+     <span class="s0">*/</span>
+    <span class="s4">function </span><span class="s2">isNestedMemo(node) {</span>
+      <span class="s4">return </span><span class="s2">astUtil.isCallExpression(node)</span>
+        <span class="s2">&amp;&amp; node.arguments</span>
+        <span class="s2">&amp;&amp; astUtil.isCallExpression(node.arguments[</span><span class="s5">0</span><span class="s2">])</span>
+        <span class="s2">&amp;&amp; utils.isPragmaComponentWrapper(node);</span>
+    <span class="s2">}</span>
+
+    <span class="s0">/**</span>
+     <span class="s0">* Reports missing display name for a given component</span>
+     <span class="s0">* </span><span class="s1">@param </span><span class="s0">{Object} component The component to process</span>
+     <span class="s0">*/</span>
+    <span class="s4">function </span><span class="s2">reportMissingDisplayName(component) {</span>
+      <span class="s4">if </span><span class="s2">(</span>
+        <span class="s2">testReactVersion(context, </span><span class="s3">'^0.14.10 || ^15.7.0 || &gt;= 16.12.0'</span><span class="s2">)</span>
+        <span class="s2">&amp;&amp; isNestedMemo(component.node)</span>
+      <span class="s2">) {</span>
+        <span class="s4">return</span><span class="s2">;</span>
+      <span class="s2">}</span>
+
+      <span class="s2">report(context, messages.noDisplayName, </span><span class="s3">'noDisplayName'</span><span class="s2">, {</span>
+        <span class="s2">node: component.node,</span>
+      <span class="s2">});</span>
+    <span class="s2">}</span>
+
+    <span class="s0">/**</span>
+     <span class="s0">* Reports missing display name for a given context object</span>
+     <span class="s0">* </span><span class="s1">@param </span><span class="s0">{Object} contextObj The context object to process</span>
+     <span class="s0">*/</span>
+    <span class="s4">function </span><span class="s2">reportMissingContextDisplayName(contextObj) {</span>
+      <span class="s2">report(context, messages.noContextDisplayName, </span><span class="s3">'noContextDisplayName'</span><span class="s2">, {</span>
+        <span class="s2">node: contextObj.node,</span>
+      <span class="s2">});</span>
+    <span class="s2">}</span>
+
+    <span class="s0">/**</span>
+     <span class="s0">* Checks if the component have a name set by the transpiler</span>
+     <span class="s0">* </span><span class="s1">@param </span><span class="s0">{ASTNode} node The AST node being checked.</span>
+     <span class="s0">* </span><span class="s1">@returns </span><span class="s0">{boolean} True if component has a name, false if not.</span>
+     <span class="s0">*/</span>
+    <span class="s4">function </span><span class="s2">hasTranspilerName(node) {</span>
+      <span class="s4">const </span><span class="s2">namedObjectAssignment = (</span>
+        <span class="s2">node.type === </span><span class="s3">'ObjectExpression'</span>
+        <span class="s2">&amp;&amp; node.parent</span>
+        <span class="s2">&amp;&amp; node.parent.parent</span>
+        <span class="s2">&amp;&amp; node.parent.parent.type === </span><span class="s3">'AssignmentExpression'</span>
+        <span class="s2">&amp;&amp; (</span>
+          <span class="s2">!node.parent.parent.left.object</span>
+          <span class="s2">|| node.parent.parent.left.object.name !== </span><span class="s3">'module'</span>
+          <span class="s2">|| node.parent.parent.left.property.name !== </span><span class="s3">'exports'</span>
+        <span class="s2">)</span>
+      <span class="s2">);</span>
+      <span class="s4">const </span><span class="s2">namedObjectDeclaration = (</span>
+        <span class="s2">node.type === </span><span class="s3">'ObjectExpression'</span>
+        <span class="s2">&amp;&amp; node.parent</span>
+        <span class="s2">&amp;&amp; node.parent.parent</span>
+        <span class="s2">&amp;&amp; node.parent.parent.type === </span><span class="s3">'VariableDeclarator'</span>
+      <span class="s2">);</span>
+      <span class="s4">const </span><span class="s2">namedClass = (</span>
+        <span class="s2">(node.type === </span><span class="s3">'ClassDeclaration' </span><span class="s2">|| node.type === </span><span class="s3">'ClassExpression'</span><span class="s2">)</span>
+        <span class="s2">&amp;&amp; node.id</span>
+        <span class="s2">&amp;&amp; !!node.id.name</span>
+      <span class="s2">);</span>
+
+      <span class="s4">const </span><span class="s2">namedFunctionDeclaration = (</span>
+        <span class="s2">(node.type === </span><span class="s3">'FunctionDeclaration' </span><span class="s2">|| node.type === </span><span class="s3">'FunctionExpression'</span><span class="s2">)</span>
+        <span class="s2">&amp;&amp; node.id</span>
+        <span class="s2">&amp;&amp; !!node.id.name</span>
+      <span class="s2">);</span>
+
+      <span class="s4">const </span><span class="s2">namedFunctionExpression = (</span>
+        <span class="s2">astUtil.isFunctionLikeExpression(node)</span>
+        <span class="s2">&amp;&amp; node.parent</span>
+        <span class="s2">&amp;&amp; (node.parent.type === </span><span class="s3">'VariableDeclarator' </span><span class="s2">|| node.parent.type === </span><span class="s3">'Property' </span><span class="s2">|| node.parent.method === </span><span class="s4">true</span><span class="s2">)</span>
+        <span class="s2">&amp;&amp; (!node.parent.parent || !componentUtil.isES5Component(node.parent.parent, context))</span>
+      <span class="s2">);</span>
+
+      <span class="s4">if </span><span class="s2">(</span>
+        <span class="s2">namedObjectAssignment || namedObjectDeclaration</span>
+        <span class="s2">|| namedClass</span>
+        <span class="s2">|| namedFunctionDeclaration || namedFunctionExpression</span>
+      <span class="s2">) {</span>
+        <span class="s4">return true</span><span class="s2">;</span>
+      <span class="s2">}</span>
+      <span class="s4">return false</span><span class="s2">;</span>
+    <span class="s2">}</span>
+
+    <span class="s0">// --------------------------------------------------------------------------</span>
+    <span class="s0">// Public</span>
+    <span class="s0">// --------------------------------------------------------------------------</span>
+
+    <span class="s4">return </span><span class="s2">{</span>
+      <span class="s2">ExpressionStatement(node) {</span>
+        <span class="s4">if </span><span class="s2">(checkContextObjects &amp;&amp; isCreateContext(node)) {</span>
+          <span class="s2">contextObjects.set(node.expression.left.name, { node, hasDisplayName: </span><span class="s4">false </span><span class="s2">});</span>
+        <span class="s2">}</span>
+      <span class="s2">},</span>
+      <span class="s2">VariableDeclarator(node) {</span>
+        <span class="s4">if </span><span class="s2">(checkContextObjects &amp;&amp; isCreateContext(node)) {</span>
+          <span class="s2">contextObjects.set(node.id.name, { node, hasDisplayName: </span><span class="s4">false </span><span class="s2">});</span>
+        <span class="s2">}</span>
+      <span class="s2">},</span>
+      <span class="s3">'ClassProperty, PropertyDefinition'</span><span class="s2">(node) {</span>
+        <span class="s4">if </span><span class="s2">(!propsUtil.isDisplayNameDeclaration(node)) {</span>
+          <span class="s4">return</span><span class="s2">;</span>
+        <span class="s2">}</span>
+        <span class="s2">markDisplayNameAsDeclared(node);</span>
+      <span class="s2">},</span>
+
+      <span class="s2">MemberExpression(node) {</span>
+        <span class="s4">if </span><span class="s2">(!propsUtil.isDisplayNameDeclaration(node.property)) {</span>
+          <span class="s4">return</span><span class="s2">;</span>
+        <span class="s2">}</span>
+        <span class="s4">if </span><span class="s2">(</span>
+          <span class="s2">checkContextObjects</span>
+          <span class="s2">&amp;&amp; node.object</span>
+          <span class="s2">&amp;&amp; node.object.name</span>
+          <span class="s2">&amp;&amp; contextObjects.has(node.object.name)</span>
+        <span class="s2">) {</span>
+          <span class="s2">contextObjects.get(node.object.name).hasDisplayName = </span><span class="s4">true</span><span class="s2">;</span>
+        <span class="s2">}</span>
+        <span class="s4">const </span><span class="s2">component = utils.getRelatedComponent(node);</span>
+        <span class="s4">if </span><span class="s2">(!component) {</span>
+          <span class="s4">return</span><span class="s2">;</span>
+        <span class="s2">}</span>
+        <span class="s2">markDisplayNameAsDeclared(astUtil.unwrapTSAsExpression(component.node));</span>
+      <span class="s2">},</span>
+
+      <span class="s3">'FunctionExpression, FunctionDeclaration, ArrowFunctionExpression'</span><span class="s2">(node) {</span>
+        <span class="s4">if </span><span class="s2">(ignoreTranspilerName || !hasTranspilerName(node)) {</span>
+          <span class="s4">return</span><span class="s2">;</span>
+        <span class="s2">}</span>
+        <span class="s4">if </span><span class="s2">(components.get(node)) {</span>
+          <span class="s2">markDisplayNameAsDeclared(node);</span>
+        <span class="s2">}</span>
+      <span class="s2">},</span>
+
+      <span class="s2">MethodDefinition(node) {</span>
+        <span class="s4">if </span><span class="s2">(!propsUtil.isDisplayNameDeclaration(node.key)) {</span>
+          <span class="s4">return</span><span class="s2">;</span>
+        <span class="s2">}</span>
+        <span class="s2">markDisplayNameAsDeclared(node);</span>
+      <span class="s2">},</span>
+
+      <span class="s3">'ClassExpression, ClassDeclaration'</span><span class="s2">(node) {</span>
+        <span class="s4">if </span><span class="s2">(ignoreTranspilerName || !hasTranspilerName(node)) {</span>
+          <span class="s4">return</span><span class="s2">;</span>
+        <span class="s2">}</span>
+        <span class="s2">markDisplayNameAsDeclared(node);</span>
+      <span class="s2">},</span>
+
+      <span class="s2">ObjectExpression(node) {</span>
+        <span class="s4">if </span><span class="s2">(!componentUtil.isES5Component(node, context)) {</span>
+          <span class="s4">return</span><span class="s2">;</span>
+        <span class="s2">}</span>
+        <span class="s4">if </span><span class="s2">(ignoreTranspilerName || !hasTranspilerName(node)) {</span>
+          <span class="s0">// Search for the displayName declaration</span>
+          <span class="s2">node.properties.forEach((property) =&gt; {</span>
+            <span class="s4">if </span><span class="s2">(!property.key || !propsUtil.isDisplayNameDeclaration(property.key)) {</span>
+              <span class="s4">return</span><span class="s2">;</span>
+            <span class="s2">}</span>
+            <span class="s2">markDisplayNameAsDeclared(node);</span>
+          <span class="s2">});</span>
+          <span class="s4">return</span><span class="s2">;</span>
+        <span class="s2">}</span>
+        <span class="s2">markDisplayNameAsDeclared(node);</span>
+      <span class="s2">},</span>
+
+      <span class="s2">CallExpression(node) {</span>
+        <span class="s4">if </span><span class="s2">(!utils.isPragmaComponentWrapper(node)) {</span>
+          <span class="s4">return</span><span class="s2">;</span>
+        <span class="s2">}</span>
+
+        <span class="s4">if </span><span class="s2">(node.arguments.length &gt; </span><span class="s5">0 </span><span class="s2">&amp;&amp; astUtil.isFunctionLikeExpression(node.arguments[</span><span class="s5">0</span><span class="s2">])) {</span>
+          <span class="s0">// Skip over React.forwardRef declarations that are embedded within</span>
+          <span class="s0">// a React.memo i.e. React.memo(React.forwardRef(/* ... */))</span>
+          <span class="s0">// This means that we raise a single error for the call to React.memo</span>
+          <span class="s0">// instead of one for React.memo and one for React.forwardRef</span>
+          <span class="s4">const </span><span class="s2">isWrappedInAnotherPragma = utils.getPragmaComponentWrapper(node);</span>
+          <span class="s4">if </span><span class="s2">(</span>
+            <span class="s2">!isWrappedInAnotherPragma</span>
+            <span class="s2">&amp;&amp; (ignoreTranspilerName || !hasTranspilerName(node.arguments[</span><span class="s5">0</span><span class="s2">]))</span>
+          <span class="s2">) {</span>
+            <span class="s4">return</span><span class="s2">;</span>
+          <span class="s2">}</span>
+
+          <span class="s4">if </span><span class="s2">(components.get(node)) {</span>
+            <span class="s2">markDisplayNameAsDeclared(node);</span>
+          <span class="s2">}</span>
+        <span class="s2">}</span>
+      <span class="s2">},</span>
+
+      <span class="s3">'Program:exit'</span><span class="s2">() {</span>
+        <span class="s4">const </span><span class="s2">list = components.list();</span>
+        <span class="s0">// Report missing display name for all components</span>
+        <span class="s2">values(list).filter((component) =&gt; !component.hasDisplayName).forEach((component) =&gt; {</span>
+          <span class="s2">reportMissingDisplayName(component);</span>
+        <span class="s2">});</span>
+        <span class="s4">if </span><span class="s2">(checkContextObjects) {</span>
+          <span class="s0">// Report missing display name for all context objects</span>
+          <span class="s2">forEach(</span>
+            <span class="s2">filter(contextObjects.values(), (v) =&gt; !v.hasDisplayName),</span>
+            <span class="s2">(contextObj) =&gt; reportMissingContextDisplayName(contextObj)</span>
+          <span class="s2">);</span>
+        <span class="s2">}</span>
+      <span class="s2">},</span>
+    <span class="s2">};</span>
+  <span class="s2">}),</span>
+<span class="s2">};</span>
+</pre>
+</body>
+</html>

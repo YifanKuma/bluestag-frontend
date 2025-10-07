@@ -1,0 +1,257 @@
+<html>
+<head>
+<title>encryption.js</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #8c8c8c; font-style: italic;}
+.s1 { color: #080808;}
+.s2 { color: #067d17;}
+.s3 { color: #0033b3;}
+.s4 { color: #1750eb;}
+</style>
+</head>
+<body bgcolor="#ffffff">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#c0c0c0" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+encryption.js</font>
+</center></td></tr></table>
+<pre><span class="s0">/* eslint-disable import/no-extraneous-dependencies */ </span><span class="s2">&quot;use strict&quot;</span><span class="s1">;</span>
+<span class="s1">Object.defineProperty(exports, </span><span class="s2">&quot;__esModule&quot;</span><span class="s1">, {</span>
+    <span class="s1">value: </span><span class="s3">true</span>
+<span class="s1">});</span>
+<span class="s4">0 </span><span class="s1">&amp;&amp; (module.exports = {</span>
+    <span class="s1">decryptActionBoundArgs: </span><span class="s3">null</span><span class="s1">,</span>
+    <span class="s1">encryptActionBoundArgs: </span><span class="s3">null</span>
+<span class="s1">});</span>
+<span class="s3">function </span><span class="s1">_export(target, all) {</span>
+    <span class="s3">for</span><span class="s1">(</span><span class="s3">var </span><span class="s1">name </span><span class="s3">in </span><span class="s1">all)Object.defineProperty(target, name, {</span>
+        <span class="s1">enumerable: </span><span class="s3">true</span><span class="s1">,</span>
+        <span class="s1">get: all[name]</span>
+    <span class="s1">});</span>
+<span class="s1">}</span>
+<span class="s1">_export(exports, {</span>
+    <span class="s1">decryptActionBoundArgs: </span><span class="s3">function</span><span class="s1">() {</span>
+        <span class="s3">return </span><span class="s1">decryptActionBoundArgs;</span>
+    <span class="s1">},</span>
+    <span class="s1">encryptActionBoundArgs: </span><span class="s3">function</span><span class="s1">() {</span>
+        <span class="s3">return </span><span class="s1">encryptActionBoundArgs;</span>
+    <span class="s1">}</span>
+<span class="s1">});</span>
+<span class="s1">require(</span><span class="s2">&quot;server-only&quot;</span><span class="s1">);</span>
+<span class="s3">const </span><span class="s1">_server = require(</span><span class="s2">&quot;react-server-dom-webpack/server&quot;</span><span class="s1">);</span>
+<span class="s3">const </span><span class="s1">_client = require(</span><span class="s2">&quot;react-server-dom-webpack/client&quot;</span><span class="s1">);</span>
+<span class="s3">const </span><span class="s1">_nodewebstreamshelper = require(</span><span class="s2">&quot;../stream-utils/node-web-streams-helper&quot;</span><span class="s1">);</span>
+<span class="s3">const </span><span class="s1">_encryptionutils = require(</span><span class="s2">&quot;./encryption-utils&quot;</span><span class="s1">);</span>
+<span class="s3">const </span><span class="s1">_workunitasyncstorageexternal = require(</span><span class="s2">&quot;./work-unit-async-storage.external&quot;</span><span class="s1">);</span>
+<span class="s3">const </span><span class="s1">_dynamicrendering = require(</span><span class="s2">&quot;./dynamic-rendering&quot;</span><span class="s1">);</span>
+<span class="s3">const </span><span class="s1">_react = </span><span class="s0">/*#__PURE__*/ </span><span class="s1">_interop_require_default(require(</span><span class="s2">&quot;react&quot;</span><span class="s1">));</span>
+<span class="s3">function </span><span class="s1">_interop_require_default(obj) {</span>
+    <span class="s3">return </span><span class="s1">obj &amp;&amp; obj.__esModule ? obj : {</span>
+        <span class="s3">default</span><span class="s1">: obj</span>
+    <span class="s1">};</span>
+<span class="s1">}</span>
+<span class="s3">const </span><span class="s1">isEdgeRuntime = process.env.NEXT_RUNTIME === </span><span class="s2">'edge'</span><span class="s1">;</span>
+<span class="s3">const </span><span class="s1">textEncoder = </span><span class="s3">new </span><span class="s1">TextEncoder();</span>
+<span class="s3">const </span><span class="s1">textDecoder = </span><span class="s3">new </span><span class="s1">TextDecoder();</span>
+<span class="s3">const </span><span class="s1">filterStackFrame = process.env.NODE_ENV !== </span><span class="s2">'production' </span><span class="s1">? require(</span><span class="s2">'../lib/source-maps'</span><span class="s1">).filterStackFrameDEV : undefined;</span>
+<span class="s3">const </span><span class="s1">findSourceMapURL = process.env.NODE_ENV !== </span><span class="s2">'production' </span><span class="s1">? require(</span><span class="s2">'../lib/source-maps'</span><span class="s1">).findSourceMapURLDEV : undefined;</span>
+<span class="s0">/**</span>
+ <span class="s0">* Decrypt the serialized string with the action id as the salt.</span>
+ <span class="s0">*/ </span><span class="s1">async </span><span class="s3">function </span><span class="s1">decodeActionBoundArg(actionId, arg) {</span>
+    <span class="s3">const </span><span class="s1">key = </span><span class="s3">await </span><span class="s1">(</span><span class="s4">0</span><span class="s1">, _encryptionutils.getActionEncryptionKey)();</span>
+    <span class="s3">if </span><span class="s1">(</span><span class="s3">typeof </span><span class="s1">key === </span><span class="s2">'undefined'</span><span class="s1">) {</span>
+        <span class="s3">throw </span><span class="s1">Object.defineProperty(</span><span class="s3">new </span><span class="s1">Error(</span><span class="s2">`Missing encryption key for Server Action. This is a bug in Next.js`</span><span class="s1">), </span><span class="s2">&quot;__NEXT_ERROR_CODE&quot;</span><span class="s1">, {</span>
+            <span class="s1">value: </span><span class="s2">&quot;E65&quot;</span><span class="s1">,</span>
+            <span class="s1">enumerable: </span><span class="s3">false</span><span class="s1">,</span>
+            <span class="s1">configurable: </span><span class="s3">true</span>
+        <span class="s1">});</span>
+    <span class="s1">}</span>
+    <span class="s0">// Get the iv (16 bytes) and the payload from the arg.</span>
+    <span class="s3">const </span><span class="s1">originalPayload = atob(arg);</span>
+    <span class="s3">const </span><span class="s1">ivValue = originalPayload.slice(</span><span class="s4">0</span><span class="s1">, </span><span class="s4">16</span><span class="s1">);</span>
+    <span class="s3">const </span><span class="s1">payload = originalPayload.slice(</span><span class="s4">16</span><span class="s1">);</span>
+    <span class="s3">const </span><span class="s1">decrypted = textDecoder.decode(</span><span class="s3">await </span><span class="s1">(</span><span class="s4">0</span><span class="s1">, _encryptionutils.decrypt)(key, (</span><span class="s4">0</span><span class="s1">, _encryptionutils.stringToUint8Array)(ivValue), (</span><span class="s4">0</span><span class="s1">, _encryptionutils.stringToUint8Array)(payload)));</span>
+    <span class="s3">if </span><span class="s1">(!decrypted.startsWith(actionId)) {</span>
+        <span class="s3">throw </span><span class="s1">Object.defineProperty(</span><span class="s3">new </span><span class="s1">Error(</span><span class="s2">'Invalid Server Action payload: failed to decrypt.'</span><span class="s1">), </span><span class="s2">&quot;__NEXT_ERROR_CODE&quot;</span><span class="s1">, {</span>
+            <span class="s1">value: </span><span class="s2">&quot;E191&quot;</span><span class="s1">,</span>
+            <span class="s1">enumerable: </span><span class="s3">false</span><span class="s1">,</span>
+            <span class="s1">configurable: </span><span class="s3">true</span>
+        <span class="s1">});</span>
+    <span class="s1">}</span>
+    <span class="s3">return </span><span class="s1">decrypted.slice(actionId.length);</span>
+<span class="s1">}</span>
+<span class="s0">/**</span>
+ <span class="s0">* Encrypt the serialized string with the action id as the salt. Add a prefix to</span>
+ <span class="s0">* later ensure that the payload is correctly decrypted, similar to a checksum.</span>
+ <span class="s0">*/ </span><span class="s1">async </span><span class="s3">function </span><span class="s1">encodeActionBoundArg(actionId, arg) {</span>
+    <span class="s3">const </span><span class="s1">key = </span><span class="s3">await </span><span class="s1">(</span><span class="s4">0</span><span class="s1">, _encryptionutils.getActionEncryptionKey)();</span>
+    <span class="s3">if </span><span class="s1">(key === undefined) {</span>
+        <span class="s3">throw </span><span class="s1">Object.defineProperty(</span><span class="s3">new </span><span class="s1">Error(</span><span class="s2">`Missing encryption key for Server Action. This is a bug in Next.js`</span><span class="s1">), </span><span class="s2">&quot;__NEXT_ERROR_CODE&quot;</span><span class="s1">, {</span>
+            <span class="s1">value: </span><span class="s2">&quot;E65&quot;</span><span class="s1">,</span>
+            <span class="s1">enumerable: </span><span class="s3">false</span><span class="s1">,</span>
+            <span class="s1">configurable: </span><span class="s3">true</span>
+        <span class="s1">});</span>
+    <span class="s1">}</span>
+    <span class="s0">// Get 16 random bytes as iv.</span>
+    <span class="s3">const </span><span class="s1">randomBytes = </span><span class="s3">new </span><span class="s1">Uint8Array(</span><span class="s4">16</span><span class="s1">);</span>
+    <span class="s1">_workunitasyncstorageexternal.workUnitAsyncStorage.exit(()=&gt;crypto.getRandomValues(randomBytes));</span>
+    <span class="s3">const </span><span class="s1">ivValue = (</span><span class="s4">0</span><span class="s1">, _encryptionutils.arrayBufferToString)(randomBytes.buffer);</span>
+    <span class="s3">const </span><span class="s1">encrypted = </span><span class="s3">await </span><span class="s1">(</span><span class="s4">0</span><span class="s1">, _encryptionutils.encrypt)(key, randomBytes, textEncoder.encode(actionId + arg));</span>
+    <span class="s3">return </span><span class="s1">btoa(ivValue + (</span><span class="s4">0</span><span class="s1">, _encryptionutils.arrayBufferToString)(encrypted));</span>
+<span class="s1">}</span>
+<span class="s3">var </span><span class="s1">ReadStatus = </span><span class="s0">/*#__PURE__*/ </span><span class="s3">function</span><span class="s1">(ReadStatus) {</span>
+    <span class="s1">ReadStatus[ReadStatus[</span><span class="s2">&quot;Ready&quot;</span><span class="s1">] = </span><span class="s4">0</span><span class="s1">] = </span><span class="s2">&quot;Ready&quot;</span><span class="s1">;</span>
+    <span class="s1">ReadStatus[ReadStatus[</span><span class="s2">&quot;Pending&quot;</span><span class="s1">] = </span><span class="s4">1</span><span class="s1">] = </span><span class="s2">&quot;Pending&quot;</span><span class="s1">;</span>
+    <span class="s1">ReadStatus[ReadStatus[</span><span class="s2">&quot;Complete&quot;</span><span class="s1">] = </span><span class="s4">2</span><span class="s1">] = </span><span class="s2">&quot;Complete&quot;</span><span class="s1">;</span>
+    <span class="s3">return </span><span class="s1">ReadStatus;</span>
+<span class="s1">}(ReadStatus || {});</span>
+<span class="s3">const </span><span class="s1">encryptActionBoundArgs = _react.default.cache(async </span><span class="s3">function </span><span class="s1">encryptActionBoundArgs(actionId, ...args) {</span>
+    <span class="s3">const </span><span class="s1">workUnitStore = _workunitasyncstorageexternal.workUnitAsyncStorage.getStore();</span>
+    <span class="s3">const </span><span class="s1">cacheSignal = workUnitStore ? (</span><span class="s4">0</span><span class="s1">, _workunitasyncstorageexternal.getCacheSignal)(workUnitStore) : undefined;</span>
+    <span class="s3">const </span><span class="s1">{ clientModules } = (</span><span class="s4">0</span><span class="s1">, _encryptionutils.getClientReferenceManifestForRsc)();</span>
+    <span class="s0">// Create an error before any asynchronous calls, to capture the original</span>
+    <span class="s0">// call stack in case we need it when the serialization errors.</span>
+    <span class="s3">const </span><span class="s1">error = </span><span class="s3">new </span><span class="s1">Error();</span>
+    <span class="s1">Error.captureStackTrace(error, encryptActionBoundArgs);</span>
+    <span class="s3">let </span><span class="s1">didCatchError = </span><span class="s3">false</span><span class="s1">;</span>
+    <span class="s3">const </span><span class="s1">hangingInputAbortSignal = workUnitStore ? (</span><span class="s4">0</span><span class="s1">, _dynamicrendering.createHangingInputAbortSignal)(workUnitStore) : undefined;</span>
+    <span class="s3">let </span><span class="s1">readStatus = </span><span class="s4">0</span><span class="s1">;</span>
+    <span class="s3">function </span><span class="s1">startReadOnce() {</span>
+        <span class="s3">if </span><span class="s1">(readStatus === </span><span class="s4">0</span><span class="s1">) {</span>
+            <span class="s1">readStatus = </span><span class="s4">1</span><span class="s1">;</span>
+            <span class="s1">cacheSignal == </span><span class="s3">null </span><span class="s1">? </span><span class="s3">void </span><span class="s4">0 </span><span class="s1">: cacheSignal.beginRead();</span>
+        <span class="s1">}</span>
+    <span class="s1">}</span>
+    <span class="s3">function </span><span class="s1">endReadIfStarted() {</span>
+        <span class="s3">if </span><span class="s1">(readStatus === </span><span class="s4">1</span><span class="s1">) {</span>
+            <span class="s1">cacheSignal == </span><span class="s3">null </span><span class="s1">? </span><span class="s3">void </span><span class="s4">0 </span><span class="s1">: cacheSignal.endRead();</span>
+        <span class="s1">}</span>
+        <span class="s1">readStatus = </span><span class="s4">2</span><span class="s1">;</span>
+    <span class="s1">}</span>
+    <span class="s0">// streamToString might take longer than a microtask to resolve and then other things</span>
+    <span class="s0">// waiting on the cache signal might not realize there is another cache to fill so if</span>
+    <span class="s0">// we are no longer waiting on the bound args serialization via the hangingInputAbortSignal</span>
+    <span class="s0">// we should eagerly start the cache read to prevent other readers of the cache signal from</span>
+    <span class="s0">// missing this cache fill. We use a idempotent function to only start reading once because</span>
+    <span class="s0">// it's also possible that streamToString finishes before the hangingInputAbortSignal aborts.</span>
+    <span class="s3">if </span><span class="s1">(hangingInputAbortSignal &amp;&amp; cacheSignal) {</span>
+        <span class="s1">hangingInputAbortSignal.addEventListener(</span><span class="s2">'abort'</span><span class="s1">, startReadOnce, {</span>
+            <span class="s1">once: </span><span class="s3">true</span>
+        <span class="s1">});</span>
+    <span class="s1">}</span>
+    <span class="s0">// Using Flight to serialize the args into a string.</span>
+    <span class="s3">const </span><span class="s1">serialized = </span><span class="s3">await </span><span class="s1">(</span><span class="s4">0</span><span class="s1">, _nodewebstreamshelper.streamToString)((</span><span class="s4">0</span><span class="s1">, _server.renderToReadableStream)(args, clientModules, {</span>
+        <span class="s1">filterStackFrame,</span>
+        <span class="s1">signal: hangingInputAbortSignal,</span>
+        <span class="s1">onError (err) {</span>
+            <span class="s3">if </span><span class="s1">(hangingInputAbortSignal == </span><span class="s3">null </span><span class="s1">? </span><span class="s3">void </span><span class="s4">0 </span><span class="s1">: hangingInputAbortSignal.aborted) {</span>
+                <span class="s3">return</span><span class="s1">;</span>
+            <span class="s1">}</span>
+            <span class="s0">// We're only reporting one error at a time, starting with the first.</span>
+            <span class="s3">if </span><span class="s1">(didCatchError) {</span>
+                <span class="s3">return</span><span class="s1">;</span>
+            <span class="s1">}</span>
+            <span class="s1">didCatchError = </span><span class="s3">true</span><span class="s1">;</span>
+            <span class="s0">// Use the original error message together with the previously created</span>
+            <span class="s0">// stack, because err.stack is a useless Flight Server call stack.</span>
+            <span class="s1">error.message = err </span><span class="s3">instanceof </span><span class="s1">Error ? err.message : String(err);</span>
+        <span class="s1">}</span>
+    <span class="s1">}), </span><span class="s0">// We pass the abort signal to `streamToString` so that no chunks are</span>
+    <span class="s0">// included that are emitted after the signal was already aborted. This</span>
+    <span class="s0">// ensures that we can encode hanging promises.</span>
+    <span class="s1">hangingInputAbortSignal);</span>
+    <span class="s3">if </span><span class="s1">(didCatchError) {</span>
+        <span class="s3">if </span><span class="s1">(process.env.NODE_ENV === </span><span class="s2">'development'</span><span class="s1">) {</span>
+            <span class="s0">// Logging the error is needed for server functions that are passed to the</span>
+            <span class="s0">// client where the decryption is not done during rendering. Console</span>
+            <span class="s0">// replaying allows us to still show the error dev overlay in this case.</span>
+            <span class="s1">console.error(error);</span>
+        <span class="s1">}</span>
+        <span class="s1">endReadIfStarted();</span>
+        <span class="s3">throw </span><span class="s1">error;</span>
+    <span class="s1">}</span>
+    <span class="s3">if </span><span class="s1">(!workUnitStore) {</span>
+        <span class="s0">// We don't need to call cacheSignal.endRead here because we can't have a cacheSignal</span>
+        <span class="s0">// if we do not have a workUnitStore.</span>
+        <span class="s3">return </span><span class="s1">encodeActionBoundArg(actionId, serialized);</span>
+    <span class="s1">}</span>
+    <span class="s1">startReadOnce();</span>
+    <span class="s3">const </span><span class="s1">prerenderResumeDataCache = (</span><span class="s4">0</span><span class="s1">, _workunitasyncstorageexternal.getPrerenderResumeDataCache)(workUnitStore);</span>
+    <span class="s3">const </span><span class="s1">renderResumeDataCache = (</span><span class="s4">0</span><span class="s1">, _workunitasyncstorageexternal.getRenderResumeDataCache)(workUnitStore);</span>
+    <span class="s3">const </span><span class="s1">cacheKey = actionId + serialized;</span>
+    <span class="s3">const </span><span class="s1">cachedEncrypted = (prerenderResumeDataCache == </span><span class="s3">null </span><span class="s1">? </span><span class="s3">void </span><span class="s4">0 </span><span class="s1">: prerenderResumeDataCache.encryptedBoundArgs.get(cacheKey)) ?? (renderResumeDataCache == </span><span class="s3">null </span><span class="s1">? </span><span class="s3">void </span><span class="s4">0 </span><span class="s1">: renderResumeDataCache.encryptedBoundArgs.get(cacheKey));</span>
+    <span class="s3">if </span><span class="s1">(cachedEncrypted) {</span>
+        <span class="s3">return </span><span class="s1">cachedEncrypted;</span>
+    <span class="s1">}</span>
+    <span class="s3">const </span><span class="s1">encrypted = </span><span class="s3">await </span><span class="s1">encodeActionBoundArg(actionId, serialized);</span>
+    <span class="s1">endReadIfStarted();</span>
+    <span class="s1">prerenderResumeDataCache == </span><span class="s3">null </span><span class="s1">? </span><span class="s3">void </span><span class="s4">0 </span><span class="s1">: prerenderResumeDataCache.encryptedBoundArgs.set(cacheKey, encrypted);</span>
+    <span class="s3">return </span><span class="s1">encrypted;</span>
+<span class="s1">});</span>
+<span class="s1">async </span><span class="s3">function </span><span class="s1">decryptActionBoundArgs(actionId, encryptedPromise) {</span>
+    <span class="s3">const </span><span class="s1">encrypted = </span><span class="s3">await </span><span class="s1">encryptedPromise;</span>
+    <span class="s3">const </span><span class="s1">workUnitStore = _workunitasyncstorageexternal.workUnitAsyncStorage.getStore();</span>
+    <span class="s3">let </span><span class="s1">decrypted;</span>
+    <span class="s3">if </span><span class="s1">(workUnitStore) {</span>
+        <span class="s3">const </span><span class="s1">cacheSignal = (</span><span class="s4">0</span><span class="s1">, _workunitasyncstorageexternal.getCacheSignal)(workUnitStore);</span>
+        <span class="s3">const </span><span class="s1">prerenderResumeDataCache = (</span><span class="s4">0</span><span class="s1">, _workunitasyncstorageexternal.getPrerenderResumeDataCache)(workUnitStore);</span>
+        <span class="s3">const </span><span class="s1">renderResumeDataCache = (</span><span class="s4">0</span><span class="s1">, _workunitasyncstorageexternal.getRenderResumeDataCache)(workUnitStore);</span>
+        <span class="s1">decrypted = (prerenderResumeDataCache == </span><span class="s3">null </span><span class="s1">? </span><span class="s3">void </span><span class="s4">0 </span><span class="s1">: prerenderResumeDataCache.decryptedBoundArgs.get(encrypted)) ?? (renderResumeDataCache == </span><span class="s3">null </span><span class="s1">? </span><span class="s3">void </span><span class="s4">0 </span><span class="s1">: renderResumeDataCache.decryptedBoundArgs.get(encrypted));</span>
+        <span class="s3">if </span><span class="s1">(!decrypted) {</span>
+            <span class="s1">cacheSignal == </span><span class="s3">null </span><span class="s1">? </span><span class="s3">void </span><span class="s4">0 </span><span class="s1">: cacheSignal.beginRead();</span>
+            <span class="s1">decrypted = </span><span class="s3">await </span><span class="s1">decodeActionBoundArg(actionId, encrypted);</span>
+            <span class="s1">cacheSignal == </span><span class="s3">null </span><span class="s1">? </span><span class="s3">void </span><span class="s4">0 </span><span class="s1">: cacheSignal.endRead();</span>
+            <span class="s1">prerenderResumeDataCache == </span><span class="s3">null </span><span class="s1">? </span><span class="s3">void </span><span class="s4">0 </span><span class="s1">: prerenderResumeDataCache.decryptedBoundArgs.set(encrypted, decrypted);</span>
+        <span class="s1">}</span>
+    <span class="s1">} </span><span class="s3">else </span><span class="s1">{</span>
+        <span class="s1">decrypted = </span><span class="s3">await </span><span class="s1">decodeActionBoundArg(actionId, encrypted);</span>
+    <span class="s1">}</span>
+    <span class="s3">const </span><span class="s1">{ edgeRscModuleMapping, rscModuleMapping } = (</span><span class="s4">0</span><span class="s1">, _encryptionutils.getClientReferenceManifestForRsc)();</span>
+    <span class="s0">// Using Flight to deserialize the args from the string.</span>
+    <span class="s3">const </span><span class="s1">deserialized = </span><span class="s3">await </span><span class="s1">(</span><span class="s4">0</span><span class="s1">, _client.createFromReadableStream)(</span><span class="s3">new </span><span class="s1">ReadableStream({</span>
+        <span class="s1">start (controller) {</span>
+            <span class="s1">controller.enqueue(textEncoder.encode(decrypted));</span>
+            <span class="s3">switch</span><span class="s1">(workUnitStore == </span><span class="s3">null </span><span class="s1">? </span><span class="s3">void </span><span class="s4">0 </span><span class="s1">: workUnitStore.type){</span>
+                <span class="s3">case </span><span class="s2">'prerender'</span><span class="s1">:</span>
+                <span class="s3">case </span><span class="s2">'prerender-runtime'</span><span class="s1">:</span>
+                    <span class="s0">// Explicitly don't close the stream here (until prerendering is</span>
+                    <span class="s0">// complete) so that hanging promises are not rejected.</span>
+                    <span class="s3">if </span><span class="s1">(workUnitStore.renderSignal.aborted) {</span>
+                        <span class="s1">controller.close();</span>
+                    <span class="s1">} </span><span class="s3">else </span><span class="s1">{</span>
+                        <span class="s1">workUnitStore.renderSignal.addEventListener(</span><span class="s2">'abort'</span><span class="s1">, ()=&gt;controller.close(), {</span>
+                            <span class="s1">once: </span><span class="s3">true</span>
+                        <span class="s1">});</span>
+                    <span class="s1">}</span>
+                    <span class="s3">break</span><span class="s1">;</span>
+                <span class="s3">case </span><span class="s2">'prerender-client'</span><span class="s1">:</span>
+                <span class="s3">case </span><span class="s2">'prerender-ppr'</span><span class="s1">:</span>
+                <span class="s3">case </span><span class="s2">'prerender-legacy'</span><span class="s1">:</span>
+                <span class="s3">case </span><span class="s2">'request'</span><span class="s1">:</span>
+                <span class="s3">case </span><span class="s2">'cache'</span><span class="s1">:</span>
+                <span class="s3">case </span><span class="s2">'private-cache'</span><span class="s1">:</span>
+                <span class="s3">case </span><span class="s2">'unstable-cache'</span><span class="s1">:</span>
+                <span class="s3">case </span><span class="s1">undefined:</span>
+                    <span class="s3">return </span><span class="s1">controller.close();</span>
+                <span class="s3">default</span><span class="s1">:</span>
+                    <span class="s1">workUnitStore;</span>
+            <span class="s1">}</span>
+        <span class="s1">}</span>
+    <span class="s1">}), {</span>
+        <span class="s1">findSourceMapURL,</span>
+        <span class="s1">serverConsumerManifest: {</span>
+            <span class="s0">// moduleLoading must be null because we don't want to trigger preloads of ClientReferences</span>
+            <span class="s0">// to be added to the current execution. Instead, we'll wait for any ClientReference</span>
+            <span class="s0">// to be emitted which themselves will handle the preloading.</span>
+            <span class="s1">moduleLoading: </span><span class="s3">null</span><span class="s1">,</span>
+            <span class="s1">moduleMap: isEdgeRuntime ? edgeRscModuleMapping : rscModuleMapping,</span>
+            <span class="s1">serverModuleMap: (</span><span class="s4">0</span><span class="s1">, _encryptionutils.getServerModuleMap)()</span>
+        <span class="s1">}</span>
+    <span class="s1">});</span>
+    <span class="s3">return </span><span class="s1">deserialized;</span>
+<span class="s1">}</span>
+
+<span class="s0">//# sourceMappingURL=encryption.js.map</span></pre>
+</body>
+</html>

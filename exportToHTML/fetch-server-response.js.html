@@ -1,0 +1,322 @@
+<html>
+<head>
+<title>fetch-server-response.js</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #067d17;}
+.s1 { color: #080808;}
+.s2 { color: #0033b3;}
+.s3 { color: #1750eb;}
+.s4 { color: #8c8c8c; font-style: italic;}
+</style>
+</head>
+<body bgcolor="#ffffff">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#c0c0c0" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+fetch-server-response.js</font>
+</center></td></tr></table>
+<pre><span class="s0">'use client'</span><span class="s1">;</span>
+<span class="s0">&quot;use strict&quot;</span><span class="s1">;</span>
+<span class="s1">Object.defineProperty(exports, </span><span class="s0">&quot;__esModule&quot;</span><span class="s1">, {</span>
+    <span class="s1">value: </span><span class="s2">true</span>
+<span class="s1">});</span>
+<span class="s3">0 </span><span class="s1">&amp;&amp; (module.exports = {</span>
+    <span class="s1">createFetch: </span><span class="s2">null</span><span class="s1">,</span>
+    <span class="s1">createFromNextReadableStream: </span><span class="s2">null</span><span class="s1">,</span>
+    <span class="s1">fetchServerResponse: </span><span class="s2">null</span>
+<span class="s1">});</span>
+<span class="s2">function </span><span class="s1">_export(target, all) {</span>
+    <span class="s2">for</span><span class="s1">(</span><span class="s2">var </span><span class="s1">name </span><span class="s2">in </span><span class="s1">all)Object.defineProperty(target, name, {</span>
+        <span class="s1">enumerable: </span><span class="s2">true</span><span class="s1">,</span>
+        <span class="s1">get: all[name]</span>
+    <span class="s1">});</span>
+<span class="s1">}</span>
+<span class="s1">_export(exports, {</span>
+    <span class="s1">createFetch: </span><span class="s2">function</span><span class="s1">() {</span>
+        <span class="s2">return </span><span class="s1">createFetch;</span>
+    <span class="s1">},</span>
+    <span class="s1">createFromNextReadableStream: </span><span class="s2">function</span><span class="s1">() {</span>
+        <span class="s2">return </span><span class="s1">createFromNextReadableStream;</span>
+    <span class="s1">},</span>
+    <span class="s1">fetchServerResponse: </span><span class="s2">function</span><span class="s1">() {</span>
+        <span class="s2">return </span><span class="s1">fetchServerResponse;</span>
+    <span class="s1">}</span>
+<span class="s1">});</span>
+<span class="s2">const </span><span class="s1">_client = require(</span><span class="s0">&quot;react-server-dom-webpack/client&quot;</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">_approuterheaders = require(</span><span class="s0">&quot;../app-router-headers&quot;</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">_appcallserver = require(</span><span class="s0">&quot;../../app-call-server&quot;</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">_appfindsourcemapurl = require(</span><span class="s0">&quot;../../app-find-source-map-url&quot;</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">_routerreducertypes = require(</span><span class="s0">&quot;./router-reducer-types&quot;</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">_flightdatahelpers = require(</span><span class="s0">&quot;../../flight-data-helpers&quot;</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">_appbuildid = require(</span><span class="s0">&quot;../../app-build-id&quot;</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">_setcachebustingsearchparam = require(</span><span class="s0">&quot;./set-cache-busting-search-param&quot;</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">_routeparams = require(</span><span class="s0">&quot;../../route-params&quot;</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">createFromReadableStream = _client.createFromReadableStream;</span>
+<span class="s2">function </span><span class="s1">doMpaNavigation(url) {</span>
+    <span class="s2">return </span><span class="s1">{</span>
+        <span class="s1">flightData: (</span><span class="s3">0</span><span class="s1">, _routeparams.urlToUrlWithoutFlightMarker)(</span><span class="s2">new </span><span class="s1">URL(url, location.origin)).toString(),</span>
+        <span class="s1">canonicalUrl: undefined,</span>
+        <span class="s1">couldBeIntercepted: </span><span class="s2">false</span><span class="s1">,</span>
+        <span class="s1">prerendered: </span><span class="s2">false</span><span class="s1">,</span>
+        <span class="s1">postponed: </span><span class="s2">false</span><span class="s1">,</span>
+        <span class="s1">staleTime: -</span><span class="s3">1</span>
+    <span class="s1">};</span>
+<span class="s1">}</span>
+<span class="s2">let </span><span class="s1">abortController = </span><span class="s2">new </span><span class="s1">AbortController();</span>
+<span class="s2">if </span><span class="s1">(</span><span class="s2">typeof </span><span class="s1">window !== </span><span class="s0">'undefined'</span><span class="s1">) {</span>
+    <span class="s4">// Abort any in-flight requests when the page is unloaded, e.g. due to</span>
+    <span class="s4">// reloading the page or performing hard navigations. This allows us to ignore</span>
+    <span class="s4">// what would otherwise be a thrown TypeError when the browser cancels the</span>
+    <span class="s4">// requests.</span>
+    <span class="s1">window.addEventListener(</span><span class="s0">'pagehide'</span><span class="s1">, ()=&gt;{</span>
+        <span class="s1">abortController.abort();</span>
+    <span class="s1">});</span>
+    <span class="s4">// Use a fresh AbortController instance on pageshow, e.g. when navigating back</span>
+    <span class="s4">// and the JavaScript execution context is restored by the browser.</span>
+    <span class="s1">window.addEventListener(</span><span class="s0">'pageshow'</span><span class="s1">, ()=&gt;{</span>
+        <span class="s1">abortController = </span><span class="s2">new </span><span class="s1">AbortController();</span>
+    <span class="s1">});</span>
+<span class="s1">}</span>
+<span class="s1">async </span><span class="s2">function </span><span class="s1">fetchServerResponse(url, options) {</span>
+    <span class="s2">const </span><span class="s1">{ flightRouterState, nextUrl, prefetchKind } = options;</span>
+    <span class="s2">const </span><span class="s1">headers = {</span>
+        <span class="s4">// Enable flight response</span>
+        <span class="s1">[_approuterheaders.RSC_HEADER]: </span><span class="s0">'1'</span><span class="s1">,</span>
+        <span class="s4">// Provide the current router state</span>
+        <span class="s1">[_approuterheaders.NEXT_ROUTER_STATE_TREE_HEADER]: (</span><span class="s3">0</span><span class="s1">, _flightdatahelpers.prepareFlightRouterStateForRequest)(flightRouterState, options.isHmrRefresh)</span>
+    <span class="s1">};</span>
+    <span class="s4">/**</span>
+   <span class="s4">* Three cases:</span>
+   <span class="s4">* - `prefetchKind` is `undefined`, it means it's a normal navigation, so we want to prefetch the page data fully</span>
+   <span class="s4">* - `prefetchKind` is `full` - we want to prefetch the whole page so same as above</span>
+   <span class="s4">* - `prefetchKind` is `auto` - if the page is dynamic, prefetch the page data partially, if static prefetch the page data fully</span>
+   <span class="s4">*/ </span><span class="s2">if </span><span class="s1">(prefetchKind === _routerreducertypes.PrefetchKind.AUTO) {</span>
+        <span class="s1">headers[_approuterheaders.NEXT_ROUTER_PREFETCH_HEADER] = </span><span class="s0">'1'</span><span class="s1">;</span>
+    <span class="s1">}</span>
+    <span class="s2">if </span><span class="s1">(process.env.NODE_ENV === </span><span class="s0">'development' </span><span class="s1">&amp;&amp; options.isHmrRefresh) {</span>
+        <span class="s1">headers[_approuterheaders.NEXT_HMR_REFRESH_HEADER] = </span><span class="s0">'1'</span><span class="s1">;</span>
+    <span class="s1">}</span>
+    <span class="s2">if </span><span class="s1">(nextUrl) {</span>
+        <span class="s1">headers[_approuterheaders.NEXT_URL] = nextUrl;</span>
+    <span class="s1">}</span>
+    <span class="s2">try </span><span class="s1">{</span>
+        <span class="s2">var </span><span class="s1">_res_headers_get;</span>
+        <span class="s4">// When creating a &quot;temporary&quot; prefetch (the &quot;on-demand&quot; prefetch that gets created on navigation, if one doesn't exist)</span>
+        <span class="s4">// we send the request with a &quot;high&quot; priority as it's in response to a user interaction that could be blocking a transition.</span>
+        <span class="s4">// Otherwise, all other prefetches are sent with a &quot;low&quot; priority.</span>
+        <span class="s4">// We use &quot;auto&quot; for in all other cases to match the existing default, as this function is shared outside of prefetching.</span>
+        <span class="s2">const </span><span class="s1">fetchPriority = prefetchKind ? prefetchKind === _routerreducertypes.PrefetchKind.TEMPORARY ? </span><span class="s0">'high' </span><span class="s1">: </span><span class="s0">'low' </span><span class="s1">: </span><span class="s0">'auto'</span><span class="s1">;</span>
+        <span class="s2">if </span><span class="s1">(process.env.NODE_ENV === </span><span class="s0">'production'</span><span class="s1">) {</span>
+            <span class="s2">if </span><span class="s1">(process.env.__NEXT_CONFIG_OUTPUT === </span><span class="s0">'export'</span><span class="s1">) {</span>
+                <span class="s4">// In &quot;output: export&quot; mode, we can't rely on headers to distinguish</span>
+                <span class="s4">// between HTML and RSC requests. Instead, we append an extra prefix</span>
+                <span class="s4">// to the request.</span>
+                <span class="s1">url = </span><span class="s2">new </span><span class="s1">URL(url);</span>
+                <span class="s2">if </span><span class="s1">(url.pathname.endsWith(</span><span class="s0">'/'</span><span class="s1">)) {</span>
+                    <span class="s1">url.pathname += </span><span class="s0">'index.txt'</span><span class="s1">;</span>
+                <span class="s1">} </span><span class="s2">else </span><span class="s1">{</span>
+                    <span class="s1">url.pathname += </span><span class="s0">'.txt'</span><span class="s1">;</span>
+                <span class="s1">}</span>
+            <span class="s1">}</span>
+        <span class="s1">}</span>
+        <span class="s2">const </span><span class="s1">res = </span><span class="s2">await </span><span class="s1">createFetch(url, headers, fetchPriority, abortController.signal);</span>
+        <span class="s2">const </span><span class="s1">responseUrl = (</span><span class="s3">0</span><span class="s1">, _routeparams.urlToUrlWithoutFlightMarker)(</span><span class="s2">new </span><span class="s1">URL(res.url));</span>
+        <span class="s2">const </span><span class="s1">canonicalUrl = res.redirected ? responseUrl : undefined;</span>
+        <span class="s2">const </span><span class="s1">contentType = res.headers.get(</span><span class="s0">'content-type'</span><span class="s1">) || </span><span class="s0">''</span><span class="s1">;</span>
+        <span class="s2">const </span><span class="s1">interception = !!((_res_headers_get = res.headers.get(</span><span class="s0">'vary'</span><span class="s1">)) == </span><span class="s2">null </span><span class="s1">? </span><span class="s2">void </span><span class="s3">0 </span><span class="s1">: _res_headers_get.includes(_approuterheaders.NEXT_URL));</span>
+        <span class="s2">const </span><span class="s1">postponed = !!res.headers.get(_approuterheaders.NEXT_DID_POSTPONE_HEADER);</span>
+        <span class="s2">const </span><span class="s1">staleTimeHeaderSeconds = res.headers.get(_approuterheaders.NEXT_ROUTER_STALE_TIME_HEADER);</span>
+        <span class="s2">const </span><span class="s1">staleTime = staleTimeHeaderSeconds !== </span><span class="s2">null </span><span class="s1">? parseInt(staleTimeHeaderSeconds, </span><span class="s3">10</span><span class="s1">) * </span><span class="s3">1000 </span><span class="s1">: -</span><span class="s3">1</span><span class="s1">;</span>
+        <span class="s2">let </span><span class="s1">isFlightResponse = contentType.startsWith(_approuterheaders.RSC_CONTENT_TYPE_HEADER);</span>
+        <span class="s2">if </span><span class="s1">(process.env.NODE_ENV === </span><span class="s0">'production'</span><span class="s1">) {</span>
+            <span class="s2">if </span><span class="s1">(process.env.__NEXT_CONFIG_OUTPUT === </span><span class="s0">'export'</span><span class="s1">) {</span>
+                <span class="s2">if </span><span class="s1">(!isFlightResponse) {</span>
+                    <span class="s1">isFlightResponse = contentType.startsWith(</span><span class="s0">'text/plain'</span><span class="s1">);</span>
+                <span class="s1">}</span>
+            <span class="s1">}</span>
+        <span class="s1">}</span>
+        <span class="s4">// If fetch returns something different than flight response handle it like a mpa navigation</span>
+        <span class="s4">// If the fetch was not 200, we also handle it like a mpa navigation</span>
+        <span class="s2">if </span><span class="s1">(!isFlightResponse || !res.ok || !res.body) {</span>
+            <span class="s4">// in case the original URL came with a hash, preserve it before redirecting to the new URL</span>
+            <span class="s2">if </span><span class="s1">(url.hash) {</span>
+                <span class="s1">responseUrl.hash = url.hash;</span>
+            <span class="s1">}</span>
+            <span class="s2">return </span><span class="s1">doMpaNavigation(responseUrl.toString());</span>
+        <span class="s1">}</span>
+        <span class="s4">// We may navigate to a page that requires a different Webpack runtime.</span>
+        <span class="s4">// In prod, every page will have the same Webpack runtime.</span>
+        <span class="s4">// In dev, the Webpack runtime is minimal for each page.</span>
+        <span class="s4">// We need to ensure the Webpack runtime is updated before executing client-side JS of the new page.</span>
+        <span class="s2">if </span><span class="s1">(process.env.NODE_ENV !== </span><span class="s0">'production' </span><span class="s1">&amp;&amp; !process.env.TURBOPACK) {</span>
+            <span class="s2">await </span><span class="s1">require(</span><span class="s0">'../../dev/hot-reloader/app/hot-reloader-app'</span><span class="s1">).waitForWebpackRuntimeHotUpdate();</span>
+        <span class="s1">}</span>
+        <span class="s4">// Handle the `fetch` readable stream that can be unwrapped by `React.use`.</span>
+        <span class="s2">const </span><span class="s1">flightStream = postponed ? createUnclosingPrefetchStream(res.body) : res.body;</span>
+        <span class="s2">const </span><span class="s1">response = </span><span class="s2">await </span><span class="s1">createFromNextReadableStream(flightStream);</span>
+        <span class="s2">if </span><span class="s1">((</span><span class="s3">0</span><span class="s1">, _appbuildid.getAppBuildId)() !== response.b) {</span>
+            <span class="s2">return </span><span class="s1">doMpaNavigation(res.url);</span>
+        <span class="s1">}</span>
+        <span class="s2">return </span><span class="s1">{</span>
+            <span class="s1">flightData: (</span><span class="s3">0</span><span class="s1">, _flightdatahelpers.normalizeFlightData)(response.f),</span>
+            <span class="s1">canonicalUrl: canonicalUrl,</span>
+            <span class="s1">couldBeIntercepted: interception,</span>
+            <span class="s1">prerendered: response.S,</span>
+            <span class="s1">postponed,</span>
+            <span class="s1">staleTime</span>
+        <span class="s1">};</span>
+    <span class="s1">} </span><span class="s2">catch </span><span class="s1">(err) {</span>
+        <span class="s2">if </span><span class="s1">(!abortController.signal.aborted) {</span>
+            <span class="s1">console.error(</span><span class="s0">&quot;Failed to fetch RSC payload for &quot; </span><span class="s1">+ url + </span><span class="s0">&quot;. Falling back to browser navigation.&quot;</span><span class="s1">, err);</span>
+        <span class="s1">}</span>
+        <span class="s4">// If fetch fails handle it like a mpa navigation</span>
+        <span class="s4">// TODO-APP: Add a test for the case where a CORS request fails, e.g. external url redirect coming from the response.</span>
+        <span class="s4">// See https://github.com/vercel/next.js/issues/43605#issuecomment-1451617521 for a reproduction.</span>
+        <span class="s2">return </span><span class="s1">{</span>
+            <span class="s1">flightData: url.toString(),</span>
+            <span class="s1">canonicalUrl: undefined,</span>
+            <span class="s1">couldBeIntercepted: </span><span class="s2">false</span><span class="s1">,</span>
+            <span class="s1">prerendered: </span><span class="s2">false</span><span class="s1">,</span>
+            <span class="s1">postponed: </span><span class="s2">false</span><span class="s1">,</span>
+            <span class="s1">staleTime: -</span><span class="s3">1</span>
+        <span class="s1">};</span>
+    <span class="s1">}</span>
+<span class="s1">}</span>
+<span class="s1">async </span><span class="s2">function </span><span class="s1">createFetch(url, headers, fetchPriority, signal) {</span>
+    <span class="s4">// TODO: In output: &quot;export&quot; mode, the headers do nothing. Omit them (and the</span>
+    <span class="s4">// cache busting search param) from the request so they're</span>
+    <span class="s4">// maximally cacheable.</span>
+    <span class="s2">if </span><span class="s1">(process.env.__NEXT_TEST_MODE &amp;&amp; fetchPriority !== </span><span class="s2">null</span><span class="s1">) {</span>
+        <span class="s1">headers[</span><span class="s0">'Next-Test-Fetch-Priority'</span><span class="s1">] = fetchPriority;</span>
+    <span class="s1">}</span>
+    <span class="s2">if </span><span class="s1">(process.env.NEXT_DEPLOYMENT_ID) {</span>
+        <span class="s1">headers[</span><span class="s0">'x-deployment-id'</span><span class="s1">] = process.env.NEXT_DEPLOYMENT_ID;</span>
+    <span class="s1">}</span>
+    <span class="s2">const </span><span class="s1">fetchOptions = {</span>
+        <span class="s4">// Backwards compat for older browsers. `same-origin` is the default in modern browsers.</span>
+        <span class="s1">credentials: </span><span class="s0">'same-origin'</span><span class="s1">,</span>
+        <span class="s1">headers,</span>
+        <span class="s1">priority: fetchPriority || undefined,</span>
+        <span class="s1">signal</span>
+    <span class="s1">};</span>
+    <span class="s4">// `fetchUrl` is slightly different from `url` because we add a cache-busting</span>
+    <span class="s4">// search param to it. This should not leak outside of this function, so we</span>
+    <span class="s4">// track them separately.</span>
+    <span class="s2">let </span><span class="s1">fetchUrl = </span><span class="s2">new </span><span class="s1">URL(url);</span>
+    <span class="s1">(</span><span class="s3">0</span><span class="s1">, _setcachebustingsearchparam.setCacheBustingSearchParam)(fetchUrl, headers);</span>
+    <span class="s2">let </span><span class="s1">browserResponse = </span><span class="s2">await </span><span class="s1">fetch(fetchUrl, fetchOptions);</span>
+    <span class="s4">// If the server responds with a redirect (e.g. 307), and the redirected</span>
+    <span class="s4">// location does not contain the cache busting search param set in the</span>
+    <span class="s4">// original request, the response is likely invalid — when following the</span>
+    <span class="s4">// redirect, the browser forwards the request headers, but since the cache</span>
+    <span class="s4">// busting search param is missing, the server will reject the request due to</span>
+    <span class="s4">// a mismatch.</span>
+    <span class="s4">//</span>
+    <span class="s4">// Ideally, we would be able to intercept the redirect response and perform it</span>
+    <span class="s4">// manually, instead of letting the browser automatically follow it, but this</span>
+    <span class="s4">// is not allowed by the fetch API.</span>
+    <span class="s4">//</span>
+    <span class="s4">// So instead, we must &quot;replay&quot; the redirect by fetching the new location</span>
+    <span class="s4">// again, but this time we'll append the cache busting search param to prevent</span>
+    <span class="s4">// a mismatch.</span>
+    <span class="s4">//</span>
+    <span class="s4">// TODO: We can optimize Next.js's built-in middleware APIs by returning a</span>
+    <span class="s4">// custom status code, to prevent the browser from automatically following it.</span>
+    <span class="s4">//</span>
+    <span class="s4">// This does not affect Server Action-based redirects; those are encoded</span>
+    <span class="s4">// differently, as part of the Flight body. It only affects redirects that</span>
+    <span class="s4">// occur in a middleware or a third-party proxy.</span>
+    <span class="s2">let </span><span class="s1">redirected = browserResponse.redirected;</span>
+    <span class="s2">if </span><span class="s1">(process.env.__NEXT_CLIENT_VALIDATE_RSC_REQUEST_HEADERS) {</span>
+        <span class="s4">// This is to prevent a redirect loop. Same limit used by Chrome.</span>
+        <span class="s2">const </span><span class="s1">MAX_REDIRECTS = </span><span class="s3">20</span><span class="s1">;</span>
+        <span class="s2">for</span><span class="s1">(</span><span class="s2">let </span><span class="s1">n = </span><span class="s3">0</span><span class="s1">; n &lt; MAX_REDIRECTS; n++){</span>
+            <span class="s2">if </span><span class="s1">(!browserResponse.redirected) {</span>
+                <span class="s2">break</span><span class="s1">;</span>
+            <span class="s1">}</span>
+            <span class="s2">const </span><span class="s1">responseUrl = </span><span class="s2">new </span><span class="s1">URL(browserResponse.url, fetchUrl);</span>
+            <span class="s2">if </span><span class="s1">(responseUrl.origin !== fetchUrl.origin) {</span>
+                <span class="s2">break</span><span class="s1">;</span>
+            <span class="s1">}</span>
+            <span class="s2">if </span><span class="s1">(responseUrl.searchParams.get(_approuterheaders.NEXT_RSC_UNION_QUERY) === fetchUrl.searchParams.get(_approuterheaders.NEXT_RSC_UNION_QUERY)) {</span>
+                <span class="s2">break</span><span class="s1">;</span>
+            <span class="s1">}</span>
+            <span class="s4">// The RSC request was redirected. Assume the response is invalid.</span>
+            <span class="s4">//</span>
+            <span class="s4">// Append the cache busting search param to the redirected URL and</span>
+            <span class="s4">// fetch again.</span>
+            <span class="s1">fetchUrl = </span><span class="s2">new </span><span class="s1">URL(responseUrl);</span>
+            <span class="s1">(</span><span class="s3">0</span><span class="s1">, _setcachebustingsearchparam.setCacheBustingSearchParam)(fetchUrl, headers);</span>
+            <span class="s1">browserResponse = </span><span class="s2">await </span><span class="s1">fetch(fetchUrl, fetchOptions);</span>
+            <span class="s4">// We just performed a manual redirect, so this is now true.</span>
+            <span class="s1">redirected = </span><span class="s2">true</span><span class="s1">;</span>
+        <span class="s1">}</span>
+    <span class="s1">}</span>
+    <span class="s4">// Remove the cache busting search param from the response URL, to prevent it</span>
+    <span class="s4">// from leaking outside of this function.</span>
+    <span class="s2">const </span><span class="s1">responseUrl = </span><span class="s2">new </span><span class="s1">URL(browserResponse.url, fetchUrl);</span>
+    <span class="s1">responseUrl.searchParams.delete(_approuterheaders.NEXT_RSC_UNION_QUERY);</span>
+    <span class="s2">const </span><span class="s1">rscResponse = {</span>
+        <span class="s1">url: responseUrl.href,</span>
+        <span class="s4">// This is true if any redirects occurred, either automatically by the</span>
+        <span class="s4">// browser, or manually by us. So it's different from</span>
+        <span class="s4">// `browserResponse.redirected`, which only tells us whether the browser</span>
+        <span class="s4">// followed a redirect, and only for the last response in the chain.</span>
+        <span class="s1">redirected,</span>
+        <span class="s4">// These can be copied from the last browser response we received. We</span>
+        <span class="s4">// intentionally only expose the subset of fields that are actually used</span>
+        <span class="s4">// elsewhere in the codebase.</span>
+        <span class="s1">ok: browserResponse.ok,</span>
+        <span class="s1">headers: browserResponse.headers,</span>
+        <span class="s1">body: browserResponse.body,</span>
+        <span class="s1">status: browserResponse.status</span>
+    <span class="s1">};</span>
+    <span class="s2">return </span><span class="s1">rscResponse;</span>
+<span class="s1">}</span>
+<span class="s2">function </span><span class="s1">createFromNextReadableStream(flightStream) {</span>
+    <span class="s2">return </span><span class="s1">createFromReadableStream(flightStream, {</span>
+        <span class="s1">callServer: _appcallserver.callServer,</span>
+        <span class="s1">findSourceMapURL: _appfindsourcemapurl.findSourceMapURL</span>
+    <span class="s1">});</span>
+<span class="s1">}</span>
+<span class="s2">function </span><span class="s1">createUnclosingPrefetchStream(originalFlightStream) {</span>
+    <span class="s4">// When PPR is enabled, prefetch streams may contain references that never</span>
+    <span class="s4">// resolve, because that's how we encode dynamic data access. In the decoded</span>
+    <span class="s4">// object returned by the Flight client, these are reified into hanging</span>
+    <span class="s4">// promises that suspend during render, which is effectively what we want.</span>
+    <span class="s4">// The UI resolves when it switches to the dynamic data stream</span>
+    <span class="s4">// (via useDeferredValue(dynamic, static)).</span>
+    <span class="s4">//</span>
+    <span class="s4">// However, the Flight implementation currently errors if the server closes</span>
+    <span class="s4">// the response before all the references are resolved. As a cheat to work</span>
+    <span class="s4">// around this, we wrap the original stream in a new stream that never closes,</span>
+    <span class="s4">// and therefore doesn't error.</span>
+    <span class="s2">const </span><span class="s1">reader = originalFlightStream.getReader();</span>
+    <span class="s2">return new </span><span class="s1">ReadableStream({</span>
+        <span class="s1">async pull (controller) {</span>
+            <span class="s2">while</span><span class="s1">(</span><span class="s2">true</span><span class="s1">){</span>
+                <span class="s2">const </span><span class="s1">{ done, value } = </span><span class="s2">await </span><span class="s1">reader.read();</span>
+                <span class="s2">if </span><span class="s1">(!done) {</span>
+                    <span class="s4">// Pass to the target stream and keep consuming the Flight response</span>
+                    <span class="s4">// from the server.</span>
+                    <span class="s1">controller.enqueue(value);</span>
+                    <span class="s2">continue</span><span class="s1">;</span>
+                <span class="s1">}</span>
+                <span class="s4">// The server stream has closed. Exit, but intentionally do not close</span>
+                <span class="s4">// the target stream.</span>
+                <span class="s2">return</span><span class="s1">;</span>
+            <span class="s1">}</span>
+        <span class="s1">}</span>
+    <span class="s1">});</span>
+<span class="s1">}</span>
+
+<span class="s2">if </span><span class="s1">((</span><span class="s2">typeof </span><span class="s1">exports.default === </span><span class="s0">'function' </span><span class="s1">|| (</span><span class="s2">typeof </span><span class="s1">exports.default === </span><span class="s0">'object' </span><span class="s1">&amp;&amp; exports.default !== </span><span class="s2">null</span><span class="s1">)) &amp;&amp; </span><span class="s2">typeof </span><span class="s1">exports.default.__esModule === </span><span class="s0">'undefined'</span><span class="s1">) {</span>
+  <span class="s1">Object.defineProperty(exports.default, </span><span class="s0">'__esModule'</span><span class="s1">, { value: </span><span class="s2">true </span><span class="s1">});</span>
+  <span class="s1">Object.assign(exports.default, exports);</span>
+  <span class="s1">module.exports = exports.default;</span>
+<span class="s1">}</span>
+
+<span class="s4">//# sourceMappingURL=fetch-server-response.js.map</span></pre>
+</body>
+</html>

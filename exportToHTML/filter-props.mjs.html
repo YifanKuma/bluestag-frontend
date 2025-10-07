@@ -1,0 +1,79 @@
+<html>
+<head>
+<title>filter-props.mjs</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #0033b3;}
+.s1 { color: #080808;}
+.s2 { color: #067d17;}
+.s3 { color: #8c8c8c; font-style: italic;}
+</style>
+</head>
+<body bgcolor="#ffffff">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#c0c0c0" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+filter-props.mjs</font>
+</center></td></tr></table>
+<pre><span class="s0">import </span><span class="s1">{ isValidMotionProp } from </span><span class="s2">'../../../motion/utils/valid-prop.mjs'</span><span class="s1">;</span>
+
+<span class="s0">let </span><span class="s1">shouldForward = (key) =&gt; !isValidMotionProp(key);</span>
+<span class="s0">function </span><span class="s1">loadExternalIsValidProp(isValidProp) {</span>
+    <span class="s0">if </span><span class="s1">(</span><span class="s0">typeof </span><span class="s1">isValidProp !== </span><span class="s2">&quot;function&quot;</span><span class="s1">)</span>
+        <span class="s0">return</span><span class="s1">;</span>
+    <span class="s3">// Explicitly filter our events</span>
+    <span class="s1">shouldForward = (key) =&gt; key.startsWith(</span><span class="s2">&quot;on&quot;</span><span class="s1">) ? !isValidMotionProp(key) : isValidProp(key);</span>
+<span class="s1">}</span>
+<span class="s3">/**</span>
+ <span class="s3">* Emotion and Styled Components both allow users to pass through arbitrary props to their components</span>
+ <span class="s3">* to dynamically generate CSS. They both use the `@emotion/is-prop-valid` package to determine which</span>
+ <span class="s3">* of these should be passed to the underlying DOM node.</span>
+ <span class="s3">*</span>
+ <span class="s3">* However, when styling a Motion component `styled(motion.div)`, both packages pass through *all* props</span>
+ <span class="s3">* as it's seen as an arbitrary component rather than a DOM node. Motion only allows arbitrary props</span>
+ <span class="s3">* passed through the `custom` prop so it doesn't *need* the payload or computational overhead of</span>
+ <span class="s3">* `@emotion/is-prop-valid`, however to fix this problem we need to use it.</span>
+ <span class="s3">*</span>
+ <span class="s3">* By making it an optionalDependency we can offer this functionality only in the situations where it's</span>
+ <span class="s3">* actually required.</span>
+ <span class="s3">*/</span>
+<span class="s0">try </span><span class="s1">{</span>
+    <span class="s3">/**</span>
+     <span class="s3">* We attempt to import this package but require won't be defined in esm environments, in that case</span>
+     <span class="s3">* isPropValid will have to be provided via `MotionContext`. In a 6.0.0 this should probably be removed</span>
+     <span class="s3">* in favour of explicit injection.</span>
+     <span class="s3">*/</span>
+    <span class="s1">loadExternalIsValidProp(require(</span><span class="s2">&quot;@emotion/is-prop-valid&quot;</span><span class="s1">).default);</span>
+<span class="s1">}</span>
+<span class="s0">catch </span><span class="s1">{</span>
+    <span class="s3">// We don't need to actually do anything here - the fallback is the existing `isPropValid`.</span>
+<span class="s1">}</span>
+<span class="s0">function </span><span class="s1">filterProps(props, isDom, forwardMotionProps) {</span>
+    <span class="s0">const </span><span class="s1">filteredProps = {};</span>
+    <span class="s0">for </span><span class="s1">(</span><span class="s0">const </span><span class="s1">key </span><span class="s0">in </span><span class="s1">props) {</span>
+        <span class="s3">/**</span>
+         <span class="s3">* values is considered a valid prop by Emotion, so if it's present</span>
+         <span class="s3">* this will be rendered out to the DOM unless explicitly filtered.</span>
+         <span class="s3">*</span>
+         <span class="s3">* We check the type as it could be used with the `feColorMatrix`</span>
+         <span class="s3">* element, which we support.</span>
+         <span class="s3">*/</span>
+        <span class="s0">if </span><span class="s1">(key === </span><span class="s2">&quot;values&quot; </span><span class="s1">&amp;&amp; </span><span class="s0">typeof </span><span class="s1">props.values === </span><span class="s2">&quot;object&quot;</span><span class="s1">)</span>
+            <span class="s0">continue</span><span class="s1">;</span>
+        <span class="s0">if </span><span class="s1">(shouldForward(key) ||</span>
+            <span class="s1">(forwardMotionProps === </span><span class="s0">true </span><span class="s1">&amp;&amp; isValidMotionProp(key)) ||</span>
+            <span class="s1">(!isDom &amp;&amp; !isValidMotionProp(key)) ||</span>
+            <span class="s3">// If trying to use native HTML drag events, forward drag listeners</span>
+            <span class="s1">(props[</span><span class="s2">&quot;draggable&quot;</span><span class="s1">] &amp;&amp;</span>
+                <span class="s1">key.startsWith(</span><span class="s2">&quot;onDrag&quot;</span><span class="s1">))) {</span>
+            <span class="s1">filteredProps[key] =</span>
+                <span class="s1">props[key];</span>
+        <span class="s1">}</span>
+    <span class="s1">}</span>
+    <span class="s0">return </span><span class="s1">filteredProps;</span>
+<span class="s1">}</span>
+
+<span class="s0">export </span><span class="s1">{ filterProps, loadExternalIsValidProp };</span>
+</pre>
+</body>
+</html>

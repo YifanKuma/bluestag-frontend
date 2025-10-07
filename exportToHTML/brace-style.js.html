@@ -1,0 +1,301 @@
+<html>
+<head>
+<title>brace-style.js</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #8c8c8c; font-style: italic;}
+.s1 { color: #8c8c8c; font-style: italic;}
+.s2 { color: #080808;}
+.s3 { color: #067d17;}
+.s4 { color: #0033b3;}
+.s5 { color: #1750eb;}
+.s6 { color: #0037a6;}
+</style>
+</head>
+<body bgcolor="#ffffff">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#c0c0c0" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+brace-style.js</font>
+</center></td></tr></table>
+<pre><span class="s0">/**</span>
+ <span class="s0">* </span><span class="s1">@fileoverview </span><span class="s0">Rule to flag block statements that do not use the one true brace style</span>
+ <span class="s0">* </span><span class="s1">@author </span><span class="s0">Ian Christian Myers</span>
+ <span class="s0">* </span><span class="s1">@deprecated </span><span class="s0">in ESLint v8.53.0</span>
+ <span class="s0">*/</span>
+
+<span class="s3">&quot;use strict&quot;</span><span class="s2">;</span>
+
+<span class="s4">const </span><span class="s2">astUtils = require(</span><span class="s3">&quot;./utils/ast-utils&quot;</span><span class="s2">);</span>
+
+<span class="s0">//------------------------------------------------------------------------------</span>
+<span class="s0">// Rule Definition</span>
+<span class="s0">//------------------------------------------------------------------------------</span>
+
+<span class="s0">/** </span><span class="s1">@type </span><span class="s0">{import('../types').Rule.RuleModule} */</span>
+<span class="s2">module.exports = {</span>
+	<span class="s2">meta: {</span>
+		<span class="s2">deprecated: {</span>
+			<span class="s2">message: </span><span class="s3">&quot;Formatting rules are being moved out of ESLint core.&quot;</span><span class="s2">,</span>
+			<span class="s2">url: </span><span class="s3">&quot;https://eslint.org/blog/2023/10/deprecating-formatting-rules/&quot;</span><span class="s2">,</span>
+			<span class="s2">deprecatedSince: </span><span class="s3">&quot;8.53.0&quot;</span><span class="s2">,</span>
+			<span class="s2">availableUntil: </span><span class="s3">&quot;10.0.0&quot;</span><span class="s2">,</span>
+			<span class="s2">replacedBy: [</span>
+				<span class="s2">{</span>
+					<span class="s2">message:</span>
+						<span class="s3">&quot;ESLint Stylistic now maintains deprecated stylistic core rules.&quot;</span><span class="s2">,</span>
+					<span class="s2">url: </span><span class="s3">&quot;https://eslint.style/guide/migration&quot;</span><span class="s2">,</span>
+					<span class="s2">plugin: {</span>
+						<span class="s2">name: </span><span class="s3">&quot;@stylistic/eslint-plugin&quot;</span><span class="s2">,</span>
+						<span class="s2">url: </span><span class="s3">&quot;https://eslint.style&quot;</span><span class="s2">,</span>
+					<span class="s2">},</span>
+					<span class="s2">rule: {</span>
+						<span class="s2">name: </span><span class="s3">&quot;brace-style&quot;</span><span class="s2">,</span>
+						<span class="s2">url: </span><span class="s3">&quot;https://eslint.style/rules/brace-style&quot;</span><span class="s2">,</span>
+					<span class="s2">},</span>
+				<span class="s2">},</span>
+			<span class="s2">],</span>
+		<span class="s2">},</span>
+		<span class="s2">type: </span><span class="s3">&quot;layout&quot;</span><span class="s2">,</span>
+
+		<span class="s2">docs: {</span>
+			<span class="s2">description: </span><span class="s3">&quot;Enforce consistent brace style for blocks&quot;</span><span class="s2">,</span>
+			<span class="s2">recommended: </span><span class="s4">false</span><span class="s2">,</span>
+			<span class="s2">url: </span><span class="s3">&quot;https://eslint.org/docs/latest/rules/brace-style&quot;</span><span class="s2">,</span>
+		<span class="s2">},</span>
+
+		<span class="s2">schema: [</span>
+			<span class="s2">{</span>
+				<span class="s4">enum</span><span class="s2">: [</span><span class="s3">&quot;1tbs&quot;</span><span class="s2">, </span><span class="s3">&quot;stroustrup&quot;</span><span class="s2">, </span><span class="s3">&quot;allman&quot;</span><span class="s2">],</span>
+			<span class="s2">},</span>
+			<span class="s2">{</span>
+				<span class="s2">type: </span><span class="s3">&quot;object&quot;</span><span class="s2">,</span>
+				<span class="s2">properties: {</span>
+					<span class="s2">allowSingleLine: {</span>
+						<span class="s2">type: </span><span class="s3">&quot;boolean&quot;</span><span class="s2">,</span>
+						<span class="s4">default</span><span class="s2">: </span><span class="s4">false</span><span class="s2">,</span>
+					<span class="s2">},</span>
+				<span class="s2">},</span>
+				<span class="s2">additionalProperties: </span><span class="s4">false</span><span class="s2">,</span>
+			<span class="s2">},</span>
+		<span class="s2">],</span>
+
+		<span class="s2">fixable: </span><span class="s3">&quot;whitespace&quot;</span><span class="s2">,</span>
+
+		<span class="s2">messages: {</span>
+			<span class="s2">nextLineOpen:</span>
+				<span class="s3">&quot;Opening curly brace does not appear on the same line as controlling statement.&quot;</span><span class="s2">,</span>
+			<span class="s2">sameLineOpen:</span>
+				<span class="s3">&quot;Opening curly brace appears on the same line as controlling statement.&quot;</span><span class="s2">,</span>
+			<span class="s2">blockSameLine:</span>
+				<span class="s3">&quot;Statement inside of curly braces should be on next line.&quot;</span><span class="s2">,</span>
+			<span class="s2">nextLineClose:</span>
+				<span class="s3">&quot;Closing curly brace does not appear on the same line as the subsequent block.&quot;</span><span class="s2">,</span>
+			<span class="s2">singleLineClose:</span>
+				<span class="s3">&quot;Closing curly brace should be on the same line as opening curly brace or on the line after the previous block.&quot;</span><span class="s2">,</span>
+			<span class="s2">sameLineClose:</span>
+				<span class="s3">&quot;Closing curly brace appears on the same line as the subsequent block.&quot;</span><span class="s2">,</span>
+		<span class="s2">},</span>
+	<span class="s2">},</span>
+
+	<span class="s2">create(context) {</span>
+		<span class="s4">const </span><span class="s2">style = context.options[</span><span class="s5">0</span><span class="s2">] || </span><span class="s3">&quot;1tbs&quot;</span><span class="s2">,</span>
+			<span class="s2">params = context.options[</span><span class="s5">1</span><span class="s2">] || {},</span>
+			<span class="s2">sourceCode = context.sourceCode;</span>
+
+		<span class="s0">//--------------------------------------------------------------------------</span>
+		<span class="s0">// Helpers</span>
+		<span class="s0">//--------------------------------------------------------------------------</span>
+
+		<span class="s0">/**</span>
+		 <span class="s0">* Fixes a place where a newline unexpectedly appears</span>
+		 <span class="s0">* </span><span class="s1">@param </span><span class="s0">{Token} firstToken The token before the unexpected newline</span>
+		 <span class="s0">* </span><span class="s1">@param </span><span class="s0">{Token} secondToken The token after the unexpected newline</span>
+		 <span class="s0">* </span><span class="s1">@returns </span><span class="s0">{Function} A fixer function to remove the newlines between the tokens</span>
+		 <span class="s0">*/</span>
+		<span class="s4">function </span><span class="s2">removeNewlineBetween(firstToken, secondToken) {</span>
+			<span class="s4">const </span><span class="s2">textRange = [firstToken.range[</span><span class="s5">1</span><span class="s2">], secondToken.range[</span><span class="s5">0</span><span class="s2">]];</span>
+			<span class="s4">const </span><span class="s2">textBetween = sourceCode.text.slice(</span>
+				<span class="s2">textRange[</span><span class="s5">0</span><span class="s2">],</span>
+				<span class="s2">textRange[</span><span class="s5">1</span><span class="s2">],</span>
+			<span class="s2">);</span>
+
+			<span class="s0">// Don't do a fix if there is a comment between the tokens</span>
+			<span class="s4">if </span><span class="s2">(textBetween.trim()) {</span>
+				<span class="s4">return null</span><span class="s2">;</span>
+			<span class="s2">}</span>
+			<span class="s4">return </span><span class="s2">fixer =&gt; fixer.replaceTextRange(textRange, </span><span class="s3">&quot; &quot;</span><span class="s2">);</span>
+		<span class="s2">}</span>
+
+		<span class="s0">/**</span>
+		 <span class="s0">* Validates a pair of curly brackets based on the user's config</span>
+		 <span class="s0">* </span><span class="s1">@param </span><span class="s0">{Token} openingCurly The opening curly bracket</span>
+		 <span class="s0">* </span><span class="s1">@param </span><span class="s0">{Token} closingCurly The closing curly bracket</span>
+		 <span class="s0">* </span><span class="s1">@returns </span><span class="s0">{void}</span>
+		 <span class="s0">*/</span>
+		<span class="s4">function </span><span class="s2">validateCurlyPair(openingCurly, closingCurly) {</span>
+			<span class="s4">const </span><span class="s2">tokenBeforeOpeningCurly =</span>
+				<span class="s2">sourceCode.getTokenBefore(openingCurly);</span>
+			<span class="s4">const </span><span class="s2">tokenAfterOpeningCurly =</span>
+				<span class="s2">sourceCode.getTokenAfter(openingCurly);</span>
+			<span class="s4">const </span><span class="s2">tokenBeforeClosingCurly =</span>
+				<span class="s2">sourceCode.getTokenBefore(closingCurly);</span>
+			<span class="s4">const </span><span class="s2">singleLineException =</span>
+				<span class="s2">params.allowSingleLine &amp;&amp;</span>
+				<span class="s2">astUtils.isTokenOnSameLine(openingCurly, closingCurly);</span>
+
+			<span class="s4">if </span><span class="s2">(</span>
+				<span class="s2">style !== </span><span class="s3">&quot;allman&quot; </span><span class="s2">&amp;&amp;</span>
+				<span class="s2">!astUtils.isTokenOnSameLine(</span>
+					<span class="s2">tokenBeforeOpeningCurly,</span>
+					<span class="s2">openingCurly,</span>
+				<span class="s2">)</span>
+			<span class="s2">) {</span>
+				<span class="s2">context.report({</span>
+					<span class="s2">node: openingCurly,</span>
+					<span class="s2">messageId: </span><span class="s3">&quot;nextLineOpen&quot;</span><span class="s2">,</span>
+					<span class="s2">fix: removeNewlineBetween(</span>
+						<span class="s2">tokenBeforeOpeningCurly,</span>
+						<span class="s2">openingCurly,</span>
+					<span class="s2">),</span>
+				<span class="s2">});</span>
+			<span class="s2">}</span>
+
+			<span class="s4">if </span><span class="s2">(</span>
+				<span class="s2">style === </span><span class="s3">&quot;allman&quot; </span><span class="s2">&amp;&amp;</span>
+				<span class="s2">astUtils.isTokenOnSameLine(</span>
+					<span class="s2">tokenBeforeOpeningCurly,</span>
+					<span class="s2">openingCurly,</span>
+				<span class="s2">) &amp;&amp;</span>
+				<span class="s2">!singleLineException</span>
+			<span class="s2">) {</span>
+				<span class="s2">context.report({</span>
+					<span class="s2">node: openingCurly,</span>
+					<span class="s2">messageId: </span><span class="s3">&quot;sameLineOpen&quot;</span><span class="s2">,</span>
+					<span class="s2">fix: fixer =&gt; fixer.insertTextBefore(openingCurly, </span><span class="s3">&quot;</span><span class="s6">\n</span><span class="s3">&quot;</span><span class="s2">),</span>
+				<span class="s2">});</span>
+			<span class="s2">}</span>
+
+			<span class="s4">if </span><span class="s2">(</span>
+				<span class="s2">astUtils.isTokenOnSameLine(</span>
+					<span class="s2">openingCurly,</span>
+					<span class="s2">tokenAfterOpeningCurly,</span>
+				<span class="s2">) &amp;&amp;</span>
+				<span class="s2">tokenAfterOpeningCurly !== closingCurly &amp;&amp;</span>
+				<span class="s2">!singleLineException</span>
+			<span class="s2">) {</span>
+				<span class="s2">context.report({</span>
+					<span class="s2">node: openingCurly,</span>
+					<span class="s2">messageId: </span><span class="s3">&quot;blockSameLine&quot;</span><span class="s2">,</span>
+					<span class="s2">fix: fixer =&gt; fixer.insertTextAfter(openingCurly, </span><span class="s3">&quot;</span><span class="s6">\n</span><span class="s3">&quot;</span><span class="s2">),</span>
+				<span class="s2">});</span>
+			<span class="s2">}</span>
+
+			<span class="s4">if </span><span class="s2">(</span>
+				<span class="s2">tokenBeforeClosingCurly !== openingCurly &amp;&amp;</span>
+				<span class="s2">!singleLineException &amp;&amp;</span>
+				<span class="s2">astUtils.isTokenOnSameLine(</span>
+					<span class="s2">tokenBeforeClosingCurly,</span>
+					<span class="s2">closingCurly,</span>
+				<span class="s2">)</span>
+			<span class="s2">) {</span>
+				<span class="s2">context.report({</span>
+					<span class="s2">node: closingCurly,</span>
+					<span class="s2">messageId: </span><span class="s3">&quot;singleLineClose&quot;</span><span class="s2">,</span>
+					<span class="s2">fix: fixer =&gt; fixer.insertTextBefore(closingCurly, </span><span class="s3">&quot;</span><span class="s6">\n</span><span class="s3">&quot;</span><span class="s2">),</span>
+				<span class="s2">});</span>
+			<span class="s2">}</span>
+		<span class="s2">}</span>
+
+		<span class="s0">/**</span>
+		 <span class="s0">* Validates the location of a token that appears before a keyword (e.g. a newline before `else`)</span>
+		 <span class="s0">* </span><span class="s1">@param </span><span class="s0">{Token} curlyToken The closing curly token. This is assumed to precede a keyword token (such as `else` or `finally`).</span>
+		 <span class="s0">* </span><span class="s1">@returns </span><span class="s0">{void}</span>
+		 <span class="s0">*/</span>
+		<span class="s4">function </span><span class="s2">validateCurlyBeforeKeyword(curlyToken) {</span>
+			<span class="s4">const </span><span class="s2">keywordToken = sourceCode.getTokenAfter(curlyToken);</span>
+
+			<span class="s4">if </span><span class="s2">(</span>
+				<span class="s2">style === </span><span class="s3">&quot;1tbs&quot; </span><span class="s2">&amp;&amp;</span>
+				<span class="s2">!astUtils.isTokenOnSameLine(curlyToken, keywordToken)</span>
+			<span class="s2">) {</span>
+				<span class="s2">context.report({</span>
+					<span class="s2">node: curlyToken,</span>
+					<span class="s2">messageId: </span><span class="s3">&quot;nextLineClose&quot;</span><span class="s2">,</span>
+					<span class="s2">fix: removeNewlineBetween(curlyToken, keywordToken),</span>
+				<span class="s2">});</span>
+			<span class="s2">}</span>
+
+			<span class="s4">if </span><span class="s2">(</span>
+				<span class="s2">style !== </span><span class="s3">&quot;1tbs&quot; </span><span class="s2">&amp;&amp;</span>
+				<span class="s2">astUtils.isTokenOnSameLine(curlyToken, keywordToken)</span>
+			<span class="s2">) {</span>
+				<span class="s2">context.report({</span>
+					<span class="s2">node: curlyToken,</span>
+					<span class="s2">messageId: </span><span class="s3">&quot;sameLineClose&quot;</span><span class="s2">,</span>
+					<span class="s2">fix: fixer =&gt; fixer.insertTextAfter(curlyToken, </span><span class="s3">&quot;</span><span class="s6">\n</span><span class="s3">&quot;</span><span class="s2">),</span>
+				<span class="s2">});</span>
+			<span class="s2">}</span>
+		<span class="s2">}</span>
+
+		<span class="s0">//--------------------------------------------------------------------------</span>
+		<span class="s0">// Public API</span>
+		<span class="s0">//--------------------------------------------------------------------------</span>
+
+		<span class="s4">return </span><span class="s2">{</span>
+			<span class="s2">BlockStatement(node) {</span>
+				<span class="s4">if </span><span class="s2">(!astUtils.STATEMENT_LIST_PARENTS.has(node.parent.type)) {</span>
+					<span class="s2">validateCurlyPair(</span>
+						<span class="s2">sourceCode.getFirstToken(node),</span>
+						<span class="s2">sourceCode.getLastToken(node),</span>
+					<span class="s2">);</span>
+				<span class="s2">}</span>
+			<span class="s2">},</span>
+			<span class="s2">StaticBlock(node) {</span>
+				<span class="s2">validateCurlyPair(</span>
+					<span class="s2">sourceCode.getFirstToken(node, { skip: </span><span class="s5">1 </span><span class="s2">}), </span><span class="s0">// skip the `static` token</span>
+					<span class="s2">sourceCode.getLastToken(node),</span>
+				<span class="s2">);</span>
+			<span class="s2">},</span>
+			<span class="s2">ClassBody(node) {</span>
+				<span class="s2">validateCurlyPair(</span>
+					<span class="s2">sourceCode.getFirstToken(node),</span>
+					<span class="s2">sourceCode.getLastToken(node),</span>
+				<span class="s2">);</span>
+			<span class="s2">},</span>
+			<span class="s2">SwitchStatement(node) {</span>
+				<span class="s4">const </span><span class="s2">closingCurly = sourceCode.getLastToken(node);</span>
+				<span class="s4">const </span><span class="s2">openingCurly = sourceCode.getTokenBefore(</span>
+					<span class="s2">node.cases.length ? node.cases[</span><span class="s5">0</span><span class="s2">] : closingCurly,</span>
+				<span class="s2">);</span>
+
+				<span class="s2">validateCurlyPair(openingCurly, closingCurly);</span>
+			<span class="s2">},</span>
+			<span class="s2">IfStatement(node) {</span>
+				<span class="s4">if </span><span class="s2">(</span>
+					<span class="s2">node.consequent.type === </span><span class="s3">&quot;BlockStatement&quot; </span><span class="s2">&amp;&amp;</span>
+					<span class="s2">node.alternate</span>
+				<span class="s2">) {</span>
+					<span class="s0">// Handle the keyword after the `if` block (before `else`)</span>
+					<span class="s2">validateCurlyBeforeKeyword(</span>
+						<span class="s2">sourceCode.getLastToken(node.consequent),</span>
+					<span class="s2">);</span>
+				<span class="s2">}</span>
+			<span class="s2">},</span>
+			<span class="s2">TryStatement(node) {</span>
+				<span class="s0">// Handle the keyword after the `try` block (before `catch` or `finally`)</span>
+				<span class="s2">validateCurlyBeforeKeyword(sourceCode.getLastToken(node.block));</span>
+
+				<span class="s4">if </span><span class="s2">(node.handler &amp;&amp; node.finalizer) {</span>
+					<span class="s0">// Handle the keyword after the `catch` block (before `finally`)</span>
+					<span class="s2">validateCurlyBeforeKeyword(</span>
+						<span class="s2">sourceCode.getLastToken(node.handler.body),</span>
+					<span class="s2">);</span>
+				<span class="s2">}</span>
+			<span class="s2">},</span>
+		<span class="s2">};</span>
+	<span class="s2">},</span>
+<span class="s2">};</span>
+</pre>
+</body>
+</html>

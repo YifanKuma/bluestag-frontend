@@ -1,0 +1,86 @@
+<html>
+<head>
+<title>bench.js</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #067d17;}
+.s1 { color: #080808;}
+.s2 { color: #0033b3;}
+.s3 { color: #1750eb;}
+</style>
+</head>
+<body bgcolor="#ffffff">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#c0c0c0" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+bench.js</font>
+</center></td></tr></table>
+<pre><span class="s0">'use strict'</span>
+
+<span class="s2">const </span><span class="s1">max = </span><span class="s3">1000000</span>
+<span class="s2">const </span><span class="s1">fastqueue = require(</span><span class="s0">'./'</span><span class="s1">)(worker, </span><span class="s3">1</span><span class="s1">)</span>
+<span class="s2">const </span><span class="s1">{ promisify } = require(</span><span class="s0">'util'</span><span class="s1">)</span>
+<span class="s2">const </span><span class="s1">immediate = promisify(setImmediate)</span>
+<span class="s2">const </span><span class="s1">qPromise = require(</span><span class="s0">'./'</span><span class="s1">).promise(immediate, </span><span class="s3">1</span><span class="s1">)</span>
+<span class="s2">const </span><span class="s1">async = require(</span><span class="s0">'async'</span><span class="s1">)</span>
+<span class="s2">const </span><span class="s1">neo = require(</span><span class="s0">'neo-async'</span><span class="s1">)</span>
+<span class="s2">const </span><span class="s1">asyncqueue = async.queue(worker, </span><span class="s3">1</span><span class="s1">)</span>
+<span class="s2">const </span><span class="s1">neoqueue = neo.queue(worker, </span><span class="s3">1</span><span class="s1">)</span>
+
+<span class="s2">function </span><span class="s1">bench (func, done) {</span>
+  <span class="s2">const </span><span class="s1">key = max + </span><span class="s0">'*' </span><span class="s1">+ func.name</span>
+  <span class="s2">let </span><span class="s1">count = -</span><span class="s3">1</span>
+
+  <span class="s1">console.time(key)</span>
+  <span class="s1">end()</span>
+
+  <span class="s2">function </span><span class="s1">end () {</span>
+    <span class="s2">if </span><span class="s1">(++count &lt; max) {</span>
+      <span class="s1">func(end)</span>
+    <span class="s1">} </span><span class="s2">else </span><span class="s1">{</span>
+      <span class="s1">console.timeEnd(key)</span>
+      <span class="s2">if </span><span class="s1">(done) {</span>
+        <span class="s1">done()</span>
+      <span class="s1">}</span>
+    <span class="s1">}</span>
+  <span class="s1">}</span>
+<span class="s1">}</span>
+
+<span class="s2">function </span><span class="s1">benchFastQ (done) {</span>
+  <span class="s1">fastqueue.push(</span><span class="s3">42</span><span class="s1">, done)</span>
+<span class="s1">}</span>
+
+<span class="s2">function </span><span class="s1">benchAsyncQueue (done) {</span>
+  <span class="s1">asyncqueue.push(</span><span class="s3">42</span><span class="s1">, done)</span>
+<span class="s1">}</span>
+
+<span class="s2">function </span><span class="s1">benchNeoQueue (done) {</span>
+  <span class="s1">neoqueue.push(</span><span class="s3">42</span><span class="s1">, done)</span>
+<span class="s1">}</span>
+
+<span class="s2">function </span><span class="s1">worker (arg, cb) {</span>
+  <span class="s1">setImmediate(cb)</span>
+<span class="s1">}</span>
+
+<span class="s2">function </span><span class="s1">benchSetImmediate (cb) {</span>
+  <span class="s1">worker(</span><span class="s3">42</span><span class="s1">, cb)</span>
+<span class="s1">}</span>
+
+<span class="s2">function </span><span class="s1">benchFastQPromise (done) {</span>
+  <span class="s1">qPromise.push(</span><span class="s3">42</span><span class="s1">).then(</span><span class="s2">function </span><span class="s1">() { done() }, done)</span>
+<span class="s1">}</span>
+
+<span class="s2">function </span><span class="s1">runBench (done) {</span>
+  <span class="s1">async.eachSeries([</span>
+    <span class="s1">benchSetImmediate,</span>
+    <span class="s1">benchFastQ,</span>
+    <span class="s1">benchNeoQueue,</span>
+    <span class="s1">benchAsyncQueue,</span>
+    <span class="s1">benchFastQPromise</span>
+  <span class="s1">], bench, done)</span>
+<span class="s1">}</span>
+
+<span class="s1">runBench(runBench)</span>
+</pre>
+</body>
+</html>

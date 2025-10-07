@@ -1,0 +1,624 @@
+<html>
+<head>
+<title>collectUnusedVariables.js</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #067d17;}
+.s1 { color: #080808;}
+.s2 { color: #0033b3;}
+.s3 { color: #8c8c8c; font-style: italic;}
+.s4 { color: #1750eb;}
+.s5 { color: #8c8c8c; font-style: italic;}
+</style>
+</head>
+<body bgcolor="#ffffff">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#c0c0c0" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+collectUnusedVariables.js</font>
+</center></td></tr></table>
+<pre><span class="s0">&quot;use strict&quot;</span><span class="s1">;</span>
+<span class="s1">Object.defineProperty(exports, </span><span class="s0">&quot;__esModule&quot;</span><span class="s1">, { value: </span><span class="s2">true </span><span class="s1">});</span>
+<span class="s1">exports.collectVariables = collectVariables;</span>
+<span class="s2">const </span><span class="s1">scope_manager_1 = require(</span><span class="s0">&quot;@typescript-eslint/scope-manager&quot;</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">utils_1 = require(</span><span class="s0">&quot;@typescript-eslint/utils&quot;</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">isTypeImport_1 = require(</span><span class="s0">&quot;./isTypeImport&quot;</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">referenceContainsTypeQuery_1 = require(</span><span class="s0">&quot;./referenceContainsTypeQuery&quot;</span><span class="s1">);</span>
+<span class="s3">/**</span>
+ <span class="s3">* This class leverages an AST visitor to mark variables as used via the</span>
+ <span class="s3">* `eslintUsed` property.</span>
+ <span class="s3">*/</span>
+<span class="s2">class </span><span class="s1">UnusedVarsVisitor </span><span class="s2">extends </span><span class="s1">scope_manager_1.Visitor {</span>
+    <span class="s3">/**</span>
+     <span class="s3">* We keep a weak cache so that multiple rules can share the calculation</span>
+     <span class="s3">*/</span>
+    <span class="s2">static </span><span class="s1">RESULTS_CACHE = </span><span class="s2">new </span><span class="s1">WeakMap();</span>
+    <span class="s1">ClassDeclaration = </span><span class="s2">this</span><span class="s1">.visitClass;</span>
+    <span class="s1">ClassExpression = </span><span class="s2">this</span><span class="s1">.visitClass;</span>
+    <span class="s1">ForInStatement = </span><span class="s2">this</span><span class="s1">.visitForInForOf;</span>
+    <span class="s1">ForOfStatement = </span><span class="s2">this</span><span class="s1">.visitForInForOf;</span>
+    <span class="s3">//#region HELPERS</span>
+    <span class="s1">FunctionDeclaration = </span><span class="s2">this</span><span class="s1">.visitFunction;</span>
+    <span class="s1">FunctionExpression = </span><span class="s2">this</span><span class="s1">.visitFunction;</span>
+    <span class="s1">MethodDefinition = </span><span class="s2">this</span><span class="s1">.visitSetter;</span>
+    <span class="s1">Property = </span><span class="s2">this</span><span class="s1">.visitSetter;</span>
+    <span class="s1">TSCallSignatureDeclaration = </span><span class="s2">this</span><span class="s1">.visitFunctionTypeSignature;</span>
+    <span class="s1">TSConstructorType = </span><span class="s2">this</span><span class="s1">.visitFunctionTypeSignature;</span>
+    <span class="s1">TSConstructSignatureDeclaration = </span><span class="s2">this</span><span class="s1">.visitFunctionTypeSignature;</span>
+    <span class="s1">TSDeclareFunction = </span><span class="s2">this</span><span class="s1">.visitFunctionTypeSignature;</span>
+    <span class="s1">TSEmptyBodyFunctionExpression = </span><span class="s2">this</span><span class="s1">.visitFunctionTypeSignature;</span>
+    <span class="s3">//#endregion HELPERS</span>
+    <span class="s3">//#region VISITORS</span>
+    <span class="s3">// NOTE - This is a simple visitor - meaning it does not support selectors</span>
+    <span class="s1">TSFunctionType = </span><span class="s2">this</span><span class="s1">.visitFunctionTypeSignature;</span>
+    <span class="s1">TSMethodSignature = </span><span class="s2">this</span><span class="s1">.visitFunctionTypeSignature;</span>
+    <span class="s1">#scopeManager;</span>
+    <span class="s1">constructor(scopeManager) {</span>
+        <span class="s2">super</span><span class="s1">({</span>
+            <span class="s1">visitChildrenEvenIfSelectorExists: </span><span class="s2">true</span><span class="s1">,</span>
+        <span class="s1">});</span>
+        <span class="s2">this</span><span class="s1">.#scopeManager = scopeManager;</span>
+    <span class="s1">}</span>
+    <span class="s2">static </span><span class="s1">collectUnusedVariables(program, scopeManager) {</span>
+        <span class="s2">const </span><span class="s1">cached = </span><span class="s2">this</span><span class="s1">.RESULTS_CACHE.get(program);</span>
+        <span class="s2">if </span><span class="s1">(cached) {</span>
+            <span class="s2">return </span><span class="s1">cached;</span>
+        <span class="s1">}</span>
+        <span class="s2">const </span><span class="s1">visitor = </span><span class="s2">new this</span><span class="s1">(scopeManager);</span>
+        <span class="s1">visitor.visit(program);</span>
+        <span class="s2">const </span><span class="s1">unusedVars = visitor.collectUnusedVariables(visitor.getScope(program));</span>
+        <span class="s2">this</span><span class="s1">.RESULTS_CACHE.set(program, unusedVars);</span>
+        <span class="s2">return </span><span class="s1">unusedVars;</span>
+    <span class="s1">}</span>
+    <span class="s1">Identifier(node) {</span>
+        <span class="s2">const </span><span class="s1">scope = </span><span class="s2">this</span><span class="s1">.getScope(node);</span>
+        <span class="s2">if </span><span class="s1">(scope.type === utils_1.TSESLint.Scope.ScopeType.function &amp;&amp;</span>
+            <span class="s1">node.name === </span><span class="s0">'this' </span><span class="s1">&amp;&amp;</span>
+            <span class="s3">// this parameters should always be considered used as they're pseudo-parameters</span>
+            <span class="s0">'params' </span><span class="s2">in </span><span class="s1">scope.block &amp;&amp;</span>
+            <span class="s1">scope.block.params.includes(node)) {</span>
+            <span class="s2">this</span><span class="s1">.markVariableAsUsed(node);</span>
+        <span class="s1">}</span>
+    <span class="s1">}</span>
+    <span class="s1">TSEnumDeclaration(node) {</span>
+        <span class="s3">// enum members create variables because they can be referenced within the enum,</span>
+        <span class="s3">// but they obviously aren't unused variables for the purposes of this rule.</span>
+        <span class="s2">const </span><span class="s1">scope = </span><span class="s2">this</span><span class="s1">.getScope(node);</span>
+        <span class="s2">for </span><span class="s1">(</span><span class="s2">const </span><span class="s1">variable of scope.variables) {</span>
+            <span class="s2">this</span><span class="s1">.markVariableAsUsed(variable);</span>
+        <span class="s1">}</span>
+    <span class="s1">}</span>
+    <span class="s1">TSMappedType(node) {</span>
+        <span class="s3">// mapped types create a variable for their type name, but it's not necessary to reference it,</span>
+        <span class="s3">// so we shouldn't consider it as unused for the purpose of this rule.</span>
+        <span class="s2">this</span><span class="s1">.markVariableAsUsed(node.key);</span>
+    <span class="s1">}</span>
+    <span class="s1">TSModuleDeclaration(node) {</span>
+        <span class="s3">// -- global augmentation can be in any file, and they do not need exports</span>
+        <span class="s2">if </span><span class="s1">(node.kind === </span><span class="s0">'global'</span><span class="s1">) {</span>
+            <span class="s2">this</span><span class="s1">.markVariableAsUsed(</span><span class="s0">'global'</span><span class="s1">, node.parent);</span>
+        <span class="s1">}</span>
+    <span class="s1">}</span>
+    <span class="s1">TSParameterProperty(node) {</span>
+        <span class="s2">let </span><span class="s1">identifier = </span><span class="s2">null</span><span class="s1">;</span>
+        <span class="s2">switch </span><span class="s1">(node.parameter.type) {</span>
+            <span class="s2">case </span><span class="s1">utils_1.AST_NODE_TYPES.AssignmentPattern:</span>
+                <span class="s2">if </span><span class="s1">(node.parameter.left.type === utils_1.AST_NODE_TYPES.Identifier) {</span>
+                    <span class="s1">identifier = node.parameter.left;</span>
+                <span class="s1">}</span>
+                <span class="s2">break</span><span class="s1">;</span>
+            <span class="s2">case </span><span class="s1">utils_1.AST_NODE_TYPES.Identifier:</span>
+                <span class="s1">identifier = node.parameter;</span>
+                <span class="s2">break</span><span class="s1">;</span>
+        <span class="s1">}</span>
+        <span class="s2">if </span><span class="s1">(identifier) {</span>
+            <span class="s2">this</span><span class="s1">.markVariableAsUsed(identifier);</span>
+        <span class="s1">}</span>
+    <span class="s1">}</span>
+    <span class="s1">collectUnusedVariables(scope, variables = {</span>
+        <span class="s1">unusedVariables: </span><span class="s2">new </span><span class="s1">Set(),</span>
+        <span class="s1">usedVariables: </span><span class="s2">new </span><span class="s1">Set(),</span>
+    <span class="s1">}) {</span>
+        <span class="s2">if </span><span class="s1">(</span>
+        <span class="s3">// skip function expression names</span>
+        <span class="s3">// this scope is created just to house the variable that allows a function</span>
+        <span class="s3">// expression to self-reference if it has a name defined</span>
+        <span class="s1">!scope.functionExpressionScope) {</span>
+            <span class="s2">for </span><span class="s1">(</span><span class="s2">const </span><span class="s1">variable of scope.variables) {</span>
+                <span class="s3">// cases that we don't want to treat as used or unused</span>
+                <span class="s2">if </span><span class="s1">(</span>
+                <span class="s3">// implicit lib variables (from @typescript-eslint/scope-manager)</span>
+                <span class="s3">// these aren't variables that should be checked ever</span>
+                <span class="s1">variable </span><span class="s2">instanceof </span><span class="s1">scope_manager_1.ImplicitLibVariable) {</span>
+                    <span class="s2">continue</span><span class="s1">;</span>
+                <span class="s1">}</span>
+                <span class="s2">if </span><span class="s1">(</span>
+                <span class="s3">// variables marked with markVariableAsUsed()</span>
+                <span class="s1">variable.eslintUsed ||</span>
+                    <span class="s3">// basic exported variables</span>
+                    <span class="s1">isExported(variable) ||</span>
+                    <span class="s3">// variables implicitly exported via a merged declaration</span>
+                    <span class="s1">isMergableExported(variable) ||</span>
+                    <span class="s3">// used variables</span>
+                    <span class="s1">isUsedVariable(variable)) {</span>
+                    <span class="s1">variables.usedVariables.add(variable);</span>
+                <span class="s1">}</span>
+                <span class="s2">else </span><span class="s1">{</span>
+                    <span class="s1">variables.unusedVariables.add(variable);</span>
+                <span class="s1">}</span>
+            <span class="s1">}</span>
+        <span class="s1">}</span>
+        <span class="s2">for </span><span class="s1">(</span><span class="s2">const </span><span class="s1">childScope of scope.childScopes) {</span>
+            <span class="s2">this</span><span class="s1">.collectUnusedVariables(childScope, variables);</span>
+        <span class="s1">}</span>
+        <span class="s2">return </span><span class="s1">variables;</span>
+    <span class="s1">}</span>
+    <span class="s1">getScope(currentNode) {</span>
+        <span class="s3">// On Program node, get the outermost scope to avoid return Node.js special function scope or ES modules scope.</span>
+        <span class="s2">const </span><span class="s1">inner = currentNode.type !== utils_1.AST_NODE_TYPES.Program;</span>
+        <span class="s2">let </span><span class="s1">node = currentNode;</span>
+        <span class="s2">while </span><span class="s1">(node) {</span>
+            <span class="s2">const </span><span class="s1">scope = </span><span class="s2">this</span><span class="s1">.#scopeManager.acquire(node, inner);</span>
+            <span class="s2">if </span><span class="s1">(scope) {</span>
+                <span class="s2">if </span><span class="s1">(scope.type === scope_manager_1.ScopeType.functionExpressionName) {</span>
+                    <span class="s2">return </span><span class="s1">scope.childScopes[</span><span class="s4">0</span><span class="s1">];</span>
+                <span class="s1">}</span>
+                <span class="s2">return </span><span class="s1">scope;</span>
+            <span class="s1">}</span>
+            <span class="s1">node = node.parent;</span>
+        <span class="s1">}</span>
+        <span class="s2">return this</span><span class="s1">.#scopeManager.scopes[</span><span class="s4">0</span><span class="s1">];</span>
+    <span class="s1">}</span>
+    <span class="s1">markVariableAsUsed(variableOrIdentifierOrName, parent) {</span>
+        <span class="s2">if </span><span class="s1">(</span><span class="s2">typeof </span><span class="s1">variableOrIdentifierOrName !== </span><span class="s0">'string' </span><span class="s1">&amp;&amp;</span>
+            <span class="s1">!(</span><span class="s0">'type' </span><span class="s2">in </span><span class="s1">variableOrIdentifierOrName)) {</span>
+            <span class="s1">variableOrIdentifierOrName.eslintUsed = </span><span class="s2">true</span><span class="s1">;</span>
+            <span class="s2">return</span><span class="s1">;</span>
+        <span class="s1">}</span>
+        <span class="s2">let </span><span class="s1">name;</span>
+        <span class="s2">let </span><span class="s1">node;</span>
+        <span class="s2">if </span><span class="s1">(</span><span class="s2">typeof </span><span class="s1">variableOrIdentifierOrName === </span><span class="s0">'string'</span><span class="s1">) {</span>
+            <span class="s1">name = variableOrIdentifierOrName;</span>
+            <span class="s3">// eslint-disable-next-line @typescript-eslint/no-non-null-assertion</span>
+            <span class="s1">node = parent;</span>
+        <span class="s1">}</span>
+        <span class="s2">else </span><span class="s1">{</span>
+            <span class="s1">name = variableOrIdentifierOrName.name;</span>
+            <span class="s1">node = variableOrIdentifierOrName;</span>
+        <span class="s1">}</span>
+        <span class="s2">let </span><span class="s1">currentScope = </span><span class="s2">this</span><span class="s1">.getScope(node);</span>
+        <span class="s2">while </span><span class="s1">(currentScope) {</span>
+            <span class="s2">const </span><span class="s1">variable = currentScope.variables.find(scopeVar =&gt; scopeVar.name === name);</span>
+            <span class="s2">if </span><span class="s1">(variable) {</span>
+                <span class="s1">variable.eslintUsed = </span><span class="s2">true</span><span class="s1">;</span>
+                <span class="s2">return</span><span class="s1">;</span>
+            <span class="s1">}</span>
+            <span class="s1">currentScope = currentScope.upper;</span>
+        <span class="s1">}</span>
+    <span class="s1">}</span>
+    <span class="s1">visitClass(node) {</span>
+        <span class="s3">// skip a variable of class itself name in the class scope</span>
+        <span class="s2">const </span><span class="s1">scope = </span><span class="s2">this</span><span class="s1">.getScope(node);</span>
+        <span class="s2">for </span><span class="s1">(</span><span class="s2">const </span><span class="s1">variable of scope.variables) {</span>
+            <span class="s2">if </span><span class="s1">(variable.identifiers[</span><span class="s4">0</span><span class="s1">] === scope.block.id) {</span>
+                <span class="s2">this</span><span class="s1">.markVariableAsUsed(variable);</span>
+                <span class="s2">return</span><span class="s1">;</span>
+            <span class="s1">}</span>
+        <span class="s1">}</span>
+    <span class="s1">}</span>
+    <span class="s1">visitForInForOf(node) {</span>
+        <span class="s3">/**</span>
+         <span class="s3">* (Brad Zacher): I hate that this has to exist.</span>
+         <span class="s3">* But it is required for compat with the base ESLint rule.</span>
+         <span class="s3">*</span>
+         <span class="s3">* In 2015, ESLint decided to add an exception for these two specific cases</span>
+         <span class="s3">* ```</span>
+         <span class="s3">* for (var key in object) return;</span>
+         <span class="s3">*</span>
+         <span class="s3">* var key;</span>
+         <span class="s3">* for (key in object) return;</span>
+         <span class="s3">* ```</span>
+         <span class="s3">*</span>
+         <span class="s3">* I disagree with it, but what are you going to do...</span>
+         <span class="s3">*</span>
+         <span class="s3">* https://github.com/eslint/eslint/issues/2342</span>
+         <span class="s3">*/</span>
+        <span class="s2">let </span><span class="s1">idOrVariable;</span>
+        <span class="s2">if </span><span class="s1">(node.left.type === utils_1.AST_NODE_TYPES.VariableDeclaration) {</span>
+            <span class="s2">const </span><span class="s1">variable = </span><span class="s2">this</span><span class="s1">.#scopeManager.getDeclaredVariables(node.left).at(</span><span class="s4">0</span><span class="s1">);</span>
+            <span class="s2">if </span><span class="s1">(!variable) {</span>
+                <span class="s2">return</span><span class="s1">;</span>
+            <span class="s1">}</span>
+            <span class="s1">idOrVariable = variable;</span>
+        <span class="s1">}</span>
+        <span class="s2">if </span><span class="s1">(node.left.type === utils_1.AST_NODE_TYPES.Identifier) {</span>
+            <span class="s1">idOrVariable = node.left;</span>
+        <span class="s1">}</span>
+        <span class="s2">if </span><span class="s1">(idOrVariable == </span><span class="s2">null</span><span class="s1">) {</span>
+            <span class="s2">return</span><span class="s1">;</span>
+        <span class="s1">}</span>
+        <span class="s2">let </span><span class="s1">body = node.body;</span>
+        <span class="s2">if </span><span class="s1">(node.body.type === utils_1.AST_NODE_TYPES.BlockStatement) {</span>
+            <span class="s2">if </span><span class="s1">(node.body.body.length !== </span><span class="s4">1</span><span class="s1">) {</span>
+                <span class="s2">return</span><span class="s1">;</span>
+            <span class="s1">}</span>
+            <span class="s1">body = node.body.body[</span><span class="s4">0</span><span class="s1">];</span>
+        <span class="s1">}</span>
+        <span class="s2">if </span><span class="s1">(body.type !== utils_1.AST_NODE_TYPES.ReturnStatement) {</span>
+            <span class="s2">return</span><span class="s1">;</span>
+        <span class="s1">}</span>
+        <span class="s2">this</span><span class="s1">.markVariableAsUsed(idOrVariable);</span>
+    <span class="s1">}</span>
+    <span class="s1">visitFunction(node) {</span>
+        <span class="s2">const </span><span class="s1">scope = </span><span class="s2">this</span><span class="s1">.getScope(node);</span>
+        <span class="s3">// skip implicit &quot;arguments&quot; variable</span>
+        <span class="s2">const </span><span class="s1">variable = scope.set.get(</span><span class="s0">'arguments'</span><span class="s1">);</span>
+        <span class="s2">if </span><span class="s1">(variable?.defs.length === </span><span class="s4">0</span><span class="s1">) {</span>
+            <span class="s2">this</span><span class="s1">.markVariableAsUsed(variable);</span>
+        <span class="s1">}</span>
+    <span class="s1">}</span>
+    <span class="s1">visitFunctionTypeSignature(node) {</span>
+        <span class="s3">// function type signature params create variables because they can be referenced within the signature,</span>
+        <span class="s3">// but they obviously aren't unused variables for the purposes of this rule.</span>
+        <span class="s2">for </span><span class="s1">(</span><span class="s2">const </span><span class="s1">param of node.params) {</span>
+            <span class="s2">this</span><span class="s1">.visitPattern(param, name =&gt; {</span>
+                <span class="s2">this</span><span class="s1">.markVariableAsUsed(name);</span>
+            <span class="s1">});</span>
+        <span class="s1">}</span>
+    <span class="s1">}</span>
+    <span class="s1">visitSetter(node) {</span>
+        <span class="s2">if </span><span class="s1">(node.kind === </span><span class="s0">'set'</span><span class="s1">) {</span>
+            <span class="s3">// ignore setter parameters because they're syntactically required to exist</span>
+            <span class="s2">for </span><span class="s1">(</span><span class="s2">const </span><span class="s1">param of node.value.params) {</span>
+                <span class="s2">this</span><span class="s1">.visitPattern(param, id =&gt; {</span>
+                    <span class="s2">this</span><span class="s1">.markVariableAsUsed(id);</span>
+                <span class="s1">});</span>
+            <span class="s1">}</span>
+        <span class="s1">}</span>
+    <span class="s1">}</span>
+<span class="s1">}</span>
+<span class="s3">//#region private helpers</span>
+<span class="s3">/**</span>
+ <span class="s3">* Checks the position of given nodes.</span>
+ <span class="s3">* </span><span class="s5">@param </span><span class="s3">inner A node which is expected as inside.</span>
+ <span class="s3">* </span><span class="s5">@param </span><span class="s3">outer A node which is expected as outside.</span>
+ <span class="s3">* </span><span class="s5">@returns </span><span class="s3">`true` if the `inner` node exists in the `outer` node.</span>
+ <span class="s3">*/</span>
+<span class="s2">function </span><span class="s1">isInside(inner, outer) {</span>
+    <span class="s2">return </span><span class="s1">inner.range[</span><span class="s4">0</span><span class="s1">] &gt;= outer.range[</span><span class="s4">0</span><span class="s1">] &amp;&amp; inner.range[</span><span class="s4">1</span><span class="s1">] &lt;= outer.range[</span><span class="s4">1</span><span class="s1">];</span>
+<span class="s1">}</span>
+<span class="s3">/**</span>
+ <span class="s3">* Determine if an identifier is referencing an enclosing name.</span>
+ <span class="s3">* This only applies to declarations that create their own scope (modules, functions, classes)</span>
+ <span class="s3">* </span><span class="s5">@param </span><span class="s3">ref The reference to check.</span>
+ <span class="s3">* </span><span class="s5">@param </span><span class="s3">nodes The candidate function nodes.</span>
+ <span class="s3">* </span><span class="s5">@returns </span><span class="s3">True if it's a self-reference, false if not.</span>
+ <span class="s3">*/</span>
+<span class="s2">function </span><span class="s1">isSelfReference(ref, nodes) {</span>
+    <span class="s2">let </span><span class="s1">scope = ref.from;</span>
+    <span class="s2">while </span><span class="s1">(scope) {</span>
+        <span class="s2">if </span><span class="s1">(nodes.has(scope.block)) {</span>
+            <span class="s2">return true</span><span class="s1">;</span>
+        <span class="s1">}</span>
+        <span class="s1">scope = scope.upper;</span>
+    <span class="s1">}</span>
+    <span class="s2">return false</span><span class="s1">;</span>
+<span class="s1">}</span>
+<span class="s2">const </span><span class="s1">MERGABLE_TYPES = </span><span class="s2">new </span><span class="s1">Set([</span>
+    <span class="s1">utils_1.AST_NODE_TYPES.ClassDeclaration,</span>
+    <span class="s1">utils_1.AST_NODE_TYPES.FunctionDeclaration,</span>
+    <span class="s1">utils_1.AST_NODE_TYPES.TSInterfaceDeclaration,</span>
+    <span class="s1">utils_1.AST_NODE_TYPES.TSModuleDeclaration,</span>
+    <span class="s1">utils_1.AST_NODE_TYPES.TSTypeAliasDeclaration,</span>
+<span class="s1">]);</span>
+<span class="s3">/**</span>
+ <span class="s3">* Determine if the variable is directly exported</span>
+ <span class="s3">* </span><span class="s5">@param </span><span class="s3">variable the variable to check</span>
+ <span class="s3">*/</span>
+<span class="s2">function </span><span class="s1">isMergableExported(variable) {</span>
+    <span class="s3">// If all of the merged things are of the same type, TS will error if not all of them are exported - so we only need to find one</span>
+    <span class="s2">for </span><span class="s1">(</span><span class="s2">const </span><span class="s1">def of variable.defs) {</span>
+        <span class="s3">// parameters can never be exported.</span>
+        <span class="s3">// their `node` prop points to the function decl, which can be exported</span>
+        <span class="s3">// so we need to special case them</span>
+        <span class="s2">if </span><span class="s1">(def.type === utils_1.TSESLint.Scope.DefinitionType.Parameter) {</span>
+            <span class="s2">continue</span><span class="s1">;</span>
+        <span class="s1">}</span>
+        <span class="s2">if </span><span class="s1">((MERGABLE_TYPES.has(def.node.type) &amp;&amp;</span>
+            <span class="s1">def.node.parent.type === utils_1.AST_NODE_TYPES.ExportNamedDeclaration) ||</span>
+            <span class="s1">def.node.parent.type === utils_1.AST_NODE_TYPES.ExportDefaultDeclaration) {</span>
+            <span class="s2">return true</span><span class="s1">;</span>
+        <span class="s1">}</span>
+    <span class="s1">}</span>
+    <span class="s2">return false</span><span class="s1">;</span>
+<span class="s1">}</span>
+<span class="s3">/**</span>
+ <span class="s3">* Determines if a given variable is being exported from a module.</span>
+ <span class="s3">* </span><span class="s5">@param </span><span class="s3">variable eslint-scope variable object.</span>
+ <span class="s3">* </span><span class="s5">@returns </span><span class="s3">True if the variable is exported, false if not.</span>
+ <span class="s3">*/</span>
+<span class="s2">function </span><span class="s1">isExported(variable) {</span>
+    <span class="s2">return </span><span class="s1">variable.defs.some(definition =&gt; {</span>
+        <span class="s2">let </span><span class="s1">node = definition.node;</span>
+        <span class="s2">if </span><span class="s1">(node.type === utils_1.AST_NODE_TYPES.VariableDeclarator) {</span>
+            <span class="s1">node = node.parent;</span>
+        <span class="s1">}</span>
+        <span class="s2">else if </span><span class="s1">(definition.type === utils_1.TSESLint.Scope.DefinitionType.Parameter) {</span>
+            <span class="s2">return false</span><span class="s1">;</span>
+        <span class="s1">}</span>
+        <span class="s2">return </span><span class="s1">node.parent.type.startsWith(</span><span class="s0">'Export'</span><span class="s1">);</span>
+    <span class="s1">});</span>
+<span class="s1">}</span>
+<span class="s2">const </span><span class="s1">LOGICAL_ASSIGNMENT_OPERATORS = </span><span class="s2">new </span><span class="s1">Set([</span><span class="s0">'??='</span><span class="s1">, </span><span class="s0">'&amp;&amp;='</span><span class="s1">, </span><span class="s0">'||='</span><span class="s1">]);</span>
+<span class="s3">/**</span>
+ <span class="s3">* Determines if the variable is used.</span>
+ <span class="s3">* </span><span class="s5">@param </span><span class="s3">variable The variable to check.</span>
+ <span class="s3">* </span><span class="s5">@returns </span><span class="s3">True if the variable is used</span>
+ <span class="s3">*/</span>
+<span class="s2">function </span><span class="s1">isUsedVariable(variable) {</span>
+    <span class="s3">/**</span>
+     <span class="s3">* Gets a list of function definitions for a specified variable.</span>
+     <span class="s3">* </span><span class="s5">@param </span><span class="s3">variable eslint-scope variable object.</span>
+     <span class="s3">* </span><span class="s5">@returns </span><span class="s3">Function nodes.</span>
+     <span class="s3">*/</span>
+    <span class="s2">function </span><span class="s1">getFunctionDefinitions(variable) {</span>
+        <span class="s2">const </span><span class="s1">functionDefinitions = </span><span class="s2">new </span><span class="s1">Set();</span>
+        <span class="s1">variable.defs.forEach(def =&gt; {</span>
+            <span class="s3">// FunctionDeclarations</span>
+            <span class="s2">if </span><span class="s1">(def.type === utils_1.TSESLint.Scope.DefinitionType.FunctionName) {</span>
+                <span class="s1">functionDefinitions.add(def.node);</span>
+            <span class="s1">}</span>
+            <span class="s3">// FunctionExpressions</span>
+            <span class="s2">if </span><span class="s1">(def.type === utils_1.TSESLint.Scope.DefinitionType.Variable &amp;&amp;</span>
+                <span class="s1">(def.node.init?.type === utils_1.AST_NODE_TYPES.FunctionExpression ||</span>
+                    <span class="s1">def.node.init?.type === utils_1.AST_NODE_TYPES.ArrowFunctionExpression)) {</span>
+                <span class="s1">functionDefinitions.add(def.node.init);</span>
+            <span class="s1">}</span>
+        <span class="s1">});</span>
+        <span class="s2">return </span><span class="s1">functionDefinitions;</span>
+    <span class="s1">}</span>
+    <span class="s2">function </span><span class="s1">getTypeDeclarations(variable) {</span>
+        <span class="s2">const </span><span class="s1">nodes = </span><span class="s2">new </span><span class="s1">Set();</span>
+        <span class="s1">variable.defs.forEach(def =&gt; {</span>
+            <span class="s2">if </span><span class="s1">(def.node.type === utils_1.AST_NODE_TYPES.TSInterfaceDeclaration ||</span>
+                <span class="s1">def.node.type === utils_1.AST_NODE_TYPES.TSTypeAliasDeclaration) {</span>
+                <span class="s1">nodes.add(def.node);</span>
+            <span class="s1">}</span>
+        <span class="s1">});</span>
+        <span class="s2">return </span><span class="s1">nodes;</span>
+    <span class="s1">}</span>
+    <span class="s2">function </span><span class="s1">getModuleDeclarations(variable) {</span>
+        <span class="s2">const </span><span class="s1">nodes = </span><span class="s2">new </span><span class="s1">Set();</span>
+        <span class="s1">variable.defs.forEach(def =&gt; {</span>
+            <span class="s2">if </span><span class="s1">(def.node.type === utils_1.AST_NODE_TYPES.TSModuleDeclaration) {</span>
+                <span class="s1">nodes.add(def.node);</span>
+            <span class="s1">}</span>
+        <span class="s1">});</span>
+        <span class="s2">return </span><span class="s1">nodes;</span>
+    <span class="s1">}</span>
+    <span class="s2">function </span><span class="s1">getEnumDeclarations(variable) {</span>
+        <span class="s2">const </span><span class="s1">nodes = </span><span class="s2">new </span><span class="s1">Set();</span>
+        <span class="s1">variable.defs.forEach(def =&gt; {</span>
+            <span class="s2">if </span><span class="s1">(def.node.type === utils_1.AST_NODE_TYPES.TSEnumDeclaration) {</span>
+                <span class="s1">nodes.add(def.node);</span>
+            <span class="s1">}</span>
+        <span class="s1">});</span>
+        <span class="s2">return </span><span class="s1">nodes;</span>
+    <span class="s1">}</span>
+    <span class="s3">/**</span>
+     <span class="s3">* Checks if the ref is contained within one of the given nodes</span>
+     <span class="s3">*/</span>
+    <span class="s2">function </span><span class="s1">isInsideOneOf(ref, nodes) {</span>
+        <span class="s2">for </span><span class="s1">(</span><span class="s2">const </span><span class="s1">node of nodes) {</span>
+            <span class="s2">if </span><span class="s1">(isInside(ref.identifier, node)) {</span>
+                <span class="s2">return true</span><span class="s1">;</span>
+            <span class="s1">}</span>
+        <span class="s1">}</span>
+        <span class="s2">return false</span><span class="s1">;</span>
+    <span class="s1">}</span>
+    <span class="s3">/**</span>
+     <span class="s3">* Checks whether a given node is unused expression or not.</span>
+     <span class="s3">* </span><span class="s5">@param </span><span class="s3">node The node itself</span>
+     <span class="s3">* </span><span class="s5">@returns </span><span class="s3">The node is an unused expression.</span>
+     <span class="s3">*/</span>
+    <span class="s2">function </span><span class="s1">isUnusedExpression(node) {</span>
+        <span class="s2">const </span><span class="s1">parent = node.parent;</span>
+        <span class="s2">if </span><span class="s1">(parent.type === utils_1.AST_NODE_TYPES.ExpressionStatement) {</span>
+            <span class="s2">return true</span><span class="s1">;</span>
+        <span class="s1">}</span>
+        <span class="s2">if </span><span class="s1">(parent.type === utils_1.AST_NODE_TYPES.SequenceExpression) {</span>
+            <span class="s2">const </span><span class="s1">isLastExpression = parent.expressions[parent.expressions.length - </span><span class="s4">1</span><span class="s1">] === node;</span>
+            <span class="s2">if </span><span class="s1">(!isLastExpression) {</span>
+                <span class="s2">return true</span><span class="s1">;</span>
+            <span class="s1">}</span>
+            <span class="s2">return </span><span class="s1">isUnusedExpression(parent);</span>
+        <span class="s1">}</span>
+        <span class="s2">return false</span><span class="s1">;</span>
+    <span class="s1">}</span>
+    <span class="s3">/**</span>
+     <span class="s3">* If a given reference is left-hand side of an assignment, this gets</span>
+     <span class="s3">* the right-hand side node of the assignment.</span>
+     <span class="s3">*</span>
+     <span class="s3">* In the following cases, this returns null.</span>
+     <span class="s3">*</span>
+     <span class="s3">* - The reference is not the LHS of an assignment expression.</span>
+     <span class="s3">* - The reference is inside of a loop.</span>
+     <span class="s3">* - The reference is inside of a function scope which is different from</span>
+     <span class="s3">*   the declaration.</span>
+     <span class="s3">* </span><span class="s5">@param </span><span class="s3">ref A reference to check.</span>
+     <span class="s3">* </span><span class="s5">@param </span><span class="s3">prevRhsNode The previous RHS node.</span>
+     <span class="s3">* </span><span class="s5">@returns </span><span class="s3">The RHS node or null.</span>
+     <span class="s3">*/</span>
+    <span class="s2">function </span><span class="s1">getRhsNode(ref, prevRhsNode) {</span>
+        <span class="s3">/**</span>
+         <span class="s3">* Checks whether the given node is in a loop or not.</span>
+         <span class="s3">* </span><span class="s5">@param </span><span class="s3">node The node to check.</span>
+         <span class="s3">* </span><span class="s5">@returns </span><span class="s3">`true` if the node is in a loop.</span>
+         <span class="s3">*/</span>
+        <span class="s2">function </span><span class="s1">isInLoop(node) {</span>
+            <span class="s2">let </span><span class="s1">currentNode = node;</span>
+            <span class="s2">while </span><span class="s1">(currentNode) {</span>
+                <span class="s2">if </span><span class="s1">(utils_1.ASTUtils.isFunction(currentNode)) {</span>
+                    <span class="s2">break</span><span class="s1">;</span>
+                <span class="s1">}</span>
+                <span class="s2">if </span><span class="s1">(utils_1.ASTUtils.isLoop(currentNode)) {</span>
+                    <span class="s2">return true</span><span class="s1">;</span>
+                <span class="s1">}</span>
+                <span class="s1">currentNode = currentNode.parent;</span>
+            <span class="s1">}</span>
+            <span class="s2">return false</span><span class="s1">;</span>
+        <span class="s1">}</span>
+        <span class="s2">const </span><span class="s1">id = ref.identifier;</span>
+        <span class="s2">const </span><span class="s1">parent = id.parent;</span>
+        <span class="s2">const </span><span class="s1">refScope = ref.from.variableScope;</span>
+        <span class="s3">// eslint-disable-next-line @typescript-eslint/no-non-null-assertion</span>
+        <span class="s2">const </span><span class="s1">varScope = ref.resolved.scope.variableScope;</span>
+        <span class="s2">const </span><span class="s1">canBeUsedLater = refScope !== varScope || isInLoop(id);</span>
+        <span class="s3">/* 
+         * Inherits the previous node if this reference is in the node. 
+         * This is for `a = a + a`-like code. 
+         */</span>
+        <span class="s2">if </span><span class="s1">(prevRhsNode &amp;&amp; isInside(id, prevRhsNode)) {</span>
+            <span class="s2">return </span><span class="s1">prevRhsNode;</span>
+        <span class="s1">}</span>
+        <span class="s2">if </span><span class="s1">(parent.type === utils_1.AST_NODE_TYPES.AssignmentExpression &amp;&amp;</span>
+            <span class="s1">isUnusedExpression(parent) &amp;&amp;</span>
+            <span class="s1">id === parent.left &amp;&amp;</span>
+            <span class="s1">!canBeUsedLater) {</span>
+            <span class="s2">return </span><span class="s1">parent.right;</span>
+        <span class="s1">}</span>
+        <span class="s2">return null</span><span class="s1">;</span>
+    <span class="s1">}</span>
+    <span class="s3">/**</span>
+     <span class="s3">* Checks whether a given reference is a read to update itself or not.</span>
+     <span class="s3">* </span><span class="s5">@param </span><span class="s3">ref A reference to check.</span>
+     <span class="s3">* </span><span class="s5">@param </span><span class="s3">rhsNode The RHS node of the previous assignment.</span>
+     <span class="s3">* </span><span class="s5">@returns </span><span class="s3">The reference is a read to update itself.</span>
+     <span class="s3">*/</span>
+    <span class="s2">function </span><span class="s1">isReadForItself(ref, rhsNode) {</span>
+        <span class="s3">/**</span>
+         <span class="s3">* Checks whether a given Identifier node exists inside of a function node which can be used later.</span>
+         <span class="s3">*</span>
+         <span class="s3">* &quot;can be used later&quot; means:</span>
+         <span class="s3">* - the function is assigned to a variable.</span>
+         <span class="s3">* - the function is bound to a property and the object can be used later.</span>
+         <span class="s3">* - the function is bound as an argument of a function call.</span>
+         <span class="s3">*</span>
+         <span class="s3">* If a reference exists in a function which can be used later, the reference is read when the function is called.</span>
+         <span class="s3">* </span><span class="s5">@param </span><span class="s3">id An Identifier node to check.</span>
+         <span class="s3">* </span><span class="s5">@param </span><span class="s3">rhsNode The RHS node of the previous assignment.</span>
+         <span class="s3">* </span><span class="s5">@returns </span><span class="s3">`true` if the `id` node exists inside of a function node which can be used later.</span>
+         <span class="s3">*/</span>
+        <span class="s2">function </span><span class="s1">isInsideOfStorableFunction(id, rhsNode) {</span>
+            <span class="s3">/**</span>
+             <span class="s3">* Finds a function node from ancestors of a node.</span>
+             <span class="s3">* </span><span class="s5">@param </span><span class="s3">node A start node to find.</span>
+             <span class="s3">* </span><span class="s5">@returns </span><span class="s3">A found function node.</span>
+             <span class="s3">*/</span>
+            <span class="s2">function </span><span class="s1">getUpperFunction(node) {</span>
+                <span class="s2">let </span><span class="s1">currentNode = node;</span>
+                <span class="s2">while </span><span class="s1">(currentNode) {</span>
+                    <span class="s2">if </span><span class="s1">(utils_1.ASTUtils.isFunction(currentNode)) {</span>
+                        <span class="s2">return </span><span class="s1">currentNode;</span>
+                    <span class="s1">}</span>
+                    <span class="s1">currentNode = currentNode.parent;</span>
+                <span class="s1">}</span>
+                <span class="s2">return null</span><span class="s1">;</span>
+            <span class="s1">}</span>
+            <span class="s3">/**</span>
+             <span class="s3">* Checks whether a given function node is stored to somewhere or not.</span>
+             <span class="s3">* If the function node is stored, the function can be used later.</span>
+             <span class="s3">* </span><span class="s5">@param </span><span class="s3">funcNode A function node to check.</span>
+             <span class="s3">* </span><span class="s5">@param </span><span class="s3">rhsNode The RHS node of the previous assignment.</span>
+             <span class="s3">* </span><span class="s5">@returns </span><span class="s3">`true` if under the following conditions:</span>
+             <span class="s3">*      - the funcNode is assigned to a variable.</span>
+             <span class="s3">*      - the funcNode is bound as an argument of a function call.</span>
+             <span class="s3">*      - the function is bound to a property and the object satisfies above conditions.</span>
+             <span class="s3">*/</span>
+            <span class="s2">function </span><span class="s1">isStorableFunction(funcNode, rhsNode) {</span>
+                <span class="s2">let </span><span class="s1">node = funcNode;</span>
+                <span class="s2">let </span><span class="s1">parent = funcNode.parent;</span>
+                <span class="s2">while </span><span class="s1">(parent &amp;&amp; isInside(parent, rhsNode)) {</span>
+                    <span class="s2">switch </span><span class="s1">(parent.type) {</span>
+                        <span class="s2">case </span><span class="s1">utils_1.AST_NODE_TYPES.SequenceExpression:</span>
+                            <span class="s2">if </span><span class="s1">(parent.expressions[parent.expressions.length - </span><span class="s4">1</span><span class="s1">] !== node) {</span>
+                                <span class="s2">return false</span><span class="s1">;</span>
+                            <span class="s1">}</span>
+                            <span class="s2">break</span><span class="s1">;</span>
+                        <span class="s2">case </span><span class="s1">utils_1.AST_NODE_TYPES.CallExpression:</span>
+                        <span class="s2">case </span><span class="s1">utils_1.AST_NODE_TYPES.NewExpression:</span>
+                            <span class="s2">return </span><span class="s1">parent.callee !== node;</span>
+                        <span class="s2">case </span><span class="s1">utils_1.AST_NODE_TYPES.AssignmentExpression:</span>
+                        <span class="s2">case </span><span class="s1">utils_1.AST_NODE_TYPES.TaggedTemplateExpression:</span>
+                        <span class="s2">case </span><span class="s1">utils_1.AST_NODE_TYPES.YieldExpression:</span>
+                            <span class="s2">return true</span><span class="s1">;</span>
+                        <span class="s2">default</span><span class="s1">:</span>
+                            <span class="s2">if </span><span class="s1">(parent.type.endsWith(</span><span class="s0">'Statement'</span><span class="s1">) ||</span>
+                                <span class="s1">parent.type.endsWith(</span><span class="s0">'Declaration'</span><span class="s1">)) {</span>
+                                <span class="s3">/* 
+                                 * If it encountered statements, this is a complex pattern. 
+                                 * Since analyzing complex patterns is hard, this returns `true` to avoid false positive. 
+                                 */</span>
+                                <span class="s2">return true</span><span class="s1">;</span>
+                            <span class="s1">}</span>
+                    <span class="s1">}</span>
+                    <span class="s1">node = parent;</span>
+                    <span class="s1">parent = parent.parent;</span>
+                <span class="s1">}</span>
+                <span class="s2">return false</span><span class="s1">;</span>
+            <span class="s1">}</span>
+            <span class="s2">const </span><span class="s1">funcNode = getUpperFunction(id);</span>
+            <span class="s2">return </span><span class="s1">(!!funcNode &amp;&amp;</span>
+                <span class="s1">isInside(funcNode, rhsNode) &amp;&amp;</span>
+                <span class="s1">isStorableFunction(funcNode, rhsNode));</span>
+        <span class="s1">}</span>
+        <span class="s2">const </span><span class="s1">id = ref.identifier;</span>
+        <span class="s2">const </span><span class="s1">parent = id.parent;</span>
+        <span class="s2">return </span><span class="s1">(ref.isRead() &amp;&amp; </span><span class="s3">// in RHS of an assignment for itself. e.g. `a = a + 1`</span>
+            <span class="s3">// self update. e.g. `a += 1`, `a++`</span>
+            <span class="s1">((parent.type === utils_1.AST_NODE_TYPES.AssignmentExpression &amp;&amp;</span>
+                <span class="s1">!LOGICAL_ASSIGNMENT_OPERATORS.has(parent.operator) &amp;&amp;</span>
+                <span class="s1">isUnusedExpression(parent) &amp;&amp;</span>
+                <span class="s1">parent.left === id) ||</span>
+                <span class="s1">(parent.type === utils_1.AST_NODE_TYPES.UpdateExpression &amp;&amp;</span>
+                    <span class="s1">isUnusedExpression(parent)) ||</span>
+                <span class="s1">(!!rhsNode &amp;&amp;</span>
+                    <span class="s1">isInside(id, rhsNode) &amp;&amp;</span>
+                    <span class="s1">!isInsideOfStorableFunction(id, rhsNode))));</span>
+    <span class="s1">}</span>
+    <span class="s2">const </span><span class="s1">functionNodes = getFunctionDefinitions(variable);</span>
+    <span class="s2">const </span><span class="s1">isFunctionDefinition = functionNodes.size &gt; </span><span class="s4">0</span><span class="s1">;</span>
+    <span class="s2">const </span><span class="s1">typeDeclNodes = getTypeDeclarations(variable);</span>
+    <span class="s2">const </span><span class="s1">isTypeDecl = typeDeclNodes.size &gt; </span><span class="s4">0</span><span class="s1">;</span>
+    <span class="s2">const </span><span class="s1">moduleDeclNodes = getModuleDeclarations(variable);</span>
+    <span class="s2">const </span><span class="s1">isModuleDecl = moduleDeclNodes.size &gt; </span><span class="s4">0</span><span class="s1">;</span>
+    <span class="s2">const </span><span class="s1">enumDeclNodes = getEnumDeclarations(variable);</span>
+    <span class="s2">const </span><span class="s1">isEnumDecl = enumDeclNodes.size &gt; </span><span class="s4">0</span><span class="s1">;</span>
+    <span class="s2">const </span><span class="s1">isImportedAsType = variable.defs.every(isTypeImport_1.isTypeImport);</span>
+    <span class="s2">let </span><span class="s1">rhsNode = </span><span class="s2">null</span><span class="s1">;</span>
+    <span class="s2">return </span><span class="s1">variable.references.some(ref =&gt; {</span>
+        <span class="s2">const </span><span class="s1">forItself = isReadForItself(ref, rhsNode);</span>
+        <span class="s1">rhsNode = getRhsNode(ref, rhsNode);</span>
+        <span class="s2">return </span><span class="s1">(ref.isRead() &amp;&amp;</span>
+            <span class="s1">!forItself &amp;&amp;</span>
+            <span class="s1">!(!isImportedAsType &amp;&amp; (</span><span class="s4">0</span><span class="s1">, referenceContainsTypeQuery_1.referenceContainsTypeQuery)(ref.identifier)) &amp;&amp;</span>
+            <span class="s1">!(isFunctionDefinition &amp;&amp; isSelfReference(ref, functionNodes)) &amp;&amp;</span>
+            <span class="s1">!(isTypeDecl &amp;&amp; isInsideOneOf(ref, typeDeclNodes)) &amp;&amp;</span>
+            <span class="s1">!(isModuleDecl &amp;&amp; isSelfReference(ref, moduleDeclNodes)) &amp;&amp;</span>
+            <span class="s1">!(isEnumDecl &amp;&amp; isSelfReference(ref, enumDeclNodes)));</span>
+    <span class="s1">});</span>
+<span class="s1">}</span>
+<span class="s3">//#endregion private helpers</span>
+<span class="s3">/**</span>
+ <span class="s3">* Collects the set of unused variables for a given context.</span>
+ <span class="s3">*</span>
+ <span class="s3">* Due to complexity, this does not take into consideration:</span>
+ <span class="s3">* - variables within declaration files</span>
+ <span class="s3">* - variables within ambient module declarations</span>
+ <span class="s3">*/</span>
+<span class="s2">function </span><span class="s1">collectVariables(context) {</span>
+    <span class="s2">return </span><span class="s1">UnusedVarsVisitor.collectUnusedVariables(context.sourceCode.ast, utils_1.ESLintUtils.nullThrows(context.sourceCode.scopeManager, </span><span class="s0">'Missing required scope manager'</span><span class="s1">));</span>
+<span class="s1">}</span>
+</pre>
+</body>
+</html>

@@ -1,0 +1,737 @@
+<html>
+<head>
+<title>AsYouTypeFormatter.js</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #0033b3;}
+.s1 { color: #080808;}
+.s2 { color: #067d17;}
+.s3 { color: #8c8c8c; font-style: italic;}
+.s4 { color: #1750eb;}
+.s5 { color: #264eff;}
+.s6 { color: #0037a6;}
+.s7 { color: #8c8c8c; font-style: italic;}
+</style>
+</head>
+<body bgcolor="#ffffff">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#c0c0c0" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+AsYouTypeFormatter.js</font>
+</center></td></tr></table>
+<pre><span class="s0">import </span><span class="s1">{</span>
+	<span class="s1">DIGIT_PLACEHOLDER,</span>
+	<span class="s1">countOccurences,</span>
+	<span class="s1">repeat,</span>
+	<span class="s1">cutAndStripNonPairedParens,</span>
+	<span class="s1">closeNonPairedParens,</span>
+	<span class="s1">stripNonPairedParens,</span>
+	<span class="s1">populateTemplateWithDigits</span>
+<span class="s1">} from </span><span class="s2">'./AsYouTypeFormatter.util.js'</span>
+
+<span class="s0">import </span><span class="s1">formatCompleteNumber, {</span>
+	<span class="s1">canFormatCompleteNumber</span>
+<span class="s1">} from </span><span class="s2">'./AsYouTypeFormatter.complete.js'</span>
+
+<span class="s0">import </span><span class="s1">PatternMatcher from </span><span class="s2">'./AsYouTypeFormatter.PatternMatcher.js'</span>
+
+<span class="s0">import </span><span class="s1">parseDigits from </span><span class="s2">'./helpers/parseDigits.js'</span>
+<span class="s0">export </span><span class="s1">{ DIGIT_PLACEHOLDER } from </span><span class="s2">'./AsYouTypeFormatter.util.js'</span>
+<span class="s0">import </span><span class="s1">{ FIRST_GROUP_PATTERN } from </span><span class="s2">'./helpers/formatNationalNumberUsingFormat.js'</span>
+<span class="s0">import </span><span class="s1">{ VALID_PUNCTUATION } from </span><span class="s2">'./constants.js'</span>
+<span class="s0">import </span><span class="s1">applyInternationalSeparatorStyle from </span><span class="s2">'./helpers/applyInternationalSeparatorStyle.js'</span>
+
+<span class="s3">// Used in phone number format template creation.</span>
+<span class="s3">// Could be any digit, I guess.</span>
+<span class="s0">const </span><span class="s1">DUMMY_DIGIT = </span><span class="s2">'9'</span>
+<span class="s3">// I don't know why is it exactly `15`</span>
+<span class="s0">const </span><span class="s1">LONGEST_NATIONAL_PHONE_NUMBER_LENGTH = </span><span class="s4">15</span>
+<span class="s3">// Create a phone number consisting only of the digit 9 that matches the</span>
+<span class="s3">// `number_pattern` by applying the pattern to the &quot;longest phone number&quot; string.</span>
+<span class="s0">const </span><span class="s1">LONGEST_DUMMY_PHONE_NUMBER = repeat(DUMMY_DIGIT, LONGEST_NATIONAL_PHONE_NUMBER_LENGTH)</span>
+
+<span class="s3">// A set of characters that, if found in a national prefix formatting rules, are an indicator to</span>
+<span class="s3">// us that we should separate the national prefix from the number when formatting.</span>
+<span class="s0">const </span><span class="s1">NATIONAL_PREFIX_SEPARATORS_PATTERN = </span><span class="s5">/[- ]/</span>
+
+<span class="s3">// Deprecated: Google has removed some formatting pattern related code from their repo.</span>
+<span class="s3">// https://github.com/googlei18n/libphonenumber/commit/a395b4fef3caf57c4bc5f082e1152a4d2bd0ba4c</span>
+<span class="s3">// &quot;We no longer have numbers in formatting matching patterns, only \d.&quot;</span>
+<span class="s3">// Because this library supports generating custom metadata</span>
+<span class="s3">// some users may still be using old metadata so the relevant</span>
+<span class="s3">// code seems to stay until some next major version update.</span>
+<span class="s0">const </span><span class="s1">SUPPORT_LEGACY_FORMATTING_PATTERNS = </span><span class="s0">true</span>
+
+<span class="s3">// A pattern that is used to match character classes in regular expressions.</span>
+<span class="s3">// An example of a character class is &quot;[1-4]&quot;.</span>
+<span class="s0">const </span><span class="s1">CREATE_CHARACTER_CLASS_PATTERN = SUPPORT_LEGACY_FORMATTING_PATTERNS &amp;&amp; (() =&gt; </span><span class="s5">/\[([^\[\]])*\]/g</span><span class="s1">)</span>
+
+<span class="s3">// Any digit in a regular expression that actually denotes a digit. For</span>
+<span class="s3">// example, in the regular expression &quot;80[0-2]\d{6,10}&quot;, the first 2 digits</span>
+<span class="s3">// (8 and 0) are standalone digits, but the rest are not.</span>
+<span class="s3">// Two look-aheads are needed because the number following \\d could be a</span>
+<span class="s3">// two-digit number, since the phone number can be as long as 15 digits.</span>
+<span class="s0">const </span><span class="s1">CREATE_STANDALONE_DIGIT_PATTERN = SUPPORT_LEGACY_FORMATTING_PATTERNS &amp;&amp; (() =&gt; </span><span class="s5">/\d(?=[^,}][^,}])/g</span><span class="s1">)</span>
+
+<span class="s3">// A regular expression that is used to determine if a `format` is</span>
+<span class="s3">// suitable to be used in the &quot;as you type formatter&quot;.</span>
+<span class="s3">// A `format` is suitable when the resulting formatted number has</span>
+<span class="s3">// the same digits as the user has entered.</span>
+<span class="s3">//</span>
+<span class="s3">// In the simplest case, that would mean that the format</span>
+<span class="s3">// doesn't add any additional digits when formatting a number.</span>
+<span class="s3">// Google says that it also shouldn't add &quot;star&quot; (`*`) characters,</span>
+<span class="s3">// like it does in some Israeli formats.</span>
+<span class="s3">// Such basic format would only contain &quot;valid punctuation&quot;</span>
+<span class="s3">// and &quot;captured group&quot; identifiers ($1, $2, etc).</span>
+<span class="s3">//</span>
+<span class="s3">// An example of a format that adds additional digits:</span>
+<span class="s3">//</span>
+<span class="s3">// Country: `AR` (Argentina).</span>
+<span class="s3">// Format:</span>
+<span class="s3">// {</span>
+<span class="s3">//    &quot;pattern&quot;: &quot;(\\d)(\\d{2})(\\d{4})(\\d{4})&quot;,</span>
+<span class="s3">//    &quot;leading_digits_patterns&quot;: [&quot;91&quot;],</span>
+<span class="s3">//    &quot;national_prefix_formatting_rule&quot;: &quot;0$1&quot;,</span>
+<span class="s3">//    &quot;format&quot;: &quot;$2 15-$3-$4&quot;,</span>
+<span class="s3">//    &quot;international_format&quot;: &quot;$1 $2 $3-$4&quot;</span>
+<span class="s3">// }</span>
+<span class="s3">//</span>
+<span class="s3">// In the format above, the `format` adds `15` to the digits when formatting a number.</span>
+<span class="s3">// A sidenote: this format actually is suitable because `national_prefix_for_parsing`</span>
+<span class="s3">// has previously removed `15` from a national number, so re-adding `15` in `format`</span>
+<span class="s3">// doesn't actually result in any extra digits added to user's input.</span>
+<span class="s3">// But verifying that would be a complex procedure, so the code chooses a simpler path:</span>
+<span class="s3">// it simply filters out all `format`s that contain anything but &quot;captured group&quot; ids.</span>
+<span class="s3">//</span>
+<span class="s3">// This regular expression is called `ELIGIBLE_FORMAT_PATTERN` in Google's</span>
+<span class="s3">// `libphonenumber` code.</span>
+<span class="s3">//</span>
+<span class="s0">const </span><span class="s1">NON_ALTERING_FORMAT_REG_EXP = </span><span class="s0">new </span><span class="s1">RegExp(</span>
+	<span class="s2">'[' </span><span class="s1">+ VALID_PUNCTUATION + </span><span class="s2">']*' </span><span class="s1">+</span>
+	<span class="s3">// Google developers say:</span>
+	<span class="s3">// &quot;We require that the first matching group is present in the</span>
+	<span class="s3">//  output pattern to ensure no data is lost while formatting.&quot;</span>
+	<span class="s2">'</span><span class="s6">\\</span><span class="s2">$1' </span><span class="s1">+</span>
+	<span class="s2">'[' </span><span class="s1">+ VALID_PUNCTUATION + </span><span class="s2">']*' </span><span class="s1">+</span>
+	<span class="s2">'(</span><span class="s6">\\</span><span class="s2">$</span><span class="s6">\\</span><span class="s2">d[' </span><span class="s1">+ VALID_PUNCTUATION + </span><span class="s2">']*)*' </span><span class="s1">+</span>
+	<span class="s2">'$'</span>
+<span class="s1">)</span>
+
+<span class="s3">// This is the minimum length of the leading digits of a phone number</span>
+<span class="s3">// to guarantee the first &quot;leading digits pattern&quot; for a phone number format</span>
+<span class="s3">// to be preemptive.</span>
+<span class="s0">const </span><span class="s1">MIN_LEADING_DIGITS_LENGTH = </span><span class="s4">3</span>
+
+<span class="s0">export default class </span><span class="s1">AsYouTypeFormatter {</span>
+	<span class="s1">constructor({</span>
+		<span class="s1">state,</span>
+		<span class="s1">metadata</span>
+	<span class="s1">}) {</span>
+		<span class="s0">this</span><span class="s1">.metadata = metadata</span>
+		<span class="s0">this</span><span class="s1">.resetFormat()</span>
+	<span class="s1">}</span>
+
+	<span class="s1">resetFormat() {</span>
+		<span class="s0">this</span><span class="s1">.chosenFormat = undefined</span>
+		<span class="s0">this</span><span class="s1">.template = undefined</span>
+		<span class="s0">this</span><span class="s1">.nationalNumberTemplate = undefined</span>
+		<span class="s0">this</span><span class="s1">.populatedNationalNumberTemplate = undefined</span>
+		<span class="s0">this</span><span class="s1">.populatedNationalNumberTemplatePosition = -</span><span class="s4">1</span>
+	<span class="s1">}</span>
+
+	<span class="s1">reset(numberingPlan, state) {</span>
+		<span class="s0">this</span><span class="s1">.resetFormat()</span>
+		<span class="s0">if </span><span class="s1">(numberingPlan) {</span>
+			<span class="s0">this</span><span class="s1">.isNANP = numberingPlan.callingCode() === </span><span class="s2">'1'</span>
+			<span class="s0">this</span><span class="s1">.matchingFormats = numberingPlan.formats()</span>
+			<span class="s0">if </span><span class="s1">(state.nationalSignificantNumber) {</span>
+				<span class="s0">this</span><span class="s1">.narrowDownMatchingFormats(state)</span>
+			<span class="s1">}</span>
+		<span class="s1">} </span><span class="s0">else </span><span class="s1">{</span>
+			<span class="s0">this</span><span class="s1">.isNANP = undefined</span>
+			<span class="s0">this</span><span class="s1">.matchingFormats = []</span>
+		<span class="s1">}</span>
+	<span class="s1">}</span>
+
+	<span class="s3">/**</span>
+	 <span class="s3">* Formats an updated phone number.</span>
+	 <span class="s3">* </span><span class="s7">@param  </span><span class="s3">{string} nextDigits — Additional phone number digits.</span>
+	 <span class="s3">* </span><span class="s7">@param  </span><span class="s3">{object} state — `AsYouType` state.</span>
+	 <span class="s3">* </span><span class="s7">@return </span><span class="s3">{[string]} Returns undefined if the updated phone number can't be formatted using any of the available formats.</span>
+	 <span class="s3">*/</span>
+	<span class="s1">format(nextDigits, state) {</span>
+		<span class="s3">// See if the phone number digits can be formatted as a complete phone number.</span>
+		<span class="s3">// If not, use the results from `formatNationalNumberWithNextDigits()`,</span>
+		<span class="s3">// which formats based on the chosen formatting pattern.</span>
+		<span class="s3">//</span>
+		<span class="s3">// Attempting to format complete phone number first is how it's done</span>
+		<span class="s3">// in Google's `libphonenumber`, so this library just follows it.</span>
+		<span class="s3">// Google's `libphonenumber` code doesn't explain in detail why does it</span>
+		<span class="s3">// attempt to format digits as a complete phone number</span>
+		<span class="s3">// instead of just going with a previoulsy (or newly) chosen `format`:</span>
+		<span class="s3">//</span>
+		<span class="s3">// &quot;Checks to see if there is an exact pattern match for these digits.</span>
+		<span class="s3">//  If so, we should use this instead of any other formatting template</span>
+		<span class="s3">//  whose leadingDigitsPattern also matches the input.&quot;</span>
+		<span class="s3">//</span>
+		<span class="s0">if </span><span class="s1">(canFormatCompleteNumber(state.nationalSignificantNumber, state.country, </span><span class="s0">this</span><span class="s1">.metadata)) {</span>
+			<span class="s0">for </span><span class="s1">(</span><span class="s0">const </span><span class="s1">format of </span><span class="s0">this</span><span class="s1">.matchingFormats) {</span>
+				<span class="s0">const </span><span class="s1">formattedCompleteNumber = formatCompleteNumber(</span>
+					<span class="s1">state,</span>
+					<span class="s1">format,</span>
+					<span class="s1">{</span>
+						<span class="s1">metadata: </span><span class="s0">this</span><span class="s1">.metadata,</span>
+						<span class="s1">shouldTryNationalPrefixFormattingRule: (format) =&gt; </span><span class="s0">this</span><span class="s1">.shouldTryNationalPrefixFormattingRule(format, {</span>
+							<span class="s1">international: state.international,</span>
+							<span class="s1">nationalPrefix: state.nationalPrefix</span>
+						<span class="s1">}),</span>
+						<span class="s1">getSeparatorAfterNationalPrefix: (format) =&gt; </span><span class="s0">this</span><span class="s1">.getSeparatorAfterNationalPrefix(format)</span>
+					<span class="s1">}</span>
+				<span class="s1">)</span>
+				<span class="s0">if </span><span class="s1">(formattedCompleteNumber) {</span>
+					<span class="s0">this</span><span class="s1">.resetFormat()</span>
+					<span class="s0">this</span><span class="s1">.chosenFormat = format</span>
+					<span class="s0">this</span><span class="s1">.setNationalNumberTemplate(formattedCompleteNumber.replace(</span><span class="s5">/\d/g</span><span class="s1">, DIGIT_PLACEHOLDER), state)</span>
+					<span class="s0">this</span><span class="s1">.populatedNationalNumberTemplate = formattedCompleteNumber</span>
+					<span class="s3">// With a new formatting template, the matched position</span>
+					<span class="s3">// using the old template needs to be reset.</span>
+					<span class="s0">this</span><span class="s1">.populatedNationalNumberTemplatePosition = </span><span class="s0">this</span><span class="s1">.template.lastIndexOf(DIGIT_PLACEHOLDER)</span>
+					<span class="s0">return </span><span class="s1">formattedCompleteNumber</span>
+				<span class="s1">}</span>
+
+			<span class="s1">}</span>
+		<span class="s1">}</span>
+		<span class="s3">// Format the digits as a partial (incomplete) phone number</span>
+		<span class="s3">// using the previously chosen formatting pattern (or a newly chosen one).</span>
+		<span class="s0">return this</span><span class="s1">.formatNationalNumberWithNextDigits(nextDigits, state)</span>
+	<span class="s1">}</span>
+
+	<span class="s3">// Formats the next phone number digits.</span>
+	<span class="s1">formatNationalNumberWithNextDigits(nextDigits, state) {</span>
+		<span class="s0">const </span><span class="s1">previouslyChosenFormat = </span><span class="s0">this</span><span class="s1">.chosenFormat</span>
+
+		<span class="s3">// Choose a format from the list of matching ones.</span>
+		<span class="s0">const </span><span class="s1">newlyChosenFormat = </span><span class="s0">this</span><span class="s1">.chooseFormat(state)</span>
+
+		<span class="s0">if </span><span class="s1">(newlyChosenFormat) {</span>
+			<span class="s0">if </span><span class="s1">(newlyChosenFormat === previouslyChosenFormat) {</span>
+				<span class="s3">// If it can format the next (current) digits</span>
+				<span class="s3">// using the previously chosen phone number format</span>
+				<span class="s3">// then return the updated formatted number.</span>
+				<span class="s0">return this</span><span class="s1">.formatNextNationalNumberDigits(nextDigits)</span>
+			<span class="s1">} </span><span class="s0">else </span><span class="s1">{</span>
+				<span class="s3">// If a more appropriate phone number format</span>
+				<span class="s3">// has been chosen for these &quot;leading digits&quot;,</span>
+				<span class="s3">// then re-format the national phone number part</span>
+				<span class="s3">// using the newly selected format.</span>
+				<span class="s0">return this</span><span class="s1">.formatNextNationalNumberDigits(state.getNationalDigits())</span>
+			<span class="s1">}</span>
+		<span class="s1">}</span>
+	<span class="s1">}</span>
+
+	<span class="s1">narrowDownMatchingFormats({</span>
+		<span class="s1">nationalSignificantNumber,</span>
+		<span class="s1">nationalPrefix,</span>
+		<span class="s1">international</span>
+	<span class="s1">}) {</span>
+		<span class="s0">const </span><span class="s1">leadingDigits = nationalSignificantNumber</span>
+
+		<span class="s3">// &quot;leading digits&quot; pattern list starts with a</span>
+		<span class="s3">// &quot;leading digits&quot; pattern fitting a maximum of 3 leading digits.</span>
+		<span class="s3">// So, after a user inputs 3 digits of a national (significant) phone number</span>
+		<span class="s3">// this national (significant) number can already be formatted.</span>
+		<span class="s3">// The next &quot;leading digits&quot; pattern is for 4 leading digits max,</span>
+		<span class="s3">// and the &quot;leading digits&quot; pattern after it is for 5 leading digits max, etc.</span>
+
+		<span class="s3">// This implementation is different from Google's</span>
+		<span class="s3">// in that it searches for a fitting format</span>
+		<span class="s3">// even if the user has entered less than</span>
+		<span class="s3">// `MIN_LEADING_DIGITS_LENGTH` digits of a national number.</span>
+		<span class="s3">// Because some leading digit patterns already match for a single first digit.</span>
+		<span class="s0">let </span><span class="s1">leadingDigitsPatternIndex = leadingDigits.length - MIN_LEADING_DIGITS_LENGTH</span>
+		<span class="s0">if </span><span class="s1">(leadingDigitsPatternIndex &lt; </span><span class="s4">0</span><span class="s1">) {</span>
+			<span class="s1">leadingDigitsPatternIndex = </span><span class="s4">0</span>
+		<span class="s1">}</span>
+
+		<span class="s0">this</span><span class="s1">.matchingFormats = </span><span class="s0">this</span><span class="s1">.matchingFormats.filter(</span>
+			<span class="s1">format =&gt; </span><span class="s0">this</span><span class="s1">.formatSuits(format, international, nationalPrefix)</span>
+				<span class="s1">&amp;&amp; </span><span class="s0">this</span><span class="s1">.formatMatches(format, leadingDigits, leadingDigitsPatternIndex)</span>
+		<span class="s1">)</span>
+
+		<span class="s3">// If there was a phone number format chosen</span>
+		<span class="s3">// and it no longer holds given the new leading digits then reset it.</span>
+		<span class="s3">// The test for this `if` condition is marked as:</span>
+		<span class="s3">// &quot;Reset a chosen format when it no longer holds given the new leading digits&quot;.</span>
+		<span class="s3">// To construct a valid test case for this one can find a country</span>
+		<span class="s3">// in `PhoneNumberMetadata.xml` yielding one format for 3 `&lt;leadingDigits&gt;`</span>
+		<span class="s3">// and yielding another format for 4 `&lt;leadingDigits&gt;` (Australia in this case).</span>
+		<span class="s0">if </span><span class="s1">(</span><span class="s0">this</span><span class="s1">.chosenFormat &amp;&amp; </span><span class="s0">this</span><span class="s1">.matchingFormats.indexOf(</span><span class="s0">this</span><span class="s1">.chosenFormat) === -</span><span class="s4">1</span><span class="s1">) {</span>
+			<span class="s0">this</span><span class="s1">.resetFormat()</span>
+		<span class="s1">}</span>
+	<span class="s1">}</span>
+
+	<span class="s1">formatSuits(format, international, nationalPrefix) {</span>
+		<span class="s3">// When a prefix before a national (significant) number is</span>
+		<span class="s3">// simply a national prefix, then it's parsed as `this.nationalPrefix`.</span>
+		<span class="s3">// In more complex cases, a prefix before national (significant) number</span>
+		<span class="s3">// could include a national prefix as well as some &quot;capturing groups&quot;,</span>
+		<span class="s3">// and in that case there's no info whether a national prefix has been parsed.</span>
+		<span class="s3">// If national prefix is not used when formatting a phone number</span>
+		<span class="s3">// using this format, but a national prefix has been entered by the user,</span>
+		<span class="s3">// and was extracted, then discard such phone number format.</span>
+		<span class="s3">// In Google's &quot;AsYouType&quot; formatter code, the equivalent would be this part:</span>
+		<span class="s3">// https://github.com/google/libphonenumber/blob/0a45cfd96e71cad8edb0e162a70fcc8bd9728933/java/libphonenumber/src/com/google/i18n/phonenumbers/AsYouTypeFormatter.java#L175-L184</span>
+		<span class="s0">if </span><span class="s1">(nationalPrefix &amp;&amp;</span>
+			<span class="s1">!format.usesNationalPrefix() &amp;&amp;</span>
+			<span class="s3">// !format.domesticCarrierCodeFormattingRule() &amp;&amp;</span>
+			<span class="s1">!format.nationalPrefixIsOptionalWhenFormattingInNationalFormat()) {</span>
+			<span class="s0">return false</span>
+		<span class="s1">}</span>
+		<span class="s3">// If national prefix is mandatory for this phone number format</span>
+		<span class="s3">// and there're no guarantees that a national prefix is present in user input</span>
+		<span class="s3">// then discard this phone number format as not suitable.</span>
+		<span class="s3">// In Google's &quot;AsYouType&quot; formatter code, the equivalent would be this part:</span>
+		<span class="s3">// https://github.com/google/libphonenumber/blob/0a45cfd96e71cad8edb0e162a70fcc8bd9728933/java/libphonenumber/src/com/google/i18n/phonenumbers/AsYouTypeFormatter.java#L185-L193</span>
+		<span class="s0">if </span><span class="s1">(!international &amp;&amp;</span>
+			<span class="s1">!nationalPrefix &amp;&amp;</span>
+			<span class="s1">format.nationalPrefixIsMandatoryWhenFormattingInNationalFormat()) {</span>
+			<span class="s0">return false</span>
+		<span class="s1">}</span>
+		<span class="s0">return true</span>
+	<span class="s1">}</span>
+
+	<span class="s1">formatMatches(format, leadingDigits, leadingDigitsPatternIndex) {</span>
+		<span class="s0">const </span><span class="s1">leadingDigitsPatternsCount = format.leadingDigitsPatterns().length</span>
+
+		<span class="s3">// If this format is not restricted to a certain</span>
+		<span class="s3">// leading digits pattern then it fits.</span>
+		<span class="s3">// The test case could be found by searching for &quot;leadingDigitsPatternsCount === 0&quot;.</span>
+		<span class="s0">if </span><span class="s1">(leadingDigitsPatternsCount === </span><span class="s4">0</span><span class="s1">) {</span>
+			<span class="s0">return true</span>
+		<span class="s1">}</span>
+
+		<span class="s3">// Start narrowing down the list of possible formats based on the leading digits.</span>
+		<span class="s3">// (only previously matched formats take part in the narrowing down process)</span>
+
+		<span class="s3">// `leading_digits_patterns` start with 3 digits min</span>
+		<span class="s3">// and then go up from there one digit at a time.</span>
+		<span class="s1">leadingDigitsPatternIndex = Math.min(leadingDigitsPatternIndex, leadingDigitsPatternsCount - </span><span class="s4">1</span><span class="s1">)</span>
+		<span class="s0">const </span><span class="s1">leadingDigitsPattern = format.leadingDigitsPatterns()[leadingDigitsPatternIndex]</span>
+
+		<span class="s3">// Google imposes a requirement on the leading digits</span>
+		<span class="s3">// to be minimum 3 digits long in order to be eligible</span>
+		<span class="s3">// for checking those with a leading digits pattern.</span>
+		<span class="s3">//</span>
+		<span class="s3">// Since `leading_digits_patterns` start with 3 digits min,</span>
+		<span class="s3">// Google's original `libphonenumber` library only starts</span>
+		<span class="s3">// excluding any non-matching formats only when the</span>
+		<span class="s3">// national number entered so far is at least 3 digits long,</span>
+		<span class="s3">// otherwise format matching would give false negatives.</span>
+		<span class="s3">//</span>
+		<span class="s3">// For example, when the digits entered so far are `2`</span>
+		<span class="s3">// and the leading digits pattern is `21` –</span>
+		<span class="s3">// it's quite obvious in this case that the format could be the one</span>
+		<span class="s3">// but due to the absence of further digits it would give false negative.</span>
+		<span class="s3">//</span>
+		<span class="s3">// Also, `leading_digits_patterns` doesn't always correspond to a single</span>
+		<span class="s3">// digits count. For example, `60|8` pattern would already match `8`</span>
+		<span class="s3">// but the `60` part would require having at least two leading digits,</span>
+		<span class="s3">// so the whole pattern would require inputting two digits first in order to</span>
+		<span class="s3">// decide on whether it matches the input, even when the input is &quot;80&quot;.</span>
+		<span class="s3">//</span>
+		<span class="s3">// This library — `libphonenumber-js` — allows filtering by `leading_digits_patterns`</span>
+		<span class="s3">// even when there's only 1 or 2 digits of the national (significant) number.</span>
+		<span class="s3">// To do that, it uses a non-strict pattern matcher written specifically for that.</span>
+		<span class="s3">//</span>
+		<span class="s0">if </span><span class="s1">(leadingDigits.length &lt; MIN_LEADING_DIGITS_LENGTH) {</span>
+			<span class="s3">// Before leading digits &lt; 3 matching was implemented:</span>
+			<span class="s3">// return true</span>
+			<span class="s3">//</span>
+			<span class="s3">// After leading digits &lt; 3 matching was implemented:</span>
+			<span class="s0">try </span><span class="s1">{</span>
+				<span class="s0">return new </span><span class="s1">PatternMatcher(leadingDigitsPattern).match(leadingDigits, { allowOverflow: </span><span class="s0">true </span><span class="s1">}) !== undefined</span>
+			<span class="s1">} </span><span class="s0">catch </span><span class="s1">(error) </span><span class="s3">/* istanbul ignore next */ </span><span class="s1">{</span>
+				<span class="s3">// There's a slight possibility that there could be some undiscovered bug</span>
+				<span class="s3">// in the pattern matcher code. Since the &quot;leading digits &lt; 3 matching&quot;</span>
+				<span class="s3">// feature is not &quot;essential&quot; for operation, it can fall back to the old way</span>
+				<span class="s3">// in case of any issues rather than halting the application's execution.</span>
+				<span class="s1">console.error(error)</span>
+				<span class="s0">return true</span>
+			<span class="s1">}</span>
+		<span class="s1">}</span>
+
+		<span class="s3">// If at least `MIN_LEADING_DIGITS_LENGTH` digits of a national number are</span>
+		<span class="s3">// available then use the usual regular expression matching.</span>
+		<span class="s3">//</span>
+		<span class="s3">// The whole pattern is wrapped in round brackets (`()`) because</span>
+		<span class="s3">// the pattern can use &quot;or&quot; operator (`|`) at the top level of the pattern.</span>
+		<span class="s3">//</span>
+		<span class="s0">return new </span><span class="s1">RegExp(</span><span class="s2">`^(</span><span class="s1">${leadingDigitsPattern}</span><span class="s2">)`</span><span class="s1">).test(leadingDigits)</span>
+	<span class="s1">}</span>
+
+	<span class="s1">getFormatFormat(format, international) {</span>
+		<span class="s0">return </span><span class="s1">international ? format.internationalFormat() : format.format()</span>
+	<span class="s1">}</span>
+
+	<span class="s1">chooseFormat(state) {</span>
+		<span class="s3">// When there are multiple available formats, the formatter uses the first</span>
+		<span class="s3">// format where a formatting template could be created.</span>
+		<span class="s3">//</span>
+		<span class="s3">// For some weird reason, `istanbul` says &quot;else path not taken&quot;</span>
+		<span class="s3">// for the `for of` line below. Supposedly that means that</span>
+		<span class="s3">// the loop doesn't ever go over the last element in the list.</span>
+		<span class="s3">// That's true because there always is `this.chosenFormat`</span>
+		<span class="s3">// when `this.matchingFormats` is non-empty.</span>
+		<span class="s3">// And, for some weird reason, it doesn't think that the case</span>
+		<span class="s3">// with empty `this.matchingFormats` qualifies for a valid &quot;else&quot; path.</span>
+		<span class="s3">// So simply muting this `istanbul` warning.</span>
+		<span class="s3">// It doesn't skip the contents of the `for of` loop,</span>
+		<span class="s3">// it just skips the `for of` line.</span>
+		<span class="s3">//</span>
+		<span class="s3">/* istanbul ignore next */</span>
+		<span class="s0">for </span><span class="s1">(</span><span class="s0">const </span><span class="s1">format of </span><span class="s0">this</span><span class="s1">.matchingFormats.slice()) {</span>
+			<span class="s3">// If this format is currently being used</span>
+			<span class="s3">// and is still suitable, then stick to it.</span>
+			<span class="s0">if </span><span class="s1">(</span><span class="s0">this</span><span class="s1">.chosenFormat === format) {</span>
+				<span class="s0">break</span>
+			<span class="s1">}</span>
+			<span class="s3">// Sometimes, a formatting rule inserts additional digits in a phone number,</span>
+			<span class="s3">// and &quot;as you type&quot; formatter can't do that: it should only use the digits</span>
+			<span class="s3">// that the user has input.</span>
+			<span class="s3">//</span>
+			<span class="s3">// For example, in Argentina, there's a format for mobile phone numbers:</span>
+			<span class="s3">//</span>
+			<span class="s3">// {</span>
+			<span class="s3">//    &quot;pattern&quot;: &quot;(\\d)(\\d{2})(\\d{4})(\\d{4})&quot;,</span>
+			<span class="s3">//    &quot;leading_digits_patterns&quot;: [&quot;91&quot;],</span>
+			<span class="s3">//    &quot;national_prefix_formatting_rule&quot;: &quot;0$1&quot;,</span>
+			<span class="s3">//    &quot;format&quot;: &quot;$2 15-$3-$4&quot;,</span>
+			<span class="s3">//    &quot;international_format&quot;: &quot;$1 $2 $3-$4&quot;</span>
+			<span class="s3">// }</span>
+			<span class="s3">//</span>
+			<span class="s3">// In that format, `international_format` is used instead of `format`</span>
+			<span class="s3">// because `format` inserts `15` in the formatted number,</span>
+			<span class="s3">// and `AsYouType` formatter should only use the digits</span>
+			<span class="s3">// the user has actually input, without adding any extra digits.</span>
+			<span class="s3">// In this case, it wouldn't make a difference, because the `15`</span>
+			<span class="s3">// is first stripped when applying `national_prefix_for_parsing`</span>
+			<span class="s3">// and then re-added when using `format`, so in reality it doesn't</span>
+			<span class="s3">// add any new digits to the number, but to detect that, the code</span>
+			<span class="s3">// would have to be more complex: it would have to try formatting</span>
+			<span class="s3">// the digits using the format and then see if any digits have</span>
+			<span class="s3">// actually been added or removed, and then, every time a new digit</span>
+			<span class="s3">// is input, it should re-check whether the chosen format doesn't</span>
+			<span class="s3">// alter the digits.</span>
+			<span class="s3">//</span>
+			<span class="s3">// Google's code doesn't go that far, and so does this library:</span>
+			<span class="s3">// it simply requires that a `format` doesn't add any additonal</span>
+			<span class="s3">// digits to user's input.</span>
+			<span class="s3">//</span>
+			<span class="s3">// Also, people in general should move from inputting phone numbers</span>
+			<span class="s3">// in national format (possibly with national prefixes)</span>
+			<span class="s3">// and use international phone number format instead:</span>
+			<span class="s3">// it's a logical thing in the modern age of mobile phones,</span>
+			<span class="s3">// globalization and the internet.</span>
+			<span class="s3">//</span>
+			<span class="s3">/* istanbul ignore if */</span>
+			<span class="s0">if </span><span class="s1">(!NON_ALTERING_FORMAT_REG_EXP.test(</span><span class="s0">this</span><span class="s1">.getFormatFormat(format, state.international))) {</span>
+				<span class="s0">continue</span>
+			<span class="s1">}</span>
+			<span class="s0">if </span><span class="s1">(!</span><span class="s0">this</span><span class="s1">.createTemplateForFormat(format, state)) {</span>
+				<span class="s3">// Remove the format if it can't generate a template.</span>
+				<span class="s0">this</span><span class="s1">.matchingFormats = </span><span class="s0">this</span><span class="s1">.matchingFormats.filter(_ =&gt; _ !== format)</span>
+				<span class="s0">continue</span>
+			<span class="s1">}</span>
+			<span class="s0">this</span><span class="s1">.chosenFormat = format</span>
+			<span class="s0">break</span>
+		<span class="s1">}</span>
+		<span class="s0">if </span><span class="s1">(!</span><span class="s0">this</span><span class="s1">.chosenFormat) {</span>
+			<span class="s3">// No format matches the national (significant) phone number.</span>
+			<span class="s0">this</span><span class="s1">.resetFormat()</span>
+		<span class="s1">}</span>
+		<span class="s0">return this</span><span class="s1">.chosenFormat</span>
+	<span class="s1">}</span>
+
+	<span class="s1">createTemplateForFormat(format, state) {</span>
+		<span class="s3">// The formatter doesn't format numbers when numberPattern contains '|', e.g.</span>
+		<span class="s3">// (20|3)\d{4}. In those cases we quickly return.</span>
+		<span class="s3">// (Though there's no such format in current metadata)</span>
+		<span class="s3">/* istanbul ignore if */</span>
+		<span class="s0">if </span><span class="s1">(SUPPORT_LEGACY_FORMATTING_PATTERNS &amp;&amp; format.pattern().indexOf(</span><span class="s2">'|'</span><span class="s1">) &gt;= </span><span class="s4">0</span><span class="s1">) {</span>
+			<span class="s0">return</span>
+		<span class="s1">}</span>
+		<span class="s3">// Get formatting template for this phone number format</span>
+		<span class="s0">const </span><span class="s1">template = </span><span class="s0">this</span><span class="s1">.getTemplateForFormat(format, state)</span>
+		<span class="s3">// If the national number entered is too long</span>
+		<span class="s3">// for any phone number format, then abort.</span>
+		<span class="s0">if </span><span class="s1">(template) {</span>
+			<span class="s0">this</span><span class="s1">.setNationalNumberTemplate(template, state)</span>
+			<span class="s0">return true</span>
+		<span class="s1">}</span>
+	<span class="s1">}</span>
+
+	<span class="s1">getSeparatorAfterNationalPrefix(format) {</span>
+		<span class="s3">// `US` metadata doesn't have a `national_prefix_formatting_rule`,</span>
+		<span class="s3">// so the `if` condition below doesn't apply to `US`,</span>
+		<span class="s3">// but in reality there shoudl be a separator</span>
+		<span class="s3">// between a national prefix and a national (significant) number.</span>
+		<span class="s3">// So `US` national prefix separator is a &quot;special&quot; &quot;hardcoded&quot; case.</span>
+		<span class="s0">if </span><span class="s1">(</span><span class="s0">this</span><span class="s1">.isNANP) {</span>
+			<span class="s0">return </span><span class="s2">' '</span>
+		<span class="s1">}</span>
+		<span class="s3">// If a `format` has a `national_prefix_formatting_rule`</span>
+		<span class="s3">// and that rule has a separator after a national prefix,</span>
+		<span class="s3">// then it means that there should be a separator</span>
+		<span class="s3">// between a national prefix and a national (significant) number.</span>
+		<span class="s0">if </span><span class="s1">(format &amp;&amp;</span>
+			<span class="s1">format.nationalPrefixFormattingRule() &amp;&amp;</span>
+			<span class="s1">NATIONAL_PREFIX_SEPARATORS_PATTERN.test(format.nationalPrefixFormattingRule())) {</span>
+			<span class="s0">return </span><span class="s2">' '</span>
+		<span class="s1">}</span>
+		<span class="s3">// At this point, there seems to be no clear evidence that</span>
+		<span class="s3">// there should be a separator between a national prefix</span>
+		<span class="s3">// and a national (significant) number. So don't insert one.</span>
+		<span class="s0">return </span><span class="s2">''</span>
+	<span class="s1">}</span>
+
+	<span class="s1">getInternationalPrefixBeforeCountryCallingCode({ IDDPrefix, missingPlus }, options) {</span>
+		<span class="s0">if </span><span class="s1">(IDDPrefix) {</span>
+			<span class="s0">return </span><span class="s1">options &amp;&amp; options.spacing === </span><span class="s0">false </span><span class="s1">? IDDPrefix : IDDPrefix + </span><span class="s2">' '</span>
+		<span class="s1">}</span>
+		<span class="s0">if </span><span class="s1">(missingPlus) {</span>
+			<span class="s0">return </span><span class="s2">''</span>
+		<span class="s1">}</span>
+		<span class="s0">return </span><span class="s2">'+'</span>
+	<span class="s1">}</span>
+
+	<span class="s1">getTemplate(state) {</span>
+		<span class="s0">if </span><span class="s1">(!</span><span class="s0">this</span><span class="s1">.template) {</span>
+			<span class="s0">return</span>
+		<span class="s1">}</span>
+		<span class="s3">// `this.template` holds the template for a &quot;complete&quot; phone number.</span>
+		<span class="s3">// The currently entered phone number is most likely not &quot;complete&quot;,</span>
+		<span class="s3">// so trim all non-populated digits.</span>
+		<span class="s0">let </span><span class="s1">index = -</span><span class="s4">1</span>
+		<span class="s0">let </span><span class="s1">i = </span><span class="s4">0</span>
+		<span class="s0">const </span><span class="s1">internationalPrefix = state.international ? </span><span class="s0">this</span><span class="s1">.getInternationalPrefixBeforeCountryCallingCode(state, { spacing: </span><span class="s0">false </span><span class="s1">}) : </span><span class="s2">''</span>
+		<span class="s0">while </span><span class="s1">(i &lt; internationalPrefix.length + state.getDigitsWithoutInternationalPrefix().length) {</span>
+			<span class="s1">index = </span><span class="s0">this</span><span class="s1">.template.indexOf(DIGIT_PLACEHOLDER, index + </span><span class="s4">1</span><span class="s1">)</span>
+			<span class="s1">i++</span>
+		<span class="s1">}</span>
+		<span class="s0">return </span><span class="s1">cutAndStripNonPairedParens(</span><span class="s0">this</span><span class="s1">.template, index + </span><span class="s4">1</span><span class="s1">)</span>
+	<span class="s1">}</span>
+
+	<span class="s1">setNationalNumberTemplate(template, state) {</span>
+		<span class="s0">this</span><span class="s1">.nationalNumberTemplate = template</span>
+		<span class="s0">this</span><span class="s1">.populatedNationalNumberTemplate = template</span>
+		<span class="s3">// With a new formatting template, the matched position</span>
+		<span class="s3">// using the old template needs to be reset.</span>
+		<span class="s0">this</span><span class="s1">.populatedNationalNumberTemplatePosition = -</span><span class="s4">1</span>
+		<span class="s3">// For convenience, the public `.template` property</span>
+		<span class="s3">// contains the whole international number</span>
+		<span class="s3">// if the phone number being input is international:</span>
+		<span class="s3">// 'x' for the '+' sign, 'x'es for the country phone code,</span>
+		<span class="s3">// a spacebar and then the template for the formatted national number.</span>
+		<span class="s0">if </span><span class="s1">(state.international) {</span>
+			<span class="s0">this</span><span class="s1">.template =</span>
+				<span class="s0">this</span><span class="s1">.getInternationalPrefixBeforeCountryCallingCode(state).replace(</span><span class="s5">/[\d\+]/g</span><span class="s1">, DIGIT_PLACEHOLDER) +</span>
+				<span class="s1">repeat(DIGIT_PLACEHOLDER, state.callingCode.length) +</span>
+				<span class="s2">' ' </span><span class="s1">+</span>
+				<span class="s1">template</span>
+		<span class="s1">} </span><span class="s0">else </span><span class="s1">{</span>
+			<span class="s0">this</span><span class="s1">.template = template</span>
+		<span class="s1">}</span>
+	<span class="s1">}</span>
+
+	<span class="s3">/**</span>
+	 <span class="s3">* Generates formatting template for a national phone number,</span>
+	 <span class="s3">* optionally containing a national prefix, for a format.</span>
+	 <span class="s3">* </span><span class="s7">@param  </span><span class="s3">{Format} format</span>
+	 <span class="s3">* </span><span class="s7">@param  </span><span class="s3">{string} nationalPrefix</span>
+	 <span class="s3">* </span><span class="s7">@return </span><span class="s3">{string}</span>
+	 <span class="s3">*/</span>
+	<span class="s1">getTemplateForFormat(format, {</span>
+		<span class="s1">nationalSignificantNumber,</span>
+		<span class="s1">international,</span>
+		<span class="s1">nationalPrefix,</span>
+		<span class="s1">prefixBeforeNationalSignificantNumberThatIsNotNationalPrefix</span>
+	<span class="s1">}) {</span>
+		<span class="s0">let </span><span class="s1">pattern = format.pattern()</span>
+
+		<span class="s3">/* istanbul ignore else */</span>
+		<span class="s0">if </span><span class="s1">(SUPPORT_LEGACY_FORMATTING_PATTERNS) {</span>
+			<span class="s1">pattern = pattern</span>
+				<span class="s3">// Replace anything in the form of [..] with \d</span>
+				<span class="s1">.replace(CREATE_CHARACTER_CLASS_PATTERN(), </span><span class="s2">'</span><span class="s6">\\</span><span class="s2">d'</span><span class="s1">)</span>
+				<span class="s3">// Replace any standalone digit (not the one in `{}`) with \d</span>
+				<span class="s1">.replace(CREATE_STANDALONE_DIGIT_PATTERN(), </span><span class="s2">'</span><span class="s6">\\</span><span class="s2">d'</span><span class="s1">)</span>
+		<span class="s1">}</span>
+
+		<span class="s3">// Generate a dummy national number (consisting of `9`s)</span>
+		<span class="s3">// that fits this format's `pattern`.</span>
+		<span class="s3">//</span>
+		<span class="s3">// This match will always succeed,</span>
+		<span class="s3">// because the &quot;longest dummy phone number&quot;</span>
+		<span class="s3">// has enough length to accomodate any possible</span>
+		<span class="s3">// national phone number format pattern.</span>
+		<span class="s3">//</span>
+		<span class="s0">let </span><span class="s1">digits = LONGEST_DUMMY_PHONE_NUMBER.match(pattern)[</span><span class="s4">0</span><span class="s1">]</span>
+
+		<span class="s3">// If the national number entered is too long</span>
+		<span class="s3">// for any phone number format, then abort.</span>
+		<span class="s0">if </span><span class="s1">(nationalSignificantNumber.length &gt; digits.length) {</span>
+			<span class="s0">return</span>
+		<span class="s1">}</span>
+
+		<span class="s3">// Get a formatting template which can be used to efficiently format</span>
+		<span class="s3">// a partial number where digits are added one by one.</span>
+
+		<span class="s3">// Below `strictPattern` is used for the</span>
+		<span class="s3">// regular expression (with `^` and `$`).</span>
+		<span class="s3">// This wasn't originally in Google's `libphonenumber`</span>
+		<span class="s3">// and I guess they don't really need it</span>
+		<span class="s3">// because they're not using &quot;templates&quot; to format phone numbers</span>
+		<span class="s3">// but I added `strictPattern` after encountering</span>
+		<span class="s3">// South Korean phone number formatting bug.</span>
+		<span class="s3">//</span>
+		<span class="s3">// Non-strict regular expression bug demonstration:</span>
+		<span class="s3">//</span>
+		<span class="s3">// this.nationalSignificantNumber : `111111111` (9 digits)</span>
+		<span class="s3">//</span>
+		<span class="s3">// pattern : (\d{2})(\d{3,4})(\d{4})</span>
+		<span class="s3">// format : `$1 $2 $3`</span>
+		<span class="s3">// digits : `9999999999` (10 digits)</span>
+		<span class="s3">//</span>
+		<span class="s3">// '9999999999'.replace(new RegExp(/(\d{2})(\d{3,4})(\d{4})/g), '$1 $2 $3') = &quot;99 9999 9999&quot;</span>
+		<span class="s3">//</span>
+		<span class="s3">// template : xx xxxx xxxx</span>
+		<span class="s3">//</span>
+		<span class="s3">// But the correct template in this case is `xx xxx xxxx`.</span>
+		<span class="s3">// The template was generated incorrectly because of the</span>
+		<span class="s3">// `{3,4}` variability in the `pattern`.</span>
+		<span class="s3">//</span>
+		<span class="s3">// The fix is, if `this.nationalSignificantNumber` has already sufficient length</span>
+		<span class="s3">// to satisfy the `pattern` completely then `this.nationalSignificantNumber`</span>
+		<span class="s3">// is used instead of `digits`.</span>
+
+		<span class="s0">const </span><span class="s1">strictPattern = </span><span class="s0">new </span><span class="s1">RegExp(</span><span class="s2">'^' </span><span class="s1">+ pattern + </span><span class="s2">'$'</span><span class="s1">)</span>
+		<span class="s0">const </span><span class="s1">nationalNumberDummyDigits = nationalSignificantNumber.replace(</span><span class="s5">/\d/g</span><span class="s1">, DUMMY_DIGIT)</span>
+
+		<span class="s3">// If `this.nationalSignificantNumber` has already sufficient length</span>
+		<span class="s3">// to satisfy the `pattern` completely then use it</span>
+		<span class="s3">// instead of `digits`.</span>
+		<span class="s0">if </span><span class="s1">(strictPattern.test(nationalNumberDummyDigits)) {</span>
+			<span class="s1">digits = nationalNumberDummyDigits</span>
+		<span class="s1">}</span>
+
+		<span class="s0">let </span><span class="s1">numberFormat = </span><span class="s0">this</span><span class="s1">.getFormatFormat(format, international)</span>
+		<span class="s0">let </span><span class="s1">nationalPrefixIncludedInTemplate</span>
+
+		<span class="s3">// If a user did input a national prefix (and that's guaranteed),</span>
+		<span class="s3">// and if a `format` does have a national prefix formatting rule,</span>
+		<span class="s3">// then see if that national prefix formatting rule</span>
+		<span class="s3">// prepends exactly the same national prefix the user has input.</span>
+		<span class="s3">// If that's the case, then use the `format` with the national prefix formatting rule.</span>
+		<span class="s3">// Otherwise, use  the `format` without the national prefix formatting rule,</span>
+		<span class="s3">// and prepend a national prefix manually to it.</span>
+		<span class="s0">if </span><span class="s1">(</span><span class="s0">this</span><span class="s1">.shouldTryNationalPrefixFormattingRule(format, { international, nationalPrefix })) {</span>
+			<span class="s0">const </span><span class="s1">numberFormatWithNationalPrefix = numberFormat.replace(</span>
+				<span class="s1">FIRST_GROUP_PATTERN,</span>
+				<span class="s1">format.nationalPrefixFormattingRule()</span>
+			<span class="s1">)</span>
+			<span class="s3">// If `national_prefix_formatting_rule` of a `format` simply prepends</span>
+			<span class="s3">// national prefix at the start of a national (significant) number,</span>
+			<span class="s3">// then such formatting can be used with `AsYouType` formatter.</span>
+			<span class="s3">// There seems to be no `else` case: everywhere in metadata,</span>
+			<span class="s3">// national prefix formatting rule is national prefix + $1,</span>
+			<span class="s3">// or `($1)`, in which case such format isn't even considered</span>
+			<span class="s3">// when the user has input a national prefix.</span>
+			<span class="s3">/* istanbul ignore else */</span>
+			<span class="s0">if </span><span class="s1">(parseDigits(format.nationalPrefixFormattingRule()) === (nationalPrefix || </span><span class="s2">''</span><span class="s1">) + parseDigits(</span><span class="s2">'$1'</span><span class="s1">)) {</span>
+				<span class="s1">numberFormat = numberFormatWithNationalPrefix</span>
+				<span class="s1">nationalPrefixIncludedInTemplate = </span><span class="s0">true</span>
+				<span class="s3">// Replace all digits of the national prefix in the formatting template</span>
+				<span class="s3">// with `DIGIT_PLACEHOLDER`s.</span>
+				<span class="s0">if </span><span class="s1">(nationalPrefix) {</span>
+					<span class="s0">let </span><span class="s1">i = nationalPrefix.length</span>
+					<span class="s0">while </span><span class="s1">(i &gt; </span><span class="s4">0</span><span class="s1">) {</span>
+						<span class="s1">numberFormat = numberFormat.replace(</span><span class="s5">/\d/</span><span class="s1">, DIGIT_PLACEHOLDER)</span>
+						<span class="s1">i--</span>
+					<span class="s1">}</span>
+				<span class="s1">}</span>
+			<span class="s1">}</span>
+		<span class="s1">}</span>
+
+		<span class="s3">// Generate formatting template for this phone number format.</span>
+		<span class="s0">let </span><span class="s1">template = digits</span>
+			<span class="s3">// Format the dummy phone number according to the format.</span>
+			<span class="s1">.replace(</span><span class="s0">new </span><span class="s1">RegExp(pattern), numberFormat)</span>
+			<span class="s3">// Replace each dummy digit with a DIGIT_PLACEHOLDER.</span>
+			<span class="s1">.replace(</span><span class="s0">new </span><span class="s1">RegExp(DUMMY_DIGIT, </span><span class="s2">'g'</span><span class="s1">), DIGIT_PLACEHOLDER)</span>
+
+		<span class="s3">// If a prefix of a national (significant) number is not as simple</span>
+		<span class="s3">// as just a basic national prefix, then just prepend such prefix</span>
+		<span class="s3">// before the national (significant) number, optionally spacing</span>
+		<span class="s3">// the two with a whitespace.</span>
+		<span class="s0">if </span><span class="s1">(!nationalPrefixIncludedInTemplate) {</span>
+			<span class="s0">if </span><span class="s1">(prefixBeforeNationalSignificantNumberThatIsNotNationalPrefix) {</span>
+				<span class="s3">// Prepend the prefix to the template manually.</span>
+				<span class="s1">template = repeat(DIGIT_PLACEHOLDER, prefixBeforeNationalSignificantNumberThatIsNotNationalPrefix.length) +</span>
+					<span class="s2">' ' </span><span class="s1">+</span>
+					<span class="s1">template</span>
+			<span class="s1">} </span><span class="s0">else if </span><span class="s1">(nationalPrefix) {</span>
+				<span class="s3">// Prepend national prefix to the template manually.</span>
+				<span class="s1">template = repeat(DIGIT_PLACEHOLDER, nationalPrefix.length) +</span>
+					<span class="s0">this</span><span class="s1">.getSeparatorAfterNationalPrefix(format) +</span>
+					<span class="s1">template</span>
+			<span class="s1">}</span>
+		<span class="s1">}</span>
+
+		<span class="s0">if </span><span class="s1">(international) {</span>
+			<span class="s1">template = applyInternationalSeparatorStyle(template)</span>
+		<span class="s1">}</span>
+
+		<span class="s0">return </span><span class="s1">template</span>
+	<span class="s1">}</span>
+
+	<span class="s1">formatNextNationalNumberDigits(digits) {</span>
+		<span class="s0">const </span><span class="s1">result = populateTemplateWithDigits(</span>
+			<span class="s0">this</span><span class="s1">.populatedNationalNumberTemplate,</span>
+			<span class="s0">this</span><span class="s1">.populatedNationalNumberTemplatePosition,</span>
+			<span class="s1">digits</span>
+		<span class="s1">)</span>
+
+		<span class="s0">if </span><span class="s1">(!result) {</span>
+			<span class="s3">// Reset the format.</span>
+			<span class="s0">this</span><span class="s1">.resetFormat()</span>
+			<span class="s0">return</span>
+		<span class="s1">}</span>
+
+		<span class="s0">this</span><span class="s1">.populatedNationalNumberTemplate = result[</span><span class="s4">0</span><span class="s1">]</span>
+		<span class="s0">this</span><span class="s1">.populatedNationalNumberTemplatePosition = result[</span><span class="s4">1</span><span class="s1">]</span>
+
+		<span class="s3">// Return the formatted phone number so far.</span>
+		<span class="s0">return </span><span class="s1">cutAndStripNonPairedParens(</span><span class="s0">this</span><span class="s1">.populatedNationalNumberTemplate, </span><span class="s0">this</span><span class="s1">.populatedNationalNumberTemplatePosition + </span><span class="s4">1</span><span class="s1">)</span>
+
+		<span class="s3">// The old way which was good for `input-format` but is not so good</span>
+		<span class="s3">// for `react-phone-number-input`'s default input (`InputBasic`).</span>
+		<span class="s3">// return closeNonPairedParens(this.populatedNationalNumberTemplate, this.populatedNationalNumberTemplatePosition + 1)</span>
+		<span class="s3">//  .replace(new RegExp(DIGIT_PLACEHOLDER, 'g'), ' ')</span>
+	<span class="s1">}</span>
+
+	<span class="s1">shouldTryNationalPrefixFormattingRule(format, { international, nationalPrefix }) {</span>
+		<span class="s0">if </span><span class="s1">(format.nationalPrefixFormattingRule()) {</span>
+			<span class="s3">// In some countries, `national_prefix_formatting_rule` is `($1)`,</span>
+			<span class="s3">// so it applies even if the user hasn't input a national prefix.</span>
+			<span class="s3">// `format.usesNationalPrefix()` detects such cases.</span>
+			<span class="s0">const </span><span class="s1">usesNationalPrefix = format.usesNationalPrefix()</span>
+			<span class="s0">if </span><span class="s1">((usesNationalPrefix &amp;&amp; nationalPrefix) ||</span>
+				<span class="s1">(!usesNationalPrefix &amp;&amp; !international)) {</span>
+				<span class="s0">return true</span>
+			<span class="s1">}</span>
+		<span class="s1">}</span>
+	<span class="s1">}</span>
+<span class="s1">}</span></pre>
+</body>
+</html>

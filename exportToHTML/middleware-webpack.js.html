@@ -1,0 +1,495 @@
+<html>
+<head>
+<title>middleware-webpack.js</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #067d17;}
+.s1 { color: #080808;}
+.s2 { color: #0033b3;}
+.s3 { color: #1750eb;}
+.s4 { color: #8c8c8c; font-style: italic;}
+.s5 { color: #264eff;}
+.s6 { color: #8c8c8c; font-style: italic;}
+</style>
+</head>
+<body bgcolor="#ffffff">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#c0c0c0" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+middleware-webpack.js</font>
+</center></td></tr></table>
+<pre><span class="s0">&quot;use strict&quot;</span><span class="s1">;</span>
+<span class="s1">Object.defineProperty(exports, </span><span class="s0">&quot;__esModule&quot;</span><span class="s1">, {</span>
+    <span class="s1">value: </span><span class="s2">true</span>
+<span class="s1">});</span>
+<span class="s3">0 </span><span class="s1">&amp;&amp; (module.exports = {</span>
+    <span class="s1">createOriginalStackFrame: </span><span class="s2">null</span><span class="s1">,</span>
+    <span class="s1">getIgnoredSources: </span><span class="s2">null</span><span class="s1">,</span>
+    <span class="s1">getOriginalStackFrames: </span><span class="s2">null</span><span class="s1">,</span>
+    <span class="s1">getOverlayMiddleware: </span><span class="s2">null</span><span class="s1">,</span>
+    <span class="s1">getSourceMapMiddleware: </span><span class="s2">null</span>
+<span class="s1">});</span>
+<span class="s2">function </span><span class="s1">_export(target, all) {</span>
+    <span class="s2">for</span><span class="s1">(</span><span class="s2">var </span><span class="s1">name </span><span class="s2">in </span><span class="s1">all)Object.defineProperty(target, name, {</span>
+        <span class="s1">enumerable: </span><span class="s2">true</span><span class="s1">,</span>
+        <span class="s1">get: all[name]</span>
+    <span class="s1">});</span>
+<span class="s1">}</span>
+<span class="s1">_export(exports, {</span>
+    <span class="s1">createOriginalStackFrame: </span><span class="s2">function</span><span class="s1">() {</span>
+        <span class="s2">return </span><span class="s1">createOriginalStackFrame;</span>
+    <span class="s1">},</span>
+    <span class="s1">getIgnoredSources: </span><span class="s2">function</span><span class="s1">() {</span>
+        <span class="s2">return </span><span class="s1">getIgnoredSources;</span>
+    <span class="s1">},</span>
+    <span class="s1">getOriginalStackFrames: </span><span class="s2">function</span><span class="s1">() {</span>
+        <span class="s2">return </span><span class="s1">getOriginalStackFrames;</span>
+    <span class="s1">},</span>
+    <span class="s1">getOverlayMiddleware: </span><span class="s2">function</span><span class="s1">() {</span>
+        <span class="s2">return </span><span class="s1">getOverlayMiddleware;</span>
+    <span class="s1">},</span>
+    <span class="s1">getSourceMapMiddleware: </span><span class="s2">function</span><span class="s1">() {</span>
+        <span class="s2">return </span><span class="s1">getSourceMapMiddleware;</span>
+    <span class="s1">}</span>
+<span class="s1">});</span>
+<span class="s2">const </span><span class="s1">_module = require(</span><span class="s0">&quot;module&quot;</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">_path = </span><span class="s4">/*#__PURE__*/ </span><span class="s1">_interop_require_default(require(</span><span class="s0">&quot;path&quot;</span><span class="s1">));</span>
+<span class="s2">const </span><span class="s1">_url = require(</span><span class="s0">&quot;url&quot;</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">_sourcemap08 = require(</span><span class="s0">&quot;next/dist/compiled/source-map08&quot;</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">_getsourcemapfromfile = require(</span><span class="s0">&quot;./get-source-map-from-file&quot;</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">_sourcemaps = require(</span><span class="s0">&quot;../lib/source-maps&quot;</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">_launcheditor = require(</span><span class="s0">&quot;../../next-devtools/server/launch-editor&quot;</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">_shared = require(</span><span class="s0">&quot;../../next-devtools/server/shared&quot;</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">_middlewareresponse = require(</span><span class="s0">&quot;../../next-devtools/server/middleware-response&quot;</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">_webpackmodulepath = require(</span><span class="s0">&quot;../../next-devtools/shared/webpack-module-path&quot;</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">_util = require(</span><span class="s0">&quot;util&quot;</span><span class="s1">);</span>
+<span class="s2">function </span><span class="s1">_interop_require_default(obj) {</span>
+    <span class="s2">return </span><span class="s1">obj &amp;&amp; obj.__esModule ? obj : {</span>
+        <span class="s2">default</span><span class="s1">: obj</span>
+    <span class="s1">};</span>
+<span class="s1">}</span>
+<span class="s2">function </span><span class="s1">shouldIgnoreSource(sourceURL) {</span>
+    <span class="s2">return </span><span class="s1">sourceURL.includes(</span><span class="s0">'node_modules'</span><span class="s1">) || </span><span class="s4">// Only relevant for when Next.js is symlinked e.g. in the Next.js monorepo</span>
+    <span class="s1">sourceURL.includes(</span><span class="s0">'next/dist'</span><span class="s1">) || sourceURL.startsWith(</span><span class="s0">'node:'</span><span class="s1">);</span>
+<span class="s1">}</span>
+<span class="s2">function </span><span class="s1">getModuleById(id, compilation) {</span>
+    <span class="s2">const </span><span class="s1">{ chunkGraph, modules } = compilation;</span>
+    <span class="s2">return </span><span class="s1">[</span>
+        <span class="s1">...modules</span>
+    <span class="s1">].find((module1)=&gt;chunkGraph.getModuleId(module1) === id);</span>
+<span class="s1">}</span>
+<span class="s2">function </span><span class="s1">findModuleNotFoundFromError(errorMessage) {</span>
+    <span class="s2">var </span><span class="s1">_errorMessage_match;</span>
+    <span class="s2">return </span><span class="s1">errorMessage == </span><span class="s2">null </span><span class="s1">? </span><span class="s2">void </span><span class="s3">0 </span><span class="s1">: (_errorMessage_match = errorMessage.match(</span><span class="s5">/'([^']+)' module/</span><span class="s1">)) == </span><span class="s2">null </span><span class="s1">? </span><span class="s2">void </span><span class="s3">0 </span><span class="s1">: _errorMessage_match[</span><span class="s3">1</span><span class="s1">];</span>
+<span class="s1">}</span>
+<span class="s2">function </span><span class="s1">getSourcePath(source) {</span>
+    <span class="s2">if </span><span class="s1">(source.startsWith(</span><span class="s0">'file://'</span><span class="s1">)) {</span>
+        <span class="s2">return </span><span class="s1">(</span><span class="s3">0</span><span class="s1">, _url.fileURLToPath)(source);</span>
+    <span class="s1">}</span>
+    <span class="s2">return </span><span class="s1">source.replace(</span><span class="s5">/^(webpack:\/\/\/|webpack:\/\/|webpack:\/\/_N_E\/)/</span><span class="s1">, </span><span class="s0">''</span><span class="s1">);</span>
+<span class="s1">}</span>
+<span class="s4">/**</span>
+ <span class="s4">* </span><span class="s6">@returns </span><span class="s4">1-based lines and 0-based columns</span>
+ <span class="s4">*/ </span><span class="s1">async </span><span class="s2">function </span><span class="s1">findOriginalSourcePositionAndContent(sourceMap, position) {</span>
+    <span class="s2">let </span><span class="s1">consumer;</span>
+    <span class="s2">try </span><span class="s1">{</span>
+        <span class="s1">consumer = </span><span class="s2">await new </span><span class="s1">_sourcemap08.SourceMapConsumer(sourceMap);</span>
+    <span class="s1">} </span><span class="s2">catch </span><span class="s1">(cause) {</span>
+        <span class="s1">console.error(Object.defineProperty(</span><span class="s2">new </span><span class="s1">Error(</span><span class="s0">`</span><span class="s1">${sourceMap.file}</span><span class="s0">: Invalid source map. Only conformant source maps can be used to find the original code.`</span><span class="s1">, {</span>
+            <span class="s1">cause</span>
+        <span class="s1">}), </span><span class="s0">&quot;__NEXT_ERROR_CODE&quot;</span><span class="s1">, {</span>
+            <span class="s1">value: </span><span class="s0">&quot;E635&quot;</span><span class="s1">,</span>
+            <span class="s1">enumerable: </span><span class="s2">false</span><span class="s1">,</span>
+            <span class="s1">configurable: </span><span class="s2">true</span>
+        <span class="s1">}));</span>
+        <span class="s2">return null</span><span class="s1">;</span>
+    <span class="s1">}</span>
+    <span class="s2">try </span><span class="s1">{</span>
+        <span class="s2">const </span><span class="s1">sourcePosition = consumer.originalPositionFor({</span>
+            <span class="s1">line: position.line1 ?? </span><span class="s3">1</span><span class="s1">,</span>
+            <span class="s4">// 0-based columns out requires 0-based columns in.</span>
+            <span class="s1">column: (position.column1 ?? </span><span class="s3">1</span><span class="s1">) - </span><span class="s3">1</span>
+        <span class="s1">});</span>
+        <span class="s2">if </span><span class="s1">(!sourcePosition.source) {</span>
+            <span class="s2">return null</span><span class="s1">;</span>
+        <span class="s1">}</span>
+        <span class="s2">const </span><span class="s1">sourceContent = consumer.sourceContentFor(sourcePosition.source, </span><span class="s4">/* returnNullOnMissing */ </span><span class="s2">true</span><span class="s1">) ?? </span><span class="s2">null</span><span class="s1">;</span>
+        <span class="s2">return </span><span class="s1">{</span>
+            <span class="s1">sourcePosition,</span>
+            <span class="s1">sourceContent</span>
+        <span class="s1">};</span>
+    <span class="s1">} </span><span class="s2">finally</span><span class="s1">{</span>
+        <span class="s1">consumer.destroy();</span>
+    <span class="s1">}</span>
+<span class="s1">}</span>
+<span class="s2">function </span><span class="s1">getIgnoredSources(sourceMap) {</span>
+    <span class="s2">const </span><span class="s1">ignoreList = </span><span class="s2">new </span><span class="s1">Set(sourceMap.ignoreList ?? []);</span>
+    <span class="s2">const </span><span class="s1">moduleFilenames = (sourceMap == </span><span class="s2">null </span><span class="s1">? </span><span class="s2">void </span><span class="s3">0 </span><span class="s1">: sourceMap.sources) ?? [];</span>
+    <span class="s2">for</span><span class="s1">(</span><span class="s2">let </span><span class="s1">index = </span><span class="s3">0</span><span class="s1">; index &lt; moduleFilenames.length; index++){</span>
+        <span class="s4">// bundlerFilePath case: webpack://./app/page.tsx</span>
+        <span class="s2">const </span><span class="s1">webpackSourceURL = moduleFilenames[index];</span>
+        <span class="s4">// Format the path to the normal file path</span>
+        <span class="s2">const </span><span class="s1">formattedFilePath = (</span><span class="s3">0</span><span class="s1">, _webpackmodulepath.formatFrameSourceFile)(webpackSourceURL);</span>
+        <span class="s2">if </span><span class="s1">(shouldIgnoreSource(formattedFilePath)) {</span>
+            <span class="s1">ignoreList.add(index);</span>
+        <span class="s1">}</span>
+    <span class="s1">}</span>
+    <span class="s2">const </span><span class="s1">ignoredSources = sourceMap.sources.map((source, index)=&gt;{</span>
+        <span class="s2">var </span><span class="s1">_sourceMap_sourcesContent;</span>
+        <span class="s2">return </span><span class="s1">{</span>
+            <span class="s1">url: source,</span>
+            <span class="s1">ignored: ignoreList.has(sourceMap.sources.indexOf(source)),</span>
+            <span class="s1">content: ((_sourceMap_sourcesContent = sourceMap.sourcesContent) == </span><span class="s2">null </span><span class="s1">? </span><span class="s2">void </span><span class="s3">0 </span><span class="s1">: _sourceMap_sourcesContent[index]) ?? </span><span class="s2">null</span>
+        <span class="s1">};</span>
+    <span class="s1">});</span>
+    <span class="s2">return </span><span class="s1">ignoredSources;</span>
+<span class="s1">}</span>
+<span class="s2">function </span><span class="s1">isIgnoredSource(source, sourcePosition) {</span>
+    <span class="s2">if </span><span class="s1">(sourcePosition.source == </span><span class="s2">null</span><span class="s1">) {</span>
+        <span class="s2">return true</span><span class="s1">;</span>
+    <span class="s1">}</span>
+    <span class="s2">for </span><span class="s1">(</span><span class="s2">const </span><span class="s1">ignoredSource of source.ignoredSources){</span>
+        <span class="s2">if </span><span class="s1">(ignoredSource.ignored &amp;&amp; ignoredSource.url === sourcePosition.source) {</span>
+            <span class="s2">return true</span><span class="s1">;</span>
+        <span class="s1">}</span>
+    <span class="s1">}</span>
+    <span class="s2">return false</span><span class="s1">;</span>
+<span class="s1">}</span>
+<span class="s2">function </span><span class="s1">findOriginalSourcePositionAndContentFromCompilation(moduleId, importedModule, compilation) {</span>
+    <span class="s2">var </span><span class="s1">_module_buildInfo_importLocByPath, _module_buildInfo;</span>
+    <span class="s2">const </span><span class="s1">module1 = getModuleById(moduleId, compilation);</span>
+    <span class="s2">return </span><span class="s1">(module1 == </span><span class="s2">null </span><span class="s1">? </span><span class="s2">void </span><span class="s3">0 </span><span class="s1">: (_module_buildInfo = module1.buildInfo) == </span><span class="s2">null </span><span class="s1">? </span><span class="s2">void </span><span class="s3">0 </span><span class="s1">: (_module_buildInfo_importLocByPath = _module_buildInfo.importLocByPath) == </span><span class="s2">null </span><span class="s1">? </span><span class="s2">void </span><span class="s3">0 </span><span class="s1">: _module_buildInfo_importLocByPath.get(importedModule)) ?? </span><span class="s2">null</span><span class="s1">;</span>
+<span class="s1">}</span>
+<span class="s1">async </span><span class="s2">function </span><span class="s1">createOriginalStackFrame({ ignoredByDefault, source, rootDirectory, frame, errorMessage }) {</span>
+    <span class="s2">var </span><span class="s4">// We ignore the sourcemapped name since it won't be the correct name.</span>
+    <span class="s4">// The callsite will point to the column of the variable name instead of the</span>
+    <span class="s4">// name of the enclosing function.</span>
+    <span class="s4">// TODO(NDX-531): Spy on prepareStackTrace to get the enclosing line number for method name mapping.</span>
+    <span class="s4">// default is not a valid identifier in JS so webpack uses a custom variable when it's an unnamed default export</span>
+    <span class="s4">// Resolve it back to `default` for the method name if the source position didn't have the method.</span>
+    <span class="s1">_frame_methodName_replace, _frame_methodName;</span>
+    <span class="s2">const </span><span class="s1">moduleNotFound = findModuleNotFoundFromError(errorMessage);</span>
+    <span class="s2">const </span><span class="s1">result = </span><span class="s2">await </span><span class="s1">(()=&gt;{</span>
+        <span class="s2">if </span><span class="s1">(moduleNotFound) {</span>
+            <span class="s2">if </span><span class="s1">(source.type === </span><span class="s0">'file'</span><span class="s1">) {</span>
+                <span class="s2">return </span><span class="s1">undefined;</span>
+            <span class="s1">}</span>
+            <span class="s2">return </span><span class="s1">findOriginalSourcePositionAndContentFromCompilation(source.moduleId, moduleNotFound, source.compilation);</span>
+        <span class="s1">}</span>
+        <span class="s2">return </span><span class="s1">findOriginalSourcePositionAndContent(source.sourceMap, frame);</span>
+    <span class="s1">})();</span>
+    <span class="s2">if </span><span class="s1">(!result) {</span>
+        <span class="s2">return null</span><span class="s1">;</span>
+    <span class="s1">}</span>
+    <span class="s2">const </span><span class="s1">{ sourcePosition, sourceContent } = result;</span>
+    <span class="s2">if </span><span class="s1">(!sourcePosition.source) {</span>
+        <span class="s2">return null</span><span class="s1">;</span>
+    <span class="s1">}</span>
+    <span class="s2">const </span><span class="s1">ignored = ignoredByDefault || isIgnoredSource(source, sourcePosition) || </span><span class="s4">// If the source file is externals, should be excluded even it's not ignored source.</span>
+    <span class="s4">// e.g. webpack://next/dist/.. needs to be ignored</span>
+    <span class="s1">shouldIgnoreSource(source.moduleURL);</span>
+    <span class="s2">const </span><span class="s1">sourcePath = getSourcePath(</span><span class="s4">// When sourcePosition.source is the loader path the modulePath is generally better.</span>
+    <span class="s1">(sourcePosition.source.includes(</span><span class="s0">'|'</span><span class="s1">) ? source.moduleURL : sourcePosition.source) || source.moduleURL);</span>
+    <span class="s2">const </span><span class="s1">filePath = _path.default.resolve(rootDirectory, sourcePath);</span>
+    <span class="s2">const </span><span class="s1">resolvedFilePath = _path.default.relative(rootDirectory, filePath);</span>
+    <span class="s2">const </span><span class="s1">traced = {</span>
+        <span class="s1">file: resolvedFilePath,</span>
+        <span class="s1">line1: sourcePosition.line,</span>
+        <span class="s1">column1: sourcePosition.column === </span><span class="s2">null </span><span class="s1">? </span><span class="s2">null </span><span class="s1">: sourcePosition.column + </span><span class="s3">1</span><span class="s1">,</span>
+        <span class="s1">methodName: (_frame_methodName = frame.methodName) == </span><span class="s2">null </span><span class="s1">? </span><span class="s2">void </span><span class="s3">0 </span><span class="s1">: (_frame_methodName_replace = _frame_methodName.replace(</span><span class="s0">'__WEBPACK_DEFAULT_EXPORT__'</span><span class="s1">, </span><span class="s0">'default'</span><span class="s1">)) == </span><span class="s2">null </span><span class="s1">? </span><span class="s2">void </span><span class="s3">0 </span><span class="s1">: _frame_methodName_replace.replace(</span><span class="s0">'__webpack_exports__.'</span><span class="s1">, </span><span class="s0">''</span><span class="s1">),</span>
+        <span class="s1">arguments: [],</span>
+        <span class="s1">ignored</span>
+    <span class="s1">};</span>
+    <span class="s2">return </span><span class="s1">{</span>
+        <span class="s1">originalStackFrame: traced,</span>
+        <span class="s1">originalCodeFrame: (</span><span class="s3">0</span><span class="s1">, _shared.getOriginalCodeFrame)(traced, sourceContent)</span>
+    <span class="s1">};</span>
+<span class="s1">}</span>
+<span class="s1">async </span><span class="s2">function </span><span class="s1">getSourceMapFromCompilation(id, compilation) {</span>
+    <span class="s2">try </span><span class="s1">{</span>
+        <span class="s2">const </span><span class="s1">module1 = getModuleById(id, compilation);</span>
+        <span class="s2">if </span><span class="s1">(!module1) {</span>
+            <span class="s2">return </span><span class="s1">undefined;</span>
+        <span class="s1">}</span>
+        <span class="s4">// @ts-expect-error The types for `CodeGenerationResults.get` require a</span>
+        <span class="s4">// runtime to be passed as second argument, but apparently it also works</span>
+        <span class="s4">// without it.</span>
+        <span class="s2">const </span><span class="s1">codeGenerationResult = compilation.codeGenerationResults.get(module1);</span>
+        <span class="s2">const </span><span class="s1">source = codeGenerationResult == </span><span class="s2">null </span><span class="s1">? </span><span class="s2">void </span><span class="s3">0 </span><span class="s1">: codeGenerationResult.sources.get(</span><span class="s0">'javascript'</span><span class="s1">);</span>
+        <span class="s2">return </span><span class="s1">(source == </span><span class="s2">null </span><span class="s1">? </span><span class="s2">void </span><span class="s3">0 </span><span class="s1">: source.map()) ?? undefined;</span>
+    <span class="s1">} </span><span class="s2">catch </span><span class="s1">(err) {</span>
+        <span class="s1">console.error(</span><span class="s0">`Failed to lookup module by ID (&quot;</span><span class="s1">${id}</span><span class="s0">&quot;):`</span><span class="s1">, err);</span>
+        <span class="s2">return </span><span class="s1">undefined;</span>
+    <span class="s1">}</span>
+<span class="s1">}</span>
+<span class="s1">async </span><span class="s2">function </span><span class="s1">getSource(frame, options) {</span>
+    <span class="s2">let </span><span class="s1">sourceURL = frame.file ?? </span><span class="s0">''</span><span class="s1">;</span>
+    <span class="s2">const </span><span class="s1">{ getCompilations } = options;</span>
+    <span class="s1">sourceURL = (</span><span class="s3">0</span><span class="s1">, _sourcemaps.devirtualizeReactServerURL)(sourceURL);</span>
+    <span class="s2">let </span><span class="s1">nativeSourceMap;</span>
+    <span class="s2">try </span><span class="s1">{</span>
+        <span class="s1">nativeSourceMap = (</span><span class="s3">0</span><span class="s1">, _module.findSourceMap)(sourceURL);</span>
+    <span class="s1">} </span><span class="s2">catch </span><span class="s1">(cause) {</span>
+        <span class="s2">throw </span><span class="s1">Object.defineProperty(</span><span class="s2">new </span><span class="s1">Error(</span><span class="s0">`</span><span class="s1">${sourceURL}</span><span class="s0">: Invalid source map. Only conformant source maps can be used to find the original code.`</span><span class="s1">, {</span>
+            <span class="s1">cause</span>
+        <span class="s1">}), </span><span class="s0">&quot;__NEXT_ERROR_CODE&quot;</span><span class="s1">, {</span>
+            <span class="s1">value: </span><span class="s0">&quot;E635&quot;</span><span class="s1">,</span>
+            <span class="s1">enumerable: </span><span class="s2">false</span><span class="s1">,</span>
+            <span class="s1">configurable: </span><span class="s2">true</span>
+        <span class="s1">});</span>
+    <span class="s1">}</span>
+    <span class="s2">if </span><span class="s1">(nativeSourceMap !== undefined) {</span>
+        <span class="s2">const </span><span class="s1">sourceMapPayload = nativeSourceMap.payload;</span>
+        <span class="s2">return </span><span class="s1">{</span>
+            <span class="s1">type: </span><span class="s0">'file'</span><span class="s1">,</span>
+            <span class="s1">sourceMap: (</span><span class="s3">0</span><span class="s1">, _sourcemaps.findApplicableSourceMapPayload)((frame.line1 ?? </span><span class="s3">1</span><span class="s1">) - </span><span class="s3">1</span><span class="s1">, (frame.column1 ?? </span><span class="s3">1</span><span class="s1">) - </span><span class="s3">1</span><span class="s1">, sourceMapPayload),</span>
+            <span class="s1">ignoredSources: getIgnoredSources(</span><span class="s4">// @ts-expect-error -- TODO: Support IndexSourceMap</span>
+            <span class="s1">sourceMapPayload),</span>
+            <span class="s1">moduleURL: sourceURL</span>
+        <span class="s1">};</span>
+    <span class="s1">}</span>
+    <span class="s2">if </span><span class="s1">(_path.default.isAbsolute(sourceURL)) {</span>
+        <span class="s1">sourceURL = (</span><span class="s3">0</span><span class="s1">, _url.pathToFileURL)(sourceURL).href;</span>
+    <span class="s1">}</span>
+    <span class="s2">if </span><span class="s1">(sourceURL.startsWith(</span><span class="s0">'file:'</span><span class="s1">)) {</span>
+        <span class="s2">const </span><span class="s1">sourceMap = </span><span class="s2">await </span><span class="s1">(</span><span class="s3">0</span><span class="s1">, _getsourcemapfromfile.getSourceMapFromFile)(sourceURL);</span>
+        <span class="s2">return </span><span class="s1">sourceMap ? {</span>
+            <span class="s1">type: </span><span class="s0">'file'</span><span class="s1">,</span>
+            <span class="s1">sourceMap,</span>
+            <span class="s1">ignoredSources: getIgnoredSources(sourceMap),</span>
+            <span class="s1">moduleURL: sourceURL</span>
+        <span class="s1">} : undefined;</span>
+    <span class="s1">}</span>
+    <span class="s4">// webpack-internal:///./src/hello.tsx =&gt; ./src/hello.tsx</span>
+    <span class="s4">// webpack://_N_E/./src/hello.tsx =&gt; ./src/hello.tsx</span>
+    <span class="s2">const </span><span class="s1">moduleId = sourceURL.replace(</span><span class="s5">/^(webpack-internal:\/\/\/|webpack:\/\/(_N_E\/)?)/</span><span class="s1">, </span><span class="s0">''</span><span class="s1">).replace(</span><span class="s5">/\?\d+$/</span><span class="s1">, </span><span class="s0">''</span><span class="s1">);</span>
+    <span class="s4">// (rsc)/./src/hello.tsx =&gt; ./src/hello.tsx</span>
+    <span class="s2">const </span><span class="s1">moduleURL = moduleId.replace(</span><span class="s5">/^(\(.*\)\/?)/</span><span class="s1">, </span><span class="s0">''</span><span class="s1">);</span>
+    <span class="s2">for </span><span class="s1">(</span><span class="s2">const </span><span class="s1">compilation of getCompilations()){</span>
+        <span class="s2">const </span><span class="s1">sourceMap = </span><span class="s2">await </span><span class="s1">getSourceMapFromCompilation(moduleId, compilation);</span>
+        <span class="s2">if </span><span class="s1">(sourceMap) {</span>
+            <span class="s2">const </span><span class="s1">ignoredSources = getIgnoredSources(sourceMap);</span>
+            <span class="s2">return </span><span class="s1">{</span>
+                <span class="s1">type: </span><span class="s0">'bundle'</span><span class="s1">,</span>
+                <span class="s1">sourceMap,</span>
+                <span class="s1">compilation,</span>
+                <span class="s1">moduleId,</span>
+                <span class="s1">moduleURL,</span>
+                <span class="s1">ignoredSources</span>
+            <span class="s1">};</span>
+        <span class="s1">}</span>
+    <span class="s1">}</span>
+    <span class="s2">return </span><span class="s1">undefined;</span>
+<span class="s1">}</span>
+<span class="s1">async </span><span class="s2">function </span><span class="s1">getOriginalStackFrames({ isServer, isEdgeServer, isAppDirectory, frames, clientStats, serverStats, edgeServerStats, rootDirectory }) {</span>
+    <span class="s2">const </span><span class="s1">frameResponses = </span><span class="s2">await </span><span class="s1">Promise.all(frames.map((frame)=&gt;getOriginalStackFrame({</span>
+            <span class="s1">isServer,</span>
+            <span class="s1">isEdgeServer,</span>
+            <span class="s1">isAppDirectory,</span>
+            <span class="s1">frame,</span>
+            <span class="s1">clientStats,</span>
+            <span class="s1">serverStats,</span>
+            <span class="s1">edgeServerStats,</span>
+            <span class="s1">rootDirectory</span>
+        <span class="s1">}).then((value)=&gt;{</span>
+            <span class="s2">return </span><span class="s1">{</span>
+                <span class="s1">status: </span><span class="s0">'fulfilled'</span><span class="s1">,</span>
+                <span class="s1">value</span>
+            <span class="s1">};</span>
+        <span class="s1">}, (reason)=&gt;{</span>
+            <span class="s2">return </span><span class="s1">{</span>
+                <span class="s1">status: </span><span class="s0">'rejected'</span><span class="s1">,</span>
+                <span class="s1">reason: (</span><span class="s3">0</span><span class="s1">, _util.inspect)(reason, {</span>
+                    <span class="s1">colors: </span><span class="s2">false</span>
+                <span class="s1">})</span>
+            <span class="s1">};</span>
+        <span class="s1">})));</span>
+    <span class="s1">(</span><span class="s3">0</span><span class="s1">, _shared.ignoreListAnonymousStackFramesIfSandwiched)(frameResponses);</span>
+    <span class="s2">return </span><span class="s1">frameResponses;</span>
+<span class="s1">}</span>
+<span class="s1">async </span><span class="s2">function </span><span class="s1">getOriginalStackFrame({ isServer, isEdgeServer, isAppDirectory, frame, clientStats, serverStats, edgeServerStats, rootDirectory }) {</span>
+    <span class="s2">const </span><span class="s1">filename = frame.file ?? </span><span class="s0">''</span><span class="s1">;</span>
+    <span class="s2">const </span><span class="s1">source = </span><span class="s2">await </span><span class="s1">getSource(frame, {</span>
+        <span class="s1">getCompilations: ()=&gt;{</span>
+            <span class="s2">const </span><span class="s1">compilations = [];</span>
+            <span class="s4">// Try Client Compilation first. In `pages` we leverage</span>
+            <span class="s4">// `isClientError` to check. In `app` it depends on if it's a server</span>
+            <span class="s4">// / client component and when the code throws. E.g. during HTML</span>
+            <span class="s4">// rendering it's the server/edge compilation.</span>
+            <span class="s2">if </span><span class="s1">(!isEdgeServer &amp;&amp; !isServer || isAppDirectory) {</span>
+                <span class="s2">var </span><span class="s1">_clientStats;</span>
+                <span class="s2">const </span><span class="s1">compilation = (_clientStats = clientStats()) == </span><span class="s2">null </span><span class="s1">? </span><span class="s2">void </span><span class="s3">0 </span><span class="s1">: _clientStats.compilation;</span>
+                <span class="s2">if </span><span class="s1">(compilation) {</span>
+                    <span class="s1">compilations.push(compilation);</span>
+                <span class="s1">}</span>
+            <span class="s1">}</span>
+            <span class="s4">// Try Server Compilation. In `pages` this could be something</span>
+            <span class="s4">// imported in getServerSideProps/getStaticProps as the code for</span>
+            <span class="s4">// those is tree-shaken. In `app` this finds server components and</span>
+            <span class="s4">// code that was imported from a server component. It also covers</span>
+            <span class="s4">// when client component code throws during HTML rendering.</span>
+            <span class="s2">if </span><span class="s1">(isServer || isAppDirectory) {</span>
+                <span class="s2">var </span><span class="s1">_serverStats;</span>
+                <span class="s2">const </span><span class="s1">compilation = (_serverStats = serverStats()) == </span><span class="s2">null </span><span class="s1">? </span><span class="s2">void </span><span class="s3">0 </span><span class="s1">: _serverStats.compilation;</span>
+                <span class="s2">if </span><span class="s1">(compilation) {</span>
+                    <span class="s1">compilations.push(compilation);</span>
+                <span class="s1">}</span>
+            <span class="s1">}</span>
+            <span class="s4">// Try Edge Server Compilation. Both cases are the same as Server</span>
+            <span class="s4">// Compilation, main difference is that it covers `runtime: 'edge'`</span>
+            <span class="s4">// pages/app routes.</span>
+            <span class="s2">if </span><span class="s1">(isEdgeServer || isAppDirectory) {</span>
+                <span class="s2">var </span><span class="s1">_edgeServerStats;</span>
+                <span class="s2">const </span><span class="s1">compilation = (_edgeServerStats = edgeServerStats()) == </span><span class="s2">null </span><span class="s1">? </span><span class="s2">void </span><span class="s3">0 </span><span class="s1">: _edgeServerStats.compilation;</span>
+                <span class="s2">if </span><span class="s1">(compilation) {</span>
+                    <span class="s1">compilations.push(compilation);</span>
+                <span class="s1">}</span>
+            <span class="s1">}</span>
+            <span class="s2">return </span><span class="s1">compilations;</span>
+        <span class="s1">}</span>
+    <span class="s1">});</span>
+    <span class="s2">let </span><span class="s1">defaultNormalizedStackFrameLocation = frame.file;</span>
+    <span class="s2">if </span><span class="s1">(defaultNormalizedStackFrameLocation !== </span><span class="s2">null </span><span class="s1">&amp;&amp; defaultNormalizedStackFrameLocation.startsWith(</span><span class="s0">'file://'</span><span class="s1">)) {</span>
+        <span class="s1">defaultNormalizedStackFrameLocation = _path.default.relative(rootDirectory, (</span><span class="s3">0</span><span class="s1">, _url.fileURLToPath)(defaultNormalizedStackFrameLocation));</span>
+    <span class="s1">}</span>
+    <span class="s4">// This stack frame is used for the one that couldn't locate the source or source mapped frame</span>
+    <span class="s2">const </span><span class="s1">defaultStackFrame = {</span>
+        <span class="s1">file: defaultNormalizedStackFrameLocation,</span>
+        <span class="s1">line1: frame.line1,</span>
+        <span class="s1">column1: frame.column1,</span>
+        <span class="s1">methodName: frame.methodName,</span>
+        <span class="s1">ignored: shouldIgnoreSource(filename),</span>
+        <span class="s1">arguments: []</span>
+    <span class="s1">};</span>
+    <span class="s2">if </span><span class="s1">(!source) {</span>
+        <span class="s4">// return original stack frame with no source map</span>
+        <span class="s2">return </span><span class="s1">{</span>
+            <span class="s1">originalStackFrame: defaultStackFrame,</span>
+            <span class="s1">originalCodeFrame: </span><span class="s2">null</span>
+        <span class="s1">};</span>
+    <span class="s1">}</span>
+    <span class="s1">defaultStackFrame.ignored ||= (</span><span class="s3">0</span><span class="s1">, _sourcemaps.sourceMapIgnoreListsEverything)(source.sourceMap);</span>
+    <span class="s2">const </span><span class="s1">originalStackFrameResponse = </span><span class="s2">await </span><span class="s1">createOriginalStackFrame({</span>
+        <span class="s1">ignoredByDefault: defaultStackFrame.ignored,</span>
+        <span class="s1">frame,</span>
+        <span class="s1">source,</span>
+        <span class="s1">rootDirectory</span>
+    <span class="s1">});</span>
+    <span class="s2">if </span><span class="s1">(!originalStackFrameResponse) {</span>
+        <span class="s2">return </span><span class="s1">{</span>
+            <span class="s1">originalStackFrame: defaultStackFrame,</span>
+            <span class="s1">originalCodeFrame: </span><span class="s2">null</span>
+        <span class="s1">};</span>
+    <span class="s1">}</span>
+    <span class="s2">return </span><span class="s1">originalStackFrameResponse;</span>
+<span class="s1">}</span>
+<span class="s2">function </span><span class="s1">getOverlayMiddleware(options) {</span>
+    <span class="s2">const </span><span class="s1">{ rootDirectory, isSrcDir, clientStats, serverStats, edgeServerStats } = options;</span>
+    <span class="s2">return </span><span class="s1">async </span><span class="s2">function</span><span class="s1">(req, res, next) {</span>
+        <span class="s2">const </span><span class="s1">{ pathname, searchParams } = </span><span class="s2">new </span><span class="s1">URL(</span><span class="s0">`http://n</span><span class="s1">${req.url}</span><span class="s0">`</span><span class="s1">);</span>
+        <span class="s2">if </span><span class="s1">(pathname === </span><span class="s0">'/__nextjs_original-stack-frames'</span><span class="s1">) {</span>
+            <span class="s2">if </span><span class="s1">(req.method !== </span><span class="s0">'POST'</span><span class="s1">) {</span>
+                <span class="s2">return </span><span class="s1">_middlewareresponse.middlewareResponse.badRequest(res);</span>
+            <span class="s1">}</span>
+            <span class="s2">const </span><span class="s1">body = </span><span class="s2">await new </span><span class="s1">Promise((resolve, reject)=&gt;{</span>
+                <span class="s2">let </span><span class="s1">data = </span><span class="s0">''</span><span class="s1">;</span>
+                <span class="s1">req.on(</span><span class="s0">'data'</span><span class="s1">, (chunk)=&gt;{</span>
+                    <span class="s1">data += chunk;</span>
+                <span class="s1">});</span>
+                <span class="s1">req.on(</span><span class="s0">'end'</span><span class="s1">, ()=&gt;resolve(data));</span>
+                <span class="s1">req.on(</span><span class="s0">'error'</span><span class="s1">, reject);</span>
+            <span class="s1">});</span>
+            <span class="s2">try </span><span class="s1">{</span>
+                <span class="s2">const </span><span class="s1">{ frames, isServer, isEdgeServer, isAppDirectory } = JSON.parse(body);</span>
+                <span class="s2">return </span><span class="s1">_middlewareresponse.middlewareResponse.json(res, </span><span class="s2">await </span><span class="s1">getOriginalStackFrames({</span>
+                    <span class="s1">isServer,</span>
+                    <span class="s1">isEdgeServer,</span>
+                    <span class="s1">isAppDirectory,</span>
+                    <span class="s1">frames,</span>
+                    <span class="s1">clientStats,</span>
+                    <span class="s1">serverStats,</span>
+                    <span class="s1">edgeServerStats,</span>
+                    <span class="s1">rootDirectory</span>
+                <span class="s1">}));</span>
+            <span class="s1">} </span><span class="s2">catch </span><span class="s1">(err) {</span>
+                <span class="s2">return </span><span class="s1">_middlewareresponse.middlewareResponse.badRequest(res);</span>
+            <span class="s1">}</span>
+        <span class="s1">} </span><span class="s2">else if </span><span class="s1">(pathname === </span><span class="s0">'/__nextjs_launch-editor'</span><span class="s1">) {</span>
+            <span class="s2">const </span><span class="s1">frame = {</span>
+                <span class="s1">file: searchParams.get(</span><span class="s0">'file'</span><span class="s1">),</span>
+                <span class="s1">methodName: searchParams.get(</span><span class="s0">'methodName'</span><span class="s1">),</span>
+                <span class="s1">line1: parseInt(searchParams.get(</span><span class="s0">'line1'</span><span class="s1">) ?? </span><span class="s0">'1'</span><span class="s1">, </span><span class="s3">10</span><span class="s1">) || </span><span class="s3">1</span><span class="s1">,</span>
+                <span class="s1">column1: parseInt(searchParams.get(</span><span class="s0">'column1'</span><span class="s1">) ?? </span><span class="s0">'1'</span><span class="s1">, </span><span class="s3">10</span><span class="s1">) || </span><span class="s3">1</span><span class="s1">,</span>
+                <span class="s1">arguments: searchParams.getAll(</span><span class="s0">'arguments'</span><span class="s1">).filter(Boolean)</span>
+            <span class="s1">};</span>
+            <span class="s2">if </span><span class="s1">(!frame.file) </span><span class="s2">return </span><span class="s1">_middlewareresponse.middlewareResponse.badRequest(res);</span>
+            <span class="s2">let </span><span class="s1">openEditorResult;</span>
+            <span class="s2">const </span><span class="s1">isAppRelativePath = searchParams.get(</span><span class="s0">'isAppRelativePath'</span><span class="s1">) === </span><span class="s0">'1'</span><span class="s1">;</span>
+            <span class="s2">if </span><span class="s1">(isAppRelativePath) {</span>
+                <span class="s2">const </span><span class="s1">relativeFilePath = searchParams.get(</span><span class="s0">'file'</span><span class="s1">) || </span><span class="s0">''</span><span class="s1">;</span>
+                <span class="s2">const </span><span class="s1">appPath = _path.default.join(</span><span class="s0">'app'</span><span class="s1">, isSrcDir ? </span><span class="s0">'src' </span><span class="s1">: </span><span class="s0">''</span><span class="s1">, relativeFilePath);</span>
+                <span class="s1">openEditorResult = </span><span class="s2">await </span><span class="s1">(</span><span class="s3">0</span><span class="s1">, _launcheditor.openFileInEditor)(appPath, </span><span class="s3">1</span><span class="s1">, </span><span class="s3">1</span><span class="s1">, rootDirectory);</span>
+            <span class="s1">} </span><span class="s2">else </span><span class="s1">{</span>
+                <span class="s4">// TODO: How do we differentiate layers and actual file paths with round brackets?</span>
+                <span class="s4">// frame files may start with their webpack layer, like (middleware)/middleware.js</span>
+                <span class="s2">const </span><span class="s1">filePath = frame.file.replace(</span><span class="s5">/^\([^)]+\)\//</span><span class="s1">, </span><span class="s0">''</span><span class="s1">);</span>
+                <span class="s1">openEditorResult = </span><span class="s2">await </span><span class="s1">(</span><span class="s3">0</span><span class="s1">, _launcheditor.openFileInEditor)(filePath, frame.line1, frame.column1 ?? </span><span class="s3">1</span><span class="s1">, rootDirectory);</span>
+            <span class="s1">}</span>
+            <span class="s2">if </span><span class="s1">(openEditorResult.error) {</span>
+                <span class="s1">console.error(</span><span class="s0">'Failed to launch editor:'</span><span class="s1">, openEditorResult.error);</span>
+                <span class="s2">return </span><span class="s1">_middlewareresponse.middlewareResponse.internalServerError(res, openEditorResult.error);</span>
+            <span class="s1">}</span>
+            <span class="s2">if </span><span class="s1">(!openEditorResult.found) {</span>
+                <span class="s2">return </span><span class="s1">_middlewareresponse.middlewareResponse.notFound(res);</span>
+            <span class="s1">}</span>
+            <span class="s2">return </span><span class="s1">_middlewareresponse.middlewareResponse.noContent(res);</span>
+        <span class="s1">}</span>
+        <span class="s2">return </span><span class="s1">next();</span>
+    <span class="s1">};</span>
+<span class="s1">}</span>
+<span class="s2">function </span><span class="s1">getSourceMapMiddleware(options) {</span>
+    <span class="s2">const </span><span class="s1">{ clientStats, serverStats, edgeServerStats } = options;</span>
+    <span class="s2">return </span><span class="s1">async </span><span class="s2">function</span><span class="s1">(req, res, next) {</span>
+        <span class="s2">const </span><span class="s1">{ pathname, searchParams } = </span><span class="s2">new </span><span class="s1">URL(</span><span class="s0">`http://n</span><span class="s1">${req.url}</span><span class="s0">`</span><span class="s1">);</span>
+        <span class="s2">if </span><span class="s1">(pathname !== </span><span class="s0">'/__nextjs_source-map'</span><span class="s1">) {</span>
+            <span class="s2">return </span><span class="s1">next();</span>
+        <span class="s1">}</span>
+        <span class="s2">const </span><span class="s1">filename = searchParams.get(</span><span class="s0">'filename'</span><span class="s1">);</span>
+        <span class="s2">if </span><span class="s1">(!filename) {</span>
+            <span class="s2">return </span><span class="s1">_middlewareresponse.middlewareResponse.badRequest(res);</span>
+        <span class="s1">}</span>
+        <span class="s2">let </span><span class="s1">source;</span>
+        <span class="s2">try </span><span class="s1">{</span>
+            <span class="s1">source = </span><span class="s2">await </span><span class="s1">getSource({</span>
+                <span class="s1">file: filename,</span>
+                <span class="s4">// Webpack doesn't use Index Source Maps</span>
+                <span class="s1">line1: </span><span class="s2">null</span><span class="s1">,</span>
+                <span class="s1">column1: </span><span class="s2">null</span>
+            <span class="s1">}, {</span>
+                <span class="s1">getCompilations: ()=&gt;{</span>
+                    <span class="s2">const </span><span class="s1">compilations = [];</span>
+                    <span class="s2">for </span><span class="s1">(</span><span class="s2">const </span><span class="s1">stats of [</span>
+                        <span class="s1">clientStats(),</span>
+                        <span class="s1">serverStats(),</span>
+                        <span class="s1">edgeServerStats()</span>
+                    <span class="s1">]){</span>
+                        <span class="s2">if </span><span class="s1">(stats == </span><span class="s2">null </span><span class="s1">? </span><span class="s2">void </span><span class="s3">0 </span><span class="s1">: stats.compilation) {</span>
+                            <span class="s1">compilations.push(stats.compilation);</span>
+                        <span class="s1">}</span>
+                    <span class="s1">}</span>
+                    <span class="s2">return </span><span class="s1">compilations;</span>
+                <span class="s1">}</span>
+            <span class="s1">});</span>
+        <span class="s1">} </span><span class="s2">catch </span><span class="s1">(error) {</span>
+            <span class="s2">return </span><span class="s1">_middlewareresponse.middlewareResponse.internalServerError(res, error);</span>
+        <span class="s1">}</span>
+        <span class="s2">if </span><span class="s1">(!source) {</span>
+            <span class="s2">return </span><span class="s1">_middlewareresponse.middlewareResponse.noContent(res);</span>
+        <span class="s1">}</span>
+        <span class="s2">return </span><span class="s1">_middlewareresponse.middlewareResponse.json(res, source.sourceMap);</span>
+    <span class="s1">};</span>
+<span class="s1">}</span>
+
+<span class="s4">//# sourceMappingURL=middleware-webpack.js.map</span></pre>
+</body>
+</html>

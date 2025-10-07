@@ -1,0 +1,95 @@
+<html>
+<head>
+<title>pathfilter.js</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #0033b3;}
+.s1 { color: #080808;}
+.s2 { color: #067d17;}
+.s3 { color: #1750eb;}
+</style>
+</head>
+<body bgcolor="#ffffff">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#c0c0c0" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+pathfilter.js</font>
+</center></td></tr></table>
+<pre><span class="s0">var </span><span class="s1">path = require(</span><span class="s2">'path'</span><span class="s1">);</span>
+<span class="s0">var </span><span class="s1">test = require(</span><span class="s2">'tape'</span><span class="s1">);</span>
+<span class="s0">var </span><span class="s1">resolve = require(</span><span class="s2">'../'</span><span class="s1">);</span>
+
+<span class="s0">var </span><span class="s1">resolverDir = path.join(__dirname, </span><span class="s2">'/pathfilter/deep_ref'</span><span class="s1">);</span>
+
+<span class="s0">var </span><span class="s1">pathFilterFactory = </span><span class="s0">function </span><span class="s1">(t) {</span>
+    <span class="s0">return function </span><span class="s1">(pkg, x, remainder) {</span>
+        <span class="s1">t.equal(pkg.version, </span><span class="s2">'1.2.3'</span><span class="s1">);</span>
+        <span class="s1">t.equal(x, path.join(resolverDir, </span><span class="s2">'node_modules/deep/ref'</span><span class="s1">));</span>
+        <span class="s1">t.equal(remainder, </span><span class="s2">'ref'</span><span class="s1">);</span>
+        <span class="s0">return </span><span class="s2">'alt'</span><span class="s1">;</span>
+    <span class="s1">};</span>
+<span class="s1">};</span>
+
+<span class="s1">test(</span><span class="s2">'#62: deep module references and the pathFilter'</span><span class="s1">, </span><span class="s0">function </span><span class="s1">(t) {</span>
+    <span class="s1">t.test(</span><span class="s2">'deep/ref.js'</span><span class="s1">, </span><span class="s0">function </span><span class="s1">(st) {</span>
+        <span class="s1">st.plan(</span><span class="s3">3</span><span class="s1">);</span>
+
+        <span class="s1">resolve(</span><span class="s2">'deep/ref'</span><span class="s1">, { basedir: resolverDir }, </span><span class="s0">function </span><span class="s1">(err, res, pkg) {</span>
+            <span class="s0">if </span><span class="s1">(err) st.fail(err);</span>
+
+            <span class="s1">st.equal(pkg.version, </span><span class="s2">'1.2.3'</span><span class="s1">);</span>
+            <span class="s1">st.equal(res, path.join(resolverDir, </span><span class="s2">'node_modules/deep/ref.js'</span><span class="s1">));</span>
+        <span class="s1">});</span>
+
+        <span class="s0">var </span><span class="s1">res = resolve.sync(</span><span class="s2">'deep/ref'</span><span class="s1">, { basedir: resolverDir });</span>
+        <span class="s1">st.equal(res, path.join(resolverDir, </span><span class="s2">'node_modules/deep/ref.js'</span><span class="s1">));</span>
+    <span class="s1">});</span>
+
+    <span class="s1">t.test(</span><span class="s2">'deep/deeper/ref'</span><span class="s1">, </span><span class="s0">function </span><span class="s1">(st) {</span>
+        <span class="s1">st.plan(</span><span class="s3">4</span><span class="s1">);</span>
+
+        <span class="s1">resolve(</span>
+            <span class="s2">'deep/deeper/ref'</span><span class="s1">,</span>
+            <span class="s1">{ basedir: resolverDir },</span>
+            <span class="s0">function </span><span class="s1">(err, res, pkg) {</span>
+                <span class="s0">if </span><span class="s1">(err) t.fail(err);</span>
+                <span class="s1">st.notEqual(pkg, undefined);</span>
+                <span class="s1">st.equal(pkg.version, </span><span class="s2">'1.2.3'</span><span class="s1">);</span>
+                <span class="s1">st.equal(res, path.join(resolverDir, </span><span class="s2">'node_modules/deep/deeper/ref.js'</span><span class="s1">));</span>
+            <span class="s1">}</span>
+        <span class="s1">);</span>
+
+        <span class="s0">var </span><span class="s1">res = resolve.sync(</span>
+            <span class="s2">'deep/deeper/ref'</span><span class="s1">,</span>
+            <span class="s1">{ basedir: resolverDir }</span>
+        <span class="s1">);</span>
+        <span class="s1">st.equal(res, path.join(resolverDir, </span><span class="s2">'node_modules/deep/deeper/ref.js'</span><span class="s1">));</span>
+    <span class="s1">});</span>
+
+    <span class="s1">t.test(</span><span class="s2">'deep/ref alt'</span><span class="s1">, </span><span class="s0">function </span><span class="s1">(st) {</span>
+        <span class="s1">st.plan(</span><span class="s3">8</span><span class="s1">);</span>
+
+        <span class="s0">var </span><span class="s1">pathFilter = pathFilterFactory(st);</span>
+
+        <span class="s0">var </span><span class="s1">res = resolve.sync(</span>
+            <span class="s2">'deep/ref'</span><span class="s1">,</span>
+            <span class="s1">{ basedir: resolverDir, pathFilter: pathFilter }</span>
+        <span class="s1">);</span>
+        <span class="s1">st.equal(res, path.join(resolverDir, </span><span class="s2">'node_modules/deep/alt.js'</span><span class="s1">));</span>
+
+        <span class="s1">resolve(</span>
+            <span class="s2">'deep/ref'</span><span class="s1">,</span>
+            <span class="s1">{ basedir: resolverDir, pathFilter: pathFilter },</span>
+            <span class="s0">function </span><span class="s1">(err, res, pkg) {</span>
+                <span class="s0">if </span><span class="s1">(err) st.fail(err);</span>
+                <span class="s1">st.equal(res, path.join(resolverDir, </span><span class="s2">'node_modules/deep/alt.js'</span><span class="s1">));</span>
+                <span class="s1">st.end();</span>
+            <span class="s1">}</span>
+        <span class="s1">);</span>
+    <span class="s1">});</span>
+
+    <span class="s1">t.end();</span>
+<span class="s1">});</span>
+</pre>
+</body>
+</html>

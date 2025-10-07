@@ -1,0 +1,84 @@
+<html>
+<head>
+<title>handle-element.mjs</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #0033b3;}
+.s1 { color: #080808;}
+.s2 { color: #067d17;}
+.s3 { color: #1750eb;}
+.s4 { color: #8c8c8c; font-style: italic;}
+</style>
+</head>
+<body bgcolor="#ffffff">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#c0c0c0" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+handle-element.mjs</font>
+</center></td></tr></table>
+<pre><span class="s0">import </span><span class="s1">{ isSVGElement } from </span><span class="s2">'../utils/is-svg-element.mjs'</span><span class="s1">;</span>
+<span class="s0">import </span><span class="s1">{ resolveElements } from </span><span class="s2">'../utils/resolve-elements.mjs'</span><span class="s1">;</span>
+
+<span class="s0">const </span><span class="s1">resizeHandlers = </span><span class="s0">new </span><span class="s1">WeakMap();</span>
+<span class="s0">let </span><span class="s1">observer;</span>
+<span class="s0">const </span><span class="s1">getSize = (borderBoxAxis, svgAxis, htmlAxis) =&gt; (target, borderBoxSize) =&gt; {</span>
+    <span class="s0">if </span><span class="s1">(borderBoxSize &amp;&amp; borderBoxSize[</span><span class="s3">0</span><span class="s1">]) {</span>
+        <span class="s0">return </span><span class="s1">borderBoxSize[</span><span class="s3">0</span><span class="s1">][(borderBoxAxis + </span><span class="s2">&quot;Size&quot;</span><span class="s1">)];</span>
+    <span class="s1">}</span>
+    <span class="s0">else if </span><span class="s1">(isSVGElement(target) &amp;&amp; </span><span class="s2">&quot;getBBox&quot; </span><span class="s0">in </span><span class="s1">target) {</span>
+        <span class="s0">return </span><span class="s1">target.getBBox()[svgAxis];</span>
+    <span class="s1">}</span>
+    <span class="s0">else </span><span class="s1">{</span>
+        <span class="s0">return </span><span class="s1">target[htmlAxis];</span>
+    <span class="s1">}</span>
+<span class="s1">};</span>
+<span class="s0">const </span><span class="s1">getWidth = </span><span class="s4">/*@__PURE__*/ </span><span class="s1">getSize(</span><span class="s2">&quot;inline&quot;</span><span class="s1">, </span><span class="s2">&quot;width&quot;</span><span class="s1">, </span><span class="s2">&quot;offsetWidth&quot;</span><span class="s1">);</span>
+<span class="s0">const </span><span class="s1">getHeight = </span><span class="s4">/*@__PURE__*/ </span><span class="s1">getSize(</span><span class="s2">&quot;block&quot;</span><span class="s1">, </span><span class="s2">&quot;height&quot;</span><span class="s1">, </span><span class="s2">&quot;offsetHeight&quot;</span><span class="s1">);</span>
+<span class="s0">function </span><span class="s1">notifyTarget({ target, borderBoxSize }) {</span>
+    <span class="s1">resizeHandlers.get(target)?.forEach((handler) =&gt; {</span>
+        <span class="s1">handler(target, {</span>
+            <span class="s1">get width() {</span>
+                <span class="s0">return </span><span class="s1">getWidth(target, borderBoxSize);</span>
+            <span class="s1">},</span>
+            <span class="s1">get height() {</span>
+                <span class="s0">return </span><span class="s1">getHeight(target, borderBoxSize);</span>
+            <span class="s1">},</span>
+        <span class="s1">});</span>
+    <span class="s1">});</span>
+<span class="s1">}</span>
+<span class="s0">function </span><span class="s1">notifyAll(entries) {</span>
+    <span class="s1">entries.forEach(notifyTarget);</span>
+<span class="s1">}</span>
+<span class="s0">function </span><span class="s1">createResizeObserver() {</span>
+    <span class="s0">if </span><span class="s1">(</span><span class="s0">typeof </span><span class="s1">ResizeObserver === </span><span class="s2">&quot;undefined&quot;</span><span class="s1">)</span>
+        <span class="s0">return</span><span class="s1">;</span>
+    <span class="s1">observer = </span><span class="s0">new </span><span class="s1">ResizeObserver(notifyAll);</span>
+<span class="s1">}</span>
+<span class="s0">function </span><span class="s1">resizeElement(target, handler) {</span>
+    <span class="s0">if </span><span class="s1">(!observer)</span>
+        <span class="s1">createResizeObserver();</span>
+    <span class="s0">const </span><span class="s1">elements = resolveElements(target);</span>
+    <span class="s1">elements.forEach((element) =&gt; {</span>
+        <span class="s0">let </span><span class="s1">elementHandlers = resizeHandlers.get(element);</span>
+        <span class="s0">if </span><span class="s1">(!elementHandlers) {</span>
+            <span class="s1">elementHandlers = </span><span class="s0">new </span><span class="s1">Set();</span>
+            <span class="s1">resizeHandlers.set(element, elementHandlers);</span>
+        <span class="s1">}</span>
+        <span class="s1">elementHandlers.add(handler);</span>
+        <span class="s1">observer?.observe(element);</span>
+    <span class="s1">});</span>
+    <span class="s0">return </span><span class="s1">() =&gt; {</span>
+        <span class="s1">elements.forEach((element) =&gt; {</span>
+            <span class="s0">const </span><span class="s1">elementHandlers = resizeHandlers.get(element);</span>
+            <span class="s1">elementHandlers?.delete(handler);</span>
+            <span class="s0">if </span><span class="s1">(!elementHandlers?.size) {</span>
+                <span class="s1">observer?.unobserve(element);</span>
+            <span class="s1">}</span>
+        <span class="s1">});</span>
+    <span class="s1">};</span>
+<span class="s1">}</span>
+
+<span class="s0">export </span><span class="s1">{ resizeElement };</span>
+</pre>
+</body>
+</html>

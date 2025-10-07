@@ -1,0 +1,982 @@
+<html>
+<head>
+<title>Components.js</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #8c8c8c; font-style: italic;}
+.s1 { color: #8c8c8c; font-style: italic;}
+.s2 { color: #080808;}
+.s3 { color: #067d17;}
+.s4 { color: #0033b3;}
+.s5 { color: #1750eb;}
+.s6 { color: #264eff;}
+</style>
+</head>
+<body bgcolor="#ffffff">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#c0c0c0" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+Components.js</font>
+</center></td></tr></table>
+<pre><span class="s0">/**</span>
+ <span class="s0">* </span><span class="s1">@fileoverview </span><span class="s0">Utility class and functions for React components detection</span>
+ <span class="s0">* </span><span class="s1">@author </span><span class="s0">Yannick Croissant</span>
+ <span class="s0">*/</span>
+
+<span class="s3">'use strict'</span><span class="s2">;</span>
+
+<span class="s4">const </span><span class="s2">arrayIncludes = require(</span><span class="s3">'array-includes'</span><span class="s2">);</span>
+<span class="s4">const </span><span class="s2">fromEntries = require(</span><span class="s3">'object.fromentries'</span><span class="s2">);</span>
+<span class="s4">const </span><span class="s2">values = require(</span><span class="s3">'object.values'</span><span class="s2">);</span>
+<span class="s4">const </span><span class="s2">iterFrom = require(</span><span class="s3">'es-iterator-helpers/Iterator.from'</span><span class="s2">);</span>
+<span class="s4">const </span><span class="s2">map = require(</span><span class="s3">'es-iterator-helpers/Iterator.prototype.map'</span><span class="s2">);</span>
+
+<span class="s4">const </span><span class="s2">variableUtil = require(</span><span class="s3">'./variable'</span><span class="s2">);</span>
+<span class="s4">const </span><span class="s2">pragmaUtil = require(</span><span class="s3">'./pragma'</span><span class="s2">);</span>
+<span class="s4">const </span><span class="s2">astUtil = require(</span><span class="s3">'./ast'</span><span class="s2">);</span>
+<span class="s4">const </span><span class="s2">componentUtil = require(</span><span class="s3">'./componentUtil'</span><span class="s2">);</span>
+<span class="s4">const </span><span class="s2">propTypesUtil = require(</span><span class="s3">'./propTypes'</span><span class="s2">);</span>
+<span class="s4">const </span><span class="s2">jsxUtil = require(</span><span class="s3">'./jsx'</span><span class="s2">);</span>
+<span class="s4">const </span><span class="s2">usedPropTypesUtil = require(</span><span class="s3">'./usedPropTypes'</span><span class="s2">);</span>
+<span class="s4">const </span><span class="s2">defaultPropsUtil = require(</span><span class="s3">'./defaultProps'</span><span class="s2">);</span>
+<span class="s4">const </span><span class="s2">isFirstLetterCapitalized = require(</span><span class="s3">'./isFirstLetterCapitalized'</span><span class="s2">);</span>
+<span class="s4">const </span><span class="s2">isDestructuredFromPragmaImport = require(</span><span class="s3">'./isDestructuredFromPragmaImport'</span><span class="s2">);</span>
+<span class="s4">const </span><span class="s2">eslintUtil = require(</span><span class="s3">'./eslint'</span><span class="s2">);</span>
+
+<span class="s4">const </span><span class="s2">getScope = eslintUtil.getScope;</span>
+<span class="s4">const </span><span class="s2">getText = eslintUtil.getText;</span>
+
+<span class="s4">function </span><span class="s2">getId(node) {</span>
+  <span class="s4">return </span><span class="s2">node ? </span><span class="s3">`</span><span class="s2">${node.range[</span><span class="s5">0</span><span class="s2">]}</span><span class="s3">:</span><span class="s2">${node.range[</span><span class="s5">1</span><span class="s2">]}</span><span class="s3">` </span><span class="s2">: </span><span class="s3">''</span><span class="s2">;</span>
+<span class="s2">}</span>
+
+<span class="s4">function </span><span class="s2">usedPropTypesAreEquivalent(propA, propB) {</span>
+  <span class="s4">if </span><span class="s2">(propA.name === propB.name) {</span>
+    <span class="s4">if </span><span class="s2">(!propA.allNames &amp;&amp; !propB.allNames) {</span>
+      <span class="s4">return true</span><span class="s2">;</span>
+    <span class="s2">}</span>
+    <span class="s4">if </span><span class="s2">(Array.isArray(propA.allNames) &amp;&amp; Array.isArray(propB.allNames) &amp;&amp; propA.allNames.join(</span><span class="s3">''</span><span class="s2">) === propB.allNames.join(</span><span class="s3">''</span><span class="s2">)) {</span>
+      <span class="s4">return true</span><span class="s2">;</span>
+    <span class="s2">}</span>
+    <span class="s4">return false</span><span class="s2">;</span>
+  <span class="s2">}</span>
+  <span class="s4">return false</span><span class="s2">;</span>
+<span class="s2">}</span>
+
+<span class="s4">function </span><span class="s2">mergeUsedPropTypes(propsList, newPropsList) {</span>
+  <span class="s4">const </span><span class="s2">propsToAdd = newPropsList.filter((newProp) =&gt; {</span>
+    <span class="s4">const </span><span class="s2">newPropIsAlreadyInTheList = propsList.some((prop) =&gt; usedPropTypesAreEquivalent(prop, newProp));</span>
+    <span class="s4">return </span><span class="s2">!newPropIsAlreadyInTheList;</span>
+  <span class="s2">});</span>
+
+  <span class="s4">return </span><span class="s2">propsList.concat(propsToAdd);</span>
+<span class="s2">}</span>
+
+<span class="s4">const </span><span class="s2">USE_HOOK_PREFIX_REGEX = </span><span class="s6">/^use[A-Z]/</span><span class="s2">;</span>
+
+<span class="s4">const </span><span class="s2">Lists = </span><span class="s4">new </span><span class="s2">WeakMap();</span>
+<span class="s4">const </span><span class="s2">ReactImports = </span><span class="s4">new </span><span class="s2">WeakMap();</span>
+
+<span class="s0">/**</span>
+ <span class="s0">* Components</span>
+ <span class="s0">*/</span>
+<span class="s4">class </span><span class="s2">Components {</span>
+  <span class="s2">constructor() {</span>
+    <span class="s2">Lists.set(</span><span class="s4">this</span><span class="s2">, {});</span>
+    <span class="s2">ReactImports.set(</span><span class="s4">this</span><span class="s2">, {});</span>
+  <span class="s2">}</span>
+
+  <span class="s0">/**</span>
+   <span class="s0">* Add a node to the components list, or update it if it's already in the list</span>
+   <span class="s0">*</span>
+   <span class="s0">* </span><span class="s1">@param </span><span class="s0">{ASTNode} node The AST node being added.</span>
+   <span class="s0">* </span><span class="s1">@param </span><span class="s0">{number} confidence Confidence in the component detection (0=banned, 1=maybe, 2=yes)</span>
+   <span class="s0">* </span><span class="s1">@returns </span><span class="s0">{Object} Added component object</span>
+   <span class="s0">*/</span>
+  <span class="s2">add(node, confidence) {</span>
+    <span class="s4">const </span><span class="s2">id = getId(node);</span>
+    <span class="s4">const </span><span class="s2">list = Lists.get(</span><span class="s4">this</span><span class="s2">);</span>
+    <span class="s4">if </span><span class="s2">(list[id]) {</span>
+      <span class="s4">if </span><span class="s2">(confidence === </span><span class="s5">0 </span><span class="s2">|| list[id].confidence === </span><span class="s5">0</span><span class="s2">) {</span>
+        <span class="s2">list[id].confidence = </span><span class="s5">0</span><span class="s2">;</span>
+      <span class="s2">} </span><span class="s4">else </span><span class="s2">{</span>
+        <span class="s2">list[id].confidence = Math.max(list[id].confidence, confidence);</span>
+      <span class="s2">}</span>
+      <span class="s4">return </span><span class="s2">list[id];</span>
+    <span class="s2">}</span>
+    <span class="s2">list[id] = {</span>
+      <span class="s2">node,</span>
+      <span class="s2">confidence,</span>
+    <span class="s2">};</span>
+    <span class="s4">return </span><span class="s2">list[id];</span>
+  <span class="s2">}</span>
+
+  <span class="s0">/**</span>
+   <span class="s0">* Find a component in the list using its node</span>
+   <span class="s0">*</span>
+   <span class="s0">* </span><span class="s1">@param </span><span class="s0">{ASTNode} node The AST node being searched.</span>
+   <span class="s0">* </span><span class="s1">@returns </span><span class="s0">{Object} Component object, undefined if the component is not found or has confidence value of 0.</span>
+   <span class="s0">*/</span>
+  <span class="s2">get(node) {</span>
+    <span class="s4">const </span><span class="s2">id = getId(node);</span>
+    <span class="s4">const </span><span class="s2">item = Lists.get(</span><span class="s4">this</span><span class="s2">)[id];</span>
+    <span class="s4">if </span><span class="s2">(item &amp;&amp; item.confidence &gt;= </span><span class="s5">1</span><span class="s2">) {</span>
+      <span class="s4">return </span><span class="s2">item;</span>
+    <span class="s2">}</span>
+    <span class="s4">return null</span><span class="s2">;</span>
+  <span class="s2">}</span>
+
+  <span class="s0">/**</span>
+   <span class="s0">* Update a component in the list</span>
+   <span class="s0">*</span>
+   <span class="s0">* </span><span class="s1">@param </span><span class="s0">{ASTNode} node The AST node being updated.</span>
+   <span class="s0">* </span><span class="s1">@param </span><span class="s0">{Object} props Additional properties to add to the component.</span>
+   <span class="s0">*/</span>
+  <span class="s2">set(node, props) {</span>
+    <span class="s4">const </span><span class="s2">list = Lists.get(</span><span class="s4">this</span><span class="s2">);</span>
+    <span class="s4">let </span><span class="s2">component = list[getId(node)];</span>
+    <span class="s4">while </span><span class="s2">(!component || component.confidence &lt; </span><span class="s5">1</span><span class="s2">) {</span>
+      <span class="s2">node = node.parent;</span>
+      <span class="s4">if </span><span class="s2">(!node) {</span>
+        <span class="s4">return</span><span class="s2">;</span>
+      <span class="s2">}</span>
+      <span class="s2">component = list[getId(node)];</span>
+    <span class="s2">}</span>
+
+    <span class="s2">Object.assign(</span>
+      <span class="s2">component,</span>
+      <span class="s2">props,</span>
+      <span class="s2">{</span>
+        <span class="s2">usedPropTypes: mergeUsedPropTypes(</span>
+          <span class="s2">component.usedPropTypes || [],</span>
+          <span class="s2">props.usedPropTypes || []</span>
+        <span class="s2">),</span>
+      <span class="s2">}</span>
+    <span class="s2">);</span>
+  <span class="s2">}</span>
+
+  <span class="s0">/**</span>
+   <span class="s0">* Return the components list</span>
+   <span class="s0">* Components for which we are not confident are not returned</span>
+   <span class="s0">*</span>
+   <span class="s0">* </span><span class="s1">@returns </span><span class="s0">{Object} Components list</span>
+   <span class="s0">*/</span>
+  <span class="s2">list() {</span>
+    <span class="s4">const </span><span class="s2">thisList = Lists.get(</span><span class="s4">this</span><span class="s2">);</span>
+    <span class="s4">const </span><span class="s2">list = {};</span>
+    <span class="s4">const </span><span class="s2">usedPropTypes = {};</span>
+
+    <span class="s0">// Find props used in components for which we are not confident</span>
+    <span class="s2">Object.keys(thisList).filter((i) =&gt; thisList[i].confidence &lt; </span><span class="s5">2</span><span class="s2">).forEach((i) =&gt; {</span>
+      <span class="s4">let </span><span class="s2">component = </span><span class="s4">null</span><span class="s2">;</span>
+      <span class="s4">let </span><span class="s2">node = </span><span class="s4">null</span><span class="s2">;</span>
+      <span class="s2">node = thisList[i].node;</span>
+      <span class="s4">while </span><span class="s2">(!component &amp;&amp; node.parent) {</span>
+        <span class="s2">node = node.parent;</span>
+        <span class="s0">// Stop moving up if we reach a decorator</span>
+        <span class="s4">if </span><span class="s2">(node.type === </span><span class="s3">'Decorator'</span><span class="s2">) {</span>
+          <span class="s4">break</span><span class="s2">;</span>
+        <span class="s2">}</span>
+        <span class="s2">component = </span><span class="s4">this</span><span class="s2">.get(node);</span>
+      <span class="s2">}</span>
+      <span class="s4">if </span><span class="s2">(component) {</span>
+        <span class="s4">const </span><span class="s2">newUsedProps = (thisList[i].usedPropTypes || []).filter((propType) =&gt; !propType.node || propType.node.kind !== </span><span class="s3">'init'</span><span class="s2">);</span>
+
+        <span class="s4">const </span><span class="s2">componentId = getId(component.node);</span>
+
+        <span class="s2">usedPropTypes[componentId] = mergeUsedPropTypes(usedPropTypes[componentId] || [], newUsedProps);</span>
+      <span class="s2">}</span>
+    <span class="s2">});</span>
+
+    <span class="s0">// Assign used props in not confident components to the parent component</span>
+    <span class="s2">Object.keys(thisList).filter((j) =&gt; thisList[j].confidence &gt;= </span><span class="s5">2</span><span class="s2">).forEach((j) =&gt; {</span>
+      <span class="s4">const </span><span class="s2">id = getId(thisList[j].node);</span>
+      <span class="s2">list[j] = thisList[j];</span>
+      <span class="s4">if </span><span class="s2">(usedPropTypes[id]) {</span>
+        <span class="s2">list[j].usedPropTypes = mergeUsedPropTypes(list[j].usedPropTypes || [], usedPropTypes[id]);</span>
+      <span class="s2">}</span>
+    <span class="s2">});</span>
+    <span class="s4">return </span><span class="s2">list;</span>
+  <span class="s2">}</span>
+
+  <span class="s0">/**</span>
+   <span class="s0">* Return the length of the components list</span>
+   <span class="s0">* Components for which we are not confident are not counted</span>
+   <span class="s0">*</span>
+   <span class="s0">* </span><span class="s1">@returns </span><span class="s0">{number} Components list length</span>
+   <span class="s0">*/</span>
+  <span class="s2">length() {</span>
+    <span class="s4">const </span><span class="s2">list = Lists.get(</span><span class="s4">this</span><span class="s2">);</span>
+    <span class="s4">return </span><span class="s2">values(list).filter((component) =&gt; component.confidence &gt;= </span><span class="s5">2</span><span class="s2">).length;</span>
+  <span class="s2">}</span>
+
+  <span class="s0">/**</span>
+   <span class="s0">* Return the node naming the default React import</span>
+   <span class="s0">* It can be used to determine the local name of import, even if it's imported</span>
+   <span class="s0">* with an unusual name.</span>
+   <span class="s0">*</span>
+   <span class="s0">* </span><span class="s1">@returns </span><span class="s0">{ASTNode} React default import node</span>
+   <span class="s0">*/</span>
+  <span class="s2">getDefaultReactImports() {</span>
+    <span class="s4">return </span><span class="s2">ReactImports.get(</span><span class="s4">this</span><span class="s2">).defaultReactImports;</span>
+  <span class="s2">}</span>
+
+  <span class="s0">/**</span>
+   <span class="s0">* Return the nodes of all React named imports</span>
+   <span class="s0">*</span>
+   <span class="s0">* </span><span class="s1">@returns </span><span class="s0">{Object} The list of React named imports</span>
+   <span class="s0">*/</span>
+  <span class="s2">getNamedReactImports() {</span>
+    <span class="s4">return </span><span class="s2">ReactImports.get(</span><span class="s4">this</span><span class="s2">).namedReactImports;</span>
+  <span class="s2">}</span>
+
+  <span class="s0">/**</span>
+   <span class="s0">* Add the default React import specifier to the scope</span>
+   <span class="s0">*</span>
+   <span class="s0">* </span><span class="s1">@param </span><span class="s0">{ASTNode} specifier The AST Node of the default React import</span>
+   <span class="s0">* </span><span class="s1">@returns </span><span class="s0">{void}</span>
+   <span class="s0">*/</span>
+  <span class="s2">addDefaultReactImport(specifier) {</span>
+    <span class="s4">const </span><span class="s2">info = ReactImports.get(</span><span class="s4">this</span><span class="s2">);</span>
+    <span class="s2">ReactImports.set(</span><span class="s4">this</span><span class="s2">, Object.assign({}, info, {</span>
+      <span class="s2">defaultReactImports: (info.defaultReactImports || []).concat(specifier),</span>
+    <span class="s2">}));</span>
+  <span class="s2">}</span>
+
+  <span class="s0">/**</span>
+   <span class="s0">* Add a named React import specifier to the scope</span>
+   <span class="s0">*</span>
+   <span class="s0">* </span><span class="s1">@param </span><span class="s0">{ASTNode} specifier The AST Node of a named React import</span>
+   <span class="s0">* </span><span class="s1">@returns </span><span class="s0">{void}</span>
+   <span class="s0">*/</span>
+  <span class="s2">addNamedReactImport(specifier) {</span>
+    <span class="s4">const </span><span class="s2">info = ReactImports.get(</span><span class="s4">this</span><span class="s2">);</span>
+    <span class="s2">ReactImports.set(</span><span class="s4">this</span><span class="s2">, Object.assign({}, info, {</span>
+      <span class="s2">namedReactImports: (info.namedReactImports || []).concat(specifier),</span>
+    <span class="s2">}));</span>
+  <span class="s2">}</span>
+<span class="s2">}</span>
+
+<span class="s4">function </span><span class="s2">getWrapperFunctions(context, pragma) {</span>
+  <span class="s4">const </span><span class="s2">componentWrapperFunctions = context.settings.componentWrapperFunctions || [];</span>
+
+  <span class="s0">// eslint-disable-next-line arrow-body-style</span>
+  <span class="s4">return </span><span class="s2">componentWrapperFunctions.map((wrapperFunction) =&gt; {</span>
+    <span class="s4">return typeof </span><span class="s2">wrapperFunction === </span><span class="s3">'string'</span>
+      <span class="s2">? { property: wrapperFunction }</span>
+      <span class="s2">: Object.assign({}, wrapperFunction, {</span>
+        <span class="s2">object: wrapperFunction.object === </span><span class="s3">'&lt;pragma&gt;' </span><span class="s2">? pragma : wrapperFunction.object,</span>
+      <span class="s2">});</span>
+  <span class="s2">}).concat([</span>
+    <span class="s2">{ property: </span><span class="s3">'forwardRef'</span><span class="s2">, object: pragma },</span>
+    <span class="s2">{ property: </span><span class="s3">'memo'</span><span class="s2">, object: pragma },</span>
+  <span class="s2">]);</span>
+<span class="s2">}</span>
+
+<span class="s0">// eslint-disable-next-line valid-jsdoc</span>
+<span class="s0">/**</span>
+ <span class="s0">* Merge many eslint rules into one</span>
+ <span class="s0">* </span><span class="s1">@param </span><span class="s0">{{[_: string]: Function}[]} rules the returned values for eslint rule.create(context)</span>
+ <span class="s0">* </span><span class="s1">@returns </span><span class="s0">{{[_: string]: Function}} merged rule</span>
+ <span class="s0">*/</span>
+<span class="s4">function </span><span class="s2">mergeRules(rules) {</span>
+  <span class="s0">/** </span><span class="s1">@type </span><span class="s0">{Map&lt;string, Function[]&gt;} */</span>
+  <span class="s4">const </span><span class="s2">handlersByKey = </span><span class="s4">new </span><span class="s2">Map();</span>
+  <span class="s2">rules.forEach((rule) =&gt; {</span>
+    <span class="s2">Object.keys(rule).forEach((key) =&gt; {</span>
+      <span class="s4">const </span><span class="s2">fns = handlersByKey.get(key);</span>
+      <span class="s4">if </span><span class="s2">(!fns) {</span>
+        <span class="s2">handlersByKey.set(key, [rule[key]]);</span>
+      <span class="s2">} </span><span class="s4">else </span><span class="s2">{</span>
+        <span class="s2">fns.push(rule[key]);</span>
+      <span class="s2">}</span>
+    <span class="s2">});</span>
+  <span class="s2">});</span>
+
+  <span class="s0">/** </span><span class="s1">@type </span><span class="s0">{{ [key: string]: Function }} */</span>
+  <span class="s4">return </span><span class="s2">fromEntries(map(iterFrom(handlersByKey), (entry) =&gt; [</span>
+    <span class="s2">entry[</span><span class="s5">0</span><span class="s2">],</span>
+    <span class="s4">function </span><span class="s2">mergedHandler(node) {</span>
+      <span class="s2">entry[</span><span class="s5">1</span><span class="s2">].forEach((fn) =&gt; {</span>
+        <span class="s2">fn(node);</span>
+      <span class="s2">});</span>
+    <span class="s2">},</span>
+  <span class="s2">]));</span>
+<span class="s2">}</span>
+
+<span class="s4">function </span><span class="s2">componentRule(rule, context) {</span>
+  <span class="s4">const </span><span class="s2">pragma = pragmaUtil.getFromContext(context);</span>
+  <span class="s4">const </span><span class="s2">components = </span><span class="s4">new </span><span class="s2">Components();</span>
+  <span class="s4">const </span><span class="s2">wrapperFunctions = getWrapperFunctions(context, pragma);</span>
+
+  <span class="s0">// Utilities for component detection</span>
+  <span class="s4">const </span><span class="s2">utils = {</span>
+    <span class="s0">/**</span>
+     <span class="s0">* Check if variable is destructured from pragma import</span>
+     <span class="s0">*</span>
+     <span class="s0">* </span><span class="s1">@param </span><span class="s0">{ASTNode} node The AST node to check</span>
+     <span class="s0">* </span><span class="s1">@param </span><span class="s0">{string} variable The variable name to check</span>
+     <span class="s0">* </span><span class="s1">@returns </span><span class="s0">{boolean} True if createElement is destructured from the pragma</span>
+     <span class="s0">*/</span>
+    <span class="s2">isDestructuredFromPragmaImport(node, variable) {</span>
+      <span class="s4">return </span><span class="s2">isDestructuredFromPragmaImport(context, node, variable);</span>
+    <span class="s2">},</span>
+
+    <span class="s0">/**</span>
+     <span class="s0">* </span><span class="s1">@param </span><span class="s0">{ASTNode} node</span>
+     <span class="s0">* </span><span class="s1">@param </span><span class="s0">{boolean=} strict</span>
+     <span class="s0">* </span><span class="s1">@returns </span><span class="s0">{boolean}</span>
+     <span class="s0">*/</span>
+    <span class="s2">isReturningJSX(node, strict) {</span>
+      <span class="s4">return </span><span class="s2">jsxUtil.isReturningJSX(context, node, strict, </span><span class="s4">true</span><span class="s2">);</span>
+    <span class="s2">},</span>
+
+    <span class="s2">isReturningJSXOrNull(node, strict) {</span>
+      <span class="s4">return </span><span class="s2">jsxUtil.isReturningJSX(context, node, strict);</span>
+    <span class="s2">},</span>
+
+    <span class="s2">isReturningOnlyNull(node) {</span>
+      <span class="s4">return </span><span class="s2">jsxUtil.isReturningOnlyNull(node, context);</span>
+    <span class="s2">},</span>
+
+    <span class="s2">getPragmaComponentWrapper(node) {</span>
+      <span class="s4">let </span><span class="s2">isPragmaComponentWrapper;</span>
+      <span class="s4">let </span><span class="s2">currentNode = node;</span>
+      <span class="s4">let </span><span class="s2">prevNode;</span>
+      <span class="s4">do </span><span class="s2">{</span>
+        <span class="s2">currentNode = currentNode.parent;</span>
+        <span class="s2">isPragmaComponentWrapper = </span><span class="s4">this</span><span class="s2">.isPragmaComponentWrapper(currentNode);</span>
+        <span class="s4">if </span><span class="s2">(isPragmaComponentWrapper) {</span>
+          <span class="s2">prevNode = currentNode;</span>
+        <span class="s2">}</span>
+      <span class="s2">} </span><span class="s4">while </span><span class="s2">(isPragmaComponentWrapper);</span>
+
+      <span class="s4">return </span><span class="s2">prevNode;</span>
+    <span class="s2">},</span>
+
+    <span class="s2">getComponentNameFromJSXElement(node) {</span>
+      <span class="s4">if </span><span class="s2">(node.type !== </span><span class="s3">'JSXElement'</span><span class="s2">) {</span>
+        <span class="s4">return null</span><span class="s2">;</span>
+      <span class="s2">}</span>
+      <span class="s4">if </span><span class="s2">(node.openingElement &amp;&amp; node.openingElement.name &amp;&amp; node.openingElement.name.name) {</span>
+        <span class="s4">return </span><span class="s2">node.openingElement.name.name;</span>
+      <span class="s2">}</span>
+      <span class="s4">return null</span><span class="s2">;</span>
+    <span class="s2">},</span>
+
+    <span class="s0">/**</span>
+     <span class="s0">* Getting the first JSX element's name.</span>
+     <span class="s0">* </span><span class="s1">@param </span><span class="s0">{object} node</span>
+     <span class="s0">* </span><span class="s1">@returns </span><span class="s0">{string | null}</span>
+     <span class="s0">*/</span>
+    <span class="s2">getNameOfWrappedComponent(node) {</span>
+      <span class="s4">if </span><span class="s2">(node.length &lt; </span><span class="s5">1</span><span class="s2">) {</span>
+        <span class="s4">return null</span><span class="s2">;</span>
+      <span class="s2">}</span>
+      <span class="s4">const </span><span class="s2">body = node[</span><span class="s5">0</span><span class="s2">].body;</span>
+      <span class="s4">if </span><span class="s2">(!body) {</span>
+        <span class="s4">return null</span><span class="s2">;</span>
+      <span class="s2">}</span>
+      <span class="s4">if </span><span class="s2">(body.type === </span><span class="s3">'JSXElement'</span><span class="s2">) {</span>
+        <span class="s4">return this</span><span class="s2">.getComponentNameFromJSXElement(body);</span>
+      <span class="s2">}</span>
+      <span class="s4">if </span><span class="s2">(body.type === </span><span class="s3">'BlockStatement'</span><span class="s2">) {</span>
+        <span class="s4">const </span><span class="s2">jsxElement = body.body.find((item) =&gt; item.type === </span><span class="s3">'ReturnStatement'</span><span class="s2">);</span>
+        <span class="s4">return </span><span class="s2">jsxElement</span>
+          <span class="s2">&amp;&amp; jsxElement.argument</span>
+          <span class="s2">&amp;&amp; </span><span class="s4">this</span><span class="s2">.getComponentNameFromJSXElement(jsxElement.argument);</span>
+      <span class="s2">}</span>
+      <span class="s4">return null</span><span class="s2">;</span>
+    <span class="s2">},</span>
+
+    <span class="s0">/**</span>
+     <span class="s0">* Get the list of names of components created till now</span>
+     <span class="s0">* </span><span class="s1">@returns </span><span class="s0">{string | boolean}</span>
+     <span class="s0">*/</span>
+    <span class="s2">getDetectedComponents() {</span>
+      <span class="s4">const </span><span class="s2">list = components.list();</span>
+      <span class="s4">return </span><span class="s2">values(list).filter((val) =&gt; {</span>
+        <span class="s4">if </span><span class="s2">(val.node.type === </span><span class="s3">'ClassDeclaration'</span><span class="s2">) {</span>
+          <span class="s4">return true</span><span class="s2">;</span>
+        <span class="s2">}</span>
+        <span class="s4">if </span><span class="s2">(</span>
+          <span class="s2">val.node.type === </span><span class="s3">'ArrowFunctionExpression'</span>
+          <span class="s2">&amp;&amp; val.node.parent</span>
+          <span class="s2">&amp;&amp; val.node.parent.type === </span><span class="s3">'VariableDeclarator'</span>
+          <span class="s2">&amp;&amp; val.node.parent.id</span>
+        <span class="s2">) {</span>
+          <span class="s4">return true</span><span class="s2">;</span>
+        <span class="s2">}</span>
+        <span class="s4">return false</span><span class="s2">;</span>
+      <span class="s2">}).map((val) =&gt; {</span>
+        <span class="s4">if </span><span class="s2">(val.node.type === </span><span class="s3">'ArrowFunctionExpression'</span><span class="s2">) </span><span class="s4">return </span><span class="s2">val.node.parent.id.name;</span>
+        <span class="s4">return </span><span class="s2">val.node.id &amp;&amp; val.node.id.name;</span>
+      <span class="s2">});</span>
+    <span class="s2">},</span>
+
+    <span class="s0">/**</span>
+     <span class="s0">* It will check whether memo/forwardRef is wrapping existing component or</span>
+     <span class="s0">* creating a new one.</span>
+     <span class="s0">* </span><span class="s1">@param </span><span class="s0">{object} node</span>
+     <span class="s0">* </span><span class="s1">@returns </span><span class="s0">{boolean}</span>
+     <span class="s0">*/</span>
+    <span class="s2">nodeWrapsComponent(node) {</span>
+      <span class="s4">const </span><span class="s2">childComponent = </span><span class="s4">this</span><span class="s2">.getNameOfWrappedComponent(node.arguments);</span>
+      <span class="s4">const </span><span class="s2">componentList = </span><span class="s4">this</span><span class="s2">.getDetectedComponents();</span>
+      <span class="s4">return </span><span class="s2">!!childComponent &amp;&amp; arrayIncludes(componentList, childComponent);</span>
+    <span class="s2">},</span>
+
+    <span class="s2">isPragmaComponentWrapper(node) {</span>
+      <span class="s4">if </span><span class="s2">(!astUtil.isCallExpression(node)) {</span>
+        <span class="s4">return false</span><span class="s2">;</span>
+      <span class="s2">}</span>
+
+      <span class="s4">return </span><span class="s2">wrapperFunctions.some((wrapperFunction) =&gt; {</span>
+        <span class="s4">if </span><span class="s2">(node.callee.type === </span><span class="s3">'MemberExpression'</span><span class="s2">) {</span>
+          <span class="s4">return </span><span class="s2">wrapperFunction.object</span>
+            <span class="s2">&amp;&amp; wrapperFunction.object === node.callee.object.name</span>
+            <span class="s2">&amp;&amp; wrapperFunction.property === node.callee.property.name</span>
+            <span class="s2">&amp;&amp; !</span><span class="s4">this</span><span class="s2">.nodeWrapsComponent(node);</span>
+        <span class="s2">}</span>
+        <span class="s4">return </span><span class="s2">wrapperFunction.property === node.callee.name</span>
+          <span class="s2">&amp;&amp; (!wrapperFunction.object</span>
+            <span class="s0">// Functions coming from the current pragma need special handling</span>
+            <span class="s2">|| (wrapperFunction.object === pragma &amp;&amp; </span><span class="s4">this</span><span class="s2">.isDestructuredFromPragmaImport(node, node.callee.name))</span>
+          <span class="s2">);</span>
+      <span class="s2">});</span>
+    <span class="s2">},</span>
+
+    <span class="s0">/**</span>
+     <span class="s0">* Find a return statement in the current node</span>
+     <span class="s0">*</span>
+     <span class="s0">* </span><span class="s1">@param </span><span class="s0">{ASTNode} node The AST node being checked</span>
+     <span class="s0">*/</span>
+    <span class="s2">findReturnStatement: astUtil.findReturnStatement,</span>
+
+    <span class="s0">/**</span>
+     <span class="s0">* Get the parent component node from the current scope</span>
+     <span class="s0">* </span><span class="s1">@param </span><span class="s0">{ASTNode} node</span>
+     <span class="s0">*</span>
+     <span class="s0">* </span><span class="s1">@returns </span><span class="s0">{ASTNode} component node, null if we are not in a component</span>
+     <span class="s0">*/</span>
+    <span class="s2">getParentComponent(node) {</span>
+      <span class="s4">return </span><span class="s2">(</span>
+        <span class="s2">componentUtil.getParentES6Component(context, node)</span>
+        <span class="s2">|| componentUtil.getParentES5Component(context, node)</span>
+        <span class="s2">|| utils.getParentStatelessComponent(node)</span>
+      <span class="s2">);</span>
+    <span class="s2">},</span>
+
+    <span class="s0">/**</span>
+     <span class="s0">* </span><span class="s1">@param </span><span class="s0">{ASTNode} node</span>
+     <span class="s0">* </span><span class="s1">@returns </span><span class="s0">{boolean}</span>
+     <span class="s0">*/</span>
+    <span class="s2">isInAllowedPositionForComponent(node) {</span>
+      <span class="s4">switch </span><span class="s2">(node.parent.type) {</span>
+        <span class="s4">case </span><span class="s3">'VariableDeclarator'</span><span class="s2">:</span>
+        <span class="s4">case </span><span class="s3">'AssignmentExpression'</span><span class="s2">:</span>
+        <span class="s4">case </span><span class="s3">'Property'</span><span class="s2">:</span>
+        <span class="s4">case </span><span class="s3">'ReturnStatement'</span><span class="s2">:</span>
+        <span class="s4">case </span><span class="s3">'ExportDefaultDeclaration'</span><span class="s2">:</span>
+        <span class="s4">case </span><span class="s3">'ArrowFunctionExpression'</span><span class="s2">: {</span>
+          <span class="s4">return true</span><span class="s2">;</span>
+        <span class="s2">}</span>
+        <span class="s4">case </span><span class="s3">'SequenceExpression'</span><span class="s2">: {</span>
+          <span class="s4">return </span><span class="s2">utils.isInAllowedPositionForComponent(node.parent)</span>
+            <span class="s2">&amp;&amp; node === node.parent.expressions[node.parent.expressions.length - </span><span class="s5">1</span><span class="s2">];</span>
+        <span class="s2">}</span>
+        <span class="s4">default</span><span class="s2">:</span>
+          <span class="s4">return false</span><span class="s2">;</span>
+      <span class="s2">}</span>
+    <span class="s2">},</span>
+
+    <span class="s0">/**</span>
+     <span class="s0">* Get node if node is a stateless component, or node.parent in cases like</span>
+     <span class="s0">* `React.memo` or `React.forwardRef`. Otherwise returns `undefined`.</span>
+     <span class="s0">* </span><span class="s1">@param </span><span class="s0">{ASTNode} node</span>
+     <span class="s0">* </span><span class="s1">@returns </span><span class="s0">{ASTNode | undefined}</span>
+     <span class="s0">*/</span>
+    <span class="s2">getStatelessComponent(node) {</span>
+      <span class="s4">const </span><span class="s2">parent = node.parent;</span>
+      <span class="s4">if </span><span class="s2">(</span>
+        <span class="s2">node.type === </span><span class="s3">'FunctionDeclaration'</span>
+        <span class="s2">&amp;&amp; (!node.id || isFirstLetterCapitalized(node.id.name))</span>
+        <span class="s2">&amp;&amp; utils.isReturningJSXOrNull(node)</span>
+      <span class="s2">) {</span>
+        <span class="s4">return </span><span class="s2">node;</span>
+      <span class="s2">}</span>
+
+      <span class="s4">if </span><span class="s2">(node.type === </span><span class="s3">'FunctionExpression' </span><span class="s2">|| node.type === </span><span class="s3">'ArrowFunctionExpression'</span><span class="s2">) {</span>
+        <span class="s4">const </span><span class="s2">isPropertyAssignment = parent.type === </span><span class="s3">'AssignmentExpression'</span>
+          <span class="s2">&amp;&amp; parent.left.type === </span><span class="s3">'MemberExpression'</span><span class="s2">;</span>
+        <span class="s4">const </span><span class="s2">isModuleExportsAssignment = isPropertyAssignment</span>
+          <span class="s2">&amp;&amp; parent.left.object.name === </span><span class="s3">'module'</span>
+          <span class="s2">&amp;&amp; parent.left.property.name === </span><span class="s3">'exports'</span><span class="s2">;</span>
+
+        <span class="s4">if </span><span class="s2">(node.parent.type === </span><span class="s3">'ExportDefaultDeclaration'</span><span class="s2">) {</span>
+          <span class="s4">if </span><span class="s2">(utils.isReturningJSX(node)) {</span>
+            <span class="s4">return </span><span class="s2">node;</span>
+          <span class="s2">}</span>
+          <span class="s4">return </span><span class="s2">undefined;</span>
+        <span class="s2">}</span>
+
+        <span class="s4">if </span><span class="s2">(node.parent.type === </span><span class="s3">'VariableDeclarator' </span><span class="s2">&amp;&amp; utils.isReturningJSXOrNull(node)) {</span>
+          <span class="s4">if </span><span class="s2">(isFirstLetterCapitalized(node.parent.id.name)) {</span>
+            <span class="s4">return </span><span class="s2">node;</span>
+          <span class="s2">}</span>
+          <span class="s4">return </span><span class="s2">undefined;</span>
+        <span class="s2">}</span>
+
+        <span class="s0">// case: const any = () =&gt; { return (props) =&gt; null }</span>
+        <span class="s0">// case: const any = () =&gt; (props) =&gt; null</span>
+        <span class="s4">if </span><span class="s2">(</span>
+          <span class="s2">(node.parent.type === </span><span class="s3">'ReturnStatement' </span><span class="s2">|| (node.parent.type === </span><span class="s3">'ArrowFunctionExpression' </span><span class="s2">&amp;&amp; node.parent.expression))</span>
+          <span class="s2">&amp;&amp; !utils.isReturningJSX(node)</span>
+        <span class="s2">) {</span>
+          <span class="s4">return </span><span class="s2">undefined;</span>
+        <span class="s2">}</span>
+
+        <span class="s0">// case: any = () =&gt; { return =&gt; null }</span>
+        <span class="s0">// case: any = () =&gt; null</span>
+        <span class="s4">if </span><span class="s2">(node.parent.type === </span><span class="s3">'AssignmentExpression' </span><span class="s2">&amp;&amp; !isPropertyAssignment &amp;&amp; utils.isReturningJSXOrNull(node)) {</span>
+          <span class="s4">if </span><span class="s2">(isFirstLetterCapitalized(node.parent.left.name)) {</span>
+            <span class="s4">return </span><span class="s2">node;</span>
+          <span class="s2">}</span>
+          <span class="s4">return </span><span class="s2">undefined;</span>
+        <span class="s2">}</span>
+
+        <span class="s0">// case: any = () =&gt; () =&gt; null</span>
+        <span class="s4">if </span><span class="s2">(node.parent.type === </span><span class="s3">'ArrowFunctionExpression' </span><span class="s2">&amp;&amp; node.parent.parent.type === </span><span class="s3">'AssignmentExpression' </span><span class="s2">&amp;&amp; !isPropertyAssignment &amp;&amp; utils.isReturningJSXOrNull(node)) {</span>
+          <span class="s4">if </span><span class="s2">(isFirstLetterCapitalized(node.parent.parent.left.name)) {</span>
+            <span class="s4">return </span><span class="s2">node;</span>
+          <span class="s2">}</span>
+          <span class="s4">return </span><span class="s2">undefined;</span>
+        <span class="s2">}</span>
+
+        <span class="s0">// case: { any: () =&gt; () =&gt; null }</span>
+        <span class="s4">if </span><span class="s2">(node.parent.type === </span><span class="s3">'ArrowFunctionExpression' </span><span class="s2">&amp;&amp; node.parent.parent.type === </span><span class="s3">'Property' </span><span class="s2">&amp;&amp; !isPropertyAssignment &amp;&amp; utils.isReturningJSXOrNull(node)) {</span>
+          <span class="s4">if </span><span class="s2">(isFirstLetterCapitalized(node.parent.parent.key.name)) {</span>
+            <span class="s4">return </span><span class="s2">node;</span>
+          <span class="s2">}</span>
+          <span class="s4">return </span><span class="s2">undefined;</span>
+        <span class="s2">}</span>
+
+        <span class="s0">// case: any = function() {return function() {return null;};}</span>
+        <span class="s4">if </span><span class="s2">(node.parent.type === </span><span class="s3">'ReturnStatement'</span><span class="s2">) {</span>
+          <span class="s4">if </span><span class="s2">(isFirstLetterCapitalized(node.id &amp;&amp; node.id.name)) {</span>
+            <span class="s4">return </span><span class="s2">node;</span>
+          <span class="s2">}</span>
+          <span class="s4">const </span><span class="s2">functionExpr = node.parent.parent.parent;</span>
+          <span class="s4">if </span><span class="s2">(functionExpr.parent.type === </span><span class="s3">'AssignmentExpression' </span><span class="s2">&amp;&amp; !isPropertyAssignment &amp;&amp; utils.isReturningJSXOrNull(node)) {</span>
+            <span class="s4">if </span><span class="s2">(isFirstLetterCapitalized(functionExpr.parent.left.name)) {</span>
+              <span class="s4">return </span><span class="s2">node;</span>
+            <span class="s2">}</span>
+            <span class="s4">return </span><span class="s2">undefined;</span>
+          <span class="s2">}</span>
+        <span class="s2">}</span>
+
+        <span class="s0">// case: { any: function() {return function() {return null;};} }</span>
+        <span class="s4">if </span><span class="s2">(node.parent.type === </span><span class="s3">'ReturnStatement'</span><span class="s2">) {</span>
+          <span class="s4">const </span><span class="s2">functionExpr = node.parent.parent.parent;</span>
+          <span class="s4">if </span><span class="s2">(functionExpr.parent.type === </span><span class="s3">'Property' </span><span class="s2">&amp;&amp; !isPropertyAssignment &amp;&amp; utils.isReturningJSXOrNull(node)) {</span>
+            <span class="s4">if </span><span class="s2">(isFirstLetterCapitalized(functionExpr.parent.key.name)) {</span>
+              <span class="s4">return </span><span class="s2">node;</span>
+            <span class="s2">}</span>
+            <span class="s4">return </span><span class="s2">undefined;</span>
+          <span class="s2">}</span>
+        <span class="s2">}</span>
+
+        <span class="s0">// for case abc = { [someobject.somekey]: props =&gt; { ... return not-jsx } }</span>
+        <span class="s4">if </span><span class="s2">(</span>
+          <span class="s2">node.parent</span>
+          <span class="s2">&amp;&amp; node.parent.key</span>
+          <span class="s2">&amp;&amp; node.parent.key.type === </span><span class="s3">'MemberExpression'</span>
+          <span class="s2">&amp;&amp; !utils.isReturningJSX(node)</span>
+          <span class="s2">&amp;&amp; !utils.isReturningOnlyNull(node)</span>
+        <span class="s2">) {</span>
+          <span class="s4">return </span><span class="s2">undefined;</span>
+        <span class="s2">}</span>
+
+        <span class="s4">if </span><span class="s2">(</span>
+          <span class="s2">node.parent.type === </span><span class="s3">'Property' </span><span class="s2">&amp;&amp; (</span>
+            <span class="s2">(node.parent.method &amp;&amp; !node.parent.computed) </span><span class="s0">// case: { f() { return ... } }</span>
+            <span class="s2">|| (!node.id &amp;&amp; !node.parent.computed) </span><span class="s0">// case: { f: () =&gt; ... }</span>
+          <span class="s2">)</span>
+        <span class="s2">) {</span>
+          <span class="s4">if </span><span class="s2">(</span>
+            <span class="s2">isFirstLetterCapitalized(node.parent.key.name)</span>
+            <span class="s2">&amp;&amp; utils.isReturningJSX(node)</span>
+          <span class="s2">) {</span>
+            <span class="s4">return </span><span class="s2">node;</span>
+          <span class="s2">}</span>
+          <span class="s4">return </span><span class="s2">undefined;</span>
+        <span class="s2">}</span>
+
+        <span class="s0">// Case like `React.memo(() =&gt; &lt;&gt;&lt;/&gt;)` or `React.forwardRef(...)`</span>
+        <span class="s4">const </span><span class="s2">pragmaComponentWrapper = utils.getPragmaComponentWrapper(node);</span>
+        <span class="s4">if </span><span class="s2">(pragmaComponentWrapper &amp;&amp; utils.isReturningJSXOrNull(node)) {</span>
+          <span class="s4">return </span><span class="s2">pragmaComponentWrapper;</span>
+        <span class="s2">}</span>
+
+        <span class="s4">if </span><span class="s2">(!(utils.isInAllowedPositionForComponent(node) &amp;&amp; utils.isReturningJSXOrNull(node))) {</span>
+          <span class="s4">return </span><span class="s2">undefined;</span>
+        <span class="s2">}</span>
+
+        <span class="s4">if </span><span class="s2">(utils.isParentComponentNotStatelessComponent(node)) {</span>
+          <span class="s4">return </span><span class="s2">undefined;</span>
+        <span class="s2">}</span>
+
+        <span class="s4">if </span><span class="s2">(node.id) {</span>
+          <span class="s4">return </span><span class="s2">isFirstLetterCapitalized(node.id.name) ? node : undefined;</span>
+        <span class="s2">}</span>
+
+        <span class="s4">if </span><span class="s2">(</span>
+          <span class="s2">isPropertyAssignment</span>
+          <span class="s2">&amp;&amp; !isModuleExportsAssignment</span>
+          <span class="s2">&amp;&amp; !isFirstLetterCapitalized(parent.left.property.name)</span>
+        <span class="s2">) {</span>
+          <span class="s4">return </span><span class="s2">undefined;</span>
+        <span class="s2">}</span>
+
+        <span class="s4">if </span><span class="s2">(parent.type === </span><span class="s3">'Property' </span><span class="s2">&amp;&amp; utils.isReturningOnlyNull(node)) {</span>
+          <span class="s4">return </span><span class="s2">undefined;</span>
+        <span class="s2">}</span>
+
+        <span class="s4">return </span><span class="s2">node;</span>
+      <span class="s2">}</span>
+
+      <span class="s4">return </span><span class="s2">undefined;</span>
+    <span class="s2">},</span>
+
+    <span class="s0">/**</span>
+     <span class="s0">* Get the parent stateless component node from the current scope</span>
+     <span class="s0">*</span>
+     <span class="s0">* </span><span class="s1">@param </span><span class="s0">{ASTNode} node The AST node being checked</span>
+     <span class="s0">* </span><span class="s1">@returns </span><span class="s0">{ASTNode} component node, null if we are not in a component</span>
+     <span class="s0">*/</span>
+    <span class="s2">getParentStatelessComponent(node) {</span>
+      <span class="s4">let </span><span class="s2">scope = getScope(context, node);</span>
+      <span class="s4">while </span><span class="s2">(scope) {</span>
+        <span class="s4">const </span><span class="s2">statelessComponent = utils.getStatelessComponent(scope.block);</span>
+        <span class="s4">if </span><span class="s2">(statelessComponent) {</span>
+          <span class="s4">return </span><span class="s2">statelessComponent;</span>
+        <span class="s2">}</span>
+        <span class="s2">scope = scope.upper;</span>
+      <span class="s2">}</span>
+      <span class="s4">return null</span><span class="s2">;</span>
+    <span class="s2">},</span>
+
+    <span class="s0">/**</span>
+     <span class="s0">* Get the related component from a node</span>
+     <span class="s0">*</span>
+     <span class="s0">* </span><span class="s1">@param </span><span class="s0">{ASTNode} node The AST node being checked (must be a MemberExpression).</span>
+     <span class="s0">* </span><span class="s1">@returns </span><span class="s0">{ASTNode | null} component node, null if we cannot find the component</span>
+     <span class="s0">*/</span>
+    <span class="s2">getRelatedComponent(node) {</span>
+      <span class="s4">let </span><span class="s2">i;</span>
+      <span class="s4">let </span><span class="s2">j;</span>
+      <span class="s4">let </span><span class="s2">k;</span>
+      <span class="s4">let </span><span class="s2">l;</span>
+      <span class="s4">let </span><span class="s2">componentNode;</span>
+      <span class="s0">// Get the component path</span>
+      <span class="s4">const </span><span class="s2">componentPath = [];</span>
+      <span class="s4">let </span><span class="s2">nodeTemp = node;</span>
+      <span class="s4">while </span><span class="s2">(nodeTemp) {</span>
+        <span class="s4">if </span><span class="s2">(nodeTemp.property &amp;&amp; nodeTemp.property.type === </span><span class="s3">'Identifier'</span><span class="s2">) {</span>
+          <span class="s2">componentPath.push(nodeTemp.property.name);</span>
+        <span class="s2">}</span>
+        <span class="s4">if </span><span class="s2">(nodeTemp.object &amp;&amp; nodeTemp.object.type === </span><span class="s3">'Identifier'</span><span class="s2">) {</span>
+          <span class="s2">componentPath.push(nodeTemp.object.name);</span>
+        <span class="s2">}</span>
+        <span class="s2">nodeTemp = nodeTemp.object;</span>
+      <span class="s2">}</span>
+      <span class="s2">componentPath.reverse();</span>
+      <span class="s4">const </span><span class="s2">componentName = componentPath.slice(</span><span class="s5">0</span><span class="s2">, componentPath.length - </span><span class="s5">1</span><span class="s2">).join(</span><span class="s3">'.'</span><span class="s2">);</span>
+
+      <span class="s0">// Find the variable in the current scope</span>
+      <span class="s4">const </span><span class="s2">variableName = componentPath.shift();</span>
+      <span class="s4">if </span><span class="s2">(!variableName) {</span>
+        <span class="s4">return null</span><span class="s2">;</span>
+      <span class="s2">}</span>
+      <span class="s4">const </span><span class="s2">variableInScope = variableUtil.getVariableFromContext(context, node, variableName);</span>
+      <span class="s4">if </span><span class="s2">(!variableInScope) {</span>
+        <span class="s4">return null</span><span class="s2">;</span>
+      <span class="s2">}</span>
+
+      <span class="s0">// Try to find the component using variable references</span>
+      <span class="s2">variableInScope.references.some((ref) =&gt; {</span>
+        <span class="s4">let </span><span class="s2">refId = ref.identifier;</span>
+        <span class="s4">if </span><span class="s2">(refId.parent &amp;&amp; refId.parent.type === </span><span class="s3">'MemberExpression'</span><span class="s2">) {</span>
+          <span class="s2">refId = refId.parent;</span>
+        <span class="s2">}</span>
+        <span class="s4">if </span><span class="s2">(getText(context, refId) !== componentName) {</span>
+          <span class="s4">return false</span><span class="s2">;</span>
+        <span class="s2">}</span>
+        <span class="s4">if </span><span class="s2">(refId.type === </span><span class="s3">'MemberExpression'</span><span class="s2">) {</span>
+          <span class="s2">componentNode = refId.parent.right;</span>
+        <span class="s2">} </span><span class="s4">else if </span><span class="s2">(</span>
+          <span class="s2">refId.parent</span>
+          <span class="s2">&amp;&amp; refId.parent.type === </span><span class="s3">'VariableDeclarator'</span>
+          <span class="s2">&amp;&amp; refId.parent.init</span>
+          <span class="s2">&amp;&amp; refId.parent.init.type !== </span><span class="s3">'Identifier'</span>
+        <span class="s2">) {</span>
+          <span class="s2">componentNode = refId.parent.init;</span>
+        <span class="s2">}</span>
+        <span class="s4">return true</span><span class="s2">;</span>
+      <span class="s2">});</span>
+
+      <span class="s4">if </span><span class="s2">(componentNode) {</span>
+        <span class="s0">// Return the component</span>
+        <span class="s4">return </span><span class="s2">components.add(componentNode, </span><span class="s5">1</span><span class="s2">);</span>
+      <span class="s2">}</span>
+
+      <span class="s0">// Try to find the component using variable declarations</span>
+      <span class="s4">const </span><span class="s2">defs = variableInScope.defs;</span>
+      <span class="s4">const </span><span class="s2">defInScope = defs.find((def) =&gt; (</span>
+        <span class="s2">def.type === </span><span class="s3">'ClassName'</span>
+        <span class="s2">|| def.type === </span><span class="s3">'FunctionName'</span>
+        <span class="s2">|| def.type === </span><span class="s3">'Variable'</span>
+      <span class="s2">));</span>
+      <span class="s4">if </span><span class="s2">(!defInScope || !defInScope.node) {</span>
+        <span class="s4">return null</span><span class="s2">;</span>
+      <span class="s2">}</span>
+      <span class="s2">componentNode = defInScope.node.init || defInScope.node;</span>
+
+      <span class="s0">// Traverse the node properties to the component declaration</span>
+      <span class="s4">for </span><span class="s2">(i = </span><span class="s5">0</span><span class="s2">, j = componentPath.length; i &lt; j; i++) {</span>
+        <span class="s4">if </span><span class="s2">(!componentNode.properties) {</span>
+          <span class="s4">continue</span><span class="s2">; </span><span class="s0">// eslint-disable-line no-continue</span>
+        <span class="s2">}</span>
+        <span class="s4">for </span><span class="s2">(k = </span><span class="s5">0</span><span class="s2">, l = componentNode.properties.length; k &lt; l; k++) {</span>
+          <span class="s4">if </span><span class="s2">(componentNode.properties[k].key &amp;&amp; componentNode.properties[k].key.name === componentPath[i]) {</span>
+            <span class="s2">componentNode = componentNode.properties[k];</span>
+            <span class="s4">break</span><span class="s2">;</span>
+          <span class="s2">}</span>
+        <span class="s2">}</span>
+        <span class="s4">if </span><span class="s2">(!componentNode || !componentNode.value) {</span>
+          <span class="s4">return null</span><span class="s2">;</span>
+        <span class="s2">}</span>
+        <span class="s2">componentNode = componentNode.value;</span>
+      <span class="s2">}</span>
+
+      <span class="s0">// Return the component</span>
+      <span class="s4">return </span><span class="s2">components.add(componentNode, </span><span class="s5">1</span><span class="s2">);</span>
+    <span class="s2">},</span>
+
+    <span class="s2">isParentComponentNotStatelessComponent(node) {</span>
+      <span class="s4">return </span><span class="s2">!!(</span>
+        <span class="s2">node.parent</span>
+        <span class="s2">&amp;&amp; node.parent.key</span>
+        <span class="s2">&amp;&amp; node.parent.key.type === </span><span class="s3">'Identifier'</span>
+        <span class="s0">// custom component functions must start with a capital letter (returns false otherwise)</span>
+        <span class="s2">&amp;&amp; node.parent.key.name.charAt(</span><span class="s5">0</span><span class="s2">) === node.parent.key.name.charAt(</span><span class="s5">0</span><span class="s2">).toLowerCase()</span>
+        <span class="s0">// react render function cannot have params</span>
+        <span class="s2">&amp;&amp; !!(node.params || []).length</span>
+      <span class="s2">);</span>
+    <span class="s2">},</span>
+
+    <span class="s0">/**</span>
+     <span class="s0">* Identify whether a node (CallExpression) is a call to a React hook</span>
+     <span class="s0">*</span>
+     <span class="s0">* </span><span class="s1">@param </span><span class="s0">{ASTNode} node The AST node being searched. (expects CallExpression)</span>
+     <span class="s0">* </span><span class="s1">@param </span><span class="s0">{('useCallback'|'useContext'|'useDebugValue'|'useEffect'|'useImperativeHandle'|'useLayoutEffect'|'useMemo'|'useReducer'|'useRef'|'useState')[]} [expectedHookNames] React hook names to which search is limited.</span>
+     <span class="s0">* </span><span class="s1">@returns </span><span class="s0">{boolean} True if the node is a call to a React hook</span>
+     <span class="s0">*/</span>
+    <span class="s2">isReactHookCall(node, expectedHookNames) {</span>
+      <span class="s4">if </span><span class="s2">(!astUtil.isCallExpression(node)) {</span>
+        <span class="s4">return false</span><span class="s2">;</span>
+      <span class="s2">}</span>
+
+      <span class="s4">const </span><span class="s2">defaultReactImports = components.getDefaultReactImports();</span>
+      <span class="s4">const </span><span class="s2">namedReactImports = components.getNamedReactImports();</span>
+
+      <span class="s4">const </span><span class="s2">defaultReactImportName = defaultReactImports</span>
+        <span class="s2">&amp;&amp; defaultReactImports[</span><span class="s5">0</span><span class="s2">]</span>
+        <span class="s2">&amp;&amp; defaultReactImports[</span><span class="s5">0</span><span class="s2">].local.name;</span>
+      <span class="s4">const </span><span class="s2">reactHookImportSpecifiers = namedReactImports</span>
+        <span class="s2">&amp;&amp; namedReactImports.filter((specifier) =&gt; USE_HOOK_PREFIX_REGEX.test(specifier.imported.name));</span>
+      <span class="s4">const </span><span class="s2">reactHookImportNames = reactHookImportSpecifiers</span>
+        <span class="s2">&amp;&amp; fromEntries(reactHookImportSpecifiers.map((specifier) =&gt; [specifier.local.name, specifier.imported.name]));</span>
+
+      <span class="s4">const </span><span class="s2">isPotentialReactHookCall = defaultReactImportName</span>
+        <span class="s2">&amp;&amp; node.callee.type === </span><span class="s3">'MemberExpression'</span>
+        <span class="s2">&amp;&amp; node.callee.object.type === </span><span class="s3">'Identifier'</span>
+        <span class="s2">&amp;&amp; node.callee.object.name === defaultReactImportName</span>
+        <span class="s2">&amp;&amp; node.callee.property.type === </span><span class="s3">'Identifier'</span>
+        <span class="s2">&amp;&amp; node.callee.property.name.match(USE_HOOK_PREFIX_REGEX);</span>
+
+      <span class="s4">const </span><span class="s2">isPotentialHookCall = reactHookImportNames</span>
+        <span class="s2">&amp;&amp; node.callee.type === </span><span class="s3">'Identifier'</span>
+        <span class="s2">&amp;&amp; node.callee.name.match(USE_HOOK_PREFIX_REGEX);</span>
+
+      <span class="s4">const </span><span class="s2">scope = (isPotentialReactHookCall || isPotentialHookCall) &amp;&amp; getScope(context, node);</span>
+
+      <span class="s4">const </span><span class="s2">reactResolvedDefs = isPotentialReactHookCall</span>
+        <span class="s2">&amp;&amp; scope.references</span>
+        <span class="s2">&amp;&amp; scope.references.find(</span>
+          <span class="s2">(reference) =&gt; reference.identifier.name === defaultReactImportName</span>
+        <span class="s2">).resolved.defs;</span>
+
+      <span class="s4">const </span><span class="s2">isReactShadowed = isPotentialReactHookCall &amp;&amp; reactResolvedDefs</span>
+        <span class="s2">&amp;&amp; reactResolvedDefs.some((reactDef) =&gt; reactDef.type !== </span><span class="s3">'ImportBinding'</span><span class="s2">);</span>
+
+      <span class="s4">const </span><span class="s2">potentialHookReference = isPotentialHookCall</span>
+        <span class="s2">&amp;&amp; scope.references</span>
+        <span class="s2">&amp;&amp; scope.references.find(</span>
+          <span class="s2">(reference) =&gt; reactHookImportNames[reference.identifier.name]</span>
+        <span class="s2">);</span>
+
+      <span class="s4">const </span><span class="s2">hookResolvedDefs = potentialHookReference &amp;&amp; potentialHookReference.resolved.defs;</span>
+      <span class="s4">const </span><span class="s2">localHookName = (</span>
+        <span class="s2">isPotentialReactHookCall</span>
+        <span class="s2">&amp;&amp; node.callee.property.name</span>
+      <span class="s2">) || (</span>
+        <span class="s2">isPotentialHookCall</span>
+        <span class="s2">&amp;&amp; potentialHookReference</span>
+        <span class="s2">&amp;&amp; node.callee.name</span>
+      <span class="s2">);</span>
+      <span class="s4">const </span><span class="s2">isHookShadowed = isPotentialHookCall</span>
+        <span class="s2">&amp;&amp; hookResolvedDefs</span>
+        <span class="s2">&amp;&amp; hookResolvedDefs.some(</span>
+          <span class="s2">(hookDef) =&gt; hookDef.name.name === localHookName</span>
+          <span class="s2">&amp;&amp; hookDef.type !== </span><span class="s3">'ImportBinding'</span>
+        <span class="s2">);</span>
+
+      <span class="s4">const </span><span class="s2">isHookCall = (isPotentialReactHookCall &amp;&amp; !isReactShadowed)</span>
+        <span class="s2">|| (isPotentialHookCall &amp;&amp; localHookName &amp;&amp; !isHookShadowed);</span>
+
+      <span class="s4">if </span><span class="s2">(!isHookCall) {</span>
+        <span class="s4">return false</span><span class="s2">;</span>
+      <span class="s2">}</span>
+
+      <span class="s4">if </span><span class="s2">(!expectedHookNames) {</span>
+        <span class="s4">return true</span><span class="s2">;</span>
+      <span class="s2">}</span>
+
+      <span class="s4">return </span><span class="s2">arrayIncludes(</span>
+        <span class="s2">expectedHookNames,</span>
+        <span class="s2">(reactHookImportNames &amp;&amp; reactHookImportNames[localHookName]) || localHookName</span>
+      <span class="s2">);</span>
+    <span class="s2">},</span>
+  <span class="s2">};</span>
+
+  <span class="s0">// Component detection instructions</span>
+  <span class="s4">const </span><span class="s2">detectionInstructions = {</span>
+    <span class="s2">CallExpression(node) {</span>
+      <span class="s4">if </span><span class="s2">(!utils.isPragmaComponentWrapper(node)) {</span>
+        <span class="s4">return</span><span class="s2">;</span>
+      <span class="s2">}</span>
+      <span class="s4">if </span><span class="s2">(node.arguments.length &gt; </span><span class="s5">0 </span><span class="s2">&amp;&amp; astUtil.isFunctionLikeExpression(node.arguments[</span><span class="s5">0</span><span class="s2">])) {</span>
+        <span class="s2">components.add(node, </span><span class="s5">2</span><span class="s2">);</span>
+      <span class="s2">}</span>
+    <span class="s2">},</span>
+
+    <span class="s2">ClassExpression(node) {</span>
+      <span class="s4">if </span><span class="s2">(!componentUtil.isES6Component(node, context)) {</span>
+        <span class="s4">return</span><span class="s2">;</span>
+      <span class="s2">}</span>
+      <span class="s2">components.add(node, </span><span class="s5">2</span><span class="s2">);</span>
+    <span class="s2">},</span>
+
+    <span class="s2">ClassDeclaration(node) {</span>
+      <span class="s4">if </span><span class="s2">(!componentUtil.isES6Component(node, context)) {</span>
+        <span class="s4">return</span><span class="s2">;</span>
+      <span class="s2">}</span>
+      <span class="s2">components.add(node, </span><span class="s5">2</span><span class="s2">);</span>
+    <span class="s2">},</span>
+
+    <span class="s2">ObjectExpression(node) {</span>
+      <span class="s4">if </span><span class="s2">(!componentUtil.isES5Component(node, context)) {</span>
+        <span class="s4">return</span><span class="s2">;</span>
+      <span class="s2">}</span>
+      <span class="s2">components.add(node, </span><span class="s5">2</span><span class="s2">);</span>
+    <span class="s2">},</span>
+
+    <span class="s2">FunctionExpression(node) {</span>
+      <span class="s4">if </span><span class="s2">(node.async &amp;&amp; node.generator) {</span>
+        <span class="s2">components.add(node, </span><span class="s5">0</span><span class="s2">);</span>
+        <span class="s4">return</span><span class="s2">;</span>
+      <span class="s2">}</span>
+
+      <span class="s4">const </span><span class="s2">component = utils.getStatelessComponent(node);</span>
+      <span class="s4">if </span><span class="s2">(!component) {</span>
+        <span class="s4">return</span><span class="s2">;</span>
+      <span class="s2">}</span>
+      <span class="s2">components.add(component, </span><span class="s5">2</span><span class="s2">);</span>
+    <span class="s2">},</span>
+
+    <span class="s2">FunctionDeclaration(node) {</span>
+      <span class="s4">if </span><span class="s2">(node.async &amp;&amp; node.generator) {</span>
+        <span class="s2">components.add(node, </span><span class="s5">0</span><span class="s2">);</span>
+        <span class="s4">return</span><span class="s2">;</span>
+      <span class="s2">}</span>
+
+      <span class="s4">const </span><span class="s2">cNode = utils.getStatelessComponent(node);</span>
+      <span class="s4">if </span><span class="s2">(!cNode) {</span>
+        <span class="s4">return</span><span class="s2">;</span>
+      <span class="s2">}</span>
+      <span class="s2">components.add(cNode, </span><span class="s5">2</span><span class="s2">);</span>
+    <span class="s2">},</span>
+
+    <span class="s2">ArrowFunctionExpression(node) {</span>
+      <span class="s4">const </span><span class="s2">component = utils.getStatelessComponent(node);</span>
+      <span class="s4">if </span><span class="s2">(!component) {</span>
+        <span class="s4">return</span><span class="s2">;</span>
+      <span class="s2">}</span>
+      <span class="s2">components.add(component, </span><span class="s5">2</span><span class="s2">);</span>
+    <span class="s2">},</span>
+
+    <span class="s2">ThisExpression(node) {</span>
+      <span class="s4">const </span><span class="s2">component = utils.getParentStatelessComponent(node);</span>
+      <span class="s4">if </span><span class="s2">(!component || !</span><span class="s6">/Function/</span><span class="s2">.test(component.type) || !node.parent.property) {</span>
+        <span class="s4">return</span><span class="s2">;</span>
+      <span class="s2">}</span>
+      <span class="s0">// Ban functions accessing a property on a ThisExpression</span>
+      <span class="s2">components.add(node, </span><span class="s5">0</span><span class="s2">);</span>
+    <span class="s2">},</span>
+  <span class="s2">};</span>
+
+  <span class="s0">// Detect React import specifiers</span>
+  <span class="s4">const </span><span class="s2">reactImportInstructions = {</span>
+    <span class="s2">ImportDeclaration(node) {</span>
+      <span class="s4">const </span><span class="s2">isReactImported = node.source.type === </span><span class="s3">'Literal' </span><span class="s2">&amp;&amp; node.source.value === </span><span class="s3">'react'</span><span class="s2">;</span>
+      <span class="s4">if </span><span class="s2">(!isReactImported) {</span>
+        <span class="s4">return</span><span class="s2">;</span>
+      <span class="s2">}</span>
+
+      <span class="s2">node.specifiers.forEach((specifier) =&gt; {</span>
+        <span class="s4">if </span><span class="s2">(specifier.type === </span><span class="s3">'ImportDefaultSpecifier'</span><span class="s2">) {</span>
+          <span class="s2">components.addDefaultReactImport(specifier);</span>
+        <span class="s2">}</span>
+        <span class="s4">if </span><span class="s2">(specifier.type === </span><span class="s3">'ImportSpecifier'</span><span class="s2">) {</span>
+          <span class="s2">components.addNamedReactImport(specifier);</span>
+        <span class="s2">}</span>
+      <span class="s2">});</span>
+    <span class="s2">},</span>
+  <span class="s2">};</span>
+
+  <span class="s4">const </span><span class="s2">ruleInstructions = rule(context, components, utils);</span>
+  <span class="s4">const </span><span class="s2">propTypesInstructions = propTypesUtil(context, components, utils);</span>
+  <span class="s4">const </span><span class="s2">usedPropTypesInstructions = usedPropTypesUtil(context, components, utils);</span>
+  <span class="s4">const </span><span class="s2">defaultPropsInstructions = defaultPropsUtil(context, components, utils);</span>
+
+  <span class="s4">const </span><span class="s2">mergedRule = mergeRules([</span>
+    <span class="s2">detectionInstructions,</span>
+    <span class="s2">propTypesInstructions,</span>
+    <span class="s2">usedPropTypesInstructions,</span>
+    <span class="s2">defaultPropsInstructions,</span>
+    <span class="s2">reactImportInstructions,</span>
+    <span class="s2">ruleInstructions,</span>
+  <span class="s2">]);</span>
+
+  <span class="s4">return </span><span class="s2">mergedRule;</span>
+<span class="s2">}</span>
+
+<span class="s2">module.exports = Object.assign(Components, {</span>
+  <span class="s2">detect(rule) {</span>
+    <span class="s4">return </span><span class="s2">componentRule.bind(</span><span class="s4">this</span><span class="s2">, rule);</span>
+  <span class="s2">},</span>
+<span class="s2">});</span>
+</pre>
+</body>
+</html>

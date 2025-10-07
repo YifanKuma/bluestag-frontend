@@ -1,0 +1,81 @@
+<html>
+<head>
+<title>ast-converter.js</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #067d17;}
+.s1 { color: #080808;}
+.s2 { color: #0033b3;}
+.s3 { color: #8c8c8c; font-style: italic;}
+.s4 { color: #1750eb;}
+</style>
+</head>
+<body bgcolor="#ffffff">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#c0c0c0" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+ast-converter.js</font>
+</center></td></tr></table>
+<pre><span class="s0">&quot;use strict&quot;</span><span class="s1">;</span>
+<span class="s1">Object.defineProperty(exports, </span><span class="s0">&quot;__esModule&quot;</span><span class="s1">, { value: </span><span class="s2">true </span><span class="s1">});</span>
+<span class="s1">exports.astConverter = astConverter;</span>
+<span class="s2">const </span><span class="s1">convert_1 = require(</span><span class="s0">&quot;./convert&quot;</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">convert_comments_1 = require(</span><span class="s0">&quot;./convert-comments&quot;</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">node_utils_1 = require(</span><span class="s0">&quot;./node-utils&quot;</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">simple_traverse_1 = require(</span><span class="s0">&quot;./simple-traverse&quot;</span><span class="s1">);</span>
+<span class="s2">function </span><span class="s1">astConverter(ast, parseSettings, shouldPreserveNodeMaps) {</span>
+    <span class="s3">/**</span>
+     <span class="s3">* The TypeScript compiler produced fundamental parse errors when parsing the</span>
+     <span class="s3">* source.</span>
+     <span class="s3">*/</span>
+    <span class="s2">const </span><span class="s1">{ parseDiagnostics } = ast;</span>
+    <span class="s2">if </span><span class="s1">(parseDiagnostics.length) {</span>
+        <span class="s2">throw </span><span class="s1">(</span><span class="s4">0</span><span class="s1">, convert_1.convertError)(parseDiagnostics[</span><span class="s4">0</span><span class="s1">]);</span>
+    <span class="s1">}</span>
+    <span class="s3">/**</span>
+     <span class="s3">* Recursively convert the TypeScript AST into an ESTree-compatible AST</span>
+     <span class="s3">*/</span>
+    <span class="s2">const </span><span class="s1">instance = </span><span class="s2">new </span><span class="s1">convert_1.Converter(ast, {</span>
+        <span class="s1">allowInvalidAST: parseSettings.allowInvalidAST,</span>
+        <span class="s1">errorOnUnknownASTType: parseSettings.errorOnUnknownASTType,</span>
+        <span class="s1">shouldPreserveNodeMaps,</span>
+        <span class="s1">suppressDeprecatedPropertyWarnings: parseSettings.suppressDeprecatedPropertyWarnings,</span>
+    <span class="s1">});</span>
+    <span class="s2">const </span><span class="s1">estree = instance.convertProgram();</span>
+    <span class="s3">/**</span>
+     <span class="s3">* Optionally remove range and loc if specified</span>
+     <span class="s3">*/</span>
+    <span class="s2">if </span><span class="s1">(!parseSettings.range || !parseSettings.loc) {</span>
+        <span class="s1">(</span><span class="s4">0</span><span class="s1">, simple_traverse_1.simpleTraverse)(estree, {</span>
+            <span class="s1">enter: node =&gt; {</span>
+                <span class="s2">if </span><span class="s1">(!parseSettings.range) {</span>
+                    <span class="s3">// eslint-disable-next-line @typescript-eslint/ban-ts-comment -- TS 4.0 made this an error because the types aren't optional</span>
+                    <span class="s3">// @ts-expect-error</span>
+                    <span class="s2">delete </span><span class="s1">node.range;</span>
+                <span class="s1">}</span>
+                <span class="s2">if </span><span class="s1">(!parseSettings.loc) {</span>
+                    <span class="s3">// eslint-disable-next-line @typescript-eslint/ban-ts-comment -- TS 4.0 made this an error because the types aren't optional</span>
+                    <span class="s3">// @ts-expect-error</span>
+                    <span class="s2">delete </span><span class="s1">node.loc;</span>
+                <span class="s1">}</span>
+            <span class="s1">},</span>
+        <span class="s1">});</span>
+    <span class="s1">}</span>
+    <span class="s3">/**</span>
+     <span class="s3">* Optionally convert and include all tokens in the AST</span>
+     <span class="s3">*/</span>
+    <span class="s2">if </span><span class="s1">(parseSettings.tokens) {</span>
+        <span class="s1">estree.tokens = (</span><span class="s4">0</span><span class="s1">, node_utils_1.convertTokens)(ast);</span>
+    <span class="s1">}</span>
+    <span class="s3">/**</span>
+     <span class="s3">* Optionally convert and include all comments in the AST</span>
+     <span class="s3">*/</span>
+    <span class="s2">if </span><span class="s1">(parseSettings.comment) {</span>
+        <span class="s1">estree.comments = (</span><span class="s4">0</span><span class="s1">, convert_comments_1.convertComments)(ast, parseSettings.codeFullText);</span>
+    <span class="s1">}</span>
+    <span class="s2">const </span><span class="s1">astMaps = instance.getASTMaps();</span>
+    <span class="s2">return </span><span class="s1">{ astMaps, estree };</span>
+<span class="s1">}</span>
+</pre>
+</body>
+</html>

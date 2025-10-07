@@ -1,0 +1,103 @@
+<html>
+<head>
+<title>devtools-config-middleware.js</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #067d17;}
+.s1 { color: #080808;}
+.s2 { color: #0033b3;}
+.s3 { color: #1750eb;}
+.s4 { color: #8c8c8c; font-style: italic;}
+</style>
+</head>
+<body bgcolor="#ffffff">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#c0c0c0" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+devtools-config-middleware.js</font>
+</center></td></tr></table>
+<pre><span class="s0">&quot;use strict&quot;</span><span class="s1">;</span>
+<span class="s1">Object.defineProperty(exports, </span><span class="s0">&quot;__esModule&quot;</span><span class="s1">, {</span>
+    <span class="s1">value: </span><span class="s2">true</span>
+<span class="s1">});</span>
+<span class="s3">0 </span><span class="s1">&amp;&amp; (module.exports = {</span>
+    <span class="s1">devToolsConfigMiddleware: </span><span class="s2">null</span><span class="s1">,</span>
+    <span class="s1">getDevToolsConfig: </span><span class="s2">null</span>
+<span class="s1">});</span>
+<span class="s2">function </span><span class="s1">_export(target, all) {</span>
+    <span class="s2">for</span><span class="s1">(</span><span class="s2">var </span><span class="s1">name </span><span class="s2">in </span><span class="s1">all)Object.defineProperty(target, name, {</span>
+        <span class="s1">enumerable: </span><span class="s2">true</span><span class="s1">,</span>
+        <span class="s1">get: all[name]</span>
+    <span class="s1">});</span>
+<span class="s1">}</span>
+<span class="s1">_export(exports, {</span>
+    <span class="s1">devToolsConfigMiddleware: </span><span class="s2">function</span><span class="s1">() {</span>
+        <span class="s2">return </span><span class="s1">devToolsConfigMiddleware;</span>
+    <span class="s1">},</span>
+    <span class="s1">getDevToolsConfig: </span><span class="s2">function</span><span class="s1">() {</span>
+        <span class="s2">return </span><span class="s1">getDevToolsConfig;</span>
+    <span class="s1">}</span>
+<span class="s1">});</span>
+<span class="s2">const </span><span class="s1">_fs = require(</span><span class="s0">&quot;fs&quot;</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">_promises = require(</span><span class="s0">&quot;fs/promises&quot;</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">_path = require(</span><span class="s0">&quot;path&quot;</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">_middlewareresponse = require(</span><span class="s0">&quot;./middleware-response&quot;</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">_devtoolsconfigschema = require(</span><span class="s0">&quot;../shared/devtools-config-schema&quot;</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">_deepmerge = require(</span><span class="s0">&quot;../shared/deepmerge&quot;</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">DEVTOOLS_CONFIG_FILENAME = </span><span class="s0">'next-devtools-config.json'</span><span class="s1">;</span>
+<span class="s2">const </span><span class="s1">DEVTOOLS_CONFIG_MIDDLEWARE_ENDPOINT = </span><span class="s0">'/__nextjs_devtools_config'</span><span class="s1">;</span>
+<span class="s2">function </span><span class="s1">devToolsConfigMiddleware(param) {</span>
+    <span class="s2">let </span><span class="s1">{ distDir, sendUpdateSignal } = param;</span>
+    <span class="s2">const </span><span class="s1">configPath = (</span><span class="s3">0</span><span class="s1">, _path.join)(distDir, </span><span class="s0">'cache'</span><span class="s1">, DEVTOOLS_CONFIG_FILENAME);</span>
+    <span class="s2">return </span><span class="s1">async </span><span class="s2">function </span><span class="s1">devToolsConfigMiddlewareHandler(req, res, next) {</span>
+        <span class="s2">const </span><span class="s1">{ pathname } = </span><span class="s2">new </span><span class="s1">URL(</span><span class="s0">&quot;http://n&quot; </span><span class="s1">+ req.url);</span>
+        <span class="s2">if </span><span class="s1">(pathname !== DEVTOOLS_CONFIG_MIDDLEWARE_ENDPOINT) {</span>
+            <span class="s2">return </span><span class="s1">next();</span>
+        <span class="s1">}</span>
+        <span class="s2">if </span><span class="s1">(req.method !== </span><span class="s0">'POST'</span><span class="s1">) {</span>
+            <span class="s2">return </span><span class="s1">_middlewareresponse.middlewareResponse.methodNotAllowed(res);</span>
+        <span class="s1">}</span>
+        <span class="s2">const </span><span class="s1">currentConfig = </span><span class="s2">await </span><span class="s1">getDevToolsConfig(distDir);</span>
+        <span class="s2">const </span><span class="s1">chunks = [];</span>
+        <span class="s2">for await </span><span class="s1">(</span><span class="s2">const </span><span class="s1">chunk of req){</span>
+            <span class="s1">chunks.push(Buffer.from(chunk));</span>
+        <span class="s1">}</span>
+        <span class="s2">let </span><span class="s1">body = Buffer.concat(chunks).toString(</span><span class="s0">'utf8'</span><span class="s1">);</span>
+        <span class="s2">try </span><span class="s1">{</span>
+            <span class="s1">body = JSON.parse(body);</span>
+        <span class="s1">} </span><span class="s2">catch </span><span class="s1">(error) {</span>
+            <span class="s1">console.error(</span><span class="s0">'[Next.js DevTools] Invalid config body passed:'</span><span class="s1">, error);</span>
+            <span class="s2">return </span><span class="s1">_middlewareresponse.middlewareResponse.badRequest(res);</span>
+        <span class="s1">}</span>
+        <span class="s2">const </span><span class="s1">validation = _devtoolsconfigschema.devToolsConfigSchema.safeParse(body);</span>
+        <span class="s2">if </span><span class="s1">(!validation.success) {</span>
+            <span class="s1">console.error(</span><span class="s0">'[Next.js DevTools] Invalid config passed:'</span><span class="s1">, validation.error.message);</span>
+            <span class="s2">return </span><span class="s1">_middlewareresponse.middlewareResponse.badRequest(res);</span>
+        <span class="s1">}</span>
+        <span class="s2">const </span><span class="s1">newConfig = (</span><span class="s3">0</span><span class="s1">, _deepmerge.deepMerge)(currentConfig, validation.data);</span>
+        <span class="s2">await </span><span class="s1">(</span><span class="s3">0</span><span class="s1">, _promises.writeFile)(configPath, JSON.stringify(newConfig, </span><span class="s2">null</span><span class="s1">, </span><span class="s3">2</span><span class="s1">));</span>
+        <span class="s1">sendUpdateSignal(newConfig);</span>
+        <span class="s2">return </span><span class="s1">_middlewareresponse.middlewareResponse.noContent(res);</span>
+    <span class="s1">};</span>
+<span class="s1">}</span>
+<span class="s1">async </span><span class="s2">function </span><span class="s1">getDevToolsConfig(distDir) {</span>
+    <span class="s2">const </span><span class="s1">configPath = (</span><span class="s3">0</span><span class="s1">, _path.join)(distDir, </span><span class="s0">'cache'</span><span class="s1">, DEVTOOLS_CONFIG_FILENAME);</span>
+    <span class="s2">if </span><span class="s1">(!(</span><span class="s3">0</span><span class="s1">, _fs.existsSync)(configPath)) {</span>
+        <span class="s2">await </span><span class="s1">(</span><span class="s3">0</span><span class="s1">, _promises.mkdir)((</span><span class="s3">0</span><span class="s1">, _path.dirname)(configPath), {</span>
+            <span class="s1">recursive: </span><span class="s2">true</span>
+        <span class="s1">});</span>
+        <span class="s2">await </span><span class="s1">(</span><span class="s3">0</span><span class="s1">, _promises.writeFile)(configPath, JSON.stringify({}));</span>
+        <span class="s2">return </span><span class="s1">{};</span>
+    <span class="s1">}</span>
+    <span class="s2">return </span><span class="s1">JSON.parse(</span><span class="s2">await </span><span class="s1">(</span><span class="s3">0</span><span class="s1">, _promises.readFile)(configPath, </span><span class="s0">'utf8'</span><span class="s1">));</span>
+<span class="s1">}</span>
+
+<span class="s2">if </span><span class="s1">((</span><span class="s2">typeof </span><span class="s1">exports.default === </span><span class="s0">'function' </span><span class="s1">|| (</span><span class="s2">typeof </span><span class="s1">exports.default === </span><span class="s0">'object' </span><span class="s1">&amp;&amp; exports.default !== </span><span class="s2">null</span><span class="s1">)) &amp;&amp; </span><span class="s2">typeof </span><span class="s1">exports.default.__esModule === </span><span class="s0">'undefined'</span><span class="s1">) {</span>
+  <span class="s1">Object.defineProperty(exports.default, </span><span class="s0">'__esModule'</span><span class="s1">, { value: </span><span class="s2">true </span><span class="s1">});</span>
+  <span class="s1">Object.assign(exports.default, exports);</span>
+  <span class="s1">module.exports = exports.default;</span>
+<span class="s1">}</span>
+
+<span class="s4">//# sourceMappingURL=devtools-config-middleware.js.map</span></pre>
+</body>
+</html>

@@ -1,0 +1,310 @@
+<html>
+<head>
+<title>utilities.cc</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #8c8c8c; font-style: italic;}
+.s1 { color: #080808;}
+.s2 { color: #0033b3;}
+.s3 { color: #067d17;}
+.s4 { color: #000000;}
+.s5 { color: #00627a;}
+.s6 { color: #1750eb; font-style: italic;}
+.s7 { color: #871094; font-style: italic;}
+</style>
+</head>
+<body bgcolor="#ffffff">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#c0c0c0" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+utilities.cc</font>
+</center></td></tr></table>
+<pre><span class="s0">// Copyright 2013 Lovell Fuller and others.</span>
+<span class="s0">// SPDX-License-Identifier: Apache-2.0</span>
+
+<span class="s2">#include </span><span class="s3">&lt;cmath&gt;</span>
+<span class="s2">#include </span><span class="s3">&lt;string&gt;</span>
+<span class="s2">#include </span><span class="s3">&lt;cstdio&gt;</span>
+
+<span class="s2">#include </span><span class="s3">&lt;napi.h&gt;</span>
+<span class="s2">#include </span><span class="s3">&lt;vips/vips8&gt;</span>
+<span class="s2">#include </span><span class="s3">&lt;vips/vector.h&gt;</span>
+
+<span class="s2">#include </span><span class="s3">&quot;common.h&quot;</span>
+<span class="s2">#include </span><span class="s3">&quot;operations.h&quot;</span>
+<span class="s2">#include </span><span class="s3">&quot;utilities.h&quot;</span>
+
+<span class="s0">/*</span>
+  <span class="s0">Get and set cache limits 
+*/</span>
+Napi<span class="s1">::Value </span><span class="s5">cache</span><span class="s1">(</span><span class="s2">const </span>Napi<span class="s1">::</span>CallbackInfo<span class="s2">&amp; </span>info<span class="s1">) {</span>
+  Napi<span class="s1">::Env env </span><span class="s2">= </span>info<span class="s1">.</span><span class="s5">Env</span><span class="s1">();</span>
+
+  <span class="s0">// Set memory limit</span>
+  <span class="s2">if </span><span class="s1">(</span>info<span class="s1">[</span><span class="s2">size_t</span><span class="s1">(</span><span class="s6">0</span><span class="s1">)].</span><span class="s5">IsNumber</span><span class="s1">()) {</span>
+    <span class="s5">vips_cache_set_max_mem</span><span class="s1">(</span>info<span class="s1">[</span><span class="s2">size_t</span><span class="s1">(</span><span class="s6">0</span><span class="s1">)].</span>As<span class="s2">&lt;</span>Napi<span class="s1">::Number</span><span class="s2">&gt;</span><span class="s1">().</span><span class="s5">Int32Value</span><span class="s1">() </span><span class="s2">* </span><span class="s6">1048576</span><span class="s1">);</span>
+  <span class="s1">}</span>
+  <span class="s0">// Set file limit</span>
+  <span class="s2">if </span><span class="s1">(</span>info<span class="s1">[</span><span class="s2">size_t</span><span class="s1">(</span><span class="s6">1</span><span class="s1">)].</span><span class="s5">IsNumber</span><span class="s1">()) {</span>
+    <span class="s5">vips_cache_set_max_files</span><span class="s1">(</span>info<span class="s1">[</span><span class="s2">size_t</span><span class="s1">(</span><span class="s6">1</span><span class="s1">)].</span>As<span class="s2">&lt;</span>Napi<span class="s1">::Number</span><span class="s2">&gt;</span><span class="s1">().</span><span class="s5">Int32Value</span><span class="s1">());</span>
+  <span class="s1">}</span>
+  <span class="s0">// Set items limit</span>
+  <span class="s2">if </span><span class="s1">(</span>info<span class="s1">[</span><span class="s2">size_t</span><span class="s1">(</span><span class="s6">2</span><span class="s1">)].</span><span class="s5">IsNumber</span><span class="s1">()) {</span>
+    <span class="s5">vips_cache_set_max</span><span class="s1">(</span>info<span class="s1">[</span><span class="s2">size_t</span><span class="s1">(</span><span class="s6">2</span><span class="s1">)].</span>As<span class="s2">&lt;</span>Napi<span class="s1">::Number</span><span class="s2">&gt;</span><span class="s1">().</span><span class="s5">Int32Value</span><span class="s1">());</span>
+  <span class="s1">}</span>
+
+  <span class="s0">// Get memory stats</span>
+  Napi<span class="s1">::Object memory </span><span class="s2">= </span>Napi<span class="s1">::</span>Object<span class="s1">::</span><span class="s5">New</span><span class="s1">(env);</span>
+  memory<span class="s1">.</span><span class="s5">Set</span><span class="s1">(</span><span class="s3">&quot;current&quot;</span><span class="s1">, </span><span class="s5">round</span><span class="s1">(</span><span class="s5">vips_tracked_get_mem</span><span class="s1">() </span><span class="s2">/ </span><span class="s6">1048576</span><span class="s1">));</span>
+  memory<span class="s1">.</span><span class="s5">Set</span><span class="s1">(</span><span class="s3">&quot;high&quot;</span><span class="s1">, </span><span class="s5">round</span><span class="s1">(</span><span class="s5">vips_tracked_get_mem_highwater</span><span class="s1">() </span><span class="s2">/ </span><span class="s6">1048576</span><span class="s1">));</span>
+  memory<span class="s1">.</span><span class="s5">Set</span><span class="s1">(</span><span class="s3">&quot;max&quot;</span><span class="s1">, </span><span class="s5">round</span><span class="s1">(</span><span class="s5">vips_cache_get_max_mem</span><span class="s1">() </span><span class="s2">/ </span><span class="s6">1048576</span><span class="s1">));</span>
+  <span class="s0">// Get file stats</span>
+  Napi<span class="s1">::Object files </span><span class="s2">= </span>Napi<span class="s1">::</span>Object<span class="s1">::</span><span class="s5">New</span><span class="s1">(env);</span>
+  files<span class="s1">.</span><span class="s5">Set</span><span class="s1">(</span><span class="s3">&quot;current&quot;</span><span class="s1">, </span><span class="s5">vips_tracked_get_files</span><span class="s1">());</span>
+  files<span class="s1">.</span><span class="s5">Set</span><span class="s1">(</span><span class="s3">&quot;max&quot;</span><span class="s1">, </span><span class="s5">vips_cache_get_max_files</span><span class="s1">());</span>
+
+  <span class="s0">// Get item stats</span>
+  Napi<span class="s1">::Object items </span><span class="s2">= </span>Napi<span class="s1">::</span>Object<span class="s1">::</span><span class="s5">New</span><span class="s1">(env);</span>
+  items<span class="s1">.</span><span class="s5">Set</span><span class="s1">(</span><span class="s3">&quot;current&quot;</span><span class="s1">, </span><span class="s5">vips_cache_get_size</span><span class="s1">());</span>
+  items<span class="s1">.</span><span class="s5">Set</span><span class="s1">(</span><span class="s3">&quot;max&quot;</span><span class="s1">, </span><span class="s5">vips_cache_get_max</span><span class="s1">());</span>
+
+  Napi<span class="s1">::Object cache </span><span class="s2">= </span>Napi<span class="s1">::</span>Object<span class="s1">::</span><span class="s5">New</span><span class="s1">(env);</span>
+  cache<span class="s1">.</span><span class="s5">Set</span><span class="s1">(</span><span class="s3">&quot;memory&quot;</span><span class="s1">, memory);</span>
+  cache<span class="s1">.</span><span class="s5">Set</span><span class="s1">(</span><span class="s3">&quot;files&quot;</span><span class="s1">, files);</span>
+  cache<span class="s1">.</span><span class="s5">Set</span><span class="s1">(</span><span class="s3">&quot;items&quot;</span><span class="s1">, items);</span>
+  <span class="s2">return </span><span class="s1">cache;</span>
+<span class="s1">}</span>
+
+<span class="s0">/*</span>
+  <span class="s0">Get and set size of thread pool 
+*/</span>
+Napi<span class="s1">::Value </span><span class="s5">concurrency</span><span class="s1">(</span><span class="s2">const </span>Napi<span class="s1">::</span>CallbackInfo<span class="s2">&amp; </span>info<span class="s1">) {</span>
+  <span class="s0">// Set concurrency</span>
+  <span class="s2">if </span><span class="s1">(</span>info<span class="s1">[</span><span class="s2">size_t</span><span class="s1">(</span><span class="s6">0</span><span class="s1">)].</span><span class="s5">IsNumber</span><span class="s1">()) {</span>
+    <span class="s5">vips_concurrency_set</span><span class="s1">(</span>info<span class="s1">[</span><span class="s2">size_t</span><span class="s1">(</span><span class="s6">0</span><span class="s1">)].</span>As<span class="s2">&lt;</span>Napi<span class="s1">::Number</span><span class="s2">&gt;</span><span class="s1">().</span><span class="s5">Int32Value</span><span class="s1">());</span>
+  <span class="s1">}</span>
+  <span class="s0">// Get concurrency</span>
+  <span class="s2">return </span>Napi<span class="s1">::</span>Number<span class="s1">::</span><span class="s5">New</span><span class="s1">(</span>info<span class="s1">.</span><span class="s5">Env</span><span class="s1">(), </span><span class="s5">vips_concurrency_get</span><span class="s1">());</span>
+<span class="s1">}</span>
+
+<span class="s0">/*</span>
+  <span class="s0">Get internal counters (queued tasks, processing tasks) 
+*/</span>
+Napi<span class="s1">::Value </span><span class="s5">counters</span><span class="s1">(</span><span class="s2">const </span>Napi<span class="s1">::</span>CallbackInfo<span class="s2">&amp; </span>info<span class="s1">) {</span>
+  Napi<span class="s1">::Object counters </span><span class="s2">= </span>Napi<span class="s1">::</span>Object<span class="s1">::</span><span class="s5">New</span><span class="s1">(</span>info<span class="s1">.</span><span class="s5">Env</span><span class="s1">());</span>
+  counters<span class="s1">.</span><span class="s5">Set</span><span class="s1">(</span><span class="s3">&quot;queue&quot;</span><span class="s1">, </span><span class="s2">static_cast&lt;int&gt;</span><span class="s1">(</span>sharp<span class="s1">::counterQueue));</span>
+  counters<span class="s1">.</span><span class="s5">Set</span><span class="s1">(</span><span class="s3">&quot;process&quot;</span><span class="s1">, </span><span class="s2">static_cast&lt;int&gt;</span><span class="s1">(</span>sharp<span class="s1">::counterProcess));</span>
+  <span class="s2">return </span><span class="s1">counters;</span>
+<span class="s1">}</span>
+
+<span class="s0">/*</span>
+  <span class="s0">Get and set use of SIMD vector unit instructions 
+*/</span>
+Napi<span class="s1">::Value </span><span class="s5">simd</span><span class="s1">(</span><span class="s2">const </span>Napi<span class="s1">::</span>CallbackInfo<span class="s2">&amp; </span>info<span class="s1">) {</span>
+  <span class="s0">// Set state</span>
+  <span class="s2">if </span><span class="s1">(</span>info<span class="s1">[</span><span class="s2">size_t</span><span class="s1">(</span><span class="s6">0</span><span class="s1">)].</span><span class="s5">IsBoolean</span><span class="s1">()) {</span>
+    <span class="s5">vips_vector_set_enabled</span><span class="s1">(</span>info<span class="s1">[</span><span class="s2">size_t</span><span class="s1">(</span><span class="s6">0</span><span class="s1">)].</span>As<span class="s2">&lt;</span>Napi<span class="s1">::Boolean</span><span class="s2">&gt;</span><span class="s1">().</span><span class="s5">Value</span><span class="s1">());</span>
+  <span class="s1">}</span>
+  <span class="s0">// Get state</span>
+  <span class="s2">return </span>Napi<span class="s1">::</span>Boolean<span class="s1">::</span><span class="s5">New</span><span class="s1">(</span>info<span class="s1">.</span><span class="s5">Env</span><span class="s1">(), </span><span class="s5">vips_vector_isenabled</span><span class="s1">());</span>
+<span class="s1">}</span>
+
+<span class="s0">/*</span>
+  <span class="s0">Get libvips version 
+*/</span>
+Napi<span class="s1">::Value </span><span class="s5">libvipsVersion</span><span class="s1">(</span><span class="s2">const </span>Napi<span class="s1">::</span>CallbackInfo<span class="s2">&amp; </span>info<span class="s1">) {</span>
+  Napi<span class="s1">::Env env </span><span class="s2">= </span>info<span class="s1">.</span><span class="s5">Env</span><span class="s1">();</span>
+  Napi<span class="s1">::Object version </span><span class="s2">= </span>Napi<span class="s1">::</span>Object<span class="s1">::</span><span class="s5">New</span><span class="s1">(env);</span>
+
+  <span class="s2">char </span>semver<span class="s1">[</span><span class="s6">9</span><span class="s1">];</span>
+  std<span class="s1">::</span><span class="s5">snprintf</span><span class="s1">(semver, </span><span class="s2">sizeof</span><span class="s1">(semver), </span><span class="s3">&quot;</span><span class="s7">%d</span><span class="s3">.</span><span class="s7">%d</span><span class="s3">.</span><span class="s7">%d</span><span class="s3">&quot;</span><span class="s1">, </span><span class="s5">vips_version</span><span class="s1">(</span><span class="s6">0</span><span class="s1">), </span><span class="s5">vips_version</span><span class="s1">(</span><span class="s6">1</span><span class="s1">), </span><span class="s5">vips_version</span><span class="s1">(</span><span class="s6">2</span><span class="s1">));</span>
+  version<span class="s1">.</span><span class="s5">Set</span><span class="s1">(</span><span class="s3">&quot;semver&quot;</span><span class="s1">, </span>Napi<span class="s1">::</span>String<span class="s1">::</span><span class="s5">New</span><span class="s1">(env, semver));</span>
+<span class="s2">#ifdef </span><span class="s5">SHARP_USE_GLOBAL_LIBVIPS</span>
+  version<span class="s1">.</span><span class="s5">Set</span><span class="s1">(</span><span class="s3">&quot;isGlobal&quot;</span><span class="s1">, </span>Napi<span class="s1">::</span>Boolean<span class="s1">::</span><span class="s5">New</span><span class="s1">(env, </span><span class="s7">true</span><span class="s1">));</span>
+<span class="s2">#else</span>
+  version<span class="s1">.</span><span class="s5">Set</span><span class="s1">(</span><span class="s3">&quot;isGlobal&quot;</span><span class="s1">, </span>Napi<span class="s1">::</span>Boolean<span class="s1">::</span><span class="s5">New</span><span class="s1">(env, </span><span class="s7">false</span><span class="s1">));</span>
+<span class="s2">#endif</span>
+<span class="s2">#ifdef </span>__EMSCRIPTEN__
+  version<span class="s1">.</span><span class="s5">Set</span><span class="s1">(</span><span class="s3">&quot;isWasm&quot;</span><span class="s1">, </span>Napi<span class="s1">::</span>Boolean<span class="s1">::</span><span class="s5">New</span><span class="s1">(env, </span><span class="s7">true</span><span class="s1">));</span>
+<span class="s2">#else</span>
+  version<span class="s1">.</span><span class="s5">Set</span><span class="s1">(</span><span class="s3">&quot;isWasm&quot;</span><span class="s1">, </span>Napi<span class="s1">::</span>Boolean<span class="s1">::</span><span class="s5">New</span><span class="s1">(env, </span><span class="s7">false</span><span class="s1">));</span>
+<span class="s2">#endif</span>
+  <span class="s2">return </span><span class="s1">version;</span>
+<span class="s1">}</span>
+
+<span class="s0">/*</span>
+  <span class="s0">Get available input/output file/buffer/stream formats 
+*/</span>
+Napi<span class="s1">::Value </span><span class="s5">format</span><span class="s1">(</span><span class="s2">const </span>Napi<span class="s1">::</span>CallbackInfo<span class="s2">&amp; </span>info<span class="s1">) {</span>
+  Napi<span class="s1">::Env env </span><span class="s2">= </span>info<span class="s1">.</span><span class="s5">Env</span><span class="s1">();</span>
+  Napi<span class="s1">::Object format </span><span class="s2">= </span>Napi<span class="s1">::</span>Object<span class="s1">::</span><span class="s5">New</span><span class="s1">(env);</span>
+  <span class="s2">for </span><span class="s1">(</span>std<span class="s1">::string </span><span class="s2">const </span><span class="s1">f : { 
+    </span><span class="s3">&quot;jpeg&quot;</span><span class="s1">, </span><span class="s3">&quot;png&quot;</span><span class="s1">, </span><span class="s3">&quot;webp&quot;</span><span class="s1">, </span><span class="s3">&quot;tiff&quot;</span><span class="s1">, </span><span class="s3">&quot;magick&quot;</span><span class="s1">, </span><span class="s3">&quot;openslide&quot;</span><span class="s1">, </span><span class="s3">&quot;dz&quot;</span><span class="s1">,</span>
+    <span class="s3">&quot;ppm&quot;</span><span class="s1">, </span><span class="s3">&quot;fits&quot;</span><span class="s1">, </span><span class="s3">&quot;gif&quot;</span><span class="s1">, </span><span class="s3">&quot;svg&quot;</span><span class="s1">, </span><span class="s3">&quot;heif&quot;</span><span class="s1">, </span><span class="s3">&quot;pdf&quot;</span><span class="s1">, </span><span class="s3">&quot;vips&quot;</span><span class="s1">, </span><span class="s3">&quot;jp2k&quot;</span><span class="s1">, </span><span class="s3">&quot;jxl&quot;</span><span class="s1">, </span><span class="s3">&quot;rad&quot;</span><span class="s1">, </span><span class="s3">&quot;dcraw&quot;</span>
+  <span class="s1">}) {</span>
+    <span class="s0">// Input</span>
+    <span class="s2">const </span><span class="s1">VipsObjectClass </span><span class="s2">*</span><span class="s1">oc </span><span class="s2">= </span><span class="s5">vips_class_find</span><span class="s1">(</span><span class="s3">&quot;VipsOperation&quot;</span><span class="s1">, (f </span><span class="s2">+ </span><span class="s3">&quot;load&quot;</span><span class="s1">).</span><span class="s5">c_str</span><span class="s1">());</span>
+    Napi<span class="s1">::Boolean hasInputFile </span><span class="s2">= </span>Napi<span class="s1">::</span>Boolean<span class="s1">::</span><span class="s5">New</span><span class="s1">(env, oc);</span>
+    Napi<span class="s1">::Boolean hasInputBuffer </span><span class="s2">=</span>
+      Napi<span class="s1">::</span>Boolean<span class="s1">::</span><span class="s5">New</span><span class="s1">(env, </span><span class="s5">vips_type_find</span><span class="s1">(</span><span class="s3">&quot;VipsOperation&quot;</span><span class="s1">, (f </span><span class="s2">+ </span><span class="s3">&quot;load_buffer&quot;</span><span class="s1">).</span><span class="s5">c_str</span><span class="s1">()));</span>
+    Napi<span class="s1">::Object input </span><span class="s2">= </span>Napi<span class="s1">::</span>Object<span class="s1">::</span><span class="s5">New</span><span class="s1">(env);</span>
+    input<span class="s1">.</span><span class="s5">Set</span><span class="s1">(</span><span class="s3">&quot;file&quot;</span><span class="s1">, hasInputFile);</span>
+    input<span class="s1">.</span><span class="s5">Set</span><span class="s1">(</span><span class="s3">&quot;buffer&quot;</span><span class="s1">, hasInputBuffer);</span>
+    input<span class="s1">.</span><span class="s5">Set</span><span class="s1">(</span><span class="s3">&quot;stream&quot;</span><span class="s1">, hasInputBuffer);</span>
+    <span class="s2">if </span><span class="s1">(hasInputFile) {</span>
+      <span class="s2">const </span><span class="s1">VipsForeignClass </span><span class="s2">*</span><span class="s1">fc </span><span class="s2">= </span><span class="s5">VIPS_FOREIGN_CLASS</span><span class="s1">(oc);</span>
+      <span class="s2">if </span><span class="s1">(</span>fc<span class="s1">-&gt;</span>suffs<span class="s1">) {</span>
+        Napi<span class="s1">::Array fileSuffix </span><span class="s2">= </span>Napi<span class="s1">::</span>Array<span class="s1">::</span><span class="s5">New</span><span class="s1">(env);</span>
+        <span class="s2">const char **</span><span class="s1">suffix </span><span class="s2">= </span>fc<span class="s1">-&gt;</span>suffs<span class="s1">;</span>
+        <span class="s2">for </span><span class="s1">(</span><span class="s2">int </span><span class="s1">i </span><span class="s2">= </span><span class="s6">0</span><span class="s1">; </span><span class="s2">*</span><span class="s1">suffix; i</span><span class="s2">++</span><span class="s1">, suffix</span><span class="s2">++</span><span class="s1">) {</span>
+          fileSuffix<span class="s1">.</span><span class="s5">Set</span><span class="s1">(i, </span>Napi<span class="s1">::</span>String<span class="s1">::</span><span class="s5">New</span><span class="s1">(env, </span><span class="s2">*</span><span class="s1">suffix));</span>
+        <span class="s1">}</span>
+        input<span class="s1">.</span><span class="s5">Set</span><span class="s1">(</span><span class="s3">&quot;fileSuffix&quot;</span><span class="s1">, fileSuffix);</span>
+      <span class="s1">}</span>
+    <span class="s1">}</span>
+    <span class="s0">// Output</span>
+    Napi<span class="s1">::Boolean hasOutputFile </span><span class="s2">=</span>
+      Napi<span class="s1">::</span>Boolean<span class="s1">::</span><span class="s5">New</span><span class="s1">(env, </span><span class="s5">vips_type_find</span><span class="s1">(</span><span class="s3">&quot;VipsOperation&quot;</span><span class="s1">, (f </span><span class="s2">+ </span><span class="s3">&quot;save&quot;</span><span class="s1">).</span><span class="s5">c_str</span><span class="s1">()));</span>
+    Napi<span class="s1">::Boolean hasOutputBuffer </span><span class="s2">=</span>
+      Napi<span class="s1">::</span>Boolean<span class="s1">::</span><span class="s5">New</span><span class="s1">(env, </span><span class="s5">vips_type_find</span><span class="s1">(</span><span class="s3">&quot;VipsOperation&quot;</span><span class="s1">, (f </span><span class="s2">+ </span><span class="s3">&quot;save_buffer&quot;</span><span class="s1">).</span><span class="s5">c_str</span><span class="s1">()));</span>
+    Napi<span class="s1">::Object output </span><span class="s2">= </span>Napi<span class="s1">::</span>Object<span class="s1">::</span><span class="s5">New</span><span class="s1">(env);</span>
+    output<span class="s1">.</span><span class="s5">Set</span><span class="s1">(</span><span class="s3">&quot;file&quot;</span><span class="s1">, hasOutputFile);</span>
+    output<span class="s1">.</span><span class="s5">Set</span><span class="s1">(</span><span class="s3">&quot;buffer&quot;</span><span class="s1">, hasOutputBuffer);</span>
+    output<span class="s1">.</span><span class="s5">Set</span><span class="s1">(</span><span class="s3">&quot;stream&quot;</span><span class="s1">, hasOutputBuffer);</span>
+    <span class="s0">// Other attributes</span>
+    Napi<span class="s1">::Object container </span><span class="s2">= </span>Napi<span class="s1">::</span>Object<span class="s1">::</span><span class="s5">New</span><span class="s1">(env);</span>
+    container<span class="s1">.</span><span class="s5">Set</span><span class="s1">(</span><span class="s3">&quot;id&quot;</span><span class="s1">, f);</span>
+    container<span class="s1">.</span><span class="s5">Set</span><span class="s1">(</span><span class="s3">&quot;input&quot;</span><span class="s1">, input);</span>
+    container<span class="s1">.</span><span class="s5">Set</span><span class="s1">(</span><span class="s3">&quot;output&quot;</span><span class="s1">, output);</span>
+    <span class="s0">// Add to set of formats</span>
+    format<span class="s1">.</span><span class="s5">Set</span><span class="s1">(f, container);</span>
+  <span class="s1">}</span>
+
+  <span class="s0">// Raw, uncompressed data</span>
+  Napi<span class="s1">::Boolean supported </span><span class="s2">= </span>Napi<span class="s1">::</span>Boolean<span class="s1">::</span><span class="s5">New</span><span class="s1">(env, </span><span class="s7">true</span><span class="s1">);</span>
+  Napi<span class="s1">::Boolean unsupported </span><span class="s2">= </span>Napi<span class="s1">::</span>Boolean<span class="s1">::</span><span class="s5">New</span><span class="s1">(env, </span><span class="s7">false</span><span class="s1">);</span>
+  Napi<span class="s1">::Object rawInput </span><span class="s2">= </span>Napi<span class="s1">::</span>Object<span class="s1">::</span><span class="s5">New</span><span class="s1">(env);</span>
+  rawInput<span class="s1">.</span><span class="s5">Set</span><span class="s1">(</span><span class="s3">&quot;file&quot;</span><span class="s1">, unsupported);</span>
+  rawInput<span class="s1">.</span><span class="s5">Set</span><span class="s1">(</span><span class="s3">&quot;buffer&quot;</span><span class="s1">, supported);</span>
+  rawInput<span class="s1">.</span><span class="s5">Set</span><span class="s1">(</span><span class="s3">&quot;stream&quot;</span><span class="s1">, supported);</span>
+  Napi<span class="s1">::Object rawOutput </span><span class="s2">= </span>Napi<span class="s1">::</span>Object<span class="s1">::</span><span class="s5">New</span><span class="s1">(env);</span>
+  rawOutput<span class="s1">.</span><span class="s5">Set</span><span class="s1">(</span><span class="s3">&quot;file&quot;</span><span class="s1">, unsupported);</span>
+  rawOutput<span class="s1">.</span><span class="s5">Set</span><span class="s1">(</span><span class="s3">&quot;buffer&quot;</span><span class="s1">, supported);</span>
+  rawOutput<span class="s1">.</span><span class="s5">Set</span><span class="s1">(</span><span class="s3">&quot;stream&quot;</span><span class="s1">, supported);</span>
+  Napi<span class="s1">::Object raw </span><span class="s2">= </span>Napi<span class="s1">::</span>Object<span class="s1">::</span><span class="s5">New</span><span class="s1">(env);</span>
+  raw<span class="s1">.</span><span class="s5">Set</span><span class="s1">(</span><span class="s3">&quot;id&quot;</span><span class="s1">, </span><span class="s3">&quot;raw&quot;</span><span class="s1">);</span>
+  raw<span class="s1">.</span><span class="s5">Set</span><span class="s1">(</span><span class="s3">&quot;input&quot;</span><span class="s1">, rawInput);</span>
+  raw<span class="s1">.</span><span class="s5">Set</span><span class="s1">(</span><span class="s3">&quot;output&quot;</span><span class="s1">, rawOutput);</span>
+  format<span class="s1">.</span><span class="s5">Set</span><span class="s1">(</span><span class="s3">&quot;raw&quot;</span><span class="s1">, raw);</span>
+
+  <span class="s2">return </span><span class="s1">format;</span>
+<span class="s1">}</span>
+
+<span class="s0">/*</span>
+  <span class="s0">(Un)block libvips operations at runtime. 
+*/</span>
+<span class="s1">void </span><span class="s5">block</span><span class="s1">(</span><span class="s2">const </span>Napi<span class="s1">::</span>CallbackInfo<span class="s2">&amp; </span>info<span class="s1">) {</span>
+  Napi<span class="s1">::Array ops </span><span class="s2">= </span>info<span class="s1">[</span><span class="s2">size_t</span><span class="s1">(</span><span class="s6">0</span><span class="s1">)].</span>As<span class="s2">&lt;</span>Napi<span class="s1">::Array</span><span class="s2">&gt;</span><span class="s1">();</span>
+  <span class="s2">bool const </span><span class="s1">state </span><span class="s2">= </span>info<span class="s1">[</span><span class="s2">size_t</span><span class="s1">(</span><span class="s6">1</span><span class="s1">)].</span>As<span class="s2">&lt;</span>Napi<span class="s1">::Boolean</span><span class="s2">&gt;</span><span class="s1">().</span><span class="s5">Value</span><span class="s1">();</span>
+  <span class="s2">for </span><span class="s1">(</span><span class="s2">unsigned int </span><span class="s1">i </span><span class="s2">= </span><span class="s6">0</span><span class="s1">; i </span><span class="s2">&lt; </span>ops<span class="s1">.</span><span class="s5">Length</span><span class="s1">(); i</span><span class="s2">++</span><span class="s1">) {</span>
+    <span class="s5">vips_operation_block_set</span><span class="s1">(</span>ops<span class="s1">.</span><span class="s5">Get</span><span class="s1">(i).</span>As<span class="s2">&lt;</span>Napi<span class="s1">::String</span><span class="s2">&gt;</span><span class="s1">().</span><span class="s5">Utf8Value</span><span class="s1">().</span><span class="s5">c_str</span><span class="s1">(), state);</span>
+  <span class="s1">}</span>
+<span class="s1">}</span>
+
+<span class="s0">/*</span>
+  <span class="s0">Synchronous, internal-only method used by some of the functional tests. 
+  Calculates the maximum colour distance using the DE2000 algorithm 
+  between two images of the same dimensions and number of channels. 
+*/</span>
+Napi<span class="s1">::Value </span><span class="s5">_maxColourDistance</span><span class="s1">(</span><span class="s2">const </span>Napi<span class="s1">::</span>CallbackInfo<span class="s2">&amp; </span>info<span class="s1">) {</span>
+  Napi<span class="s1">::Env env </span><span class="s2">= </span>info<span class="s1">.</span><span class="s5">Env</span><span class="s1">();</span>
+
+  <span class="s0">// Open input files</span>
+  <span class="s1">VImage image1;</span>
+  sharp<span class="s1">::ImageType imageType1 </span><span class="s2">= </span>sharp<span class="s1">::</span><span class="s5">DetermineImageType</span><span class="s1">(</span>info<span class="s1">[</span><span class="s2">size_t</span><span class="s1">(</span><span class="s6">0</span><span class="s1">)].</span>As<span class="s2">&lt;</span>Napi<span class="s1">::String</span><span class="s2">&gt;</span><span class="s1">().</span><span class="s5">Utf8Value</span><span class="s1">().</span><span class="s5">data</span><span class="s1">());</span>
+  <span class="s2">if </span><span class="s1">(imageType1 </span><span class="s2">!= </span>sharp<span class="s1">::</span>ImageType<span class="s1">::UNKNOWN) {</span>
+    <span class="s2">try </span><span class="s1">{</span>
+      <span class="s1">image1 </span><span class="s2">= </span>VImage<span class="s1">::</span><span class="s5">new_from_file</span><span class="s1">(</span>info<span class="s1">[</span><span class="s2">size_t</span><span class="s1">(</span><span class="s6">0</span><span class="s1">)].</span>As<span class="s2">&lt;</span>Napi<span class="s1">::String</span><span class="s2">&gt;</span><span class="s1">().</span><span class="s5">Utf8Value</span><span class="s1">().</span><span class="s5">c_str</span><span class="s1">());</span>
+    <span class="s1">} </span><span class="s2">catch </span><span class="s1">(...) {</span>
+      <span class="s2">throw </span>Napi<span class="s1">::</span>Error<span class="s1">::</span><span class="s5">New</span><span class="s1">(env, </span><span class="s3">&quot;Input file 1 has corrupt header&quot;</span><span class="s1">);</span>
+    <span class="s1">}</span>
+  <span class="s1">} </span><span class="s2">else </span><span class="s1">{</span>
+    <span class="s2">throw </span>Napi<span class="s1">::</span>Error<span class="s1">::</span><span class="s5">New</span><span class="s1">(env, </span><span class="s3">&quot;Input file 1 is of an unsupported image format&quot;</span><span class="s1">);</span>
+  <span class="s1">}</span>
+  <span class="s1">VImage image2;</span>
+  sharp<span class="s1">::ImageType imageType2 </span><span class="s2">= </span>sharp<span class="s1">::</span><span class="s5">DetermineImageType</span><span class="s1">(</span>info<span class="s1">[</span><span class="s2">size_t</span><span class="s1">(</span><span class="s6">1</span><span class="s1">)].</span>As<span class="s2">&lt;</span>Napi<span class="s1">::String</span><span class="s2">&gt;</span><span class="s1">().</span><span class="s5">Utf8Value</span><span class="s1">().</span><span class="s5">data</span><span class="s1">());</span>
+  <span class="s2">if </span><span class="s1">(imageType2 </span><span class="s2">!= </span>sharp<span class="s1">::</span>ImageType<span class="s1">::UNKNOWN) {</span>
+    <span class="s2">try </span><span class="s1">{</span>
+      <span class="s1">image2 </span><span class="s2">= </span>VImage<span class="s1">::</span><span class="s5">new_from_file</span><span class="s1">(</span>info<span class="s1">[</span><span class="s2">size_t</span><span class="s1">(</span><span class="s6">1</span><span class="s1">)].</span>As<span class="s2">&lt;</span>Napi<span class="s1">::String</span><span class="s2">&gt;</span><span class="s1">().</span><span class="s5">Utf8Value</span><span class="s1">().</span><span class="s5">c_str</span><span class="s1">());</span>
+    <span class="s1">} </span><span class="s2">catch </span><span class="s1">(...) {</span>
+      <span class="s2">throw </span>Napi<span class="s1">::</span>Error<span class="s1">::</span><span class="s5">New</span><span class="s1">(env, </span><span class="s3">&quot;Input file 2 has corrupt header&quot;</span><span class="s1">);</span>
+    <span class="s1">}</span>
+  <span class="s1">} </span><span class="s2">else </span><span class="s1">{</span>
+    <span class="s2">throw </span>Napi<span class="s1">::</span>Error<span class="s1">::</span><span class="s5">New</span><span class="s1">(env, </span><span class="s3">&quot;Input file 2 is of an unsupported image format&quot;</span><span class="s1">);</span>
+  <span class="s1">}</span>
+  <span class="s0">// Ensure same number of channels</span>
+  <span class="s2">if </span><span class="s1">(</span>image1<span class="s1">.</span><span class="s5">bands</span><span class="s1">() </span><span class="s2">!= </span>image2<span class="s1">.</span><span class="s5">bands</span><span class="s1">()) {</span>
+    <span class="s2">throw </span>Napi<span class="s1">::</span>Error<span class="s1">::</span><span class="s5">New</span><span class="s1">(env, </span><span class="s3">&quot;mismatchedBands&quot;</span><span class="s1">);</span>
+  <span class="s1">}</span>
+  <span class="s0">// Ensure same dimensions</span>
+  <span class="s2">if </span><span class="s1">(</span>image1<span class="s1">.</span><span class="s5">width</span><span class="s1">() </span><span class="s2">!= </span>image2<span class="s1">.</span><span class="s5">width</span><span class="s1">() </span><span class="s2">|| </span>image1<span class="s1">.</span><span class="s5">height</span><span class="s1">() </span><span class="s2">!= </span>image2<span class="s1">.</span><span class="s5">height</span><span class="s1">()) {</span>
+    <span class="s2">throw </span>Napi<span class="s1">::</span>Error<span class="s1">::</span><span class="s5">New</span><span class="s1">(env, </span><span class="s3">&quot;mismatchedDimensions&quot;</span><span class="s1">);</span>
+  <span class="s1">}</span>
+
+  <span class="s2">double </span><span class="s1">maxColourDistance;</span>
+  <span class="s2">try </span><span class="s1">{</span>
+    <span class="s0">// Premultiply and remove alpha</span>
+    <span class="s2">if </span><span class="s1">(</span>image1<span class="s1">.</span><span class="s5">has_alpha</span><span class="s1">()) {</span>
+      <span class="s1">image1 </span><span class="s2">= </span>image1<span class="s1">.</span><span class="s5">premultiply</span><span class="s1">().</span><span class="s5">extract_band</span><span class="s1">(</span><span class="s6">1</span><span class="s1">, </span>VImage<span class="s1">::</span><span class="s5">option</span><span class="s1">()-&gt;</span><span class="s5">set</span><span class="s1">(</span><span class="s3">&quot;n&quot;</span><span class="s1">, </span>image1<span class="s1">.</span><span class="s5">bands</span><span class="s1">() </span><span class="s2">- </span><span class="s6">1</span><span class="s1">));</span>
+    <span class="s1">}</span>
+    <span class="s2">if </span><span class="s1">(</span>image2<span class="s1">.</span><span class="s5">has_alpha</span><span class="s1">()) {</span>
+      <span class="s1">image2 </span><span class="s2">= </span>image2<span class="s1">.</span><span class="s5">premultiply</span><span class="s1">().</span><span class="s5">extract_band</span><span class="s1">(</span><span class="s6">1</span><span class="s1">, </span>VImage<span class="s1">::</span><span class="s5">option</span><span class="s1">()-&gt;</span><span class="s5">set</span><span class="s1">(</span><span class="s3">&quot;n&quot;</span><span class="s1">, </span>image2<span class="s1">.</span><span class="s5">bands</span><span class="s1">() </span><span class="s2">- </span><span class="s6">1</span><span class="s1">));</span>
+    <span class="s1">}</span>
+    <span class="s0">// Calculate colour distance</span>
+    <span class="s1">maxColourDistance </span><span class="s2">= </span>image1<span class="s1">.</span><span class="s5">dE00</span><span class="s1">(image2).</span><span class="s5">max</span><span class="s1">();</span>
+  <span class="s1">} </span><span class="s2">catch </span><span class="s1">(</span>vips<span class="s1">::VError </span><span class="s2">const &amp;</span><span class="s1">err) {</span>
+    <span class="s2">throw </span>Napi<span class="s1">::</span>Error<span class="s1">::</span><span class="s5">New</span><span class="s1">(env, </span>err<span class="s1">.</span><span class="s5">what</span><span class="s1">());</span>
+  <span class="s1">}</span>
+
+  <span class="s0">// Clean up libvips' per-request data and threads</span>
+  <span class="s5">vips_error_clear</span><span class="s1">();</span>
+  <span class="s5">vips_thread_shutdown</span><span class="s1">();</span>
+
+  <span class="s2">return </span>Napi<span class="s1">::</span>Number<span class="s1">::</span><span class="s5">New</span><span class="s1">(env, maxColourDistance);</span>
+<span class="s1">}</span>
+
+<span class="s2">#if defined</span><span class="s1">(</span><span class="s5">__GNUC__</span><span class="s1">)</span>
+<span class="s0">// mallctl will be resolved by the runtime linker when jemalloc is being used</span>
+<span class="s2">extern </span><span class="s3">&quot;C&quot; </span><span class="s1">{</span>
+  <span class="s1">int </span><span class="s5">mallctl</span><span class="s1">(</span><span class="s2">const char *</span>name<span class="s1">, </span><span class="s2">void *</span>oldp<span class="s1">, </span><span class="s2">size_t *</span>oldlenp<span class="s1">, </span><span class="s2">void *</span>newp<span class="s1">, </span><span class="s2">size_t </span>newlen<span class="s1">) </span><span class="s5">__attribute__</span><span class="s1">((weak));</span>
+<span class="s1">}</span>
+Napi<span class="s1">::Value </span><span class="s5">_isUsingJemalloc</span><span class="s1">(</span><span class="s2">const </span>Napi<span class="s1">::</span>CallbackInfo<span class="s2">&amp; </span>info<span class="s1">) {</span>
+  Napi<span class="s1">::Env env </span><span class="s2">= </span>info<span class="s1">.</span><span class="s5">Env</span><span class="s1">();</span>
+  <span class="s2">return </span>Napi<span class="s1">::</span>Boolean<span class="s1">::</span><span class="s5">New</span><span class="s1">(env, mallctl </span><span class="s2">!= </span><span class="s7">nullptr</span><span class="s1">);</span>
+<span class="s1">}</span>
+<span class="s2">#else</span>
+Napi<span class="s1">::Value </span><span class="s5">_isUsingJemalloc</span><span class="s1">(</span><span class="s2">const </span>Napi<span class="s1">::</span>CallbackInfo<span class="s2">&amp; </span>info<span class="s1">) {</span>
+  Napi<span class="s1">::Env env </span><span class="s2">= </span>info<span class="s1">.</span><span class="s5">Env</span><span class="s1">();</span>
+  <span class="s2">return </span>Napi<span class="s1">::</span>Boolean<span class="s1">::</span><span class="s5">New</span><span class="s1">(env, </span><span class="s7">false</span><span class="s1">);</span>
+<span class="s1">}</span>
+<span class="s2">#endif</span>
+
+<span class="s2">#if defined</span><span class="s1">(</span><span class="s5">__GNUC__</span><span class="s1">) </span><span class="s2">&amp;&amp; defined</span><span class="s1">(</span><span class="s5">__x86_64__</span><span class="s1">)</span>
+<span class="s0">// Are SSE 4.2 intrinsics available at runtime?</span>
+Napi<span class="s1">::Value </span><span class="s5">_isUsingX64V2</span><span class="s1">(</span><span class="s2">const </span>Napi<span class="s1">::</span>CallbackInfo<span class="s2">&amp; </span>info<span class="s1">) {</span>
+  Napi<span class="s1">::Env env </span><span class="s2">= </span>info<span class="s1">.</span><span class="s5">Env</span><span class="s1">();</span>
+  <span class="s2">unsigned int </span><span class="s1">eax, ebx, ecx, edx;</span>
+  <span class="s2">__asm__ </span><span class="s1">_</span><span class="s5">_volatile__</span><span class="s1">(</span><span class="s3">&quot;cpuid&quot;</span>
+    <span class="s1">: </span><span class="s3">&quot;=a&quot;</span><span class="s1">(eax), </span><span class="s3">&quot;=b&quot;</span><span class="s1">(ebx), </span><span class="s3">&quot;=c&quot;</span><span class="s1">(ecx), </span><span class="s3">&quot;=d&quot;</span><span class="s1">(edx)</span>
+    <span class="s1">: </span><span class="s3">&quot;a&quot;</span><span class="s1">(</span><span class="s6">1</span><span class="s1">));</span>
+  <span class="s2">return </span>Napi<span class="s1">::</span>Boolean<span class="s1">::</span><span class="s5">New</span><span class="s1">(env, (ecx </span><span class="s2">&amp; </span><span class="s6">1</span><span class="s2">U &lt;&lt; </span><span class="s6">20</span><span class="s1">) </span><span class="s2">!= </span><span class="s6">0</span><span class="s1">);</span>
+<span class="s1">}</span>
+<span class="s2">#else</span>
+Napi<span class="s1">::Value </span><span class="s5">_isUsingX64V2</span><span class="s1">(</span><span class="s2">const </span>Napi<span class="s1">::</span>CallbackInfo<span class="s2">&amp; </span>info<span class="s1">) {</span>
+  Napi<span class="s1">::Env env </span><span class="s2">= </span>info<span class="s1">.</span><span class="s5">Env</span><span class="s1">();</span>
+  <span class="s2">return </span>Napi<span class="s1">::</span>Boolean<span class="s1">::</span><span class="s5">New</span><span class="s1">(env, </span><span class="s7">false</span><span class="s1">);</span>
+<span class="s1">}</span>
+<span class="s2">#endif</span>
+</pre>
+</body>
+</html>

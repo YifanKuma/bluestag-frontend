@@ -1,0 +1,105 @@
+<html>
+<head>
+<title>find.mjs</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #0033b3;}
+.s1 { color: #080808;}
+.s2 { color: #067d17;}
+.s3 { color: #1750eb;}
+.s4 { color: #8c8c8c; font-style: italic;}
+</style>
+</head>
+<body bgcolor="#ffffff">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#c0c0c0" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+find.mjs</font>
+</center></td></tr></table>
+<pre><span class="s0">import </span><span class="s1">{ warning, secondsToMilliseconds, clamp, millisecondsToSeconds } from </span><span class="s2">'motion-utils'</span><span class="s1">;</span>
+<span class="s0">import </span><span class="s1">{ springDefaults } from </span><span class="s2">'./defaults.mjs'</span><span class="s1">;</span>
+
+<span class="s0">const </span><span class="s1">safeMin = </span><span class="s3">0.001</span><span class="s1">;</span>
+<span class="s0">function </span><span class="s1">findSpring({ duration = springDefaults.duration, bounce = springDefaults.bounce, velocity = springDefaults.velocity, mass = springDefaults.mass, }) {</span>
+    <span class="s0">let </span><span class="s1">envelope;</span>
+    <span class="s0">let </span><span class="s1">derivative;</span>
+    <span class="s1">warning(duration &lt;= secondsToMilliseconds(springDefaults.maxDuration), </span><span class="s2">&quot;Spring duration must be 10 seconds or less&quot;</span><span class="s1">, </span><span class="s2">&quot;spring-duration-limit&quot;</span><span class="s1">);</span>
+    <span class="s0">let </span><span class="s1">dampingRatio = </span><span class="s3">1 </span><span class="s1">- bounce;</span>
+    <span class="s4">/**</span>
+     <span class="s4">* Restrict dampingRatio and duration to within acceptable ranges.</span>
+     <span class="s4">*/</span>
+    <span class="s1">dampingRatio = clamp(springDefaults.minDamping, springDefaults.maxDamping, dampingRatio);</span>
+    <span class="s1">duration = clamp(springDefaults.minDuration, springDefaults.maxDuration, millisecondsToSeconds(duration));</span>
+    <span class="s0">if </span><span class="s1">(dampingRatio &lt; </span><span class="s3">1</span><span class="s1">) {</span>
+        <span class="s4">/**</span>
+         <span class="s4">* Underdamped spring</span>
+         <span class="s4">*/</span>
+        <span class="s1">envelope = (undampedFreq) =&gt; {</span>
+            <span class="s0">const </span><span class="s1">exponentialDecay = undampedFreq * dampingRatio;</span>
+            <span class="s0">const </span><span class="s1">delta = exponentialDecay * duration;</span>
+            <span class="s0">const </span><span class="s1">a = exponentialDecay - velocity;</span>
+            <span class="s0">const </span><span class="s1">b = calcAngularFreq(undampedFreq, dampingRatio);</span>
+            <span class="s0">const </span><span class="s1">c = Math.exp(-delta);</span>
+            <span class="s0">return </span><span class="s1">safeMin - (a / b) * c;</span>
+        <span class="s1">};</span>
+        <span class="s1">derivative = (undampedFreq) =&gt; {</span>
+            <span class="s0">const </span><span class="s1">exponentialDecay = undampedFreq * dampingRatio;</span>
+            <span class="s0">const </span><span class="s1">delta = exponentialDecay * duration;</span>
+            <span class="s0">const </span><span class="s1">d = delta * velocity + velocity;</span>
+            <span class="s0">const </span><span class="s1">e = Math.pow(dampingRatio, </span><span class="s3">2</span><span class="s1">) * Math.pow(undampedFreq, </span><span class="s3">2</span><span class="s1">) * duration;</span>
+            <span class="s0">const </span><span class="s1">f = Math.exp(-delta);</span>
+            <span class="s0">const </span><span class="s1">g = calcAngularFreq(Math.pow(undampedFreq, </span><span class="s3">2</span><span class="s1">), dampingRatio);</span>
+            <span class="s0">const </span><span class="s1">factor = -envelope(undampedFreq) + safeMin &gt; </span><span class="s3">0 </span><span class="s1">? -</span><span class="s3">1 </span><span class="s1">: </span><span class="s3">1</span><span class="s1">;</span>
+            <span class="s0">return </span><span class="s1">(factor * ((d - e) * f)) / g;</span>
+        <span class="s1">};</span>
+    <span class="s1">}</span>
+    <span class="s0">else </span><span class="s1">{</span>
+        <span class="s4">/**</span>
+         <span class="s4">* Critically-damped spring</span>
+         <span class="s4">*/</span>
+        <span class="s1">envelope = (undampedFreq) =&gt; {</span>
+            <span class="s0">const </span><span class="s1">a = Math.exp(-undampedFreq * duration);</span>
+            <span class="s0">const </span><span class="s1">b = (undampedFreq - velocity) * duration + </span><span class="s3">1</span><span class="s1">;</span>
+            <span class="s0">return </span><span class="s1">-safeMin + a * b;</span>
+        <span class="s1">};</span>
+        <span class="s1">derivative = (undampedFreq) =&gt; {</span>
+            <span class="s0">const </span><span class="s1">a = Math.exp(-undampedFreq * duration);</span>
+            <span class="s0">const </span><span class="s1">b = (velocity - undampedFreq) * (duration * duration);</span>
+            <span class="s0">return </span><span class="s1">a * b;</span>
+        <span class="s1">};</span>
+    <span class="s1">}</span>
+    <span class="s0">const </span><span class="s1">initialGuess = </span><span class="s3">5 </span><span class="s1">/ duration;</span>
+    <span class="s0">const </span><span class="s1">undampedFreq = approximateRoot(envelope, derivative, initialGuess);</span>
+    <span class="s1">duration = secondsToMilliseconds(duration);</span>
+    <span class="s0">if </span><span class="s1">(isNaN(undampedFreq)) {</span>
+        <span class="s0">return </span><span class="s1">{</span>
+            <span class="s1">stiffness: springDefaults.stiffness,</span>
+            <span class="s1">damping: springDefaults.damping,</span>
+            <span class="s1">duration,</span>
+        <span class="s1">};</span>
+    <span class="s1">}</span>
+    <span class="s0">else </span><span class="s1">{</span>
+        <span class="s0">const </span><span class="s1">stiffness = Math.pow(undampedFreq, </span><span class="s3">2</span><span class="s1">) * mass;</span>
+        <span class="s0">return </span><span class="s1">{</span>
+            <span class="s1">stiffness,</span>
+            <span class="s1">damping: dampingRatio * </span><span class="s3">2 </span><span class="s1">* Math.sqrt(mass * stiffness),</span>
+            <span class="s1">duration,</span>
+        <span class="s1">};</span>
+    <span class="s1">}</span>
+<span class="s1">}</span>
+<span class="s0">const </span><span class="s1">rootIterations = </span><span class="s3">12</span><span class="s1">;</span>
+<span class="s0">function </span><span class="s1">approximateRoot(envelope, derivative, initialGuess) {</span>
+    <span class="s0">let </span><span class="s1">result = initialGuess;</span>
+    <span class="s0">for </span><span class="s1">(</span><span class="s0">let </span><span class="s1">i = </span><span class="s3">1</span><span class="s1">; i &lt; rootIterations; i++) {</span>
+        <span class="s1">result = result - envelope(result) / derivative(result);</span>
+    <span class="s1">}</span>
+    <span class="s0">return </span><span class="s1">result;</span>
+<span class="s1">}</span>
+<span class="s0">function </span><span class="s1">calcAngularFreq(undampedFreq, dampingRatio) {</span>
+    <span class="s0">return </span><span class="s1">undampedFreq * Math.sqrt(</span><span class="s3">1 </span><span class="s1">- dampingRatio * dampingRatio);</span>
+<span class="s1">}</span>
+
+<span class="s0">export </span><span class="s1">{ calcAngularFreq, findSpring };</span>
+</pre>
+</body>
+</html>

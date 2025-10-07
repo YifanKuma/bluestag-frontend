@@ -1,0 +1,107 @@
+<html>
+<head>
+<title>web-on-close.js</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #8c8c8c; font-style: italic;}
+.s1 { color: #080808;}
+.s2 { color: #067d17;}
+.s3 { color: #0033b3;}
+.s4 { color: #1750eb;}
+</style>
+</head>
+<body bgcolor="#ffffff">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#c0c0c0" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+web-on-close.js</font>
+</center></td></tr></table>
+<pre><span class="s0">/** Monitor when the consumer finishes reading the response body.</span>
+<span class="s0">that's as close as we can get to `res.on('close')` using web APIs.</span>
+<span class="s0">*/ </span><span class="s2">&quot;use strict&quot;</span><span class="s1">;</span>
+<span class="s1">Object.defineProperty(exports, </span><span class="s2">&quot;__esModule&quot;</span><span class="s1">, {</span>
+    <span class="s1">value: </span><span class="s3">true</span>
+<span class="s1">});</span>
+<span class="s4">0 </span><span class="s1">&amp;&amp; (module.exports = {</span>
+    <span class="s1">CloseController: </span><span class="s3">null</span><span class="s1">,</span>
+    <span class="s1">trackBodyConsumed: </span><span class="s3">null</span><span class="s1">,</span>
+    <span class="s1">trackStreamConsumed: </span><span class="s3">null</span>
+<span class="s1">});</span>
+<span class="s3">function </span><span class="s1">_export(target, all) {</span>
+    <span class="s3">for</span><span class="s1">(</span><span class="s3">var </span><span class="s1">name </span><span class="s3">in </span><span class="s1">all)Object.defineProperty(target, name, {</span>
+        <span class="s1">enumerable: </span><span class="s3">true</span><span class="s1">,</span>
+        <span class="s1">get: all[name]</span>
+    <span class="s1">});</span>
+<span class="s1">}</span>
+<span class="s1">_export(exports, {</span>
+    <span class="s1">CloseController: </span><span class="s3">function</span><span class="s1">() {</span>
+        <span class="s3">return </span><span class="s1">CloseController;</span>
+    <span class="s1">},</span>
+    <span class="s1">trackBodyConsumed: </span><span class="s3">function</span><span class="s1">() {</span>
+        <span class="s3">return </span><span class="s1">trackBodyConsumed;</span>
+    <span class="s1">},</span>
+    <span class="s1">trackStreamConsumed: </span><span class="s3">function</span><span class="s1">() {</span>
+        <span class="s3">return </span><span class="s1">trackStreamConsumed;</span>
+    <span class="s1">}</span>
+<span class="s1">});</span>
+<span class="s3">function </span><span class="s1">trackBodyConsumed(body, onEnd) {</span>
+    <span class="s3">if </span><span class="s1">(</span><span class="s3">typeof </span><span class="s1">body === </span><span class="s2">'string'</span><span class="s1">) {</span>
+        <span class="s3">const </span><span class="s1">generator = async </span><span class="s3">function</span><span class="s1">* generate() {</span>
+            <span class="s3">const </span><span class="s1">encoder = </span><span class="s3">new </span><span class="s1">TextEncoder();</span>
+            <span class="s3">yield </span><span class="s1">encoder.encode(body);</span>
+            <span class="s1">onEnd();</span>
+        <span class="s1">};</span>
+        <span class="s0">// @ts-expect-error BodyInit typings doesn't seem to include AsyncIterables even though it's supported in practice</span>
+        <span class="s3">return </span><span class="s1">generator();</span>
+    <span class="s1">} </span><span class="s3">else </span><span class="s1">{</span>
+        <span class="s3">return </span><span class="s1">trackStreamConsumed(body, onEnd);</span>
+    <span class="s1">}</span>
+<span class="s1">}</span>
+<span class="s3">function </span><span class="s1">trackStreamConsumed(stream, onEnd) {</span>
+    <span class="s0">// NOTE: This function must handle `stream` being aborted or cancelled,</span>
+    <span class="s0">// so it can't just be this:</span>
+    <span class="s0">//</span>
+    <span class="s0">//   return stream.pipeThrough(new TransformStream({ flush() { onEnd() } }))</span>
+    <span class="s0">//</span>
+    <span class="s0">// because that doesn't handle cancellations.</span>
+    <span class="s0">// (and cancellation handling via `Transformer.cancel` is only available in node &gt;20)</span>
+    <span class="s3">const </span><span class="s1">dest = </span><span class="s3">new </span><span class="s1">TransformStream();</span>
+    <span class="s3">const </span><span class="s1">runOnEnd = ()=&gt;onEnd();</span>
+    <span class="s1">stream.pipeTo(dest.writable).then(runOnEnd, runOnEnd);</span>
+    <span class="s3">return </span><span class="s1">dest.readable;</span>
+<span class="s1">}</span>
+<span class="s3">class </span><span class="s1">CloseController {</span>
+    <span class="s1">onClose(callback) {</span>
+        <span class="s3">if </span><span class="s1">(</span><span class="s3">this</span><span class="s1">.isClosed) {</span>
+            <span class="s3">throw </span><span class="s1">Object.defineProperty(</span><span class="s3">new </span><span class="s1">Error(</span><span class="s2">'Cannot subscribe to a closed CloseController'</span><span class="s1">), </span><span class="s2">&quot;__NEXT_ERROR_CODE&quot;</span><span class="s1">, {</span>
+                <span class="s1">value: </span><span class="s2">&quot;E365&quot;</span><span class="s1">,</span>
+                <span class="s1">enumerable: </span><span class="s3">false</span><span class="s1">,</span>
+                <span class="s1">configurable: </span><span class="s3">true</span>
+            <span class="s1">});</span>
+        <span class="s1">}</span>
+        <span class="s3">this</span><span class="s1">.target.addEventListener(</span><span class="s2">'close'</span><span class="s1">, callback);</span>
+        <span class="s3">this</span><span class="s1">.listeners++;</span>
+    <span class="s1">}</span>
+    <span class="s1">dispatchClose() {</span>
+        <span class="s3">if </span><span class="s1">(</span><span class="s3">this</span><span class="s1">.isClosed) {</span>
+            <span class="s3">throw </span><span class="s1">Object.defineProperty(</span><span class="s3">new </span><span class="s1">Error(</span><span class="s2">'Cannot close a CloseController multiple times'</span><span class="s1">), </span><span class="s2">&quot;__NEXT_ERROR_CODE&quot;</span><span class="s1">, {</span>
+                <span class="s1">value: </span><span class="s2">&quot;E229&quot;</span><span class="s1">,</span>
+                <span class="s1">enumerable: </span><span class="s3">false</span><span class="s1">,</span>
+                <span class="s1">configurable: </span><span class="s3">true</span>
+            <span class="s1">});</span>
+        <span class="s1">}</span>
+        <span class="s3">if </span><span class="s1">(</span><span class="s3">this</span><span class="s1">.listeners &gt; </span><span class="s4">0</span><span class="s1">) {</span>
+            <span class="s3">this</span><span class="s1">.target.dispatchEvent(</span><span class="s3">new </span><span class="s1">Event(</span><span class="s2">'close'</span><span class="s1">));</span>
+        <span class="s1">}</span>
+        <span class="s3">this</span><span class="s1">.isClosed = </span><span class="s3">true</span><span class="s1">;</span>
+    <span class="s1">}</span>
+    <span class="s1">constructor(){</span>
+        <span class="s3">this</span><span class="s1">.target = </span><span class="s3">new </span><span class="s1">EventTarget();</span>
+        <span class="s3">this</span><span class="s1">.listeners = </span><span class="s4">0</span><span class="s1">;</span>
+        <span class="s3">this</span><span class="s1">.isClosed = </span><span class="s3">false</span><span class="s1">;</span>
+    <span class="s1">}</span>
+<span class="s1">}</span>
+
+<span class="s0">//# sourceMappingURL=web-on-close.js.map</span></pre>
+</body>
+</html>

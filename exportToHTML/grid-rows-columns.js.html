@@ -1,0 +1,146 @@
+<html>
+<head>
+<title>grid-rows-columns.js</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #0033b3;}
+.s1 { color: #080808;}
+.s2 { color: #067d17;}
+.s3 { color: #8c8c8c; font-style: italic;}
+.s4 { color: #264eff;}
+</style>
+</head>
+<body bgcolor="#ffffff">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#c0c0c0" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+grid-rows-columns.js</font>
+</center></td></tr></table>
+<pre><span class="s0">let </span><span class="s1">Declaration = require(</span><span class="s2">'../declaration'</span><span class="s1">)</span>
+<span class="s0">let </span><span class="s1">Processor = require(</span><span class="s2">'../processor'</span><span class="s1">)</span>
+<span class="s0">let </span><span class="s1">{</span>
+  <span class="s1">autoplaceGridItems,</span>
+  <span class="s1">getGridGap,</span>
+  <span class="s1">inheritGridGap,</span>
+  <span class="s1">prefixTrackProp,</span>
+  <span class="s1">prefixTrackValue</span>
+<span class="s1">} = require(</span><span class="s2">'./grid-utils'</span><span class="s1">)</span>
+
+<span class="s0">class </span><span class="s1">GridRowsColumns </span><span class="s0">extends </span><span class="s1">Declaration {</span>
+  <span class="s1">insert(decl, prefix, prefixes, result) {</span>
+    <span class="s0">if </span><span class="s1">(prefix !== </span><span class="s2">'-ms-'</span><span class="s1">) </span><span class="s0">return super</span><span class="s1">.insert(decl, prefix, prefixes)</span>
+
+    <span class="s0">let </span><span class="s1">{ parent, prop, value } = decl</span>
+    <span class="s0">let </span><span class="s1">isRowProp = prop.includes(</span><span class="s2">'rows'</span><span class="s1">)</span>
+    <span class="s0">let </span><span class="s1">isColumnProp = prop.includes(</span><span class="s2">'columns'</span><span class="s1">)</span>
+
+    <span class="s0">let </span><span class="s1">hasGridTemplate = parent.some(</span>
+      <span class="s1">i =&gt; i.prop === </span><span class="s2">'grid-template' </span><span class="s1">|| i.prop === </span><span class="s2">'grid-template-areas'</span>
+    <span class="s1">)</span>
+
+    <span class="s3">/**</span>
+     <span class="s3">* Not to prefix rows declaration if grid-template(-areas) is present</span>
+     <span class="s3">*/</span>
+    <span class="s0">if </span><span class="s1">(hasGridTemplate &amp;&amp; isRowProp) {</span>
+      <span class="s0">return false</span>
+    <span class="s1">}</span>
+
+    <span class="s0">let </span><span class="s1">processor = </span><span class="s0">new </span><span class="s1">Processor({ options: {} })</span>
+    <span class="s0">let </span><span class="s1">status = processor.gridStatus(parent, result)</span>
+    <span class="s0">let </span><span class="s1">gap = getGridGap(decl)</span>
+    <span class="s1">gap = inheritGridGap(decl, gap) || gap</span>
+
+    <span class="s0">let </span><span class="s1">gapValue = isRowProp ? gap.row : gap.column</span>
+
+    <span class="s0">if </span><span class="s1">((status === </span><span class="s2">'no-autoplace' </span><span class="s1">|| status === </span><span class="s0">true</span><span class="s1">) &amp;&amp; !hasGridTemplate) {</span>
+      <span class="s1">gapValue = </span><span class="s0">null</span>
+    <span class="s1">}</span>
+
+    <span class="s0">let </span><span class="s1">prefixValue = prefixTrackValue({</span>
+      <span class="s1">gap: gapValue,</span>
+      <span class="s1">value</span>
+    <span class="s1">})</span>
+
+    <span class="s3">/**</span>
+     <span class="s3">* Insert prefixes</span>
+     <span class="s3">*/</span>
+    <span class="s1">decl.cloneBefore({</span>
+      <span class="s1">prop: prefixTrackProp({ prefix, prop }),</span>
+      <span class="s1">value: prefixValue</span>
+    <span class="s1">})</span>
+
+    <span class="s0">let </span><span class="s1">autoflow = parent.nodes.find(i =&gt; i.prop === </span><span class="s2">'grid-auto-flow'</span><span class="s1">)</span>
+    <span class="s0">let </span><span class="s1">autoflowValue = </span><span class="s2">'row'</span>
+
+    <span class="s0">if </span><span class="s1">(autoflow &amp;&amp; !processor.disabled(autoflow, result)) {</span>
+      <span class="s1">autoflowValue = autoflow.value.trim()</span>
+    <span class="s1">}</span>
+    <span class="s0">if </span><span class="s1">(status === </span><span class="s2">'autoplace'</span><span class="s1">) {</span>
+      <span class="s3">/**</span>
+       <span class="s3">* Show warning if grid-template-rows decl is not found</span>
+       <span class="s3">*/</span>
+      <span class="s0">let </span><span class="s1">rowDecl = parent.nodes.find(i =&gt; i.prop === </span><span class="s2">'grid-template-rows'</span><span class="s1">)</span>
+
+      <span class="s0">if </span><span class="s1">(!rowDecl &amp;&amp; hasGridTemplate) {</span>
+        <span class="s0">return </span><span class="s1">undefined</span>
+      <span class="s1">} </span><span class="s0">else if </span><span class="s1">(!rowDecl &amp;&amp; !hasGridTemplate) {</span>
+        <span class="s1">decl.warn(</span>
+          <span class="s1">result,</span>
+          <span class="s2">'Autoplacement does not work without grid-template-rows property'</span>
+        <span class="s1">)</span>
+        <span class="s0">return </span><span class="s1">undefined</span>
+      <span class="s1">}</span>
+
+      <span class="s3">/**</span>
+       <span class="s3">* Show warning if grid-template-columns decl is not found</span>
+       <span class="s3">*/</span>
+      <span class="s0">let </span><span class="s1">columnDecl = parent.nodes.find(i =&gt; {</span>
+        <span class="s0">return </span><span class="s1">i.prop === </span><span class="s2">'grid-template-columns'</span>
+      <span class="s1">})</span>
+      <span class="s0">if </span><span class="s1">(!columnDecl &amp;&amp; !hasGridTemplate) {</span>
+        <span class="s1">decl.warn(</span>
+          <span class="s1">result,</span>
+          <span class="s2">'Autoplacement does not work without grid-template-columns property'</span>
+        <span class="s1">)</span>
+      <span class="s1">}</span>
+
+      <span class="s3">/**</span>
+       <span class="s3">* Autoplace grid items</span>
+       <span class="s3">*/</span>
+      <span class="s0">if </span><span class="s1">(isColumnProp &amp;&amp; !hasGridTemplate) {</span>
+        <span class="s1">autoplaceGridItems(decl, result, gap, autoflowValue)</span>
+      <span class="s1">}</span>
+    <span class="s1">}</span>
+
+    <span class="s0">return </span><span class="s1">undefined</span>
+  <span class="s1">}</span>
+
+  <span class="s3">/**</span>
+   <span class="s3">* Change IE property back</span>
+   <span class="s3">*/</span>
+  <span class="s1">normalize(prop) {</span>
+    <span class="s0">return </span><span class="s1">prop.replace(</span><span class="s4">/^grid-(rows|columns)/</span><span class="s1">, </span><span class="s2">'grid-template-$1'</span><span class="s1">)</span>
+  <span class="s1">}</span>
+
+  <span class="s3">/**</span>
+   <span class="s3">* Change property name for IE</span>
+   <span class="s3">*/</span>
+  <span class="s1">prefixed(prop, prefix) {</span>
+    <span class="s0">if </span><span class="s1">(prefix === </span><span class="s2">'-ms-'</span><span class="s1">) {</span>
+      <span class="s0">return </span><span class="s1">prefixTrackProp({ prefix, prop })</span>
+    <span class="s1">}</span>
+    <span class="s0">return super</span><span class="s1">.prefixed(prop, prefix)</span>
+  <span class="s1">}</span>
+<span class="s1">}</span>
+
+<span class="s1">GridRowsColumns.names = [</span>
+  <span class="s2">'grid-template-rows'</span><span class="s1">,</span>
+  <span class="s2">'grid-template-columns'</span><span class="s1">,</span>
+  <span class="s2">'grid-rows'</span><span class="s1">,</span>
+  <span class="s2">'grid-columns'</span>
+<span class="s1">]</span>
+
+<span class="s1">module.exports = GridRowsColumns</span>
+</pre>
+</body>
+</html>

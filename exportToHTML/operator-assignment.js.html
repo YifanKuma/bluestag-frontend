@@ -1,0 +1,292 @@
+<html>
+<head>
+<title>operator-assignment.js</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #8c8c8c; font-style: italic;}
+.s1 { color: #8c8c8c; font-style: italic;}
+.s2 { color: #080808;}
+.s3 { color: #067d17;}
+.s4 { color: #0033b3;}
+.s5 { color: #1750eb;}
+</style>
+</head>
+<body bgcolor="#ffffff">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#c0c0c0" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+operator-assignment.js</font>
+</center></td></tr></table>
+<pre><span class="s0">/**</span>
+ <span class="s0">* </span><span class="s1">@fileoverview </span><span class="s0">Rule to replace assignment expressions with operator assignment</span>
+ <span class="s0">* </span><span class="s1">@author </span><span class="s0">Brandon Mills</span>
+ <span class="s0">*/</span>
+<span class="s3">&quot;use strict&quot;</span><span class="s2">;</span>
+
+<span class="s0">//------------------------------------------------------------------------------</span>
+<span class="s0">// Requirements</span>
+<span class="s0">//------------------------------------------------------------------------------</span>
+
+<span class="s4">const </span><span class="s2">astUtils = require(</span><span class="s3">&quot;./utils/ast-utils&quot;</span><span class="s2">);</span>
+
+<span class="s0">//------------------------------------------------------------------------------</span>
+<span class="s0">// Helpers</span>
+<span class="s0">//------------------------------------------------------------------------------</span>
+
+<span class="s0">/**</span>
+ <span class="s0">* Checks whether an operator is commutative and has an operator assignment</span>
+ <span class="s0">* shorthand form.</span>
+ <span class="s0">* </span><span class="s1">@param </span><span class="s0">{string} operator Operator to check.</span>
+ <span class="s0">* </span><span class="s1">@returns </span><span class="s0">{boolean} True if the operator is commutative and has a</span>
+ <span class="s0">*     shorthand form.</span>
+ <span class="s0">*/</span>
+<span class="s4">function </span><span class="s2">isCommutativeOperatorWithShorthand(operator) {</span>
+	<span class="s4">return </span><span class="s2">[</span><span class="s3">&quot;*&quot;</span><span class="s2">, </span><span class="s3">&quot;&amp;&quot;</span><span class="s2">, </span><span class="s3">&quot;^&quot;</span><span class="s2">, </span><span class="s3">&quot;|&quot;</span><span class="s2">].includes(operator);</span>
+<span class="s2">}</span>
+
+<span class="s0">/**</span>
+ <span class="s0">* Checks whether an operator is not commutative and has an operator assignment</span>
+ <span class="s0">* shorthand form.</span>
+ <span class="s0">* </span><span class="s1">@param </span><span class="s0">{string} operator Operator to check.</span>
+ <span class="s0">* </span><span class="s1">@returns </span><span class="s0">{boolean} True if the operator is not commutative and has</span>
+ <span class="s0">*     a shorthand form.</span>
+ <span class="s0">*/</span>
+<span class="s4">function </span><span class="s2">isNonCommutativeOperatorWithShorthand(operator) {</span>
+	<span class="s4">return </span><span class="s2">[</span><span class="s3">&quot;+&quot;</span><span class="s2">, </span><span class="s3">&quot;-&quot;</span><span class="s2">, </span><span class="s3">&quot;/&quot;</span><span class="s2">, </span><span class="s3">&quot;%&quot;</span><span class="s2">, </span><span class="s3">&quot;&lt;&lt;&quot;</span><span class="s2">, </span><span class="s3">&quot;&gt;&gt;&quot;</span><span class="s2">, </span><span class="s3">&quot;&gt;&gt;&gt;&quot;</span><span class="s2">, </span><span class="s3">&quot;**&quot;</span><span class="s2">].includes(operator);</span>
+<span class="s2">}</span>
+
+<span class="s0">//------------------------------------------------------------------------------</span>
+<span class="s0">// Rule Definition</span>
+<span class="s0">//------------------------------------------------------------------------------</span>
+
+<span class="s0">/**</span>
+ <span class="s0">* Determines if the left side of a node can be safely fixed (i.e. if it activates the same getters/setters and)</span>
+ <span class="s0">* toString calls regardless of whether assignment shorthand is used)</span>
+ <span class="s0">* </span><span class="s1">@param </span><span class="s0">{ASTNode} node The node on the left side of the expression</span>
+ <span class="s0">* </span><span class="s1">@returns </span><span class="s0">{boolean} `true` if the node can be fixed</span>
+ <span class="s0">*/</span>
+<span class="s4">function </span><span class="s2">canBeFixed(node) {</span>
+	<span class="s4">return </span><span class="s2">(</span>
+		<span class="s2">node.type === </span><span class="s3">&quot;Identifier&quot; </span><span class="s2">||</span>
+		<span class="s2">(node.type === </span><span class="s3">&quot;MemberExpression&quot; </span><span class="s2">&amp;&amp;</span>
+			<span class="s2">(node.object.type === </span><span class="s3">&quot;Identifier&quot; </span><span class="s2">||</span>
+				<span class="s2">node.object.type === </span><span class="s3">&quot;ThisExpression&quot;</span><span class="s2">) &amp;&amp;</span>
+			<span class="s2">(!node.computed || node.property.type === </span><span class="s3">&quot;Literal&quot;</span><span class="s2">))</span>
+	<span class="s2">);</span>
+<span class="s2">}</span>
+
+<span class="s0">/** </span><span class="s1">@type </span><span class="s0">{import('../types').Rule.RuleModule} */</span>
+<span class="s2">module.exports = {</span>
+	<span class="s2">meta: {</span>
+		<span class="s2">type: </span><span class="s3">&quot;suggestion&quot;</span><span class="s2">,</span>
+
+		<span class="s2">defaultOptions: [</span><span class="s3">&quot;always&quot;</span><span class="s2">],</span>
+
+		<span class="s2">docs: {</span>
+			<span class="s2">description:</span>
+				<span class="s3">&quot;Require or disallow assignment operator shorthand where possible&quot;</span><span class="s2">,</span>
+			<span class="s2">recommended: </span><span class="s4">false</span><span class="s2">,</span>
+			<span class="s2">frozen: </span><span class="s4">true</span><span class="s2">,</span>
+			<span class="s2">url: </span><span class="s3">&quot;https://eslint.org/docs/latest/rules/operator-assignment&quot;</span><span class="s2">,</span>
+		<span class="s2">},</span>
+
+		<span class="s2">schema: [</span>
+			<span class="s2">{</span>
+				<span class="s4">enum</span><span class="s2">: [</span><span class="s3">&quot;always&quot;</span><span class="s2">, </span><span class="s3">&quot;never&quot;</span><span class="s2">],</span>
+			<span class="s2">},</span>
+		<span class="s2">],</span>
+
+		<span class="s2">fixable: </span><span class="s3">&quot;code&quot;</span><span class="s2">,</span>
+		<span class="s2">messages: {</span>
+			<span class="s2">replaced:</span>
+				<span class="s3">&quot;Assignment (=) can be replaced with operator assignment ({{operator}}).&quot;</span><span class="s2">,</span>
+			<span class="s2">unexpected:</span>
+				<span class="s3">&quot;Unexpected operator assignment ({{operator}}) shorthand.&quot;</span><span class="s2">,</span>
+		<span class="s2">},</span>
+	<span class="s2">},</span>
+
+	<span class="s2">create(context) {</span>
+		<span class="s4">const </span><span class="s2">never = context.options[</span><span class="s5">0</span><span class="s2">] === </span><span class="s3">&quot;never&quot;</span><span class="s2">;</span>
+		<span class="s4">const </span><span class="s2">sourceCode = context.sourceCode;</span>
+
+		<span class="s0">/**</span>
+		 <span class="s0">* Returns the operator token of an AssignmentExpression or BinaryExpression</span>
+		 <span class="s0">* </span><span class="s1">@param </span><span class="s0">{ASTNode} node An AssignmentExpression or BinaryExpression node</span>
+		 <span class="s0">* </span><span class="s1">@returns </span><span class="s0">{Token} The operator token in the node</span>
+		 <span class="s0">*/</span>
+		<span class="s4">function </span><span class="s2">getOperatorToken(node) {</span>
+			<span class="s4">return </span><span class="s2">sourceCode.getFirstTokenBetween(</span>
+				<span class="s2">node.left,</span>
+				<span class="s2">node.right,</span>
+				<span class="s2">token =&gt; token.value === node.operator,</span>
+			<span class="s2">);</span>
+		<span class="s2">}</span>
+
+		<span class="s0">/**</span>
+		 <span class="s0">* Ensures that an assignment uses the shorthand form where possible.</span>
+		 <span class="s0">* </span><span class="s1">@param </span><span class="s0">{ASTNode} node An AssignmentExpression node.</span>
+		 <span class="s0">* </span><span class="s1">@returns </span><span class="s0">{void}</span>
+		 <span class="s0">*/</span>
+		<span class="s4">function </span><span class="s2">verify(node) {</span>
+			<span class="s4">if </span><span class="s2">(</span>
+				<span class="s2">node.operator !== </span><span class="s3">&quot;=&quot; </span><span class="s2">||</span>
+				<span class="s2">node.right.type !== </span><span class="s3">&quot;BinaryExpression&quot;</span>
+			<span class="s2">) {</span>
+				<span class="s4">return</span><span class="s2">;</span>
+			<span class="s2">}</span>
+
+			<span class="s4">const </span><span class="s2">left = node.left;</span>
+			<span class="s4">const </span><span class="s2">expr = node.right;</span>
+			<span class="s4">const </span><span class="s2">operator = expr.operator;</span>
+
+			<span class="s4">if </span><span class="s2">(</span>
+				<span class="s2">isCommutativeOperatorWithShorthand(operator) ||</span>
+				<span class="s2">isNonCommutativeOperatorWithShorthand(operator)</span>
+			<span class="s2">) {</span>
+				<span class="s4">const </span><span class="s2">replacementOperator = </span><span class="s3">`</span><span class="s2">${operator}</span><span class="s3">=`</span><span class="s2">;</span>
+
+				<span class="s4">if </span><span class="s2">(astUtils.isSameReference(left, expr.left, </span><span class="s4">true</span><span class="s2">)) {</span>
+					<span class="s2">context.report({</span>
+						<span class="s2">node,</span>
+						<span class="s2">messageId: </span><span class="s3">&quot;replaced&quot;</span><span class="s2">,</span>
+						<span class="s2">data: { operator: replacementOperator },</span>
+						<span class="s2">fix(fixer) {</span>
+							<span class="s4">if </span><span class="s2">(canBeFixed(left) &amp;&amp; canBeFixed(expr.left)) {</span>
+								<span class="s4">const </span><span class="s2">equalsToken = getOperatorToken(node);</span>
+								<span class="s4">const </span><span class="s2">operatorToken = getOperatorToken(expr);</span>
+								<span class="s4">const </span><span class="s2">leftText = sourceCode</span>
+									<span class="s2">.getText()</span>
+									<span class="s2">.slice(node.range[</span><span class="s5">0</span><span class="s2">], equalsToken.range[</span><span class="s5">0</span><span class="s2">]);</span>
+								<span class="s4">const </span><span class="s2">rightText = sourceCode</span>
+									<span class="s2">.getText()</span>
+									<span class="s2">.slice(</span>
+										<span class="s2">operatorToken.range[</span><span class="s5">1</span><span class="s2">],</span>
+										<span class="s2">node.right.range[</span><span class="s5">1</span><span class="s2">],</span>
+									<span class="s2">);</span>
+
+								<span class="s0">// Check for comments that would be removed.</span>
+								<span class="s4">if </span><span class="s2">(</span>
+									<span class="s2">sourceCode.commentsExistBetween(</span>
+										<span class="s2">equalsToken,</span>
+										<span class="s2">operatorToken,</span>
+									<span class="s2">)</span>
+								<span class="s2">) {</span>
+									<span class="s4">return null</span><span class="s2">;</span>
+								<span class="s2">}</span>
+
+								<span class="s4">return </span><span class="s2">fixer.replaceText(</span>
+									<span class="s2">node,</span>
+									<span class="s3">`</span><span class="s2">${leftText}${replacementOperator}${rightText}</span><span class="s3">`</span><span class="s2">,</span>
+								<span class="s2">);</span>
+							<span class="s2">}</span>
+							<span class="s4">return null</span><span class="s2">;</span>
+						<span class="s2">},</span>
+					<span class="s2">});</span>
+				<span class="s2">} </span><span class="s4">else if </span><span class="s2">(</span>
+					<span class="s2">astUtils.isSameReference(left, expr.right, </span><span class="s4">true</span><span class="s2">) &amp;&amp;</span>
+					<span class="s2">isCommutativeOperatorWithShorthand(operator)</span>
+				<span class="s2">) {</span>
+					<span class="s0">/* 
+                     * This case can't be fixed safely. 
+                     * If `a` and `b` both have custom valueOf() behavior, then fixing `a = b * a` to `a *= b` would 
+                     * change the execution order of the valueOf() functions. 
+                     */</span>
+					<span class="s2">context.report({</span>
+						<span class="s2">node,</span>
+						<span class="s2">messageId: </span><span class="s3">&quot;replaced&quot;</span><span class="s2">,</span>
+						<span class="s2">data: { operator: replacementOperator },</span>
+					<span class="s2">});</span>
+				<span class="s2">}</span>
+			<span class="s2">}</span>
+		<span class="s2">}</span>
+
+		<span class="s0">/**</span>
+		 <span class="s0">* Warns if an assignment expression uses operator assignment shorthand.</span>
+		 <span class="s0">* </span><span class="s1">@param </span><span class="s0">{ASTNode} node An AssignmentExpression node.</span>
+		 <span class="s0">* </span><span class="s1">@returns </span><span class="s0">{void}</span>
+		 <span class="s0">*/</span>
+		<span class="s4">function </span><span class="s2">prohibit(node) {</span>
+			<span class="s4">if </span><span class="s2">(</span>
+				<span class="s2">node.operator !== </span><span class="s3">&quot;=&quot; </span><span class="s2">&amp;&amp;</span>
+				<span class="s2">!astUtils.isLogicalAssignmentOperator(node.operator)</span>
+			<span class="s2">) {</span>
+				<span class="s2">context.report({</span>
+					<span class="s2">node,</span>
+					<span class="s2">messageId: </span><span class="s3">&quot;unexpected&quot;</span><span class="s2">,</span>
+					<span class="s2">data: { operator: node.operator },</span>
+					<span class="s2">fix(fixer) {</span>
+						<span class="s4">if </span><span class="s2">(canBeFixed(node.left)) {</span>
+							<span class="s4">const </span><span class="s2">firstToken = sourceCode.getFirstToken(node);</span>
+							<span class="s4">const </span><span class="s2">operatorToken = getOperatorToken(node);</span>
+							<span class="s4">const </span><span class="s2">leftText = sourceCode</span>
+								<span class="s2">.getText()</span>
+								<span class="s2">.slice(node.range[</span><span class="s5">0</span><span class="s2">], operatorToken.range[</span><span class="s5">0</span><span class="s2">]);</span>
+							<span class="s4">const </span><span class="s2">newOperator = node.operator.slice(</span><span class="s5">0</span><span class="s2">, -</span><span class="s5">1</span><span class="s2">);</span>
+							<span class="s4">let </span><span class="s2">rightText;</span>
+
+							<span class="s0">// Check for comments that would be duplicated.</span>
+							<span class="s4">if </span><span class="s2">(</span>
+								<span class="s2">sourceCode.commentsExistBetween(</span>
+									<span class="s2">firstToken,</span>
+									<span class="s2">operatorToken,</span>
+								<span class="s2">)</span>
+							<span class="s2">) {</span>
+								<span class="s4">return null</span><span class="s2">;</span>
+							<span class="s2">}</span>
+
+							<span class="s0">// If this change would modify precedence (e.g. `foo *= bar + 1` =&gt; `foo = foo * (bar + 1)`), parenthesize the right side.</span>
+							<span class="s4">if </span><span class="s2">(</span>
+								<span class="s2">astUtils.getPrecedence(node.right) &lt;=</span>
+									<span class="s2">astUtils.getPrecedence({</span>
+										<span class="s2">type: </span><span class="s3">&quot;BinaryExpression&quot;</span><span class="s2">,</span>
+										<span class="s2">operator: newOperator,</span>
+									<span class="s2">}) &amp;&amp;</span>
+								<span class="s2">!astUtils.isParenthesised(</span>
+									<span class="s2">sourceCode,</span>
+									<span class="s2">node.right,</span>
+								<span class="s2">)</span>
+							<span class="s2">) {</span>
+								<span class="s2">rightText = </span><span class="s3">`</span><span class="s2">${sourceCode.text.slice(operatorToken.range[</span><span class="s5">1</span><span class="s2">], node.right.range[</span><span class="s5">0</span><span class="s2">])}</span><span class="s3">(</span><span class="s2">${sourceCode.getText(node.right)}</span><span class="s3">)`</span><span class="s2">;</span>
+							<span class="s2">} </span><span class="s4">else </span><span class="s2">{</span>
+								<span class="s4">const </span><span class="s2">tokenAfterOperator =</span>
+									<span class="s2">sourceCode.getTokenAfter(operatorToken, {</span>
+										<span class="s2">includeComments: </span><span class="s4">true</span><span class="s2">,</span>
+									<span class="s2">});</span>
+								<span class="s4">let </span><span class="s2">rightTextPrefix = </span><span class="s3">&quot;&quot;</span><span class="s2">;</span>
+
+								<span class="s4">if </span><span class="s2">(</span>
+									<span class="s2">operatorToken.range[</span><span class="s5">1</span><span class="s2">] ===</span>
+										<span class="s2">tokenAfterOperator.range[</span><span class="s5">0</span><span class="s2">] &amp;&amp;</span>
+									<span class="s2">!astUtils.canTokensBeAdjacent(</span>
+										<span class="s2">{</span>
+											<span class="s2">type: </span><span class="s3">&quot;Punctuator&quot;</span><span class="s2">,</span>
+											<span class="s2">value: newOperator,</span>
+										<span class="s2">},</span>
+										<span class="s2">tokenAfterOperator,</span>
+									<span class="s2">)</span>
+								<span class="s2">) {</span>
+									<span class="s2">rightTextPrefix = </span><span class="s3">&quot; &quot;</span><span class="s2">; </span><span class="s0">// foo+=+bar -&gt; foo= foo+ +bar</span>
+								<span class="s2">}</span>
+
+								<span class="s2">rightText = </span><span class="s3">`</span><span class="s2">${rightTextPrefix}${sourceCode.text.slice(operatorToken.range[</span><span class="s5">1</span><span class="s2">], node.range[</span><span class="s5">1</span><span class="s2">])}</span><span class="s3">`</span><span class="s2">;</span>
+							<span class="s2">}</span>
+
+							<span class="s4">return </span><span class="s2">fixer.replaceText(</span>
+								<span class="s2">node,</span>
+								<span class="s3">`</span><span class="s2">${leftText}</span><span class="s3">= </span><span class="s2">${leftText}${newOperator}${rightText}</span><span class="s3">`</span><span class="s2">,</span>
+							<span class="s2">);</span>
+						<span class="s2">}</span>
+						<span class="s4">return null</span><span class="s2">;</span>
+					<span class="s2">},</span>
+				<span class="s2">});</span>
+			<span class="s2">}</span>
+		<span class="s2">}</span>
+
+		<span class="s4">return </span><span class="s2">{</span>
+			<span class="s2">AssignmentExpression: !never ? verify : prohibit,</span>
+		<span class="s2">};</span>
+	<span class="s2">},</span>
+<span class="s2">};</span>
+</pre>
+</body>
+</html>

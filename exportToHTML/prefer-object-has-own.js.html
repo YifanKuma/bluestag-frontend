@@ -1,0 +1,170 @@
+<html>
+<head>
+<title>prefer-object-has-own.js</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #8c8c8c; font-style: italic;}
+.s1 { color: #8c8c8c; font-style: italic;}
+.s2 { color: #080808;}
+.s3 { color: #067d17;}
+.s4 { color: #0033b3;}
+.s5 { color: #1750eb;}
+</style>
+</head>
+<body bgcolor="#ffffff">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#c0c0c0" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+prefer-object-has-own.js</font>
+</center></td></tr></table>
+<pre><span class="s0">/**</span>
+ <span class="s0">* </span><span class="s1">@fileoverview </span><span class="s0">Prefers Object.hasOwn() instead of Object.prototype.hasOwnProperty.call()</span>
+ <span class="s0">* </span><span class="s1">@author </span><span class="s0">Nitin Kumar</span>
+ <span class="s0">* </span><span class="s1">@author </span><span class="s0">Gautam Arora</span>
+ <span class="s0">*/</span>
+
+<span class="s3">&quot;use strict&quot;</span><span class="s2">;</span>
+
+<span class="s0">//------------------------------------------------------------------------------</span>
+<span class="s0">// Requirements</span>
+<span class="s0">//------------------------------------------------------------------------------</span>
+
+<span class="s4">const </span><span class="s2">astUtils = require(</span><span class="s3">&quot;./utils/ast-utils&quot;</span><span class="s2">);</span>
+
+<span class="s0">//------------------------------------------------------------------------------</span>
+<span class="s0">// Helpers</span>
+<span class="s0">//------------------------------------------------------------------------------</span>
+
+<span class="s0">/**</span>
+ <span class="s0">* Checks if the given node is considered to be an access to a property of `Object.prototype`.</span>
+ <span class="s0">* </span><span class="s1">@param </span><span class="s0">{ASTNode} node `MemberExpression` node to evaluate.</span>
+ <span class="s0">* </span><span class="s1">@returns </span><span class="s0">{boolean} `true` if `node.object` is `Object`, `Object.prototype`, or `{}` (empty 'ObjectExpression' node).</span>
+ <span class="s0">*/</span>
+<span class="s4">function </span><span class="s2">hasLeftHandObject(node) {</span>
+	<span class="s0">/* 
+     * ({}).hasOwnProperty.call(obj, prop) - `true` 
+     * ({ foo }.hasOwnProperty.call(obj, prop)) - `false`, object literal should be empty 
+     */</span>
+	<span class="s4">if </span><span class="s2">(</span>
+		<span class="s2">node.object.type === </span><span class="s3">&quot;ObjectExpression&quot; </span><span class="s2">&amp;&amp;</span>
+		<span class="s2">node.object.properties.length === </span><span class="s5">0</span>
+	<span class="s2">) {</span>
+		<span class="s4">return true</span><span class="s2">;</span>
+	<span class="s2">}</span>
+
+	<span class="s4">const </span><span class="s2">objectNodeToCheck =</span>
+		<span class="s2">node.object.type === </span><span class="s3">&quot;MemberExpression&quot; </span><span class="s2">&amp;&amp;</span>
+		<span class="s2">astUtils.getStaticPropertyName(node.object) === </span><span class="s3">&quot;prototype&quot;</span>
+			<span class="s2">? node.object.object</span>
+			<span class="s2">: node.object;</span>
+
+	<span class="s4">if </span><span class="s2">(</span>
+		<span class="s2">objectNodeToCheck.type === </span><span class="s3">&quot;Identifier&quot; </span><span class="s2">&amp;&amp;</span>
+		<span class="s2">objectNodeToCheck.name === </span><span class="s3">&quot;Object&quot;</span>
+	<span class="s2">) {</span>
+		<span class="s4">return true</span><span class="s2">;</span>
+	<span class="s2">}</span>
+
+	<span class="s4">return false</span><span class="s2">;</span>
+<span class="s2">}</span>
+
+<span class="s0">//------------------------------------------------------------------------------</span>
+<span class="s0">// Rule Definition</span>
+<span class="s0">//------------------------------------------------------------------------------</span>
+
+<span class="s0">/** </span><span class="s1">@type </span><span class="s0">{import('../types').Rule.RuleModule} */</span>
+<span class="s2">module.exports = {</span>
+	<span class="s2">meta: {</span>
+		<span class="s2">type: </span><span class="s3">&quot;suggestion&quot;</span><span class="s2">,</span>
+		<span class="s2">docs: {</span>
+			<span class="s2">description:</span>
+				<span class="s3">&quot;Disallow use of `Object.prototype.hasOwnProperty.call()` and prefer use of `Object.hasOwn()`&quot;</span><span class="s2">,</span>
+			<span class="s2">recommended: </span><span class="s4">false</span><span class="s2">,</span>
+			<span class="s2">url: </span><span class="s3">&quot;https://eslint.org/docs/latest/rules/prefer-object-has-own&quot;</span><span class="s2">,</span>
+		<span class="s2">},</span>
+		<span class="s2">schema: [],</span>
+		<span class="s2">messages: {</span>
+			<span class="s2">useHasOwn:</span>
+				<span class="s3">&quot;Use 'Object.hasOwn()' instead of 'Object.prototype.hasOwnProperty.call()'.&quot;</span><span class="s2">,</span>
+		<span class="s2">},</span>
+		<span class="s2">fixable: </span><span class="s3">&quot;code&quot;</span><span class="s2">,</span>
+	<span class="s2">},</span>
+	<span class="s2">create(context) {</span>
+		<span class="s4">const </span><span class="s2">sourceCode = context.sourceCode;</span>
+
+		<span class="s4">return </span><span class="s2">{</span>
+			<span class="s2">CallExpression(node) {</span>
+				<span class="s4">if </span><span class="s2">(</span>
+					<span class="s2">!(</span>
+						<span class="s2">node.callee.type === </span><span class="s3">&quot;MemberExpression&quot; </span><span class="s2">&amp;&amp;</span>
+						<span class="s2">node.callee.object.type === </span><span class="s3">&quot;MemberExpression&quot;</span>
+					<span class="s2">)</span>
+				<span class="s2">) {</span>
+					<span class="s4">return</span><span class="s2">;</span>
+				<span class="s2">}</span>
+
+				<span class="s4">const </span><span class="s2">calleePropertyName = astUtils.getStaticPropertyName(</span>
+					<span class="s2">node.callee,</span>
+				<span class="s2">);</span>
+				<span class="s4">const </span><span class="s2">objectPropertyName = astUtils.getStaticPropertyName(</span>
+					<span class="s2">node.callee.object,</span>
+				<span class="s2">);</span>
+				<span class="s4">const </span><span class="s2">isObject = hasLeftHandObject(node.callee.object);</span>
+
+				<span class="s0">// check `Object` scope</span>
+				<span class="s4">const </span><span class="s2">scope = sourceCode.getScope(node);</span>
+				<span class="s4">const </span><span class="s2">variable = astUtils.getVariableByName(scope, </span><span class="s3">&quot;Object&quot;</span><span class="s2">);</span>
+
+				<span class="s4">if </span><span class="s2">(</span>
+					<span class="s2">calleePropertyName === </span><span class="s3">&quot;call&quot; </span><span class="s2">&amp;&amp;</span>
+					<span class="s2">objectPropertyName === </span><span class="s3">&quot;hasOwnProperty&quot; </span><span class="s2">&amp;&amp;</span>
+					<span class="s2">isObject &amp;&amp;</span>
+					<span class="s2">variable &amp;&amp;</span>
+					<span class="s2">variable.scope.type === </span><span class="s3">&quot;global&quot;</span>
+				<span class="s2">) {</span>
+					<span class="s2">context.report({</span>
+						<span class="s2">node,</span>
+						<span class="s2">messageId: </span><span class="s3">&quot;useHasOwn&quot;</span><span class="s2">,</span>
+						<span class="s2">fix(fixer) {</span>
+							<span class="s4">if </span><span class="s2">(</span>
+								<span class="s2">sourceCode.getCommentsInside(node.callee)</span>
+									<span class="s2">.length &gt; </span><span class="s5">0</span>
+							<span class="s2">) {</span>
+								<span class="s4">return null</span><span class="s2">;</span>
+							<span class="s2">}</span>
+
+							<span class="s4">const </span><span class="s2">tokenJustBeforeNode =</span>
+								<span class="s2">sourceCode.getTokenBefore(node.callee, {</span>
+									<span class="s2">includeComments: </span><span class="s4">true</span><span class="s2">,</span>
+								<span class="s2">});</span>
+
+							<span class="s0">// for https://github.com/eslint/eslint/pull/15346#issuecomment-991417335</span>
+							<span class="s4">if </span><span class="s2">(</span>
+								<span class="s2">tokenJustBeforeNode &amp;&amp;</span>
+								<span class="s2">tokenJustBeforeNode.range[</span><span class="s5">1</span><span class="s2">] ===</span>
+									<span class="s2">node.callee.range[</span><span class="s5">0</span><span class="s2">] &amp;&amp;</span>
+								<span class="s2">!astUtils.canTokensBeAdjacent(</span>
+									<span class="s2">tokenJustBeforeNode,</span>
+									<span class="s3">&quot;Object.hasOwn&quot;</span><span class="s2">,</span>
+								<span class="s2">)</span>
+							<span class="s2">) {</span>
+								<span class="s4">return </span><span class="s2">fixer.replaceText(</span>
+									<span class="s2">node.callee,</span>
+									<span class="s3">&quot; Object.hasOwn&quot;</span><span class="s2">,</span>
+								<span class="s2">);</span>
+							<span class="s2">}</span>
+
+							<span class="s4">return </span><span class="s2">fixer.replaceText(</span>
+								<span class="s2">node.callee,</span>
+								<span class="s3">&quot;Object.hasOwn&quot;</span><span class="s2">,</span>
+							<span class="s2">);</span>
+						<span class="s2">},</span>
+					<span class="s2">});</span>
+				<span class="s2">}</span>
+			<span class="s2">},</span>
+		<span class="s2">};</span>
+	<span class="s2">},</span>
+<span class="s2">};</span>
+</pre>
+</body>
+</html>

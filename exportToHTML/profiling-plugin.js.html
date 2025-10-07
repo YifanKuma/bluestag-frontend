@@ -1,0 +1,303 @@
+<html>
+<head>
+<title>profiling-plugin.js</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #067d17;}
+.s1 { color: #080808;}
+.s2 { color: #0033b3;}
+.s3 { color: #1750eb;}
+.s4 { color: #8c8c8c; font-style: italic;}
+.s5 { color: #264eff;}
+</style>
+</head>
+<body bgcolor="#ffffff">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#c0c0c0" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+profiling-plugin.js</font>
+</center></td></tr></table>
+<pre><span class="s0">&quot;use strict&quot;</span><span class="s1">;</span>
+<span class="s1">Object.defineProperty(exports, </span><span class="s0">&quot;__esModule&quot;</span><span class="s1">, {</span>
+    <span class="s1">value: </span><span class="s2">true</span>
+<span class="s1">});</span>
+<span class="s3">0 </span><span class="s1">&amp;&amp; (module.exports = {</span>
+    <span class="s1">ProfilingPlugin: </span><span class="s2">null</span><span class="s1">,</span>
+    <span class="s1">spans: </span><span class="s2">null</span><span class="s1">,</span>
+    <span class="s1">webpackInvalidSpans: </span><span class="s2">null</span>
+<span class="s1">});</span>
+<span class="s2">function </span><span class="s1">_export(target, all) {</span>
+    <span class="s2">for</span><span class="s1">(</span><span class="s2">var </span><span class="s1">name </span><span class="s2">in </span><span class="s1">all)Object.defineProperty(target, name, {</span>
+        <span class="s1">enumerable: </span><span class="s2">true</span><span class="s1">,</span>
+        <span class="s1">get: all[name]</span>
+    <span class="s1">});</span>
+<span class="s1">}</span>
+<span class="s1">_export(exports, {</span>
+    <span class="s1">ProfilingPlugin: </span><span class="s2">function</span><span class="s1">() {</span>
+        <span class="s2">return </span><span class="s1">ProfilingPlugin;</span>
+    <span class="s1">},</span>
+    <span class="s1">spans: </span><span class="s2">function</span><span class="s1">() {</span>
+        <span class="s2">return </span><span class="s1">spans;</span>
+    <span class="s1">},</span>
+    <span class="s1">webpackInvalidSpans: </span><span class="s2">function</span><span class="s1">() {</span>
+        <span class="s2">return </span><span class="s1">webpackInvalidSpans;</span>
+    <span class="s1">}</span>
+<span class="s1">});</span>
+<span class="s2">const </span><span class="s1">_webpack = require(</span><span class="s0">&quot;next/dist/compiled/webpack/webpack&quot;</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">_path = </span><span class="s4">/*#__PURE__*/ </span><span class="s1">_interop_require_default(require(</span><span class="s0">&quot;path&quot;</span><span class="s1">));</span>
+<span class="s2">function </span><span class="s1">_interop_require_default(obj) {</span>
+    <span class="s2">return </span><span class="s1">obj &amp;&amp; obj.__esModule ? obj : {</span>
+        <span class="s2">default</span><span class="s1">: obj</span>
+    <span class="s1">};</span>
+<span class="s1">}</span>
+<span class="s2">const </span><span class="s1">pluginName = </span><span class="s0">'ProfilingPlugin'</span><span class="s1">;</span>
+<span class="s2">const </span><span class="s1">spans = </span><span class="s2">new </span><span class="s1">WeakMap();</span>
+<span class="s2">const </span><span class="s1">moduleSpansByCompilation = </span><span class="s2">new </span><span class="s1">WeakMap();</span>
+<span class="s2">const </span><span class="s1">makeSpanByCompilation = </span><span class="s2">new </span><span class="s1">WeakMap();</span>
+<span class="s2">const </span><span class="s1">sealSpanByCompilation = </span><span class="s2">new </span><span class="s1">WeakMap();</span>
+<span class="s2">const </span><span class="s1">webpackInvalidSpans = </span><span class="s2">new </span><span class="s1">WeakMap();</span>
+<span class="s2">const </span><span class="s1">TRACE_LABELS_SEAL = [</span>
+    <span class="s0">'module assets'</span><span class="s1">,</span>
+    <span class="s0">'create chunk assets'</span><span class="s1">,</span>
+    <span class="s0">'asset render'</span><span class="s1">,</span>
+    <span class="s0">'asset emit'</span><span class="s1">,</span>
+    <span class="s0">'store asset'</span>
+<span class="s1">];</span>
+<span class="s2">function </span><span class="s1">inTraceLabelsSeal(label) {</span>
+    <span class="s2">return </span><span class="s1">TRACE_LABELS_SEAL.some((l)=&gt;label.startsWith(l));</span>
+<span class="s1">}</span>
+<span class="s2">class </span><span class="s1">ProfilingPlugin {</span>
+    <span class="s1">constructor({ runWebpackSpan, rootDir }){</span>
+        <span class="s2">this</span><span class="s1">.runWebpackSpan = runWebpackSpan;</span>
+        <span class="s2">this</span><span class="s1">.rootDir = rootDir;</span>
+    <span class="s1">}</span>
+    <span class="s1">apply(compiler) {</span>
+        <span class="s2">this</span><span class="s1">.traceTopLevelHooks(compiler);</span>
+        <span class="s2">this</span><span class="s1">.traceCompilationHooks(compiler);</span>
+        <span class="s2">this</span><span class="s1">.compiler = compiler;</span>
+    <span class="s1">}</span>
+    <span class="s1">traceHookPair(spanName, startHook, stopHook, { parentSpan, attrs, onStart, onStop } = {}) {</span>
+        <span class="s2">let </span><span class="s1">span;</span>
+        <span class="s1">startHook.tap({</span>
+            <span class="s1">name: pluginName,</span>
+            <span class="s1">stage: -Infinity</span>
+        <span class="s1">}, (...params)=&gt;{</span>
+            <span class="s2">const </span><span class="s1">name = </span><span class="s2">typeof </span><span class="s1">spanName === </span><span class="s0">'function' </span><span class="s1">? spanName() : spanName;</span>
+            <span class="s2">const </span><span class="s1">attributes = attrs ? attrs(...params) : attrs;</span>
+            <span class="s1">span = parentSpan ? parentSpan(...params).traceChild(name, attributes) : </span><span class="s2">this</span><span class="s1">.runWebpackSpan.traceChild(name, attributes);</span>
+            <span class="s2">if </span><span class="s1">(onStart) onStart(span, ...params);</span>
+        <span class="s1">});</span>
+        <span class="s1">stopHook.tap({</span>
+            <span class="s1">name: pluginName,</span>
+            <span class="s1">stage: Infinity</span>
+        <span class="s1">}, (...params)=&gt;{</span>
+            <span class="s4">// `stopHook` may be triggered when `startHook` has not in cases</span>
+            <span class="s4">// where `stopHook` is used as the terminating event for more</span>
+            <span class="s4">// than one pair of hooks.</span>
+            <span class="s2">if </span><span class="s1">(!span) {</span>
+                <span class="s2">return</span><span class="s1">;</span>
+            <span class="s1">}</span>
+            <span class="s2">if </span><span class="s1">(onStop) onStop(span, ...params);</span>
+            <span class="s1">span.stop();</span>
+        <span class="s1">});</span>
+    <span class="s1">}</span>
+    <span class="s1">traceTopLevelHooks(compiler) {</span>
+        <span class="s2">this</span><span class="s1">.traceHookPair(</span><span class="s0">'webpack-compilation'</span><span class="s1">, compiler.hooks.compilation, compiler.hooks.afterCompile, {</span>
+            <span class="s1">parentSpan: ()=&gt;webpackInvalidSpans.get(compiler) || </span><span class="s2">this</span><span class="s1">.runWebpackSpan,</span>
+            <span class="s1">attrs: ()=&gt;({</span>
+                    <span class="s1">name: compiler.name</span>
+                <span class="s1">}),</span>
+            <span class="s1">onStart: (span, compilation)=&gt;{</span>
+                <span class="s1">spans.set(compilation, span);</span>
+                <span class="s1">spans.set(compiler, span);</span>
+                <span class="s1">moduleSpansByCompilation.set(compilation, </span><span class="s2">new </span><span class="s1">WeakMap());</span>
+            <span class="s1">}</span>
+        <span class="s1">});</span>
+        <span class="s2">if </span><span class="s1">(compiler.options.mode === </span><span class="s0">'development'</span><span class="s1">) {</span>
+            <span class="s2">this</span><span class="s1">.traceHookPair(()=&gt;</span><span class="s0">`webpack-invalidated-</span><span class="s1">${compiler.name}</span><span class="s0">`</span><span class="s1">, compiler.hooks.invalid, compiler.hooks.done, {</span>
+                <span class="s1">onStart: (span)=&gt;webpackInvalidSpans.set(compiler, span),</span>
+                <span class="s1">onStop: ()=&gt;webpackInvalidSpans.delete(compiler),</span>
+                <span class="s1">attrs: (fileName)=&gt;({</span>
+                        <span class="s1">trigger: fileName ? _path.default.relative(</span><span class="s2">this</span><span class="s1">.rootDir, fileName).replaceAll(_path.default.sep, </span><span class="s0">'/'</span><span class="s1">) : </span><span class="s0">'manual'</span>
+                    <span class="s1">})</span>
+            <span class="s1">});</span>
+        <span class="s1">}</span>
+    <span class="s1">}</span>
+    <span class="s1">traceCompilationHooks(compiler) {</span>
+        <span class="s2">this</span><span class="s1">.traceHookPair(</span><span class="s0">'emit'</span><span class="s1">, compiler.hooks.emit, compiler.hooks.afterEmit, {</span>
+            <span class="s1">parentSpan: ()=&gt;webpackInvalidSpans.get(compiler) || </span><span class="s2">this</span><span class="s1">.runWebpackSpan</span>
+        <span class="s1">});</span>
+        <span class="s2">this</span><span class="s1">.traceHookPair(</span><span class="s0">'make'</span><span class="s1">, compiler.hooks.make, compiler.hooks.finishMake, {</span>
+            <span class="s1">parentSpan: (compilation)=&gt;{</span>
+                <span class="s2">const </span><span class="s1">compilationSpan = spans.get(compilation);</span>
+                <span class="s2">if </span><span class="s1">(!compilationSpan) {</span>
+                    <span class="s2">return </span><span class="s1">webpackInvalidSpans.get(compiler) || </span><span class="s2">this</span><span class="s1">.runWebpackSpan;</span>
+                <span class="s1">}</span>
+                <span class="s2">return </span><span class="s1">compilationSpan;</span>
+            <span class="s1">},</span>
+            <span class="s1">onStart: (span, compilation)=&gt;{</span>
+                <span class="s1">makeSpanByCompilation.set(compilation, span);</span>
+            <span class="s1">},</span>
+            <span class="s1">onStop: (_span, compilation)=&gt;{</span>
+                <span class="s1">makeSpanByCompilation.delete(compilation);</span>
+            <span class="s1">}</span>
+        <span class="s1">});</span>
+        <span class="s1">compiler.hooks.compilation.tap({</span>
+            <span class="s1">name: pluginName,</span>
+            <span class="s1">stage: -Infinity</span>
+        <span class="s1">}, (compilation)=&gt;{</span>
+            <span class="s1">compilation.hooks.buildModule.tap(pluginName, (module1)=&gt;{</span>
+                <span class="s2">var </span><span class="s1">_compilation_moduleGraph;</span>
+                <span class="s2">const </span><span class="s1">moduleType = (()=&gt;{</span>
+                    <span class="s2">const </span><span class="s1">r = module1.userRequest;</span>
+                    <span class="s2">if </span><span class="s1">(!r || r.endsWith(</span><span class="s0">'!'</span><span class="s1">)) {</span>
+                        <span class="s2">return </span><span class="s0">''</span><span class="s1">;</span>
+                    <span class="s1">} </span><span class="s2">else </span><span class="s1">{</span>
+                        <span class="s2">const </span><span class="s1">resource = r.split(</span><span class="s0">'!'</span><span class="s1">).pop();</span>
+                        <span class="s2">const </span><span class="s1">match = </span><span class="s5">/^[^?]+\.([^?]+)$/</span><span class="s1">.exec(resource);</span>
+                        <span class="s2">return </span><span class="s1">match ? match[</span><span class="s3">1</span><span class="s1">] : </span><span class="s0">''</span><span class="s1">;</span>
+                    <span class="s1">}</span>
+                <span class="s1">})();</span>
+                <span class="s2">const </span><span class="s1">issuerModule = compilation == </span><span class="s2">null </span><span class="s1">? </span><span class="s2">void </span><span class="s3">0 </span><span class="s1">: (_compilation_moduleGraph = compilation.moduleGraph) == </span><span class="s2">null </span><span class="s1">? </span><span class="s2">void </span><span class="s3">0 </span><span class="s1">: _compilation_moduleGraph.getIssuer(module1);</span>
+                <span class="s2">let </span><span class="s1">span;</span>
+                <span class="s2">const </span><span class="s1">moduleSpans = moduleSpansByCompilation.get(compilation);</span>
+                <span class="s2">const </span><span class="s1">spanName = </span><span class="s0">`build-module</span><span class="s1">${moduleType ? </span><span class="s0">`-</span><span class="s1">${moduleType}</span><span class="s0">` </span><span class="s1">: </span><span class="s0">''</span><span class="s1">}</span><span class="s0">`</span><span class="s1">;</span>
+                <span class="s2">const </span><span class="s1">issuerSpan = issuerModule &amp;&amp; (moduleSpans == </span><span class="s2">null </span><span class="s1">? </span><span class="s2">void </span><span class="s3">0 </span><span class="s1">: moduleSpans.get(issuerModule));</span>
+                <span class="s2">if </span><span class="s1">(issuerSpan) {</span>
+                    <span class="s1">span = issuerSpan.traceChild(spanName);</span>
+                <span class="s1">} </span><span class="s2">else </span><span class="s1">{</span>
+                    <span class="s2">let </span><span class="s1">parentSpan;</span>
+                    <span class="s2">for </span><span class="s1">(</span><span class="s2">const </span><span class="s1">incomingConnection of compilation.moduleGraph.getIncomingConnections(module1)){</span>
+                        <span class="s2">const </span><span class="s1">entrySpan = spans.get(incomingConnection.dependency);</span>
+                        <span class="s2">if </span><span class="s1">(entrySpan) {</span>
+                            <span class="s1">parentSpan = entrySpan;</span>
+                            <span class="s2">break</span><span class="s1">;</span>
+                        <span class="s1">}</span>
+                    <span class="s1">}</span>
+                    <span class="s2">if </span><span class="s1">(!parentSpan) {</span>
+                        <span class="s2">const </span><span class="s1">compilationSpan = spans.get(compilation);</span>
+                        <span class="s2">if </span><span class="s1">(!compilationSpan) {</span>
+                            <span class="s2">return</span><span class="s1">;</span>
+                        <span class="s1">}</span>
+                        <span class="s1">parentSpan = compilationSpan;</span>
+                    <span class="s1">}</span>
+                    <span class="s1">span = parentSpan.traceChild(spanName);</span>
+                <span class="s1">}</span>
+                <span class="s1">span.setAttribute(</span><span class="s0">'name'</span><span class="s1">, module1.userRequest);</span>
+                <span class="s1">span.setAttribute(</span><span class="s0">'layer'</span><span class="s1">, module1.layer);</span>
+                <span class="s1">moduleSpans.set(module1, span);</span>
+            <span class="s1">});</span>
+            <span class="s2">const </span><span class="s1">moduleHooks = _webpack.NormalModule.getCompilationHooks(compilation);</span>
+            <span class="s1">moduleHooks.readResource.for(undefined).intercept({</span>
+                <span class="s1">register (tapInfo) {</span>
+                    <span class="s2">const </span><span class="s1">fn = tapInfo.fn;</span>
+                    <span class="s1">tapInfo.fn = (loaderContext, callback)=&gt;{</span>
+                        <span class="s1">fn(loaderContext, (err, result)=&gt;{</span>
+                            <span class="s1">callback(err, result);</span>
+                        <span class="s1">});</span>
+                    <span class="s1">};</span>
+                    <span class="s2">return </span><span class="s1">tapInfo;</span>
+                <span class="s1">}</span>
+            <span class="s1">});</span>
+            <span class="s1">moduleHooks.loader.tap(pluginName, (loaderContext, module1)=&gt;{</span>
+                <span class="s2">var </span><span class="s1">_moduleSpansByCompilation_get;</span>
+                <span class="s2">const </span><span class="s1">moduleSpan = (_moduleSpansByCompilation_get = moduleSpansByCompilation.get(compilation)) == </span><span class="s2">null </span><span class="s1">? </span><span class="s2">void </span><span class="s3">0 </span><span class="s1">: _moduleSpansByCompilation_get.get(module1);</span>
+                <span class="s1">loaderContext.currentTraceSpan = moduleSpan;</span>
+            <span class="s1">});</span>
+            <span class="s1">compilation.hooks.succeedModule.tap(pluginName, (module1)=&gt;{</span>
+                <span class="s2">var </span><span class="s1">_moduleSpansByCompilation_get_get, _moduleSpansByCompilation_get;</span>
+                <span class="s1">moduleSpansByCompilation == </span><span class="s2">null </span><span class="s1">? </span><span class="s2">void </span><span class="s3">0 </span><span class="s1">: (_moduleSpansByCompilation_get = moduleSpansByCompilation.get(compilation)) == </span><span class="s2">null </span><span class="s1">? </span><span class="s2">void </span><span class="s3">0 </span><span class="s1">: (_moduleSpansByCompilation_get_get = _moduleSpansByCompilation_get.get(module1)) == </span><span class="s2">null </span><span class="s1">? </span><span class="s2">void </span><span class="s3">0 </span><span class="s1">: _moduleSpansByCompilation_get_get.stop();</span>
+            <span class="s1">});</span>
+            <span class="s1">compilation.hooks.failedModule.tap(pluginName, (module1)=&gt;{</span>
+                <span class="s2">var </span><span class="s1">_moduleSpansByCompilation_get_get, _moduleSpansByCompilation_get;</span>
+                <span class="s1">moduleSpansByCompilation == </span><span class="s2">null </span><span class="s1">? </span><span class="s2">void </span><span class="s3">0 </span><span class="s1">: (_moduleSpansByCompilation_get = moduleSpansByCompilation.get(compilation)) == </span><span class="s2">null </span><span class="s1">? </span><span class="s2">void </span><span class="s3">0 </span><span class="s1">: (_moduleSpansByCompilation_get_get = _moduleSpansByCompilation_get.get(module1)) == </span><span class="s2">null </span><span class="s1">? </span><span class="s2">void </span><span class="s3">0 </span><span class="s1">: _moduleSpansByCompilation_get_get.stop();</span>
+            <span class="s1">});</span>
+            <span class="s2">this</span><span class="s1">.traceHookPair(</span><span class="s0">'seal'</span><span class="s1">, compilation.hooks.seal, compilation.hooks.afterSeal, {</span>
+                <span class="s1">parentSpan: ()=&gt;spans.get(compilation),</span>
+                <span class="s1">onStart (span) {</span>
+                    <span class="s1">sealSpanByCompilation.set(compilation, span);</span>
+                <span class="s1">},</span>
+                <span class="s1">onStop () {</span>
+                    <span class="s1">sealSpanByCompilation.delete(compilation);</span>
+                <span class="s1">}</span>
+            <span class="s1">});</span>
+            <span class="s1">compilation.hooks.addEntry.tap(pluginName, (entry)=&gt;{</span>
+                <span class="s2">const </span><span class="s1">parentSpan = makeSpanByCompilation.get(compilation) || spans.get(compilation);</span>
+                <span class="s2">if </span><span class="s1">(!parentSpan) {</span>
+                    <span class="s2">return</span><span class="s1">;</span>
+                <span class="s1">}</span>
+                <span class="s2">const </span><span class="s1">addEntrySpan = parentSpan.traceChild(</span><span class="s0">'add-entry'</span><span class="s1">);</span>
+                <span class="s1">addEntrySpan.setAttribute(</span><span class="s0">'request'</span><span class="s1">, entry.request);</span>
+                <span class="s1">spans.set(entry, addEntrySpan);</span>
+            <span class="s1">});</span>
+            <span class="s1">compilation.hooks.succeedEntry.tap(pluginName, (entry)=&gt;{</span>
+                <span class="s2">var </span><span class="s1">_spans_get;</span>
+                <span class="s1">(_spans_get = spans.get(entry)) == </span><span class="s2">null </span><span class="s1">? </span><span class="s2">void </span><span class="s3">0 </span><span class="s1">: _spans_get.stop();</span>
+                <span class="s1">spans.delete(entry);</span>
+            <span class="s1">});</span>
+            <span class="s1">compilation.hooks.failedEntry.tap(pluginName, (entry)=&gt;{</span>
+                <span class="s2">var </span><span class="s1">_spans_get;</span>
+                <span class="s1">(_spans_get = spans.get(entry)) == </span><span class="s2">null </span><span class="s1">? </span><span class="s2">void </span><span class="s3">0 </span><span class="s1">: _spans_get.stop();</span>
+                <span class="s1">spans.delete(entry);</span>
+            <span class="s1">});</span>
+            <span class="s2">this</span><span class="s1">.traceHookPair(</span><span class="s0">'chunk-graph'</span><span class="s1">, compilation.hooks.beforeChunks, compilation.hooks.afterChunks, {</span>
+                <span class="s1">parentSpan: ()=&gt;sealSpanByCompilation.get(compilation) || spans.get(compilation)</span>
+            <span class="s1">});</span>
+            <span class="s2">this</span><span class="s1">.traceHookPair(</span><span class="s0">'optimize'</span><span class="s1">, compilation.hooks.optimize, compilation.hooks.reviveModules, {</span>
+                <span class="s1">parentSpan: ()=&gt;sealSpanByCompilation.get(compilation) || spans.get(compilation)</span>
+            <span class="s1">});</span>
+            <span class="s2">this</span><span class="s1">.traceHookPair(</span><span class="s0">'optimize-modules'</span><span class="s1">, compilation.hooks.optimizeModules, compilation.hooks.afterOptimizeModules, {</span>
+                <span class="s1">parentSpan: ()=&gt;sealSpanByCompilation.get(compilation) || spans.get(compilation)</span>
+            <span class="s1">});</span>
+            <span class="s2">this</span><span class="s1">.traceHookPair(</span><span class="s0">'optimize-chunks'</span><span class="s1">, compilation.hooks.optimizeChunks, compilation.hooks.afterOptimizeChunks, {</span>
+                <span class="s1">parentSpan: ()=&gt;sealSpanByCompilation.get(compilation) || spans.get(compilation)</span>
+            <span class="s1">});</span>
+            <span class="s2">this</span><span class="s1">.traceHookPair(</span><span class="s0">'optimize-tree'</span><span class="s1">, compilation.hooks.optimizeTree, compilation.hooks.afterOptimizeTree, {</span>
+                <span class="s1">parentSpan: ()=&gt;sealSpanByCompilation.get(compilation) || spans.get(compilation)</span>
+            <span class="s1">});</span>
+            <span class="s2">this</span><span class="s1">.traceHookPair(</span><span class="s0">'optimize-chunk-modules'</span><span class="s1">, compilation.hooks.optimizeChunkModules, compilation.hooks.afterOptimizeChunkModules, {</span>
+                <span class="s1">parentSpan: ()=&gt;sealSpanByCompilation.get(compilation) || spans.get(compilation)</span>
+            <span class="s1">});</span>
+            <span class="s2">this</span><span class="s1">.traceHookPair(</span><span class="s0">'module-hash'</span><span class="s1">, compilation.hooks.beforeModuleHash, compilation.hooks.afterModuleHash, {</span>
+                <span class="s1">parentSpan: ()=&gt;sealSpanByCompilation.get(compilation) || spans.get(compilation)</span>
+            <span class="s1">});</span>
+            <span class="s2">this</span><span class="s1">.traceHookPair(</span><span class="s0">'code-generation'</span><span class="s1">, compilation.hooks.beforeCodeGeneration, compilation.hooks.afterCodeGeneration, {</span>
+                <span class="s1">parentSpan: ()=&gt;sealSpanByCompilation.get(compilation) || spans.get(compilation)</span>
+            <span class="s1">});</span>
+            <span class="s2">this</span><span class="s1">.traceHookPair(</span><span class="s0">'hash'</span><span class="s1">, compilation.hooks.beforeHash, compilation.hooks.afterHash, {</span>
+                <span class="s1">parentSpan: ()=&gt;sealSpanByCompilation.get(compilation) || spans.get(compilation)</span>
+            <span class="s1">});</span>
+            <span class="s2">this</span><span class="s1">.traceHookPair(</span><span class="s0">'code-generation-jobs'</span><span class="s1">, compilation.hooks.afterHash, compilation.hooks.beforeModuleAssets, {</span>
+                <span class="s1">parentSpan: ()=&gt;sealSpanByCompilation.get(compilation) || spans.get(compilation)</span>
+            <span class="s1">});</span>
+            <span class="s2">const </span><span class="s1">logs = </span><span class="s2">new </span><span class="s1">Map();</span>
+            <span class="s2">const </span><span class="s1">originalTime = compilation.logger.time;</span>
+            <span class="s2">const </span><span class="s1">originalTimeEnd = compilation.logger.timeEnd;</span>
+            <span class="s1">compilation.logger.time = (label)=&gt;{</span>
+                <span class="s2">if </span><span class="s1">(!inTraceLabelsSeal(label)) {</span>
+                    <span class="s2">return </span><span class="s1">originalTime.call(compilation.logger, label);</span>
+                <span class="s1">}</span>
+                <span class="s2">const </span><span class="s1">span = sealSpanByCompilation.get(compilation);</span>
+                <span class="s2">if </span><span class="s1">(span) {</span>
+                    <span class="s1">logs.set(label, span.traceChild(label.replace(</span><span class="s5">/ /g</span><span class="s1">, </span><span class="s0">'-'</span><span class="s1">)));</span>
+                <span class="s1">}</span>
+                <span class="s2">return </span><span class="s1">originalTime.call(compilation.logger, label);</span>
+            <span class="s1">};</span>
+            <span class="s1">compilation.logger.timeEnd = (label)=&gt;{</span>
+                <span class="s2">if </span><span class="s1">(!inTraceLabelsSeal(label)) {</span>
+                    <span class="s2">return </span><span class="s1">originalTimeEnd.call(compilation.logger, label);</span>
+                <span class="s1">}</span>
+                <span class="s2">const </span><span class="s1">span = logs.get(label);</span>
+                <span class="s2">if </span><span class="s1">(span) {</span>
+                    <span class="s1">span.stop();</span>
+                    <span class="s1">logs.delete(label);</span>
+                <span class="s1">}</span>
+                <span class="s2">return </span><span class="s1">originalTimeEnd.call(compilation.logger, label);</span>
+            <span class="s1">};</span>
+        <span class="s1">});</span>
+    <span class="s1">}</span>
+<span class="s1">}</span>
+
+<span class="s4">//# sourceMappingURL=profiling-plugin.js.map</span></pre>
+</body>
+</html>

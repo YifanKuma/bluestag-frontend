@@ -1,0 +1,72 @@
+<html>
+<head>
+<title>resolveCommand.js</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #067d17;}
+.s1 { color: #080808;}
+.s2 { color: #0033b3;}
+.s3 { color: #8c8c8c; font-style: italic;}
+</style>
+</head>
+<body bgcolor="#ffffff">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#c0c0c0" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+resolveCommand.js</font>
+</center></td></tr></table>
+<pre><span class="s0">'use strict'</span><span class="s1">;</span>
+
+<span class="s2">const </span><span class="s1">path = require(</span><span class="s0">'path'</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">which = require(</span><span class="s0">'which'</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">getPathKey = require(</span><span class="s0">'path-key'</span><span class="s1">);</span>
+
+<span class="s2">function </span><span class="s1">resolveCommandAttempt(parsed, withoutPathExt) {</span>
+    <span class="s2">const </span><span class="s1">env = parsed.options.env || process.env;</span>
+    <span class="s2">const </span><span class="s1">cwd = process.cwd();</span>
+    <span class="s2">const </span><span class="s1">hasCustomCwd = parsed.options.cwd != </span><span class="s2">null</span><span class="s1">;</span>
+    <span class="s3">// Worker threads do not have process.chdir()</span>
+    <span class="s2">const </span><span class="s1">shouldSwitchCwd = hasCustomCwd &amp;&amp; process.chdir !== undefined &amp;&amp; !process.chdir.disabled;</span>
+
+    <span class="s3">// If a custom `cwd` was specified, we need to change the process cwd</span>
+    <span class="s3">// because `which` will do stat calls but does not support a custom cwd</span>
+    <span class="s2">if </span><span class="s1">(shouldSwitchCwd) {</span>
+        <span class="s2">try </span><span class="s1">{</span>
+            <span class="s1">process.chdir(parsed.options.cwd);</span>
+        <span class="s1">} </span><span class="s2">catch </span><span class="s1">(err) {</span>
+            <span class="s3">/* Empty */</span>
+        <span class="s1">}</span>
+    <span class="s1">}</span>
+
+    <span class="s2">let </span><span class="s1">resolved;</span>
+
+    <span class="s2">try </span><span class="s1">{</span>
+        <span class="s1">resolved = which.sync(parsed.command, {</span>
+            <span class="s1">path: env[getPathKey({ env })],</span>
+            <span class="s1">pathExt: withoutPathExt ? path.delimiter : undefined,</span>
+        <span class="s1">});</span>
+    <span class="s1">} </span><span class="s2">catch </span><span class="s1">(e) {</span>
+        <span class="s3">/* Empty */</span>
+    <span class="s1">} </span><span class="s2">finally </span><span class="s1">{</span>
+        <span class="s2">if </span><span class="s1">(shouldSwitchCwd) {</span>
+            <span class="s1">process.chdir(cwd);</span>
+        <span class="s1">}</span>
+    <span class="s1">}</span>
+
+    <span class="s3">// If we successfully resolved, ensure that an absolute path is returned</span>
+    <span class="s3">// Note that when a custom `cwd` was used, we need to resolve to an absolute path based on it</span>
+    <span class="s2">if </span><span class="s1">(resolved) {</span>
+        <span class="s1">resolved = path.resolve(hasCustomCwd ? parsed.options.cwd : </span><span class="s0">''</span><span class="s1">, resolved);</span>
+    <span class="s1">}</span>
+
+    <span class="s2">return </span><span class="s1">resolved;</span>
+<span class="s1">}</span>
+
+<span class="s2">function </span><span class="s1">resolveCommand(parsed) {</span>
+    <span class="s2">return </span><span class="s1">resolveCommandAttempt(parsed) || resolveCommandAttempt(parsed, </span><span class="s2">true</span><span class="s1">);</span>
+<span class="s1">}</span>
+
+<span class="s1">module.exports = resolveCommand;</span>
+</pre>
+</body>
+</html>

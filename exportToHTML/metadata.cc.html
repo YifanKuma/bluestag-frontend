@@ -1,0 +1,366 @@
+<html>
+<head>
+<title>metadata.cc</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #8c8c8c; font-style: italic;}
+.s1 { color: #080808;}
+.s2 { color: #0033b3;}
+.s3 { color: #067d17;}
+.s4 { color: #00627a;}
+.s5 { color: #000000;}
+.s6 { color: #1750eb; font-style: italic;}
+.s7 { color: #871094; font-style: italic;}
+</style>
+</head>
+<body bgcolor="#ffffff">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#c0c0c0" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+metadata.cc</font>
+</center></td></tr></table>
+<pre><span class="s0">// Copyright 2013 Lovell Fuller and others.</span>
+<span class="s0">// SPDX-License-Identifier: Apache-2.0</span>
+
+<span class="s2">#include </span><span class="s3">&lt;numeric&gt;</span>
+<span class="s2">#include </span><span class="s3">&lt;vector&gt;</span>
+<span class="s2">#include </span><span class="s3">&lt;cmath&gt;</span>
+
+<span class="s2">#include </span><span class="s3">&lt;napi.h&gt;</span>
+<span class="s2">#include </span><span class="s3">&lt;vips/vips8&gt;</span>
+
+<span class="s2">#include </span><span class="s3">&quot;common.h&quot;</span>
+<span class="s2">#include </span><span class="s3">&quot;metadata.h&quot;</span>
+
+<span class="s2">static </span><span class="s1">void</span><span class="s2">* </span><span class="s4">readPNGComment</span><span class="s1">(</span>VipsImage <span class="s2">*</span>image<span class="s1">, </span><span class="s2">const char *</span>field<span class="s1">, </span>GValue <span class="s2">*</span>value<span class="s1">, </span><span class="s2">void *</span>p<span class="s1">);</span>
+
+<span class="s2">class </span>MetadataWorker <span class="s1">: </span><span class="s2">public </span>Napi<span class="s1">::AsyncWorker {</span>
+ <span class="s2">public:</span>
+  <span class="s4">MetadataWorker</span><span class="s1">(</span>Napi<span class="s1">::</span>Function callback<span class="s1">, </span>MetadataBaton <span class="s2">*</span>baton<span class="s1">, </span>Napi<span class="s1">::</span>Function debuglog<span class="s1">) :</span>
+    <span class="s1">Napi::</span><span class="s4">AsyncWorker</span><span class="s1">(callback), </span><span class="s4">baton</span><span class="s1">(baton), </span><span class="s4">debuglog</span><span class="s1">(</span>Napi<span class="s1">::</span><span class="s4">Persistent</span><span class="s1">(debuglog)) {}</span>
+  <span class="s4">~MetadataWorker</span><span class="s1">() {}</span>
+
+  <span class="s1">void </span><span class="s4">Execute</span><span class="s1">() {</span>
+    <span class="s0">// Decrement queued task counter</span>
+    sharp<span class="s1">::counterQueue</span><span class="s2">--</span><span class="s1">;</span>
+
+    vips<span class="s1">::VImage image;</span>
+    sharp<span class="s1">::ImageType imageType </span><span class="s2">= </span>sharp<span class="s1">::</span>ImageType<span class="s1">::UNKNOWN;</span>
+    <span class="s2">try </span><span class="s1">{</span>
+      std<span class="s1">::</span><span class="s4">tie</span><span class="s1">(image, imageType) </span><span class="s2">= </span><span class="s4">OpenInput</span><span class="s1">(</span>baton<span class="s1">-&gt;</span>input<span class="s1">);</span>
+    <span class="s1">} </span><span class="s2">catch </span><span class="s1">(</span>vips<span class="s1">::VError </span><span class="s2">const &amp;</span><span class="s1">err) {</span>
+      <span class="s1">(</span>baton<span class="s1">-&gt;</span>err<span class="s1">).</span><span class="s4">append</span><span class="s1">(</span>err<span class="s1">.</span><span class="s4">what</span><span class="s1">());</span>
+    <span class="s1">}</span>
+    <span class="s2">if </span><span class="s1">(imageType </span><span class="s2">!= </span>sharp<span class="s1">::</span>ImageType<span class="s1">::UNKNOWN) {</span>
+      <span class="s0">// Image type</span>
+      baton<span class="s1">-&gt;</span>format <span class="s2">= </span>sharp<span class="s1">::</span><span class="s4">ImageTypeId</span><span class="s1">(imageType);</span>
+      <span class="s0">// VipsImage attributes</span>
+      baton<span class="s1">-&gt;</span>width <span class="s2">= </span>image<span class="s1">.</span><span class="s4">width</span><span class="s1">();</span>
+      baton<span class="s1">-&gt;</span>height <span class="s2">= </span>image<span class="s1">.</span><span class="s4">height</span><span class="s1">();</span>
+      baton<span class="s1">-&gt;</span>space <span class="s2">= </span><span class="s4">vips_enum_nick</span><span class="s1">(VIPS_TYPE_INTERPRETATION, </span>image<span class="s1">.</span><span class="s4">interpretation</span><span class="s1">());</span>
+      baton<span class="s1">-&gt;</span>channels <span class="s2">= </span>image<span class="s1">.</span><span class="s4">bands</span><span class="s1">();</span>
+      baton<span class="s1">-&gt;</span>depth <span class="s2">= </span><span class="s4">vips_enum_nick</span><span class="s1">(VIPS_TYPE_BAND_FORMAT, </span>image<span class="s1">.</span><span class="s4">format</span><span class="s1">());</span>
+      <span class="s2">if </span><span class="s1">(</span>sharp<span class="s1">::</span><span class="s4">HasDensity</span><span class="s1">(image)) {</span>
+        baton<span class="s1">-&gt;</span>density <span class="s2">= </span>sharp<span class="s1">::</span><span class="s4">GetDensity</span><span class="s1">(image);</span>
+      <span class="s1">}</span>
+      <span class="s2">if </span><span class="s1">(</span>image<span class="s1">.</span><span class="s4">get_typeof</span><span class="s1">(</span><span class="s3">&quot;jpeg-chroma-subsample&quot;</span><span class="s1">) </span><span class="s2">== </span><span class="s1">VIPS_TYPE_REF_STRING) {</span>
+        baton<span class="s1">-&gt;</span>chromaSubsampling <span class="s2">= </span>image<span class="s1">.</span><span class="s4">get_string</span><span class="s1">(</span><span class="s3">&quot;jpeg-chroma-subsample&quot;</span><span class="s1">);</span>
+      <span class="s1">}</span>
+      <span class="s2">if </span><span class="s1">(</span>image<span class="s1">.</span><span class="s4">get_typeof</span><span class="s1">(</span><span class="s3">&quot;interlaced&quot;</span><span class="s1">) </span><span class="s2">== </span><span class="s1">G_TYPE_INT) {</span>
+        baton<span class="s1">-&gt;</span>isProgressive <span class="s2">= </span>image<span class="s1">.</span><span class="s4">get_int</span><span class="s1">(</span><span class="s3">&quot;interlaced&quot;</span><span class="s1">) </span><span class="s2">== </span><span class="s6">1</span><span class="s1">;</span>
+      <span class="s1">}</span>
+      <span class="s2">if </span><span class="s1">(</span>image<span class="s1">.</span><span class="s4">get_typeof</span><span class="s1">(VIPS_META_PALETTE) </span><span class="s2">== </span><span class="s1">G_TYPE_INT) {</span>
+        baton<span class="s1">-&gt;</span>isPalette <span class="s2">= </span>image<span class="s1">.</span><span class="s4">get_int</span><span class="s1">(VIPS_META_PALETTE);</span>
+      <span class="s1">}</span>
+      <span class="s2">if </span><span class="s1">(</span>image<span class="s1">.</span><span class="s4">get_typeof</span><span class="s1">(VIPS_META_BITS_PER_SAMPLE) </span><span class="s2">== </span><span class="s1">G_TYPE_INT) {</span>
+        baton<span class="s1">-&gt;</span>bitsPerSample <span class="s2">= </span>image<span class="s1">.</span><span class="s4">get_int</span><span class="s1">(VIPS_META_BITS_PER_SAMPLE);</span>
+      <span class="s1">}</span>
+      <span class="s2">if </span><span class="s1">(</span>image<span class="s1">.</span><span class="s4">get_typeof</span><span class="s1">(VIPS_META_N_PAGES) </span><span class="s2">== </span><span class="s1">G_TYPE_INT) {</span>
+        baton<span class="s1">-&gt;</span>pages <span class="s2">= </span>image<span class="s1">.</span><span class="s4">get_int</span><span class="s1">(VIPS_META_N_PAGES);</span>
+      <span class="s1">}</span>
+      <span class="s2">if </span><span class="s1">(</span>image<span class="s1">.</span><span class="s4">get_typeof</span><span class="s1">(VIPS_META_PAGE_HEIGHT) </span><span class="s2">== </span><span class="s1">G_TYPE_INT) {</span>
+        baton<span class="s1">-&gt;</span>pageHeight <span class="s2">= </span>image<span class="s1">.</span><span class="s4">get_int</span><span class="s1">(VIPS_META_PAGE_HEIGHT);</span>
+      <span class="s1">}</span>
+      <span class="s2">if </span><span class="s1">(</span>image<span class="s1">.</span><span class="s4">get_typeof</span><span class="s1">(</span><span class="s3">&quot;loop&quot;</span><span class="s1">) </span><span class="s2">== </span><span class="s1">G_TYPE_INT) {</span>
+        baton<span class="s1">-&gt;</span>loop <span class="s2">= </span>image<span class="s1">.</span><span class="s4">get_int</span><span class="s1">(</span><span class="s3">&quot;loop&quot;</span><span class="s1">);</span>
+      <span class="s1">}</span>
+      <span class="s2">if </span><span class="s1">(</span>image<span class="s1">.</span><span class="s4">get_typeof</span><span class="s1">(</span><span class="s3">&quot;delay&quot;</span><span class="s1">) </span><span class="s2">== </span><span class="s1">VIPS_TYPE_ARRAY_INT) {</span>
+        baton<span class="s1">-&gt;</span>delay <span class="s2">= </span>image<span class="s1">.</span><span class="s4">get_array_int</span><span class="s1">(</span><span class="s3">&quot;delay&quot;</span><span class="s1">);</span>
+      <span class="s1">}</span>
+      <span class="s2">if </span><span class="s1">(</span>image<span class="s1">.</span><span class="s4">get_typeof</span><span class="s1">(</span><span class="s3">&quot;heif-primary&quot;</span><span class="s1">) </span><span class="s2">== </span><span class="s1">G_TYPE_INT) {</span>
+        baton<span class="s1">-&gt;</span>pagePrimary <span class="s2">= </span>image<span class="s1">.</span><span class="s4">get_int</span><span class="s1">(</span><span class="s3">&quot;heif-primary&quot;</span><span class="s1">);</span>
+      <span class="s1">}</span>
+      <span class="s2">if </span><span class="s1">(</span>image<span class="s1">.</span><span class="s4">get_typeof</span><span class="s1">(</span><span class="s3">&quot;heif-compression&quot;</span><span class="s1">) </span><span class="s2">== </span><span class="s1">VIPS_TYPE_REF_STRING) {</span>
+        baton<span class="s1">-&gt;</span>compression <span class="s2">= </span>image<span class="s1">.</span><span class="s4">get_string</span><span class="s1">(</span><span class="s3">&quot;heif-compression&quot;</span><span class="s1">);</span>
+      <span class="s1">}</span>
+      <span class="s2">if </span><span class="s1">(</span>image<span class="s1">.</span><span class="s4">get_typeof</span><span class="s1">(VIPS_META_RESOLUTION_UNIT) </span><span class="s2">== </span><span class="s1">VIPS_TYPE_REF_STRING) {</span>
+        baton<span class="s1">-&gt;</span>resolutionUnit <span class="s2">= </span>image<span class="s1">.</span><span class="s4">get_string</span><span class="s1">(VIPS_META_RESOLUTION_UNIT);</span>
+      <span class="s1">}</span>
+      <span class="s2">if </span><span class="s1">(</span>image<span class="s1">.</span><span class="s4">get_typeof</span><span class="s1">(</span><span class="s3">&quot;magick-format&quot;</span><span class="s1">) </span><span class="s2">== </span><span class="s1">VIPS_TYPE_REF_STRING) {</span>
+        baton<span class="s1">-&gt;</span>formatMagick <span class="s2">= </span>image<span class="s1">.</span><span class="s4">get_string</span><span class="s1">(</span><span class="s3">&quot;magick-format&quot;</span><span class="s1">);</span>
+      <span class="s1">}</span>
+      <span class="s2">if </span><span class="s1">(</span>image<span class="s1">.</span><span class="s4">get_typeof</span><span class="s1">(</span><span class="s3">&quot;openslide.level-count&quot;</span><span class="s1">) </span><span class="s2">== </span><span class="s1">VIPS_TYPE_REF_STRING) {</span>
+        <span class="s2">int const </span><span class="s1">levels </span><span class="s2">= </span>std<span class="s1">::</span><span class="s4">stoi</span><span class="s1">(</span>image<span class="s1">.</span><span class="s4">get_string</span><span class="s1">(</span><span class="s3">&quot;openslide.level-count&quot;</span><span class="s1">));</span>
+        <span class="s2">for </span><span class="s1">(</span><span class="s2">int </span><span class="s1">l </span><span class="s2">= </span><span class="s6">0</span><span class="s1">; l </span><span class="s2">&lt; </span><span class="s1">levels; l</span><span class="s2">++</span><span class="s1">) {</span>
+          std<span class="s1">::string prefix </span><span class="s2">= </span><span class="s3">&quot;openslide.level[&quot; </span><span class="s2">+ </span>std<span class="s1">::</span><span class="s4">to_string</span><span class="s1">(l) </span><span class="s2">+ </span><span class="s3">&quot;].&quot;</span><span class="s1">;</span>
+          <span class="s2">int const </span><span class="s1">width </span><span class="s2">= </span>std<span class="s1">::</span><span class="s4">stoi</span><span class="s1">(</span>image<span class="s1">.</span><span class="s4">get_string</span><span class="s1">((prefix </span><span class="s2">+ </span><span class="s3">&quot;width&quot;</span><span class="s1">).</span><span class="s4">data</span><span class="s1">()));</span>
+          <span class="s2">int const </span><span class="s1">height </span><span class="s2">= </span>std<span class="s1">::</span><span class="s4">stoi</span><span class="s1">(</span>image<span class="s1">.</span><span class="s4">get_string</span><span class="s1">((prefix </span><span class="s2">+ </span><span class="s3">&quot;height&quot;</span><span class="s1">).</span><span class="s4">data</span><span class="s1">()));</span>
+          baton<span class="s1">-&gt;</span>levels<span class="s1">.</span><span class="s4">push_back</span><span class="s1">(</span>std<span class="s1">::</span><span class="s4">pair</span><span class="s1">&lt;int, int&gt;(width, height));</span>
+        <span class="s1">}</span>
+      <span class="s1">}</span>
+      <span class="s2">if </span><span class="s1">(</span>image<span class="s1">.</span><span class="s4">get_typeof</span><span class="s1">(VIPS_META_N_SUBIFDS) </span><span class="s2">== </span><span class="s1">G_TYPE_INT) {</span>
+        baton<span class="s1">-&gt;</span>subifds <span class="s2">= </span>image<span class="s1">.</span><span class="s4">get_int</span><span class="s1">(VIPS_META_N_SUBIFDS);</span>
+      <span class="s1">}</span>
+      baton<span class="s1">-&gt;</span>hasProfile <span class="s2">= </span>sharp<span class="s1">::</span><span class="s4">HasProfile</span><span class="s1">(image);</span>
+      <span class="s2">if </span><span class="s1">(</span>image<span class="s1">.</span><span class="s4">get_typeof</span><span class="s1">(</span><span class="s3">&quot;background&quot;</span><span class="s1">) </span><span class="s2">== </span><span class="s1">VIPS_TYPE_ARRAY_DOUBLE) {</span>
+        baton<span class="s1">-&gt;</span>background <span class="s2">= </span>image<span class="s1">.</span><span class="s4">get_array_double</span><span class="s1">(</span><span class="s3">&quot;background&quot;</span><span class="s1">);</span>
+      <span class="s1">}</span>
+      <span class="s0">// Derived attributes</span>
+      baton<span class="s1">-&gt;</span>hasAlpha <span class="s2">= </span>image<span class="s1">.</span><span class="s4">has_alpha</span><span class="s1">();</span>
+      baton<span class="s1">-&gt;</span>orientation <span class="s2">= </span>sharp<span class="s1">::</span><span class="s4">ExifOrientation</span><span class="s1">(image);</span>
+      <span class="s0">// EXIF</span>
+      <span class="s2">if </span><span class="s1">(</span>image<span class="s1">.</span><span class="s4">get_typeof</span><span class="s1">(VIPS_META_EXIF_NAME) </span><span class="s2">== </span><span class="s1">VIPS_TYPE_BLOB) {</span>
+        <span class="s2">size_t </span><span class="s1">exifLength;</span>
+        <span class="s2">void const *</span><span class="s1">exif </span><span class="s2">= </span>image<span class="s1">.</span><span class="s4">get_blob</span><span class="s1">(VIPS_META_EXIF_NAME, </span><span class="s2">&amp;</span><span class="s1">exifLength);</span>
+        baton<span class="s1">-&gt;</span>exif <span class="s2">= static_cast&lt;char*&gt;</span><span class="s1">(</span><span class="s4">g_malloc</span><span class="s1">(exifLength));</span>
+        <span class="s4">memcpy</span><span class="s1">(</span>baton<span class="s1">-&gt;</span>exif<span class="s1">, exif, exifLength);</span>
+        baton<span class="s1">-&gt;</span>exifLength <span class="s2">= </span><span class="s1">exifLength;</span>
+      <span class="s1">}</span>
+      <span class="s0">// ICC profile</span>
+      <span class="s2">if </span><span class="s1">(</span>image<span class="s1">.</span><span class="s4">get_typeof</span><span class="s1">(VIPS_META_ICC_NAME) </span><span class="s2">== </span><span class="s1">VIPS_TYPE_BLOB) {</span>
+        <span class="s2">size_t </span><span class="s1">iccLength;</span>
+        <span class="s2">void const *</span><span class="s1">icc </span><span class="s2">= </span>image<span class="s1">.</span><span class="s4">get_blob</span><span class="s1">(VIPS_META_ICC_NAME, </span><span class="s2">&amp;</span><span class="s1">iccLength);</span>
+        baton<span class="s1">-&gt;</span>icc <span class="s2">= static_cast&lt;char*&gt;</span><span class="s1">(</span><span class="s4">g_malloc</span><span class="s1">(iccLength));</span>
+        <span class="s4">memcpy</span><span class="s1">(</span>baton<span class="s1">-&gt;</span>icc<span class="s1">, icc, iccLength);</span>
+        baton<span class="s1">-&gt;</span>iccLength <span class="s2">= </span><span class="s1">iccLength;</span>
+      <span class="s1">}</span>
+      <span class="s0">// IPTC</span>
+      <span class="s2">if </span><span class="s1">(</span>image<span class="s1">.</span><span class="s4">get_typeof</span><span class="s1">(VIPS_META_IPTC_NAME) </span><span class="s2">== </span><span class="s1">VIPS_TYPE_BLOB) {</span>
+        <span class="s2">size_t </span><span class="s1">iptcLength;</span>
+        <span class="s2">void const *</span><span class="s1">iptc </span><span class="s2">= </span>image<span class="s1">.</span><span class="s4">get_blob</span><span class="s1">(VIPS_META_IPTC_NAME, </span><span class="s2">&amp;</span><span class="s1">iptcLength);</span>
+        baton<span class="s1">-&gt;</span>iptc <span class="s2">= static_cast&lt;char *&gt;</span><span class="s1">(</span><span class="s4">g_malloc</span><span class="s1">(iptcLength));</span>
+        <span class="s4">memcpy</span><span class="s1">(</span>baton<span class="s1">-&gt;</span>iptc<span class="s1">, iptc, iptcLength);</span>
+        baton<span class="s1">-&gt;</span>iptcLength <span class="s2">= </span><span class="s1">iptcLength;</span>
+      <span class="s1">}</span>
+      <span class="s0">// XMP</span>
+      <span class="s2">if </span><span class="s1">(</span>image<span class="s1">.</span><span class="s4">get_typeof</span><span class="s1">(VIPS_META_XMP_NAME) </span><span class="s2">== </span><span class="s1">VIPS_TYPE_BLOB) {</span>
+        <span class="s2">size_t </span><span class="s1">xmpLength;</span>
+        <span class="s2">void const *</span><span class="s1">xmp </span><span class="s2">= </span>image<span class="s1">.</span><span class="s4">get_blob</span><span class="s1">(VIPS_META_XMP_NAME, </span><span class="s2">&amp;</span><span class="s1">xmpLength);</span>
+        baton<span class="s1">-&gt;</span>xmp <span class="s2">= static_cast&lt;char *&gt;</span><span class="s1">(</span><span class="s4">g_malloc</span><span class="s1">(xmpLength));</span>
+        <span class="s4">memcpy</span><span class="s1">(</span>baton<span class="s1">-&gt;</span>xmp<span class="s1">, xmp, xmpLength);</span>
+        baton<span class="s1">-&gt;</span>xmpLength <span class="s2">= </span><span class="s1">xmpLength;</span>
+      <span class="s1">}</span>
+      <span class="s0">// TIFFTAG_PHOTOSHOP</span>
+      <span class="s2">if </span><span class="s1">(</span>image<span class="s1">.</span><span class="s4">get_typeof</span><span class="s1">(VIPS_META_PHOTOSHOP_NAME) </span><span class="s2">== </span><span class="s1">VIPS_TYPE_BLOB) {</span>
+        <span class="s2">size_t </span><span class="s1">tifftagPhotoshopLength;</span>
+        <span class="s2">void const *</span><span class="s1">tifftagPhotoshop </span><span class="s2">= </span>image<span class="s1">.</span><span class="s4">get_blob</span><span class="s1">(VIPS_META_PHOTOSHOP_NAME, </span><span class="s2">&amp;</span><span class="s1">tifftagPhotoshopLength);</span>
+        baton<span class="s1">-&gt;</span>tifftagPhotoshop <span class="s2">= static_cast&lt;char *&gt;</span><span class="s1">(</span><span class="s4">g_malloc</span><span class="s1">(tifftagPhotoshopLength));</span>
+        <span class="s4">memcpy</span><span class="s1">(</span>baton<span class="s1">-&gt;</span>tifftagPhotoshop<span class="s1">, tifftagPhotoshop, tifftagPhotoshopLength);</span>
+        baton<span class="s1">-&gt;</span>tifftagPhotoshopLength <span class="s2">= </span><span class="s1">tifftagPhotoshopLength;</span>
+      <span class="s1">}</span>
+      <span class="s0">// PNG comments</span>
+      <span class="s4">vips_image_map</span><span class="s1">(</span>image<span class="s1">.</span><span class="s4">get_image</span><span class="s1">(), readPNGComment, </span><span class="s2">&amp;</span>baton<span class="s1">-&gt;</span>comments<span class="s1">);</span>
+    <span class="s1">}</span>
+
+    <span class="s0">// Clean up</span>
+    <span class="s4">vips_error_clear</span><span class="s1">();</span>
+    <span class="s4">vips_thread_shutdown</span><span class="s1">();</span>
+  <span class="s1">}</span>
+
+  <span class="s1">void </span><span class="s4">OnOK</span><span class="s1">() {</span>
+    Napi<span class="s1">::Env env </span><span class="s2">= </span><span class="s4">Env</span><span class="s1">();</span>
+    Napi<span class="s1">::HandleScope </span><span class="s4">scope</span><span class="s1">(env);</span>
+
+    <span class="s0">// Handle warnings</span>
+    std<span class="s1">::string warning </span><span class="s2">= </span>sharp<span class="s1">::</span><span class="s4">VipsWarningPop</span><span class="s1">();</span>
+    <span class="s2">while </span><span class="s1">(</span><span class="s2">!</span>warning<span class="s1">.</span><span class="s4">empty</span><span class="s1">()) {</span>
+      debuglog<span class="s1">.</span><span class="s4">Call</span><span class="s1">(</span><span class="s4">Receiver</span><span class="s1">().</span><span class="s4">Value</span><span class="s1">(), { </span>Napi<span class="s1">::</span>String<span class="s1">::</span><span class="s4">New</span><span class="s1">(env, warning) });</span>
+      <span class="s1">warning </span><span class="s2">= </span>sharp<span class="s1">::</span><span class="s4">VipsWarningPop</span><span class="s1">();</span>
+    <span class="s1">}</span>
+
+    <span class="s2">if </span><span class="s1">(</span>baton<span class="s1">-&gt;</span>err<span class="s1">.</span><span class="s4">empty</span><span class="s1">()) {</span>
+      Napi<span class="s1">::Object info </span><span class="s2">= </span>Napi<span class="s1">::</span>Object<span class="s1">::</span><span class="s4">New</span><span class="s1">(env);</span>
+      info<span class="s1">.</span><span class="s4">Set</span><span class="s1">(</span><span class="s3">&quot;format&quot;</span><span class="s1">, </span>baton<span class="s1">-&gt;</span>format<span class="s1">);</span>
+      <span class="s2">if </span><span class="s1">(</span>baton<span class="s1">-&gt;</span>input<span class="s1">-&gt;</span>bufferLength <span class="s2">&gt; </span><span class="s6">0</span><span class="s1">) {</span>
+        info<span class="s1">.</span><span class="s4">Set</span><span class="s1">(</span><span class="s3">&quot;size&quot;</span><span class="s1">, </span>baton<span class="s1">-&gt;</span>input<span class="s1">-&gt;</span>bufferLength<span class="s1">);</span>
+      <span class="s1">}</span>
+      info<span class="s1">.</span><span class="s4">Set</span><span class="s1">(</span><span class="s3">&quot;width&quot;</span><span class="s1">, </span>baton<span class="s1">-&gt;</span>width<span class="s1">);</span>
+      info<span class="s1">.</span><span class="s4">Set</span><span class="s1">(</span><span class="s3">&quot;height&quot;</span><span class="s1">, </span>baton<span class="s1">-&gt;</span>height<span class="s1">);</span>
+      info<span class="s1">.</span><span class="s4">Set</span><span class="s1">(</span><span class="s3">&quot;space&quot;</span><span class="s1">, </span>baton<span class="s1">-&gt;</span>space<span class="s1">);</span>
+      info<span class="s1">.</span><span class="s4">Set</span><span class="s1">(</span><span class="s3">&quot;channels&quot;</span><span class="s1">, </span>baton<span class="s1">-&gt;</span>channels<span class="s1">);</span>
+      info<span class="s1">.</span><span class="s4">Set</span><span class="s1">(</span><span class="s3">&quot;depth&quot;</span><span class="s1">, </span>baton<span class="s1">-&gt;</span>depth<span class="s1">);</span>
+      <span class="s2">if </span><span class="s1">(</span>baton<span class="s1">-&gt;</span>density <span class="s2">&gt; </span><span class="s6">0</span><span class="s1">) {</span>
+        info<span class="s1">.</span><span class="s4">Set</span><span class="s1">(</span><span class="s3">&quot;density&quot;</span><span class="s1">, </span>baton<span class="s1">-&gt;</span>density<span class="s1">);</span>
+      <span class="s1">}</span>
+      <span class="s2">if </span><span class="s1">(</span><span class="s2">!</span>baton<span class="s1">-&gt;</span>chromaSubsampling<span class="s1">.</span><span class="s4">empty</span><span class="s1">()) {</span>
+        info<span class="s1">.</span><span class="s4">Set</span><span class="s1">(</span><span class="s3">&quot;chromaSubsampling&quot;</span><span class="s1">, </span>baton<span class="s1">-&gt;</span>chromaSubsampling<span class="s1">);</span>
+      <span class="s1">}</span>
+      info<span class="s1">.</span><span class="s4">Set</span><span class="s1">(</span><span class="s3">&quot;isProgressive&quot;</span><span class="s1">, </span>baton<span class="s1">-&gt;</span>isProgressive<span class="s1">);</span>
+      info<span class="s1">.</span><span class="s4">Set</span><span class="s1">(</span><span class="s3">&quot;isPalette&quot;</span><span class="s1">, </span>baton<span class="s1">-&gt;</span>isPalette<span class="s1">);</span>
+      <span class="s2">if </span><span class="s1">(</span>baton<span class="s1">-&gt;</span>bitsPerSample <span class="s2">&gt; </span><span class="s6">0</span><span class="s1">) {</span>
+        info<span class="s1">.</span><span class="s4">Set</span><span class="s1">(</span><span class="s3">&quot;bitsPerSample&quot;</span><span class="s1">, </span>baton<span class="s1">-&gt;</span>bitsPerSample<span class="s1">);</span>
+        <span class="s2">if </span><span class="s1">(</span>baton<span class="s1">-&gt;</span>isPalette<span class="s1">) {</span>
+          <span class="s0">// Deprecated, remove with libvips 8.17.0</span>
+          info<span class="s1">.</span><span class="s4">Set</span><span class="s1">(</span><span class="s3">&quot;paletteBitDepth&quot;</span><span class="s1">, </span>baton<span class="s1">-&gt;</span>bitsPerSample<span class="s1">);</span>
+        <span class="s1">}</span>
+      <span class="s1">}</span>
+      <span class="s2">if </span><span class="s1">(</span>baton<span class="s1">-&gt;</span>pages <span class="s2">&gt; </span><span class="s6">0</span><span class="s1">) {</span>
+        info<span class="s1">.</span><span class="s4">Set</span><span class="s1">(</span><span class="s3">&quot;pages&quot;</span><span class="s1">, </span>baton<span class="s1">-&gt;</span>pages<span class="s1">);</span>
+      <span class="s1">}</span>
+      <span class="s2">if </span><span class="s1">(</span>baton<span class="s1">-&gt;</span>pageHeight <span class="s2">&gt; </span><span class="s6">0</span><span class="s1">) {</span>
+        info<span class="s1">.</span><span class="s4">Set</span><span class="s1">(</span><span class="s3">&quot;pageHeight&quot;</span><span class="s1">, </span>baton<span class="s1">-&gt;</span>pageHeight<span class="s1">);</span>
+      <span class="s1">}</span>
+      <span class="s2">if </span><span class="s1">(</span>baton<span class="s1">-&gt;</span>loop <span class="s2">&gt;= </span><span class="s6">0</span><span class="s1">) {</span>
+        info<span class="s1">.</span><span class="s4">Set</span><span class="s1">(</span><span class="s3">&quot;loop&quot;</span><span class="s1">, </span>baton<span class="s1">-&gt;</span>loop<span class="s1">);</span>
+      <span class="s1">}</span>
+      <span class="s2">if </span><span class="s1">(</span><span class="s2">!</span>baton<span class="s1">-&gt;</span>delay<span class="s1">.</span><span class="s4">empty</span><span class="s1">()) {</span>
+        <span class="s2">int </span><span class="s1">i </span><span class="s2">= </span><span class="s6">0</span><span class="s1">;</span>
+        Napi<span class="s1">::Array delay </span><span class="s2">= </span>Napi<span class="s1">::</span>Array<span class="s1">::</span><span class="s4">New</span><span class="s1">(env, </span><span class="s2">static_cast&lt;size_t&gt;</span><span class="s1">(</span>baton<span class="s1">-&gt;</span>delay<span class="s1">.</span><span class="s4">size</span><span class="s1">()));</span>
+        <span class="s2">for </span><span class="s1">(</span><span class="s2">int const </span><span class="s1">d : </span>baton<span class="s1">-&gt;</span>delay<span class="s1">) {</span>
+          delay<span class="s1">.</span><span class="s4">Set</span><span class="s1">(i</span><span class="s2">++</span><span class="s1">, d);</span>
+        <span class="s1">}</span>
+        info<span class="s1">.</span><span class="s4">Set</span><span class="s1">(</span><span class="s3">&quot;delay&quot;</span><span class="s1">, delay);</span>
+      <span class="s1">}</span>
+      <span class="s2">if </span><span class="s1">(</span>baton<span class="s1">-&gt;</span>pagePrimary <span class="s2">&gt; -</span><span class="s6">1</span><span class="s1">) {</span>
+        info<span class="s1">.</span><span class="s4">Set</span><span class="s1">(</span><span class="s3">&quot;pagePrimary&quot;</span><span class="s1">, </span>baton<span class="s1">-&gt;</span>pagePrimary<span class="s1">);</span>
+      <span class="s1">}</span>
+      <span class="s2">if </span><span class="s1">(</span><span class="s2">!</span>baton<span class="s1">-&gt;</span>compression<span class="s1">.</span><span class="s4">empty</span><span class="s1">()) {</span>
+        info<span class="s1">.</span><span class="s4">Set</span><span class="s1">(</span><span class="s3">&quot;compression&quot;</span><span class="s1">, </span>baton<span class="s1">-&gt;</span>compression<span class="s1">);</span>
+      <span class="s1">}</span>
+      <span class="s2">if </span><span class="s1">(</span><span class="s2">!</span>baton<span class="s1">-&gt;</span>resolutionUnit<span class="s1">.</span><span class="s4">empty</span><span class="s1">()) {</span>
+        info<span class="s1">.</span><span class="s4">Set</span><span class="s1">(</span><span class="s3">&quot;resolutionUnit&quot;</span><span class="s1">, </span>baton<span class="s1">-&gt;</span>resolutionUnit <span class="s2">== </span><span class="s3">&quot;in&quot; </span><span class="s2">? </span><span class="s3">&quot;inch&quot; </span><span class="s2">: </span>baton<span class="s1">-&gt;</span>resolutionUnit<span class="s1">);</span>
+      <span class="s1">}</span>
+      <span class="s2">if </span><span class="s1">(</span><span class="s2">!</span>baton<span class="s1">-&gt;</span>formatMagick<span class="s1">.</span><span class="s4">empty</span><span class="s1">()) {</span>
+        info<span class="s1">.</span><span class="s4">Set</span><span class="s1">(</span><span class="s3">&quot;formatMagick&quot;</span><span class="s1">, </span>baton<span class="s1">-&gt;</span>formatMagick<span class="s1">);</span>
+      <span class="s1">}</span>
+      <span class="s2">if </span><span class="s1">(</span><span class="s2">!</span>baton<span class="s1">-&gt;</span>levels<span class="s1">.</span><span class="s4">empty</span><span class="s1">()) {</span>
+        <span class="s2">int </span><span class="s1">i </span><span class="s2">= </span><span class="s6">0</span><span class="s1">;</span>
+        Napi<span class="s1">::Array levels </span><span class="s2">= </span>Napi<span class="s1">::</span>Array<span class="s1">::</span><span class="s4">New</span><span class="s1">(env, </span><span class="s2">static_cast&lt;size_t&gt;</span><span class="s1">(</span>baton<span class="s1">-&gt;</span>levels<span class="s1">.</span><span class="s4">size</span><span class="s1">()));</span>
+        <span class="s2">for </span><span class="s1">(</span>std<span class="s1">::pair</span><span class="s2">&lt;int</span><span class="s1">, </span><span class="s2">int&gt; const &amp;</span><span class="s1">l : </span>baton<span class="s1">-&gt;</span>levels<span class="s1">) {</span>
+          Napi<span class="s1">::Object level </span><span class="s2">= </span>Napi<span class="s1">::</span>Object<span class="s1">::</span><span class="s4">New</span><span class="s1">(env);</span>
+          level<span class="s1">.</span><span class="s4">Set</span><span class="s1">(</span><span class="s3">&quot;width&quot;</span><span class="s1">, </span>l<span class="s1">.</span>first<span class="s1">);</span>
+          level<span class="s1">.</span><span class="s4">Set</span><span class="s1">(</span><span class="s3">&quot;height&quot;</span><span class="s1">, </span>l<span class="s1">.</span>second<span class="s1">);</span>
+          levels<span class="s1">.</span><span class="s4">Set</span><span class="s1">(i</span><span class="s2">++</span><span class="s1">, level);</span>
+        <span class="s1">}</span>
+        info<span class="s1">.</span><span class="s4">Set</span><span class="s1">(</span><span class="s3">&quot;levels&quot;</span><span class="s1">, levels);</span>
+      <span class="s1">}</span>
+      <span class="s2">if </span><span class="s1">(</span>baton<span class="s1">-&gt;</span>subifds <span class="s2">&gt; </span><span class="s6">0</span><span class="s1">) {</span>
+        info<span class="s1">.</span><span class="s4">Set</span><span class="s1">(</span><span class="s3">&quot;subifds&quot;</span><span class="s1">, </span>baton<span class="s1">-&gt;</span>subifds<span class="s1">);</span>
+      <span class="s1">}</span>
+      <span class="s2">if </span><span class="s1">(</span><span class="s2">!</span>baton<span class="s1">-&gt;</span>background<span class="s1">.</span><span class="s4">empty</span><span class="s1">()) {</span>
+        Napi<span class="s1">::Object background </span><span class="s2">= </span>Napi<span class="s1">::</span>Object<span class="s1">::</span><span class="s4">New</span><span class="s1">(env);</span>
+        <span class="s2">if </span><span class="s1">(</span>baton<span class="s1">-&gt;</span>background<span class="s1">.</span><span class="s4">size</span><span class="s1">() </span><span class="s2">== </span><span class="s6">3</span><span class="s1">) {</span>
+          background<span class="s1">.</span><span class="s4">Set</span><span class="s1">(</span><span class="s3">&quot;r&quot;</span><span class="s1">, </span>baton<span class="s1">-&gt;</span>background<span class="s1">[</span><span class="s6">0</span><span class="s1">]);</span>
+          background<span class="s1">.</span><span class="s4">Set</span><span class="s1">(</span><span class="s3">&quot;g&quot;</span><span class="s1">, </span>baton<span class="s1">-&gt;</span>background<span class="s1">[</span><span class="s6">1</span><span class="s1">]);</span>
+          background<span class="s1">.</span><span class="s4">Set</span><span class="s1">(</span><span class="s3">&quot;b&quot;</span><span class="s1">, </span>baton<span class="s1">-&gt;</span>background<span class="s1">[</span><span class="s6">2</span><span class="s1">]);</span>
+        <span class="s1">} </span><span class="s2">else </span><span class="s1">{</span>
+          background<span class="s1">.</span><span class="s4">Set</span><span class="s1">(</span><span class="s3">&quot;gray&quot;</span><span class="s1">, </span><span class="s4">round</span><span class="s1">(</span>baton<span class="s1">-&gt;</span>background<span class="s1">[</span><span class="s6">0</span><span class="s1">] </span><span class="s2">* </span><span class="s6">100 </span><span class="s2">/ </span><span class="s6">255</span><span class="s1">));</span>
+        <span class="s1">}</span>
+        info<span class="s1">.</span><span class="s4">Set</span><span class="s1">(</span><span class="s3">&quot;background&quot;</span><span class="s1">, background);</span>
+      <span class="s1">}</span>
+      info<span class="s1">.</span><span class="s4">Set</span><span class="s1">(</span><span class="s3">&quot;hasProfile&quot;</span><span class="s1">, </span>baton<span class="s1">-&gt;</span>hasProfile<span class="s1">);</span>
+      info<span class="s1">.</span><span class="s4">Set</span><span class="s1">(</span><span class="s3">&quot;hasAlpha&quot;</span><span class="s1">, </span>baton<span class="s1">-&gt;</span>hasAlpha<span class="s1">);</span>
+      <span class="s2">if </span><span class="s1">(</span>baton<span class="s1">-&gt;</span>orientation <span class="s2">&gt; </span><span class="s6">0</span><span class="s1">) {</span>
+        info<span class="s1">.</span><span class="s4">Set</span><span class="s1">(</span><span class="s3">&quot;orientation&quot;</span><span class="s1">, </span>baton<span class="s1">-&gt;</span>orientation<span class="s1">);</span>
+      <span class="s1">}</span>
+      Napi<span class="s1">::Object autoOrient </span><span class="s2">= </span>Napi<span class="s1">::</span>Object<span class="s1">::</span><span class="s4">New</span><span class="s1">(env);</span>
+      info<span class="s1">.</span><span class="s4">Set</span><span class="s1">(</span><span class="s3">&quot;autoOrient&quot;</span><span class="s1">, autoOrient);</span>
+      <span class="s2">if </span><span class="s1">(</span>baton<span class="s1">-&gt;</span>orientation <span class="s2">&gt;= </span><span class="s6">5</span><span class="s1">) {</span>
+        autoOrient<span class="s1">.</span><span class="s4">Set</span><span class="s1">(</span><span class="s3">&quot;width&quot;</span><span class="s1">, </span>baton<span class="s1">-&gt;</span>height<span class="s1">);</span>
+        autoOrient<span class="s1">.</span><span class="s4">Set</span><span class="s1">(</span><span class="s3">&quot;height&quot;</span><span class="s1">, </span>baton<span class="s1">-&gt;</span>width<span class="s1">);</span>
+      <span class="s1">} </span><span class="s2">else </span><span class="s1">{</span>
+        autoOrient<span class="s1">.</span><span class="s4">Set</span><span class="s1">(</span><span class="s3">&quot;width&quot;</span><span class="s1">, </span>baton<span class="s1">-&gt;</span>width<span class="s1">);</span>
+        autoOrient<span class="s1">.</span><span class="s4">Set</span><span class="s1">(</span><span class="s3">&quot;height&quot;</span><span class="s1">, </span>baton<span class="s1">-&gt;</span>height<span class="s1">);</span>
+      <span class="s1">}</span>
+      <span class="s2">if </span><span class="s1">(</span>baton<span class="s1">-&gt;</span>exifLength <span class="s2">&gt; </span><span class="s6">0</span><span class="s1">) {</span>
+        info<span class="s1">.</span><span class="s4">Set</span><span class="s1">(</span><span class="s3">&quot;exif&quot;</span><span class="s1">, </span>Napi<span class="s1">::</span>Buffer<span class="s1">&lt;char&gt;::</span><span class="s4">NewOrCopy</span><span class="s1">(env, </span>baton<span class="s1">-&gt;</span>exif<span class="s1">, </span>baton<span class="s1">-&gt;</span>exifLength<span class="s1">, </span>sharp<span class="s1">::FreeCallback));</span>
+      <span class="s1">}</span>
+      <span class="s2">if </span><span class="s1">(</span>baton<span class="s1">-&gt;</span>iccLength <span class="s2">&gt; </span><span class="s6">0</span><span class="s1">) {</span>
+        info<span class="s1">.</span><span class="s4">Set</span><span class="s1">(</span><span class="s3">&quot;icc&quot;</span><span class="s1">, </span>Napi<span class="s1">::</span>Buffer<span class="s1">&lt;char&gt;::</span><span class="s4">NewOrCopy</span><span class="s1">(env, </span>baton<span class="s1">-&gt;</span>icc<span class="s1">, </span>baton<span class="s1">-&gt;</span>iccLength<span class="s1">, </span>sharp<span class="s1">::FreeCallback));</span>
+      <span class="s1">}</span>
+      <span class="s2">if </span><span class="s1">(</span>baton<span class="s1">-&gt;</span>iptcLength <span class="s2">&gt; </span><span class="s6">0</span><span class="s1">) {</span>
+        info<span class="s1">.</span><span class="s4">Set</span><span class="s1">(</span><span class="s3">&quot;iptc&quot;</span><span class="s1">, </span>Napi<span class="s1">::</span>Buffer<span class="s1">&lt;char&gt;::</span><span class="s4">NewOrCopy</span><span class="s1">(env, </span>baton<span class="s1">-&gt;</span>iptc<span class="s1">, </span>baton<span class="s1">-&gt;</span>iptcLength<span class="s1">, </span>sharp<span class="s1">::FreeCallback));</span>
+      <span class="s1">}</span>
+      <span class="s2">if </span><span class="s1">(</span>baton<span class="s1">-&gt;</span>xmpLength <span class="s2">&gt; </span><span class="s6">0</span><span class="s1">) {</span>
+        <span class="s2">if </span><span class="s1">(</span><span class="s4">g_utf8_validate</span><span class="s1">(</span><span class="s2">static_cast&lt;char const *&gt;</span><span class="s1">(</span>baton<span class="s1">-&gt;</span>xmp<span class="s1">), </span>baton<span class="s1">-&gt;</span>xmpLength<span class="s1">, </span><span class="s7">nullptr</span><span class="s1">)) {</span>
+          info<span class="s1">.</span><span class="s4">Set</span><span class="s1">(</span><span class="s3">&quot;xmpAsString&quot;</span><span class="s1">,</span>
+            Napi<span class="s1">::</span>String<span class="s1">::</span><span class="s4">New</span><span class="s1">(env, </span><span class="s2">static_cast&lt;char const *&gt;</span><span class="s1">(</span>baton<span class="s1">-&gt;</span>xmp<span class="s1">), </span>baton<span class="s1">-&gt;</span>xmpLength<span class="s1">));</span>
+        <span class="s1">}</span>
+        info<span class="s1">.</span><span class="s4">Set</span><span class="s1">(</span><span class="s3">&quot;xmp&quot;</span><span class="s1">, </span>Napi<span class="s1">::</span>Buffer<span class="s1">&lt;char&gt;::</span><span class="s4">NewOrCopy</span><span class="s1">(env, </span>baton<span class="s1">-&gt;</span>xmp<span class="s1">, </span>baton<span class="s1">-&gt;</span>xmpLength<span class="s1">, </span>sharp<span class="s1">::FreeCallback));</span>
+      <span class="s1">}</span>
+      <span class="s2">if </span><span class="s1">(</span>baton<span class="s1">-&gt;</span>tifftagPhotoshopLength <span class="s2">&gt; </span><span class="s6">0</span><span class="s1">) {</span>
+        info<span class="s1">.</span><span class="s4">Set</span><span class="s1">(</span><span class="s3">&quot;tifftagPhotoshop&quot;</span><span class="s1">,</span>
+          Napi<span class="s1">::</span>Buffer<span class="s1">&lt;char&gt;::</span><span class="s4">NewOrCopy</span><span class="s1">(env, </span>baton<span class="s1">-&gt;</span>tifftagPhotoshop<span class="s1">,</span>
+            baton<span class="s1">-&gt;</span>tifftagPhotoshopLength<span class="s1">, </span>sharp<span class="s1">::FreeCallback));</span>
+      <span class="s1">}</span>
+      <span class="s2">if </span><span class="s1">(</span>baton<span class="s1">-&gt;</span>comments<span class="s1">.</span><span class="s4">size</span><span class="s1">() </span><span class="s2">&gt; </span><span class="s6">0</span><span class="s1">) {</span>
+        <span class="s2">int </span><span class="s1">i </span><span class="s2">= </span><span class="s6">0</span><span class="s1">;</span>
+        Napi<span class="s1">::Array comments </span><span class="s2">= </span>Napi<span class="s1">::</span>Array<span class="s1">::</span><span class="s4">New</span><span class="s1">(env, </span>baton<span class="s1">-&gt;</span>comments<span class="s1">.</span><span class="s4">size</span><span class="s1">());</span>
+        <span class="s2">for </span><span class="s1">(</span><span class="s2">auto &amp;</span><span class="s1">c : </span>baton<span class="s1">-&gt;</span>comments<span class="s1">) {</span>
+          Napi<span class="s1">::Object comment </span><span class="s2">= </span>Napi<span class="s1">::</span>Object<span class="s1">::</span><span class="s4">New</span><span class="s1">(env);</span>
+          comment<span class="s1">.</span><span class="s4">Set</span><span class="s1">(</span><span class="s3">&quot;keyword&quot;</span><span class="s1">, </span>c<span class="s1">.</span>first<span class="s1">);</span>
+          comment<span class="s1">.</span><span class="s4">Set</span><span class="s1">(</span><span class="s3">&quot;text&quot;</span><span class="s1">, </span>c<span class="s1">.</span>second<span class="s1">);</span>
+          comments<span class="s1">.</span><span class="s4">Set</span><span class="s1">(i</span><span class="s2">++</span><span class="s1">, comment);</span>
+        <span class="s1">}</span>
+        info<span class="s1">.</span><span class="s4">Set</span><span class="s1">(</span><span class="s3">&quot;comments&quot;</span><span class="s1">, comments);</span>
+      <span class="s1">}</span>
+      <span class="s4">Callback</span><span class="s1">().</span><span class="s4">Call</span><span class="s1">(</span><span class="s4">Receiver</span><span class="s1">().</span><span class="s4">Value</span><span class="s1">(), { </span>env<span class="s1">.</span><span class="s4">Null</span><span class="s1">(), info });</span>
+    <span class="s1">} </span><span class="s2">else </span><span class="s1">{</span>
+      <span class="s4">Callback</span><span class="s1">().</span><span class="s4">Call</span><span class="s1">(</span><span class="s4">Receiver</span><span class="s1">().</span><span class="s4">Value</span><span class="s1">(), { </span>Napi<span class="s1">::</span>Error<span class="s1">::</span><span class="s4">New</span><span class="s1">(env, </span>sharp<span class="s1">::</span><span class="s4">TrimEnd</span><span class="s1">(</span>baton<span class="s1">-&gt;</span>err<span class="s1">)).</span><span class="s4">Value</span><span class="s1">() });</span>
+    <span class="s1">}</span>
+
+    <span class="s2">delete </span>baton<span class="s1">-&gt;</span>input<span class="s1">;</span>
+    <span class="s2">delete </span><span class="s1">baton;</span>
+  <span class="s1">}</span>
+
+ <span class="s2">private:</span>
+  <span class="s1">MetadataBaton</span><span class="s2">* </span><span class="s1">baton;</span>
+  Napi<span class="s1">::FunctionReference debuglog;</span>
+<span class="s1">};</span>
+
+<span class="s0">/*</span>
+  <span class="s0">metadata(options, callback) 
+*/</span>
+Napi<span class="s1">::Value </span><span class="s4">metadata</span><span class="s1">(</span><span class="s2">const </span>Napi<span class="s1">::</span>CallbackInfo<span class="s2">&amp; </span>info<span class="s1">) {</span>
+  <span class="s0">// V8 objects are converted to non-V8 types held in the baton struct</span>
+  <span class="s1">MetadataBaton </span><span class="s2">*</span><span class="s1">baton </span><span class="s2">= new </span><span class="s1">MetadataBaton;</span>
+  Napi<span class="s1">::Object options </span><span class="s2">= </span>info<span class="s1">[</span><span class="s2">size_t</span><span class="s1">(</span><span class="s6">0</span><span class="s1">)].</span>As<span class="s2">&lt;</span>Napi<span class="s1">::Object</span><span class="s2">&gt;</span><span class="s1">();</span>
+
+  <span class="s0">// Input</span>
+  baton<span class="s1">-&gt;</span>input <span class="s2">= </span>sharp<span class="s1">::</span><span class="s4">CreateInputDescriptor</span><span class="s1">(</span>options<span class="s1">.</span><span class="s4">Get</span><span class="s1">(</span><span class="s3">&quot;input&quot;</span><span class="s1">).</span>As<span class="s2">&lt;</span>Napi<span class="s1">::Object</span><span class="s2">&gt;</span><span class="s1">());</span>
+
+  <span class="s0">// Function to notify of libvips warnings</span>
+  Napi<span class="s1">::Function debuglog </span><span class="s2">= </span>options<span class="s1">.</span><span class="s4">Get</span><span class="s1">(</span><span class="s3">&quot;debuglog&quot;</span><span class="s1">).</span>As<span class="s2">&lt;</span>Napi<span class="s1">::Function</span><span class="s2">&gt;</span><span class="s1">();</span>
+
+  <span class="s0">// Join queue for worker thread</span>
+  Napi<span class="s1">::Function callback </span><span class="s2">= </span>info<span class="s1">[</span><span class="s2">size_t</span><span class="s1">(</span><span class="s6">1</span><span class="s1">)].</span>As<span class="s2">&lt;</span>Napi<span class="s1">::Function</span><span class="s2">&gt;</span><span class="s1">();</span>
+  <span class="s1">MetadataWorker </span><span class="s2">*</span><span class="s1">worker </span><span class="s2">= new </span><span class="s4">MetadataWorker</span><span class="s1">(callback, baton, debuglog);</span>
+  worker<span class="s1">-&gt;</span><span class="s4">Receiver</span><span class="s1">().</span><span class="s4">Set</span><span class="s1">(</span><span class="s3">&quot;options&quot;</span><span class="s1">, options);</span>
+  worker<span class="s1">-&gt;</span><span class="s4">Queue</span><span class="s1">();</span>
+
+  <span class="s0">// Increment queued task counter</span>
+  sharp<span class="s1">::counterQueue</span><span class="s2">++</span><span class="s1">;</span>
+
+  <span class="s2">return </span>info<span class="s1">.</span><span class="s4">Env</span><span class="s1">().</span><span class="s4">Undefined</span><span class="s1">();</span>
+<span class="s1">}</span>
+
+<span class="s2">const char *</span><span class="s1">PNG_COMMENT_START </span><span class="s2">= </span><span class="s3">&quot;png-comment-&quot;</span><span class="s1">;</span>
+<span class="s2">const int </span><span class="s1">PNG_COMMENT_START_LEN </span><span class="s2">= </span><span class="s4">strlen</span><span class="s1">(PNG_COMMENT_START);</span>
+
+<span class="s2">static </span><span class="s1">void</span><span class="s2">* </span><span class="s4">readPNGComment</span><span class="s1">(</span>VipsImage <span class="s2">*</span>image<span class="s1">, </span><span class="s2">const char *</span>field<span class="s1">, </span>GValue <span class="s2">*</span>value<span class="s1">, </span><span class="s2">void *</span>p<span class="s1">) {</span>
+  <span class="s1">MetadataComments </span><span class="s2">*</span><span class="s1">comments </span><span class="s2">= static_cast&lt;</span><span class="s1">MetadataComments </span><span class="s2">*&gt;</span><span class="s1">(p);</span>
+
+  <span class="s2">if </span><span class="s1">(</span><span class="s4">vips_isprefix</span><span class="s1">(PNG_COMMENT_START, field)) {</span>
+    <span class="s2">const char *</span><span class="s1">keyword </span><span class="s2">= </span><span class="s4">strchr</span><span class="s1">(field </span><span class="s2">+ </span><span class="s1">PNG_COMMENT_START_LEN, </span><span class="s3">'-'</span><span class="s1">);</span>
+    <span class="s2">const char *</span><span class="s1">str;</span>
+    <span class="s2">if </span><span class="s1">(keyword </span><span class="s2">!= </span><span class="s7">NULL </span><span class="s2">&amp;&amp; !</span><span class="s4">vips_image_get_string</span><span class="s1">(image, field, </span><span class="s2">&amp;</span><span class="s1">str)) {</span>
+      <span class="s1">keyword</span><span class="s2">++</span><span class="s1">;  </span><span class="s0">// Skip the hyphen</span>
+      comments<span class="s1">-&gt;</span><span class="s4">push_back</span><span class="s1">(</span>std<span class="s1">::</span><span class="s4">make_pair</span><span class="s1">(keyword, str));</span>
+    <span class="s1">}</span>
+  <span class="s1">}</span>
+
+  <span class="s2">return </span><span class="s7">NULL</span><span class="s1">;</span>
+<span class="s1">}</span>
+</pre>
+</body>
+</html>

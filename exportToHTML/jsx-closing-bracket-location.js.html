@@ -1,0 +1,339 @@
+<html>
+<head>
+<title>jsx-closing-bracket-location.js</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #8c8c8c; font-style: italic;}
+.s1 { color: #8c8c8c; font-style: italic;}
+.s2 { color: #080808;}
+.s3 { color: #067d17;}
+.s4 { color: #0033b3;}
+.s5 { color: #1750eb;}
+.s6 { color: #264eff;}
+.s7 { color: #0037a6;}
+</style>
+</head>
+<body bgcolor="#ffffff">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#c0c0c0" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+jsx-closing-bracket-location.js</font>
+</center></td></tr></table>
+<pre><span class="s0">/**</span>
+ <span class="s0">* </span><span class="s1">@fileoverview </span><span class="s0">Validate closing bracket location in JSX</span>
+ <span class="s0">* </span><span class="s1">@author </span><span class="s0">Yannick Croissant</span>
+ <span class="s0">*/</span>
+
+<span class="s3">'use strict'</span><span class="s2">;</span>
+
+<span class="s4">const </span><span class="s2">has = require(</span><span class="s3">'hasown'</span><span class="s2">);</span>
+<span class="s4">const </span><span class="s2">repeat = require(</span><span class="s3">'string.prototype.repeat'</span><span class="s2">);</span>
+
+<span class="s4">const </span><span class="s2">docsUrl = require(</span><span class="s3">'../util/docsUrl'</span><span class="s2">);</span>
+<span class="s4">const </span><span class="s2">getSourceCode = require(</span><span class="s3">'../util/eslint'</span><span class="s2">).getSourceCode;</span>
+<span class="s4">const </span><span class="s2">report = require(</span><span class="s3">'../util/report'</span><span class="s2">);</span>
+
+<span class="s0">// ------------------------------------------------------------------------------</span>
+<span class="s0">// Rule Definition</span>
+<span class="s0">// ------------------------------------------------------------------------------</span>
+
+<span class="s4">const </span><span class="s2">messages = {</span>
+  <span class="s2">bracketLocation: </span><span class="s3">'The closing bracket must be {{location}}{{details}}'</span><span class="s2">,</span>
+<span class="s2">};</span>
+
+<span class="s0">/** </span><span class="s1">@type </span><span class="s0">{import('eslint').Rule.RuleModule} */</span>
+<span class="s2">module.exports = {</span>
+  <span class="s2">meta: {</span>
+    <span class="s2">docs: {</span>
+      <span class="s2">description: </span><span class="s3">'Enforce closing bracket location in JSX'</span><span class="s2">,</span>
+      <span class="s2">category: </span><span class="s3">'Stylistic Issues'</span><span class="s2">,</span>
+      <span class="s2">recommended: </span><span class="s4">false</span><span class="s2">,</span>
+      <span class="s2">url: docsUrl(</span><span class="s3">'jsx-closing-bracket-location'</span><span class="s2">),</span>
+    <span class="s2">},</span>
+    <span class="s2">fixable: </span><span class="s3">'code'</span><span class="s2">,</span>
+
+    <span class="s2">messages,</span>
+
+    <span class="s2">schema: [{</span>
+      <span class="s2">anyOf: [</span>
+        <span class="s2">{</span>
+          <span class="s4">enum</span><span class="s2">: [</span><span class="s3">'after-props'</span><span class="s2">, </span><span class="s3">'props-aligned'</span><span class="s2">, </span><span class="s3">'tag-aligned'</span><span class="s2">, </span><span class="s3">'line-aligned'</span><span class="s2">],</span>
+        <span class="s2">},</span>
+        <span class="s2">{</span>
+          <span class="s2">type: </span><span class="s3">'object'</span><span class="s2">,</span>
+          <span class="s2">properties: {</span>
+            <span class="s2">location: {</span>
+              <span class="s4">enum</span><span class="s2">: [</span><span class="s3">'after-props'</span><span class="s2">, </span><span class="s3">'props-aligned'</span><span class="s2">, </span><span class="s3">'tag-aligned'</span><span class="s2">, </span><span class="s3">'line-aligned'</span><span class="s2">],</span>
+            <span class="s2">},</span>
+          <span class="s2">},</span>
+          <span class="s2">additionalProperties: </span><span class="s4">false</span><span class="s2">,</span>
+        <span class="s2">}, {</span>
+          <span class="s2">type: </span><span class="s3">'object'</span><span class="s2">,</span>
+          <span class="s2">properties: {</span>
+            <span class="s2">nonEmpty: {</span>
+              <span class="s4">enum</span><span class="s2">: [</span><span class="s3">'after-props'</span><span class="s2">, </span><span class="s3">'props-aligned'</span><span class="s2">, </span><span class="s3">'tag-aligned'</span><span class="s2">, </span><span class="s3">'line-aligned'</span><span class="s2">, </span><span class="s4">false</span><span class="s2">],</span>
+            <span class="s2">},</span>
+            <span class="s2">selfClosing: {</span>
+              <span class="s4">enum</span><span class="s2">: [</span><span class="s3">'after-props'</span><span class="s2">, </span><span class="s3">'props-aligned'</span><span class="s2">, </span><span class="s3">'tag-aligned'</span><span class="s2">, </span><span class="s3">'line-aligned'</span><span class="s2">, </span><span class="s4">false</span><span class="s2">],</span>
+            <span class="s2">},</span>
+          <span class="s2">},</span>
+          <span class="s2">additionalProperties: </span><span class="s4">false</span><span class="s2">,</span>
+        <span class="s2">},</span>
+      <span class="s2">],</span>
+    <span class="s2">}],</span>
+  <span class="s2">},</span>
+
+  <span class="s2">create(context) {</span>
+    <span class="s4">const </span><span class="s2">MESSAGE_LOCATION = {</span>
+      <span class="s3">'after-props'</span><span class="s2">: </span><span class="s3">'placed after the last prop'</span><span class="s2">,</span>
+      <span class="s3">'after-tag'</span><span class="s2">: </span><span class="s3">'placed after the opening tag'</span><span class="s2">,</span>
+      <span class="s3">'props-aligned'</span><span class="s2">: </span><span class="s3">'aligned with the last prop'</span><span class="s2">,</span>
+      <span class="s3">'tag-aligned'</span><span class="s2">: </span><span class="s3">'aligned with the opening tag'</span><span class="s2">,</span>
+      <span class="s3">'line-aligned'</span><span class="s2">: </span><span class="s3">'aligned with the line containing the opening tag'</span><span class="s2">,</span>
+    <span class="s2">};</span>
+    <span class="s4">const </span><span class="s2">DEFAULT_LOCATION = </span><span class="s3">'tag-aligned'</span><span class="s2">;</span>
+
+    <span class="s4">const </span><span class="s2">config = context.options[</span><span class="s5">0</span><span class="s2">];</span>
+    <span class="s4">const </span><span class="s2">options = {</span>
+      <span class="s2">nonEmpty: DEFAULT_LOCATION,</span>
+      <span class="s2">selfClosing: DEFAULT_LOCATION,</span>
+    <span class="s2">};</span>
+
+    <span class="s4">if </span><span class="s2">(</span><span class="s4">typeof </span><span class="s2">config === </span><span class="s3">'string'</span><span class="s2">) {</span>
+      <span class="s0">// simple shorthand [1, 'something']</span>
+      <span class="s2">options.nonEmpty = config;</span>
+      <span class="s2">options.selfClosing = config;</span>
+    <span class="s2">} </span><span class="s4">else if </span><span class="s2">(</span><span class="s4">typeof </span><span class="s2">config === </span><span class="s3">'object'</span><span class="s2">) {</span>
+      <span class="s0">// [1, {location: 'something'}] (back-compat)</span>
+      <span class="s4">if </span><span class="s2">(has(config, </span><span class="s3">'location'</span><span class="s2">)) {</span>
+        <span class="s2">options.nonEmpty = config.location;</span>
+        <span class="s2">options.selfClosing = config.location;</span>
+      <span class="s2">}</span>
+      <span class="s0">// [1, {nonEmpty: 'something'}]</span>
+      <span class="s4">if </span><span class="s2">(has(config, </span><span class="s3">'nonEmpty'</span><span class="s2">)) {</span>
+        <span class="s2">options.nonEmpty = config.nonEmpty;</span>
+      <span class="s2">}</span>
+      <span class="s0">// [1, {selfClosing: 'something'}]</span>
+      <span class="s4">if </span><span class="s2">(has(config, </span><span class="s3">'selfClosing'</span><span class="s2">)) {</span>
+        <span class="s2">options.selfClosing = config.selfClosing;</span>
+      <span class="s2">}</span>
+    <span class="s2">}</span>
+
+    <span class="s0">/**</span>
+     <span class="s0">* Get expected location for the closing bracket</span>
+     <span class="s0">* </span><span class="s1">@param </span><span class="s0">{Object} tokens Locations of the opening bracket, closing bracket and last prop</span>
+     <span class="s0">* </span><span class="s1">@return </span><span class="s0">{string} Expected location for the closing bracket</span>
+     <span class="s0">*/</span>
+    <span class="s4">function </span><span class="s2">getExpectedLocation(tokens) {</span>
+      <span class="s4">let </span><span class="s2">location;</span>
+      <span class="s0">// Is always after the opening tag if there is no props</span>
+      <span class="s4">if </span><span class="s2">(</span><span class="s4">typeof </span><span class="s2">tokens.lastProp === </span><span class="s3">'undefined'</span><span class="s2">) {</span>
+        <span class="s2">location = </span><span class="s3">'after-tag'</span><span class="s2">;</span>
+      <span class="s0">// Is always after the last prop if this one is on the same line as the opening bracket</span>
+      <span class="s2">} </span><span class="s4">else if </span><span class="s2">(tokens.opening.line === tokens.lastProp.lastLine) {</span>
+        <span class="s2">location = </span><span class="s3">'after-props'</span><span class="s2">;</span>
+      <span class="s0">// Else use configuration dependent on selfClosing property</span>
+      <span class="s2">} </span><span class="s4">else </span><span class="s2">{</span>
+        <span class="s2">location = tokens.selfClosing ? options.selfClosing : options.nonEmpty;</span>
+      <span class="s2">}</span>
+      <span class="s4">return </span><span class="s2">location;</span>
+    <span class="s2">}</span>
+
+    <span class="s0">/**</span>
+     <span class="s0">* Get the correct 0-indexed column for the closing bracket, given the</span>
+     <span class="s0">* expected location.</span>
+     <span class="s0">* </span><span class="s1">@param </span><span class="s0">{Object} tokens Locations of the opening bracket, closing bracket and last prop</span>
+     <span class="s0">* </span><span class="s1">@param </span><span class="s0">{string} expectedLocation Expected location for the closing bracket</span>
+     <span class="s0">* </span><span class="s1">@return </span><span class="s0">{?Number} The correct column for the closing bracket, or null</span>
+     <span class="s0">*/</span>
+    <span class="s4">function </span><span class="s2">getCorrectColumn(tokens, expectedLocation) {</span>
+      <span class="s4">switch </span><span class="s2">(expectedLocation) {</span>
+        <span class="s4">case </span><span class="s3">'props-aligned'</span><span class="s2">:</span>
+          <span class="s4">return </span><span class="s2">tokens.lastProp.column;</span>
+        <span class="s4">case </span><span class="s3">'tag-aligned'</span><span class="s2">:</span>
+          <span class="s4">return </span><span class="s2">tokens.opening.column;</span>
+        <span class="s4">case </span><span class="s3">'line-aligned'</span><span class="s2">:</span>
+          <span class="s4">return </span><span class="s2">tokens.openingStartOfLine.column;</span>
+        <span class="s4">default</span><span class="s2">:</span>
+          <span class="s4">return null</span><span class="s2">;</span>
+      <span class="s2">}</span>
+    <span class="s2">}</span>
+
+    <span class="s0">/**</span>
+     <span class="s0">* Check if the closing bracket is correctly located</span>
+     <span class="s0">* </span><span class="s1">@param </span><span class="s0">{Object} tokens Locations of the opening bracket, closing bracket and last prop</span>
+     <span class="s0">* </span><span class="s1">@param </span><span class="s0">{string} expectedLocation Expected location for the closing bracket</span>
+     <span class="s0">* </span><span class="s1">@return </span><span class="s0">{boolean} True if the closing bracket is correctly located, false if not</span>
+     <span class="s0">*/</span>
+    <span class="s4">function </span><span class="s2">hasCorrectLocation(tokens, expectedLocation) {</span>
+      <span class="s4">switch </span><span class="s2">(expectedLocation) {</span>
+        <span class="s4">case </span><span class="s3">'after-tag'</span><span class="s2">:</span>
+          <span class="s4">return </span><span class="s2">tokens.tag.line === tokens.closing.line;</span>
+        <span class="s4">case </span><span class="s3">'after-props'</span><span class="s2">:</span>
+          <span class="s4">return </span><span class="s2">tokens.lastProp.lastLine === tokens.closing.line;</span>
+        <span class="s4">case </span><span class="s3">'props-aligned'</span><span class="s2">:</span>
+        <span class="s4">case </span><span class="s3">'tag-aligned'</span><span class="s2">:</span>
+        <span class="s4">case </span><span class="s3">'line-aligned'</span><span class="s2">: {</span>
+          <span class="s4">const </span><span class="s2">correctColumn = getCorrectColumn(tokens, expectedLocation);</span>
+          <span class="s4">return </span><span class="s2">correctColumn === tokens.closing.column;</span>
+        <span class="s2">}</span>
+        <span class="s4">default</span><span class="s2">:</span>
+          <span class="s4">return true</span><span class="s2">;</span>
+      <span class="s2">}</span>
+    <span class="s2">}</span>
+
+    <span class="s0">/**</span>
+     <span class="s0">* Get the characters used for indentation on the line to be matched</span>
+     <span class="s0">* </span><span class="s1">@param </span><span class="s0">{Object} tokens Locations of the opening bracket, closing bracket and last prop</span>
+     <span class="s0">* </span><span class="s1">@param </span><span class="s0">{string} expectedLocation Expected location for the closing bracket</span>
+     <span class="s0">* </span><span class="s1">@param </span><span class="s0">{number} [correctColumn] Expected column for the closing bracket. Default to 0</span>
+     <span class="s0">* </span><span class="s1">@return </span><span class="s0">{string} The characters used for indentation</span>
+     <span class="s0">*/</span>
+    <span class="s4">function </span><span class="s2">getIndentation(tokens, expectedLocation, correctColumn) {</span>
+      <span class="s4">const </span><span class="s2">newColumn = correctColumn || </span><span class="s5">0</span><span class="s2">;</span>
+      <span class="s4">let </span><span class="s2">indentation;</span>
+      <span class="s4">let </span><span class="s2">spaces = </span><span class="s3">''</span><span class="s2">;</span>
+      <span class="s4">switch </span><span class="s2">(expectedLocation) {</span>
+        <span class="s4">case </span><span class="s3">'props-aligned'</span><span class="s2">:</span>
+          <span class="s2">indentation = </span><span class="s6">/^\s*/</span><span class="s2">.exec(getSourceCode(context).lines[tokens.lastProp.firstLine - </span><span class="s5">1</span><span class="s2">])[</span><span class="s5">0</span><span class="s2">];</span>
+          <span class="s4">break</span><span class="s2">;</span>
+        <span class="s4">case </span><span class="s3">'tag-aligned'</span><span class="s2">:</span>
+        <span class="s4">case </span><span class="s3">'line-aligned'</span><span class="s2">:</span>
+          <span class="s2">indentation = </span><span class="s6">/^\s*/</span><span class="s2">.exec(getSourceCode(context).lines[tokens.opening.line - </span><span class="s5">1</span><span class="s2">])[</span><span class="s5">0</span><span class="s2">];</span>
+          <span class="s4">break</span><span class="s2">;</span>
+        <span class="s4">default</span><span class="s2">:</span>
+          <span class="s2">indentation = </span><span class="s3">''</span><span class="s2">;</span>
+      <span class="s2">}</span>
+      <span class="s4">if </span><span class="s2">(indentation.length + </span><span class="s5">1 </span><span class="s2">&lt; newColumn) {</span>
+        <span class="s0">// Non-whitespace characters were included in the column offset</span>
+        <span class="s2">spaces = repeat(</span><span class="s3">' '</span><span class="s2">, +correctColumn - indentation.length);</span>
+      <span class="s2">}</span>
+      <span class="s4">return </span><span class="s2">indentation + spaces;</span>
+    <span class="s2">}</span>
+
+    <span class="s0">/**</span>
+     <span class="s0">* Get the locations of the opening bracket, closing bracket, last prop, and</span>
+     <span class="s0">* start of opening line.</span>
+     <span class="s0">* </span><span class="s1">@param </span><span class="s0">{ASTNode} node The node to check</span>
+     <span class="s0">* </span><span class="s1">@return </span><span class="s0">{Object} Locations of the opening bracket, closing bracket, last</span>
+     <span class="s0">* prop and start of opening line.</span>
+     <span class="s0">*/</span>
+    <span class="s4">function </span><span class="s2">getTokensLocations(node) {</span>
+      <span class="s4">const </span><span class="s2">sourceCode = getSourceCode(context);</span>
+      <span class="s4">const </span><span class="s2">opening = sourceCode.getFirstToken(node).loc.start;</span>
+      <span class="s4">const </span><span class="s2">closing = sourceCode.getLastTokens(node, node.selfClosing ? </span><span class="s5">2 </span><span class="s2">: </span><span class="s5">1</span><span class="s2">)[</span><span class="s5">0</span><span class="s2">].loc.start;</span>
+      <span class="s4">const </span><span class="s2">tag = sourceCode.getFirstToken(node.name).loc.start;</span>
+      <span class="s4">let </span><span class="s2">lastProp;</span>
+      <span class="s4">if </span><span class="s2">(node.attributes.length) {</span>
+        <span class="s2">lastProp = node.attributes[node.attributes.length - </span><span class="s5">1</span><span class="s2">];</span>
+        <span class="s2">lastProp = {</span>
+          <span class="s2">column: sourceCode.getFirstToken(lastProp).loc.start.column,</span>
+          <span class="s2">firstLine: sourceCode.getFirstToken(lastProp).loc.start.line,</span>
+          <span class="s2">lastLine: sourceCode.getLastToken(lastProp).loc.end.line,</span>
+        <span class="s2">};</span>
+      <span class="s2">}</span>
+      <span class="s4">const </span><span class="s2">openingLine = sourceCode.lines[opening.line - </span><span class="s5">1</span><span class="s2">];</span>
+      <span class="s4">const </span><span class="s2">closingLine = sourceCode.lines[closing.line - </span><span class="s5">1</span><span class="s2">];</span>
+      <span class="s4">const </span><span class="s2">isTab = {</span>
+        <span class="s2">openTab: </span><span class="s6">/^\t/</span><span class="s2">.test(openingLine),</span>
+        <span class="s2">closeTab: </span><span class="s6">/^\t/</span><span class="s2">.test(closingLine),</span>
+      <span class="s2">};</span>
+      <span class="s4">const </span><span class="s2">openingStartOfLine = {</span>
+        <span class="s2">column: </span><span class="s6">/^\s*/</span><span class="s2">.exec(openingLine)[</span><span class="s5">0</span><span class="s2">].length,</span>
+        <span class="s2">line: opening.line,</span>
+      <span class="s2">};</span>
+      <span class="s4">return </span><span class="s2">{</span>
+        <span class="s2">isTab,</span>
+        <span class="s2">tag,</span>
+        <span class="s2">opening,</span>
+        <span class="s2">closing,</span>
+        <span class="s2">lastProp,</span>
+        <span class="s2">selfClosing: node.selfClosing,</span>
+        <span class="s2">openingStartOfLine,</span>
+      <span class="s2">};</span>
+    <span class="s2">}</span>
+
+    <span class="s0">/**</span>
+     <span class="s0">* Get an unique ID for a given JSXOpeningElement</span>
+     <span class="s0">*</span>
+     <span class="s0">* </span><span class="s1">@param </span><span class="s0">{ASTNode} node The AST node being checked.</span>
+     <span class="s0">* </span><span class="s1">@returns </span><span class="s0">{string} Unique ID (based on its range)</span>
+     <span class="s0">*/</span>
+    <span class="s4">function </span><span class="s2">getOpeningElementId(node) {</span>
+      <span class="s4">return </span><span class="s2">node.range.join(</span><span class="s3">':'</span><span class="s2">);</span>
+    <span class="s2">}</span>
+
+    <span class="s4">const </span><span class="s2">lastAttributeNode = {};</span>
+
+    <span class="s4">return </span><span class="s2">{</span>
+      <span class="s2">JSXAttribute(node) {</span>
+        <span class="s2">lastAttributeNode[getOpeningElementId(node.parent)] = node;</span>
+      <span class="s2">},</span>
+
+      <span class="s2">JSXSpreadAttribute(node) {</span>
+        <span class="s2">lastAttributeNode[getOpeningElementId(node.parent)] = node;</span>
+      <span class="s2">},</span>
+
+      <span class="s3">'JSXOpeningElement:exit'</span><span class="s2">(node) {</span>
+        <span class="s4">const </span><span class="s2">attributeNode = lastAttributeNode[getOpeningElementId(node)];</span>
+        <span class="s4">const </span><span class="s2">cachedLastAttributeEndPos = attributeNode ? attributeNode.range[</span><span class="s5">1</span><span class="s2">] : </span><span class="s4">null</span><span class="s2">;</span>
+
+        <span class="s4">let </span><span class="s2">expectedNextLine;</span>
+        <span class="s4">const </span><span class="s2">tokens = getTokensLocations(node);</span>
+        <span class="s4">const </span><span class="s2">expectedLocation = getExpectedLocation(tokens);</span>
+        <span class="s4">let </span><span class="s2">usingSameIndentation = </span><span class="s4">true</span><span class="s2">;</span>
+
+        <span class="s4">if </span><span class="s2">(expectedLocation === </span><span class="s3">'tag-aligned'</span><span class="s2">) {</span>
+          <span class="s2">usingSameIndentation = tokens.isTab.openTab === tokens.isTab.closeTab;</span>
+        <span class="s2">}</span>
+
+        <span class="s4">if </span><span class="s2">(hasCorrectLocation(tokens, expectedLocation) &amp;&amp; usingSameIndentation) {</span>
+          <span class="s4">return</span><span class="s2">;</span>
+        <span class="s2">}</span>
+
+        <span class="s4">const </span><span class="s2">data = {</span>
+          <span class="s2">location: MESSAGE_LOCATION[expectedLocation],</span>
+          <span class="s2">details: </span><span class="s3">''</span><span class="s2">,</span>
+        <span class="s2">};</span>
+        <span class="s4">const </span><span class="s2">correctColumn = getCorrectColumn(tokens, expectedLocation);</span>
+
+        <span class="s4">if </span><span class="s2">(correctColumn !== </span><span class="s4">null</span><span class="s2">) {</span>
+          <span class="s2">expectedNextLine = tokens.lastProp</span>
+            <span class="s2">&amp;&amp; (tokens.lastProp.lastLine === tokens.closing.line);</span>
+          <span class="s2">data.details = </span><span class="s3">` (expected column </span><span class="s2">${correctColumn + </span><span class="s5">1</span><span class="s2">}${expectedNextLine ? </span><span class="s3">' on the next line)' </span><span class="s2">: </span><span class="s3">')'</span><span class="s2">}</span><span class="s3">`</span><span class="s2">;</span>
+        <span class="s2">}</span>
+
+        <span class="s2">report(context, messages.bracketLocation, </span><span class="s3">'bracketLocation'</span><span class="s2">, {</span>
+          <span class="s2">node,</span>
+          <span class="s2">loc: tokens.closing,</span>
+          <span class="s2">data,</span>
+          <span class="s2">fix(fixer) {</span>
+            <span class="s4">const </span><span class="s2">closingTag = tokens.selfClosing ? </span><span class="s3">'/&gt;' </span><span class="s2">: </span><span class="s3">'&gt;'</span><span class="s2">;</span>
+            <span class="s4">switch </span><span class="s2">(expectedLocation) {</span>
+              <span class="s4">case </span><span class="s3">'after-tag'</span><span class="s2">:</span>
+                <span class="s4">if </span><span class="s2">(cachedLastAttributeEndPos) {</span>
+                  <span class="s4">return </span><span class="s2">fixer.replaceTextRange([cachedLastAttributeEndPos, node.range[</span><span class="s5">1</span><span class="s2">]],</span>
+                    <span class="s2">(expectedNextLine ? </span><span class="s3">'</span><span class="s7">\n</span><span class="s3">' </span><span class="s2">: </span><span class="s3">''</span><span class="s2">) + closingTag);</span>
+                <span class="s2">}</span>
+                <span class="s4">return </span><span class="s2">fixer.replaceTextRange([node.name.range[</span><span class="s5">1</span><span class="s2">], node.range[</span><span class="s5">1</span><span class="s2">]],</span>
+                  <span class="s2">(expectedNextLine ? </span><span class="s3">'</span><span class="s7">\n</span><span class="s3">' </span><span class="s2">: </span><span class="s3">' '</span><span class="s2">) + closingTag);</span>
+              <span class="s4">case </span><span class="s3">'after-props'</span><span class="s2">:</span>
+                <span class="s4">return </span><span class="s2">fixer.replaceTextRange([cachedLastAttributeEndPos, node.range[</span><span class="s5">1</span><span class="s2">]],</span>
+                  <span class="s2">(expectedNextLine ? </span><span class="s3">'</span><span class="s7">\n</span><span class="s3">' </span><span class="s2">: </span><span class="s3">''</span><span class="s2">) + closingTag);</span>
+              <span class="s4">case </span><span class="s3">'props-aligned'</span><span class="s2">:</span>
+              <span class="s4">case </span><span class="s3">'tag-aligned'</span><span class="s2">:</span>
+              <span class="s4">case </span><span class="s3">'line-aligned'</span><span class="s2">:</span>
+                <span class="s4">return </span><span class="s2">fixer.replaceTextRange([cachedLastAttributeEndPos, node.range[</span><span class="s5">1</span><span class="s2">]],</span>
+                  <span class="s3">`</span><span class="s7">\n</span><span class="s2">${getIndentation(tokens, expectedLocation, correctColumn)}${closingTag}</span><span class="s3">`</span><span class="s2">);</span>
+              <span class="s4">default</span><span class="s2">:</span>
+                <span class="s4">return true</span><span class="s2">;</span>
+            <span class="s2">}</span>
+          <span class="s2">},</span>
+        <span class="s2">});</span>
+      <span class="s2">},</span>
+    <span class="s2">};</span>
+  <span class="s2">},</span>
+<span class="s2">};</span>
+</pre>
+</body>
+</html>

@@ -1,0 +1,520 @@
+<html>
+<head>
+<title>VisualElementDragControls.mjs</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #0033b3;}
+.s1 { color: #080808;}
+.s2 { color: #067d17;}
+.s3 { color: #1750eb;}
+.s4 { color: #8c8c8c; font-style: italic;}
+.s5 { color: #8c8c8c; font-style: italic;}
+</style>
+</head>
+<body bgcolor="#ffffff">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#c0c0c0" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+VisualElementDragControls.mjs</font>
+</center></td></tr></table>
+<pre><span class="s0">import </span><span class="s1">{ frame, mixNumber, setDragLock, percent } from </span><span class="s2">'motion-dom'</span><span class="s1">;</span>
+<span class="s0">import </span><span class="s1">{ invariant } from </span><span class="s2">'motion-utils'</span><span class="s1">;</span>
+<span class="s0">import </span><span class="s1">{ animateMotionValue } from </span><span class="s2">'../../animation/interfaces/motion-value.mjs'</span><span class="s1">;</span>
+<span class="s0">import </span><span class="s1">{ addDomEvent } from </span><span class="s2">'../../events/add-dom-event.mjs'</span><span class="s1">;</span>
+<span class="s0">import </span><span class="s1">{ addPointerEvent } from </span><span class="s2">'../../events/add-pointer-event.mjs'</span><span class="s1">;</span>
+<span class="s0">import </span><span class="s1">{ extractEventInfo } from </span><span class="s2">'../../events/event-info.mjs'</span><span class="s1">;</span>
+<span class="s0">import </span><span class="s1">{ convertBoxToBoundingBox, convertBoundingBoxToBox } from </span><span class="s2">'../../projection/geometry/conversion.mjs'</span><span class="s1">;</span>
+<span class="s0">import </span><span class="s1">{ calcLength } from </span><span class="s2">'../../projection/geometry/delta-calc.mjs'</span><span class="s1">;</span>
+<span class="s0">import </span><span class="s1">{ createBox } from </span><span class="s2">'../../projection/geometry/models.mjs'</span><span class="s1">;</span>
+<span class="s0">import </span><span class="s1">{ eachAxis } from </span><span class="s2">'../../projection/utils/each-axis.mjs'</span><span class="s1">;</span>
+<span class="s0">import </span><span class="s1">{ measurePageBox } from </span><span class="s2">'../../projection/utils/measure.mjs'</span><span class="s1">;</span>
+<span class="s0">import </span><span class="s1">{ getContextWindow } from </span><span class="s2">'../../utils/get-context-window.mjs'</span><span class="s1">;</span>
+<span class="s0">import </span><span class="s1">{ isRefObject } from </span><span class="s2">'../../utils/is-ref-object.mjs'</span><span class="s1">;</span>
+<span class="s0">import </span><span class="s1">{ addValueToWillChange } from </span><span class="s2">'../../value/use-will-change/add-will-change.mjs'</span><span class="s1">;</span>
+<span class="s0">import </span><span class="s1">{ PanSession } from </span><span class="s2">'../pan/PanSession.mjs'</span><span class="s1">;</span>
+<span class="s0">import </span><span class="s1">{ applyConstraints, calcRelativeConstraints, resolveDragElastic, rebaseAxisConstraints, calcViewportConstraints, calcOrigin, defaultElastic } from </span><span class="s2">'./utils/constraints.mjs'</span><span class="s1">;</span>
+
+<span class="s0">const </span><span class="s1">elementDragControls = </span><span class="s0">new </span><span class="s1">WeakMap();</span>
+<span class="s0">class </span><span class="s1">VisualElementDragControls {</span>
+    <span class="s1">constructor(visualElement) {</span>
+        <span class="s0">this</span><span class="s1">.openDragLock = </span><span class="s0">null</span><span class="s1">;</span>
+        <span class="s0">this</span><span class="s1">.isDragging = </span><span class="s0">false</span><span class="s1">;</span>
+        <span class="s0">this</span><span class="s1">.currentDirection = </span><span class="s0">null</span><span class="s1">;</span>
+        <span class="s0">this</span><span class="s1">.originPoint = { x: </span><span class="s3">0</span><span class="s1">, y: </span><span class="s3">0 </span><span class="s1">};</span>
+        <span class="s4">/**</span>
+         <span class="s4">* The permitted boundaries of travel, in pixels.</span>
+         <span class="s4">*/</span>
+        <span class="s0">this</span><span class="s1">.constraints = </span><span class="s0">false</span><span class="s1">;</span>
+        <span class="s0">this</span><span class="s1">.hasMutatedConstraints = </span><span class="s0">false</span><span class="s1">;</span>
+        <span class="s4">/**</span>
+         <span class="s4">* The per-axis resolved elastic values.</span>
+         <span class="s4">*/</span>
+        <span class="s0">this</span><span class="s1">.elastic = createBox();</span>
+        <span class="s4">/**</span>
+         <span class="s4">* The latest pointer event. Used as fallback when the `cancel` and `stop` functions are called without arguments.</span>
+         <span class="s4">*/</span>
+        <span class="s0">this</span><span class="s1">.latestPointerEvent = </span><span class="s0">null</span><span class="s1">;</span>
+        <span class="s4">/**</span>
+         <span class="s4">* The latest pan info. Used as fallback when the `cancel` and `stop` functions are called without arguments.</span>
+         <span class="s4">*/</span>
+        <span class="s0">this</span><span class="s1">.latestPanInfo = </span><span class="s0">null</span><span class="s1">;</span>
+        <span class="s0">this</span><span class="s1">.visualElement = visualElement;</span>
+    <span class="s1">}</span>
+    <span class="s1">start(originEvent, { snapToCursor = </span><span class="s0">false</span><span class="s1">, distanceThreshold } = {}) {</span>
+        <span class="s4">/**</span>
+         <span class="s4">* Don't start dragging if this component is exiting</span>
+         <span class="s4">*/</span>
+        <span class="s0">const </span><span class="s1">{ presenceContext } = </span><span class="s0">this</span><span class="s1">.visualElement;</span>
+        <span class="s0">if </span><span class="s1">(presenceContext &amp;&amp; presenceContext.isPresent === </span><span class="s0">false</span><span class="s1">)</span>
+            <span class="s0">return</span><span class="s1">;</span>
+        <span class="s0">const </span><span class="s1">onSessionStart = (event) =&gt; {</span>
+            <span class="s0">const </span><span class="s1">{ dragSnapToOrigin } = </span><span class="s0">this</span><span class="s1">.getProps();</span>
+            <span class="s4">// Stop or pause any animations on both axis values immediately. This allows the user to throw and catch</span>
+            <span class="s4">// the component.</span>
+            <span class="s1">dragSnapToOrigin ? </span><span class="s0">this</span><span class="s1">.pauseAnimation() : </span><span class="s0">this</span><span class="s1">.stopAnimation();</span>
+            <span class="s0">if </span><span class="s1">(snapToCursor) {</span>
+                <span class="s0">this</span><span class="s1">.snapToCursor(extractEventInfo(event).point);</span>
+            <span class="s1">}</span>
+        <span class="s1">};</span>
+        <span class="s0">const </span><span class="s1">onStart = (event, info) =&gt; {</span>
+            <span class="s4">// Attempt to grab the global drag gesture lock - maybe make this part of PanSession</span>
+            <span class="s0">const </span><span class="s1">{ drag, dragPropagation, onDragStart } = </span><span class="s0">this</span><span class="s1">.getProps();</span>
+            <span class="s0">if </span><span class="s1">(drag &amp;&amp; !dragPropagation) {</span>
+                <span class="s0">if </span><span class="s1">(</span><span class="s0">this</span><span class="s1">.openDragLock)</span>
+                    <span class="s0">this</span><span class="s1">.openDragLock();</span>
+                <span class="s0">this</span><span class="s1">.openDragLock = setDragLock(drag);</span>
+                <span class="s4">// If we don 't have the lock, don't start dragging</span>
+                <span class="s0">if </span><span class="s1">(!</span><span class="s0">this</span><span class="s1">.openDragLock)</span>
+                    <span class="s0">return</span><span class="s1">;</span>
+            <span class="s1">}</span>
+            <span class="s0">this</span><span class="s1">.latestPointerEvent = event;</span>
+            <span class="s0">this</span><span class="s1">.latestPanInfo = info;</span>
+            <span class="s0">this</span><span class="s1">.isDragging = </span><span class="s0">true</span><span class="s1">;</span>
+            <span class="s0">this</span><span class="s1">.currentDirection = </span><span class="s0">null</span><span class="s1">;</span>
+            <span class="s0">this</span><span class="s1">.resolveConstraints();</span>
+            <span class="s0">if </span><span class="s1">(</span><span class="s0">this</span><span class="s1">.visualElement.projection) {</span>
+                <span class="s0">this</span><span class="s1">.visualElement.projection.isAnimationBlocked = </span><span class="s0">true</span><span class="s1">;</span>
+                <span class="s0">this</span><span class="s1">.visualElement.projection.target = undefined;</span>
+            <span class="s1">}</span>
+            <span class="s4">/**</span>
+             <span class="s4">* Record gesture origin</span>
+             <span class="s4">*/</span>
+            <span class="s1">eachAxis((axis) =&gt; {</span>
+                <span class="s0">let </span><span class="s1">current = </span><span class="s0">this</span><span class="s1">.getAxisMotionValue(axis).get() || </span><span class="s3">0</span><span class="s1">;</span>
+                <span class="s4">/**</span>
+                 <span class="s4">* If the MotionValue is a percentage value convert to px</span>
+                 <span class="s4">*/</span>
+                <span class="s0">if </span><span class="s1">(percent.test(current)) {</span>
+                    <span class="s0">const </span><span class="s1">{ projection } = </span><span class="s0">this</span><span class="s1">.visualElement;</span>
+                    <span class="s0">if </span><span class="s1">(projection &amp;&amp; projection.layout) {</span>
+                        <span class="s0">const </span><span class="s1">measuredAxis = projection.layout.layoutBox[axis];</span>
+                        <span class="s0">if </span><span class="s1">(measuredAxis) {</span>
+                            <span class="s0">const </span><span class="s1">length = calcLength(measuredAxis);</span>
+                            <span class="s1">current = length * (parseFloat(current) / </span><span class="s3">100</span><span class="s1">);</span>
+                        <span class="s1">}</span>
+                    <span class="s1">}</span>
+                <span class="s1">}</span>
+                <span class="s0">this</span><span class="s1">.originPoint[axis] = current;</span>
+            <span class="s1">});</span>
+            <span class="s4">// Fire onDragStart event</span>
+            <span class="s0">if </span><span class="s1">(onDragStart) {</span>
+                <span class="s1">frame.postRender(() =&gt; onDragStart(event, info));</span>
+            <span class="s1">}</span>
+            <span class="s1">addValueToWillChange(</span><span class="s0">this</span><span class="s1">.visualElement, </span><span class="s2">&quot;transform&quot;</span><span class="s1">);</span>
+            <span class="s0">const </span><span class="s1">{ animationState } = </span><span class="s0">this</span><span class="s1">.visualElement;</span>
+            <span class="s1">animationState &amp;&amp; animationState.setActive(</span><span class="s2">&quot;whileDrag&quot;</span><span class="s1">, </span><span class="s0">true</span><span class="s1">);</span>
+        <span class="s1">};</span>
+        <span class="s0">const </span><span class="s1">onMove = (event, info) =&gt; {</span>
+            <span class="s0">this</span><span class="s1">.latestPointerEvent = event;</span>
+            <span class="s0">this</span><span class="s1">.latestPanInfo = info;</span>
+            <span class="s0">const </span><span class="s1">{ dragPropagation, dragDirectionLock, onDirectionLock, onDrag, } = </span><span class="s0">this</span><span class="s1">.getProps();</span>
+            <span class="s4">// If we didn't successfully receive the gesture lock, early return.</span>
+            <span class="s0">if </span><span class="s1">(!dragPropagation &amp;&amp; !</span><span class="s0">this</span><span class="s1">.openDragLock)</span>
+                <span class="s0">return</span><span class="s1">;</span>
+            <span class="s0">const </span><span class="s1">{ offset } = info;</span>
+            <span class="s4">// Attempt to detect drag direction if directionLock is true</span>
+            <span class="s0">if </span><span class="s1">(dragDirectionLock &amp;&amp; </span><span class="s0">this</span><span class="s1">.currentDirection === </span><span class="s0">null</span><span class="s1">) {</span>
+                <span class="s0">this</span><span class="s1">.currentDirection = getCurrentDirection(offset);</span>
+                <span class="s4">// If we've successfully set a direction, notify listener</span>
+                <span class="s0">if </span><span class="s1">(</span><span class="s0">this</span><span class="s1">.currentDirection !== </span><span class="s0">null</span><span class="s1">) {</span>
+                    <span class="s1">onDirectionLock &amp;&amp; onDirectionLock(</span><span class="s0">this</span><span class="s1">.currentDirection);</span>
+                <span class="s1">}</span>
+                <span class="s0">return</span><span class="s1">;</span>
+            <span class="s1">}</span>
+            <span class="s4">// Update each point with the latest position</span>
+            <span class="s0">this</span><span class="s1">.updateAxis(</span><span class="s2">&quot;x&quot;</span><span class="s1">, info.point, offset);</span>
+            <span class="s0">this</span><span class="s1">.updateAxis(</span><span class="s2">&quot;y&quot;</span><span class="s1">, info.point, offset);</span>
+            <span class="s4">/**</span>
+             <span class="s4">* Ideally we would leave the renderer to fire naturally at the end of</span>
+             <span class="s4">* this frame but if the element is about to change layout as the result</span>
+             <span class="s4">* of a re-render we want to ensure the browser can read the latest</span>
+             <span class="s4">* bounding box to ensure the pointer and element don't fall out of sync.</span>
+             <span class="s4">*/</span>
+            <span class="s0">this</span><span class="s1">.visualElement.render();</span>
+            <span class="s4">/**</span>
+             <span class="s4">* This must fire after the render call as it might trigger a state</span>
+             <span class="s4">* change which itself might trigger a layout update.</span>
+             <span class="s4">*/</span>
+            <span class="s1">onDrag &amp;&amp; onDrag(event, info);</span>
+        <span class="s1">};</span>
+        <span class="s0">const </span><span class="s1">onSessionEnd = (event, info) =&gt; {</span>
+            <span class="s0">this</span><span class="s1">.latestPointerEvent = event;</span>
+            <span class="s0">this</span><span class="s1">.latestPanInfo = info;</span>
+            <span class="s0">this</span><span class="s1">.stop(event, info);</span>
+            <span class="s0">this</span><span class="s1">.latestPointerEvent = </span><span class="s0">null</span><span class="s1">;</span>
+            <span class="s0">this</span><span class="s1">.latestPanInfo = </span><span class="s0">null</span><span class="s1">;</span>
+        <span class="s1">};</span>
+        <span class="s0">const </span><span class="s1">resumeAnimation = () =&gt; eachAxis((axis) =&gt; </span><span class="s0">this</span><span class="s1">.getAnimationState(axis) === </span><span class="s2">&quot;paused&quot; </span><span class="s1">&amp;&amp;</span>
+            <span class="s0">this</span><span class="s1">.getAxisMotionValue(axis).animation?.play());</span>
+        <span class="s0">const </span><span class="s1">{ dragSnapToOrigin } = </span><span class="s0">this</span><span class="s1">.getProps();</span>
+        <span class="s0">this</span><span class="s1">.panSession = </span><span class="s0">new </span><span class="s1">PanSession(originEvent, {</span>
+            <span class="s1">onSessionStart,</span>
+            <span class="s1">onStart,</span>
+            <span class="s1">onMove,</span>
+            <span class="s1">onSessionEnd,</span>
+            <span class="s1">resumeAnimation,</span>
+        <span class="s1">}, {</span>
+            <span class="s1">transformPagePoint: </span><span class="s0">this</span><span class="s1">.visualElement.getTransformPagePoint(),</span>
+            <span class="s1">dragSnapToOrigin,</span>
+            <span class="s1">distanceThreshold,</span>
+            <span class="s1">contextWindow: getContextWindow(</span><span class="s0">this</span><span class="s1">.visualElement),</span>
+        <span class="s1">});</span>
+    <span class="s1">}</span>
+    <span class="s4">/**</span>
+     <span class="s4">* </span><span class="s5">@internal</span>
+     <span class="s4">*/</span>
+    <span class="s1">stop(event, panInfo) {</span>
+        <span class="s0">const </span><span class="s1">finalEvent = event || </span><span class="s0">this</span><span class="s1">.latestPointerEvent;</span>
+        <span class="s0">const </span><span class="s1">finalPanInfo = panInfo || </span><span class="s0">this</span><span class="s1">.latestPanInfo;</span>
+        <span class="s0">const </span><span class="s1">isDragging = </span><span class="s0">this</span><span class="s1">.isDragging;</span>
+        <span class="s0">this</span><span class="s1">.cancel();</span>
+        <span class="s0">if </span><span class="s1">(!isDragging || !finalPanInfo || !finalEvent)</span>
+            <span class="s0">return</span><span class="s1">;</span>
+        <span class="s0">const </span><span class="s1">{ velocity } = finalPanInfo;</span>
+        <span class="s0">this</span><span class="s1">.startAnimation(velocity);</span>
+        <span class="s0">const </span><span class="s1">{ onDragEnd } = </span><span class="s0">this</span><span class="s1">.getProps();</span>
+        <span class="s0">if </span><span class="s1">(onDragEnd) {</span>
+            <span class="s1">frame.postRender(() =&gt; onDragEnd(finalEvent, finalPanInfo));</span>
+        <span class="s1">}</span>
+    <span class="s1">}</span>
+    <span class="s4">/**</span>
+     <span class="s4">* </span><span class="s5">@internal</span>
+     <span class="s4">*/</span>
+    <span class="s1">cancel() {</span>
+        <span class="s0">this</span><span class="s1">.isDragging = </span><span class="s0">false</span><span class="s1">;</span>
+        <span class="s0">const </span><span class="s1">{ projection, animationState } = </span><span class="s0">this</span><span class="s1">.visualElement;</span>
+        <span class="s0">if </span><span class="s1">(projection) {</span>
+            <span class="s1">projection.isAnimationBlocked = </span><span class="s0">false</span><span class="s1">;</span>
+        <span class="s1">}</span>
+        <span class="s0">this</span><span class="s1">.panSession &amp;&amp; </span><span class="s0">this</span><span class="s1">.panSession.end();</span>
+        <span class="s0">this</span><span class="s1">.panSession = undefined;</span>
+        <span class="s0">const </span><span class="s1">{ dragPropagation } = </span><span class="s0">this</span><span class="s1">.getProps();</span>
+        <span class="s0">if </span><span class="s1">(!dragPropagation &amp;&amp; </span><span class="s0">this</span><span class="s1">.openDragLock) {</span>
+            <span class="s0">this</span><span class="s1">.openDragLock();</span>
+            <span class="s0">this</span><span class="s1">.openDragLock = </span><span class="s0">null</span><span class="s1">;</span>
+        <span class="s1">}</span>
+        <span class="s1">animationState &amp;&amp; animationState.setActive(</span><span class="s2">&quot;whileDrag&quot;</span><span class="s1">, </span><span class="s0">false</span><span class="s1">);</span>
+    <span class="s1">}</span>
+    <span class="s1">updateAxis(axis, _point, offset) {</span>
+        <span class="s0">const </span><span class="s1">{ drag } = </span><span class="s0">this</span><span class="s1">.getProps();</span>
+        <span class="s4">// If we're not dragging this axis, do an early return.</span>
+        <span class="s0">if </span><span class="s1">(!offset || !shouldDrag(axis, drag, </span><span class="s0">this</span><span class="s1">.currentDirection))</span>
+            <span class="s0">return</span><span class="s1">;</span>
+        <span class="s0">const </span><span class="s1">axisValue = </span><span class="s0">this</span><span class="s1">.getAxisMotionValue(axis);</span>
+        <span class="s0">let </span><span class="s1">next = </span><span class="s0">this</span><span class="s1">.originPoint[axis] + offset[axis];</span>
+        <span class="s4">// Apply constraints</span>
+        <span class="s0">if </span><span class="s1">(</span><span class="s0">this</span><span class="s1">.constraints &amp;&amp; </span><span class="s0">this</span><span class="s1">.constraints[axis]) {</span>
+            <span class="s1">next = applyConstraints(next, </span><span class="s0">this</span><span class="s1">.constraints[axis], </span><span class="s0">this</span><span class="s1">.elastic[axis]);</span>
+        <span class="s1">}</span>
+        <span class="s1">axisValue.set(next);</span>
+    <span class="s1">}</span>
+    <span class="s1">resolveConstraints() {</span>
+        <span class="s0">const </span><span class="s1">{ dragConstraints, dragElastic } = </span><span class="s0">this</span><span class="s1">.getProps();</span>
+        <span class="s0">const </span><span class="s1">layout = </span><span class="s0">this</span><span class="s1">.visualElement.projection &amp;&amp;</span>
+            <span class="s1">!</span><span class="s0">this</span><span class="s1">.visualElement.projection.layout</span>
+            <span class="s1">? </span><span class="s0">this</span><span class="s1">.visualElement.projection.measure(</span><span class="s0">false</span><span class="s1">)</span>
+            <span class="s1">: </span><span class="s0">this</span><span class="s1">.visualElement.projection?.layout;</span>
+        <span class="s0">const </span><span class="s1">prevConstraints = </span><span class="s0">this</span><span class="s1">.constraints;</span>
+        <span class="s0">if </span><span class="s1">(dragConstraints &amp;&amp; isRefObject(dragConstraints)) {</span>
+            <span class="s0">if </span><span class="s1">(!</span><span class="s0">this</span><span class="s1">.constraints) {</span>
+                <span class="s0">this</span><span class="s1">.constraints = </span><span class="s0">this</span><span class="s1">.resolveRefConstraints();</span>
+            <span class="s1">}</span>
+        <span class="s1">}</span>
+        <span class="s0">else </span><span class="s1">{</span>
+            <span class="s0">if </span><span class="s1">(dragConstraints &amp;&amp; layout) {</span>
+                <span class="s0">this</span><span class="s1">.constraints = calcRelativeConstraints(layout.layoutBox, dragConstraints);</span>
+            <span class="s1">}</span>
+            <span class="s0">else </span><span class="s1">{</span>
+                <span class="s0">this</span><span class="s1">.constraints = </span><span class="s0">false</span><span class="s1">;</span>
+            <span class="s1">}</span>
+        <span class="s1">}</span>
+        <span class="s0">this</span><span class="s1">.elastic = resolveDragElastic(dragElastic);</span>
+        <span class="s4">/**</span>
+         <span class="s4">* If we're outputting to external MotionValues, we want to rebase the measured constraints</span>
+         <span class="s4">* from viewport-relative to component-relative.</span>
+         <span class="s4">*/</span>
+        <span class="s0">if </span><span class="s1">(prevConstraints !== </span><span class="s0">this</span><span class="s1">.constraints &amp;&amp;</span>
+            <span class="s1">layout &amp;&amp;</span>
+            <span class="s0">this</span><span class="s1">.constraints &amp;&amp;</span>
+            <span class="s1">!</span><span class="s0">this</span><span class="s1">.hasMutatedConstraints) {</span>
+            <span class="s1">eachAxis((axis) =&gt; {</span>
+                <span class="s0">if </span><span class="s1">(</span><span class="s0">this</span><span class="s1">.constraints !== </span><span class="s0">false </span><span class="s1">&amp;&amp;</span>
+                    <span class="s0">this</span><span class="s1">.getAxisMotionValue(axis)) {</span>
+                    <span class="s0">this</span><span class="s1">.constraints[axis] = rebaseAxisConstraints(layout.layoutBox[axis], </span><span class="s0">this</span><span class="s1">.constraints[axis]);</span>
+                <span class="s1">}</span>
+            <span class="s1">});</span>
+        <span class="s1">}</span>
+    <span class="s1">}</span>
+    <span class="s1">resolveRefConstraints() {</span>
+        <span class="s0">const </span><span class="s1">{ dragConstraints: constraints, onMeasureDragConstraints } = </span><span class="s0">this</span><span class="s1">.getProps();</span>
+        <span class="s0">if </span><span class="s1">(!constraints || !isRefObject(constraints))</span>
+            <span class="s0">return false</span><span class="s1">;</span>
+        <span class="s0">const </span><span class="s1">constraintsElement = constraints.current;</span>
+        <span class="s1">invariant(constraintsElement !== </span><span class="s0">null</span><span class="s1">, </span><span class="s2">&quot;If `dragConstraints` is set as a React ref, that ref must be passed to another component's `ref` prop.&quot;</span><span class="s1">, </span><span class="s2">&quot;drag-constraints-ref&quot;</span><span class="s1">);</span>
+        <span class="s0">const </span><span class="s1">{ projection } = </span><span class="s0">this</span><span class="s1">.visualElement;</span>
+        <span class="s4">// TODO</span>
+        <span class="s0">if </span><span class="s1">(!projection || !projection.layout)</span>
+            <span class="s0">return false</span><span class="s1">;</span>
+        <span class="s0">const </span><span class="s1">constraintsBox = measurePageBox(constraintsElement, projection.root, </span><span class="s0">this</span><span class="s1">.visualElement.getTransformPagePoint());</span>
+        <span class="s0">let </span><span class="s1">measuredConstraints = calcViewportConstraints(projection.layout.layoutBox, constraintsBox);</span>
+        <span class="s4">/**</span>
+         <span class="s4">* If there's an onMeasureDragConstraints listener we call it and</span>
+         <span class="s4">* if different constraints are returned, set constraints to that</span>
+         <span class="s4">*/</span>
+        <span class="s0">if </span><span class="s1">(onMeasureDragConstraints) {</span>
+            <span class="s0">const </span><span class="s1">userConstraints = onMeasureDragConstraints(convertBoxToBoundingBox(measuredConstraints));</span>
+            <span class="s0">this</span><span class="s1">.hasMutatedConstraints = !!userConstraints;</span>
+            <span class="s0">if </span><span class="s1">(userConstraints) {</span>
+                <span class="s1">measuredConstraints = convertBoundingBoxToBox(userConstraints);</span>
+            <span class="s1">}</span>
+        <span class="s1">}</span>
+        <span class="s0">return </span><span class="s1">measuredConstraints;</span>
+    <span class="s1">}</span>
+    <span class="s1">startAnimation(velocity) {</span>
+        <span class="s0">const </span><span class="s1">{ drag, dragMomentum, dragElastic, dragTransition, dragSnapToOrigin, onDragTransitionEnd, } = </span><span class="s0">this</span><span class="s1">.getProps();</span>
+        <span class="s0">const </span><span class="s1">constraints = </span><span class="s0">this</span><span class="s1">.constraints || {};</span>
+        <span class="s0">const </span><span class="s1">momentumAnimations = eachAxis((axis) =&gt; {</span>
+            <span class="s0">if </span><span class="s1">(!shouldDrag(axis, drag, </span><span class="s0">this</span><span class="s1">.currentDirection)) {</span>
+                <span class="s0">return</span><span class="s1">;</span>
+            <span class="s1">}</span>
+            <span class="s0">let </span><span class="s1">transition = (constraints &amp;&amp; constraints[axis]) || {};</span>
+            <span class="s0">if </span><span class="s1">(dragSnapToOrigin)</span>
+                <span class="s1">transition = { min: </span><span class="s3">0</span><span class="s1">, max: </span><span class="s3">0 </span><span class="s1">};</span>
+            <span class="s4">/**</span>
+             <span class="s4">* Overdamp the boundary spring if `dragElastic` is disabled. There's still a frame</span>
+             <span class="s4">* of spring animations so we should look into adding a disable spring option to `inertia`.</span>
+             <span class="s4">* We could do something here where we affect the `bounceStiffness` and `bounceDamping`</span>
+             <span class="s4">* using the value of `dragElastic`.</span>
+             <span class="s4">*/</span>
+            <span class="s0">const </span><span class="s1">bounceStiffness = dragElastic ? </span><span class="s3">200 </span><span class="s1">: </span><span class="s3">1000000</span><span class="s1">;</span>
+            <span class="s0">const </span><span class="s1">bounceDamping = dragElastic ? </span><span class="s3">40 </span><span class="s1">: </span><span class="s3">10000000</span><span class="s1">;</span>
+            <span class="s0">const </span><span class="s1">inertia = {</span>
+                <span class="s1">type: </span><span class="s2">&quot;inertia&quot;</span><span class="s1">,</span>
+                <span class="s1">velocity: dragMomentum ? velocity[axis] : </span><span class="s3">0</span><span class="s1">,</span>
+                <span class="s1">bounceStiffness,</span>
+                <span class="s1">bounceDamping,</span>
+                <span class="s1">timeConstant: </span><span class="s3">750</span><span class="s1">,</span>
+                <span class="s1">restDelta: </span><span class="s3">1</span><span class="s1">,</span>
+                <span class="s1">restSpeed: </span><span class="s3">10</span><span class="s1">,</span>
+                <span class="s1">...dragTransition,</span>
+                <span class="s1">...transition,</span>
+            <span class="s1">};</span>
+            <span class="s4">// If we're not animating on an externally-provided `MotionValue` we can use the</span>
+            <span class="s4">// component's animation controls which will handle interactions with whileHover (etc),</span>
+            <span class="s4">// otherwise we just have to animate the `MotionValue` itself.</span>
+            <span class="s0">return this</span><span class="s1">.startAxisValueAnimation(axis, inertia);</span>
+        <span class="s1">});</span>
+        <span class="s4">// Run all animations and then resolve the new drag constraints.</span>
+        <span class="s0">return </span><span class="s1">Promise.all(momentumAnimations).then(onDragTransitionEnd);</span>
+    <span class="s1">}</span>
+    <span class="s1">startAxisValueAnimation(axis, transition) {</span>
+        <span class="s0">const </span><span class="s1">axisValue = </span><span class="s0">this</span><span class="s1">.getAxisMotionValue(axis);</span>
+        <span class="s1">addValueToWillChange(</span><span class="s0">this</span><span class="s1">.visualElement, axis);</span>
+        <span class="s0">return </span><span class="s1">axisValue.start(animateMotionValue(axis, axisValue, </span><span class="s3">0</span><span class="s1">, transition, </span><span class="s0">this</span><span class="s1">.visualElement, </span><span class="s0">false</span><span class="s1">));</span>
+    <span class="s1">}</span>
+    <span class="s1">stopAnimation() {</span>
+        <span class="s1">eachAxis((axis) =&gt; </span><span class="s0">this</span><span class="s1">.getAxisMotionValue(axis).stop());</span>
+    <span class="s1">}</span>
+    <span class="s1">pauseAnimation() {</span>
+        <span class="s1">eachAxis((axis) =&gt; </span><span class="s0">this</span><span class="s1">.getAxisMotionValue(axis).animation?.pause());</span>
+    <span class="s1">}</span>
+    <span class="s1">getAnimationState(axis) {</span>
+        <span class="s0">return this</span><span class="s1">.getAxisMotionValue(axis).animation?.state;</span>
+    <span class="s1">}</span>
+    <span class="s4">/**</span>
+     <span class="s4">* Drag works differently depending on which props are provided.</span>
+     <span class="s4">*</span>
+     <span class="s4">* - If _dragX and _dragY are provided, we output the gesture delta directly to those motion values.</span>
+     <span class="s4">* - Otherwise, we apply the delta to the x/y motion values.</span>
+     <span class="s4">*/</span>
+    <span class="s1">getAxisMotionValue(axis) {</span>
+        <span class="s0">const </span><span class="s1">dragKey = </span><span class="s2">`_drag</span><span class="s1">${axis.toUpperCase()}</span><span class="s2">`</span><span class="s1">;</span>
+        <span class="s0">const </span><span class="s1">props = </span><span class="s0">this</span><span class="s1">.visualElement.getProps();</span>
+        <span class="s0">const </span><span class="s1">externalMotionValue = props[dragKey];</span>
+        <span class="s0">return </span><span class="s1">externalMotionValue</span>
+            <span class="s1">? externalMotionValue</span>
+            <span class="s1">: </span><span class="s0">this</span><span class="s1">.visualElement.getValue(axis, (props.initial</span>
+                <span class="s1">? props.initial[axis]</span>
+                <span class="s1">: undefined) || </span><span class="s3">0</span><span class="s1">);</span>
+    <span class="s1">}</span>
+    <span class="s1">snapToCursor(point) {</span>
+        <span class="s1">eachAxis((axis) =&gt; {</span>
+            <span class="s0">const </span><span class="s1">{ drag } = </span><span class="s0">this</span><span class="s1">.getProps();</span>
+            <span class="s4">// If we're not dragging this axis, do an early return.</span>
+            <span class="s0">if </span><span class="s1">(!shouldDrag(axis, drag, </span><span class="s0">this</span><span class="s1">.currentDirection))</span>
+                <span class="s0">return</span><span class="s1">;</span>
+            <span class="s0">const </span><span class="s1">{ projection } = </span><span class="s0">this</span><span class="s1">.visualElement;</span>
+            <span class="s0">const </span><span class="s1">axisValue = </span><span class="s0">this</span><span class="s1">.getAxisMotionValue(axis);</span>
+            <span class="s0">if </span><span class="s1">(projection &amp;&amp; projection.layout) {</span>
+                <span class="s0">const </span><span class="s1">{ min, max } = projection.layout.layoutBox[axis];</span>
+                <span class="s1">axisValue.set(point[axis] - mixNumber(min, max, </span><span class="s3">0.5</span><span class="s1">));</span>
+            <span class="s1">}</span>
+        <span class="s1">});</span>
+    <span class="s1">}</span>
+    <span class="s4">/**</span>
+     <span class="s4">* When the viewport resizes we want to check if the measured constraints</span>
+     <span class="s4">* have changed and, if so, reposition the element within those new constraints</span>
+     <span class="s4">* relative to where it was before the resize.</span>
+     <span class="s4">*/</span>
+    <span class="s1">scalePositionWithinConstraints() {</span>
+        <span class="s0">if </span><span class="s1">(!</span><span class="s0">this</span><span class="s1">.visualElement.current)</span>
+            <span class="s0">return</span><span class="s1">;</span>
+        <span class="s0">const </span><span class="s1">{ drag, dragConstraints } = </span><span class="s0">this</span><span class="s1">.getProps();</span>
+        <span class="s0">const </span><span class="s1">{ projection } = </span><span class="s0">this</span><span class="s1">.visualElement;</span>
+        <span class="s0">if </span><span class="s1">(!isRefObject(dragConstraints) || !projection || !</span><span class="s0">this</span><span class="s1">.constraints)</span>
+            <span class="s0">return</span><span class="s1">;</span>
+        <span class="s4">/**</span>
+         <span class="s4">* Stop current animations as there can be visual glitching if we try to do</span>
+         <span class="s4">* this mid-animation</span>
+         <span class="s4">*/</span>
+        <span class="s0">this</span><span class="s1">.stopAnimation();</span>
+        <span class="s4">/**</span>
+         <span class="s4">* Record the relative position of the dragged element relative to the</span>
+         <span class="s4">* constraints box and save as a progress value.</span>
+         <span class="s4">*/</span>
+        <span class="s0">const </span><span class="s1">boxProgress = { x: </span><span class="s3">0</span><span class="s1">, y: </span><span class="s3">0 </span><span class="s1">};</span>
+        <span class="s1">eachAxis((axis) =&gt; {</span>
+            <span class="s0">const </span><span class="s1">axisValue = </span><span class="s0">this</span><span class="s1">.getAxisMotionValue(axis);</span>
+            <span class="s0">if </span><span class="s1">(axisValue &amp;&amp; </span><span class="s0">this</span><span class="s1">.constraints !== </span><span class="s0">false</span><span class="s1">) {</span>
+                <span class="s0">const </span><span class="s1">latest = axisValue.get();</span>
+                <span class="s1">boxProgress[axis] = calcOrigin({ min: latest, max: latest }, </span><span class="s0">this</span><span class="s1">.constraints[axis]);</span>
+            <span class="s1">}</span>
+        <span class="s1">});</span>
+        <span class="s4">/**</span>
+         <span class="s4">* Update the layout of this element and resolve the latest drag constraints</span>
+         <span class="s4">*/</span>
+        <span class="s0">const </span><span class="s1">{ transformTemplate } = </span><span class="s0">this</span><span class="s1">.visualElement.getProps();</span>
+        <span class="s0">this</span><span class="s1">.visualElement.current.style.transform = transformTemplate</span>
+            <span class="s1">? transformTemplate({}, </span><span class="s2">&quot;&quot;</span><span class="s1">)</span>
+            <span class="s1">: </span><span class="s2">&quot;none&quot;</span><span class="s1">;</span>
+        <span class="s1">projection.root &amp;&amp; projection.root.updateScroll();</span>
+        <span class="s1">projection.updateLayout();</span>
+        <span class="s0">this</span><span class="s1">.resolveConstraints();</span>
+        <span class="s4">/**</span>
+         <span class="s4">* For each axis, calculate the current progress of the layout axis</span>
+         <span class="s4">* within the new constraints.</span>
+         <span class="s4">*/</span>
+        <span class="s1">eachAxis((axis) =&gt; {</span>
+            <span class="s0">if </span><span class="s1">(!shouldDrag(axis, drag, </span><span class="s0">null</span><span class="s1">))</span>
+                <span class="s0">return</span><span class="s1">;</span>
+            <span class="s4">/**</span>
+             <span class="s4">* Calculate a new transform based on the previous box progress</span>
+             <span class="s4">*/</span>
+            <span class="s0">const </span><span class="s1">axisValue = </span><span class="s0">this</span><span class="s1">.getAxisMotionValue(axis);</span>
+            <span class="s0">const </span><span class="s1">{ min, max } = </span><span class="s0">this</span><span class="s1">.constraints[axis];</span>
+            <span class="s1">axisValue.set(mixNumber(min, max, boxProgress[axis]));</span>
+        <span class="s1">});</span>
+    <span class="s1">}</span>
+    <span class="s1">addListeners() {</span>
+        <span class="s0">if </span><span class="s1">(!</span><span class="s0">this</span><span class="s1">.visualElement.current)</span>
+            <span class="s0">return</span><span class="s1">;</span>
+        <span class="s1">elementDragControls.set(</span><span class="s0">this</span><span class="s1">.visualElement, </span><span class="s0">this</span><span class="s1">);</span>
+        <span class="s0">const </span><span class="s1">element = </span><span class="s0">this</span><span class="s1">.visualElement.current;</span>
+        <span class="s4">/**</span>
+         <span class="s4">* Attach a pointerdown event listener on this DOM element to initiate drag tracking.</span>
+         <span class="s4">*/</span>
+        <span class="s0">const </span><span class="s1">stopPointerListener = addPointerEvent(element, </span><span class="s2">&quot;pointerdown&quot;</span><span class="s1">, (event) =&gt; {</span>
+            <span class="s0">const </span><span class="s1">{ drag, dragListener = </span><span class="s0">true </span><span class="s1">} = </span><span class="s0">this</span><span class="s1">.getProps();</span>
+            <span class="s1">drag &amp;&amp; dragListener &amp;&amp; </span><span class="s0">this</span><span class="s1">.start(event);</span>
+        <span class="s1">});</span>
+        <span class="s0">const </span><span class="s1">measureDragConstraints = () =&gt; {</span>
+            <span class="s0">const </span><span class="s1">{ dragConstraints } = </span><span class="s0">this</span><span class="s1">.getProps();</span>
+            <span class="s0">if </span><span class="s1">(isRefObject(dragConstraints) &amp;&amp; dragConstraints.current) {</span>
+                <span class="s0">this</span><span class="s1">.constraints = </span><span class="s0">this</span><span class="s1">.resolveRefConstraints();</span>
+            <span class="s1">}</span>
+        <span class="s1">};</span>
+        <span class="s0">const </span><span class="s1">{ projection } = </span><span class="s0">this</span><span class="s1">.visualElement;</span>
+        <span class="s0">const </span><span class="s1">stopMeasureLayoutListener = projection.addEventListener(</span><span class="s2">&quot;measure&quot;</span><span class="s1">, measureDragConstraints);</span>
+        <span class="s0">if </span><span class="s1">(projection &amp;&amp; !projection.layout) {</span>
+            <span class="s1">projection.root &amp;&amp; projection.root.updateScroll();</span>
+            <span class="s1">projection.updateLayout();</span>
+        <span class="s1">}</span>
+        <span class="s1">frame.read(measureDragConstraints);</span>
+        <span class="s4">/**</span>
+         <span class="s4">* Attach a window resize listener to scale the draggable target within its defined</span>
+         <span class="s4">* constraints as the window resizes.</span>
+         <span class="s4">*/</span>
+        <span class="s0">const </span><span class="s1">stopResizeListener = addDomEvent(window, </span><span class="s2">&quot;resize&quot;</span><span class="s1">, () =&gt; </span><span class="s0">this</span><span class="s1">.scalePositionWithinConstraints());</span>
+        <span class="s4">/**</span>
+         <span class="s4">* If the element's layout changes, calculate the delta and apply that to</span>
+         <span class="s4">* the drag gesture's origin point.</span>
+         <span class="s4">*/</span>
+        <span class="s0">const </span><span class="s1">stopLayoutUpdateListener = projection.addEventListener(</span><span class="s2">&quot;didUpdate&quot;</span><span class="s1">, (({ delta, hasLayoutChanged }) =&gt; {</span>
+            <span class="s0">if </span><span class="s1">(</span><span class="s0">this</span><span class="s1">.isDragging &amp;&amp; hasLayoutChanged) {</span>
+                <span class="s1">eachAxis((axis) =&gt; {</span>
+                    <span class="s0">const </span><span class="s1">motionValue = </span><span class="s0">this</span><span class="s1">.getAxisMotionValue(axis);</span>
+                    <span class="s0">if </span><span class="s1">(!motionValue)</span>
+                        <span class="s0">return</span><span class="s1">;</span>
+                    <span class="s0">this</span><span class="s1">.originPoint[axis] += delta[axis].translate;</span>
+                    <span class="s1">motionValue.set(motionValue.get() + delta[axis].translate);</span>
+                <span class="s1">});</span>
+                <span class="s0">this</span><span class="s1">.visualElement.render();</span>
+            <span class="s1">}</span>
+        <span class="s1">}));</span>
+        <span class="s0">return </span><span class="s1">() =&gt; {</span>
+            <span class="s1">stopResizeListener();</span>
+            <span class="s1">stopPointerListener();</span>
+            <span class="s1">stopMeasureLayoutListener();</span>
+            <span class="s1">stopLayoutUpdateListener &amp;&amp; stopLayoutUpdateListener();</span>
+        <span class="s1">};</span>
+    <span class="s1">}</span>
+    <span class="s1">getProps() {</span>
+        <span class="s0">const </span><span class="s1">props = </span><span class="s0">this</span><span class="s1">.visualElement.getProps();</span>
+        <span class="s0">const </span><span class="s1">{ drag = </span><span class="s0">false</span><span class="s1">, dragDirectionLock = </span><span class="s0">false</span><span class="s1">, dragPropagation = </span><span class="s0">false</span><span class="s1">, dragConstraints = </span><span class="s0">false</span><span class="s1">, dragElastic = defaultElastic, dragMomentum = </span><span class="s0">true</span><span class="s1">, } = props;</span>
+        <span class="s0">return </span><span class="s1">{</span>
+            <span class="s1">...props,</span>
+            <span class="s1">drag,</span>
+            <span class="s1">dragDirectionLock,</span>
+            <span class="s1">dragPropagation,</span>
+            <span class="s1">dragConstraints,</span>
+            <span class="s1">dragElastic,</span>
+            <span class="s1">dragMomentum,</span>
+        <span class="s1">};</span>
+    <span class="s1">}</span>
+<span class="s1">}</span>
+<span class="s0">function </span><span class="s1">shouldDrag(direction, drag, currentDirection) {</span>
+    <span class="s0">return </span><span class="s1">((drag === </span><span class="s0">true </span><span class="s1">|| drag === direction) &amp;&amp;</span>
+        <span class="s1">(currentDirection === </span><span class="s0">null </span><span class="s1">|| currentDirection === direction));</span>
+<span class="s1">}</span>
+<span class="s4">/**</span>
+ <span class="s4">* Based on an x/y offset determine the current drag direction. If both axis' offsets are lower</span>
+ <span class="s4">* than the provided threshold, return `null`.</span>
+ <span class="s4">*</span>
+ <span class="s4">* </span><span class="s5">@param </span><span class="s4">offset - The x/y offset from origin.</span>
+ <span class="s4">* </span><span class="s5">@param </span><span class="s4">lockThreshold - (Optional) - the minimum absolute offset before we can determine a drag direction.</span>
+ <span class="s4">*/</span>
+<span class="s0">function </span><span class="s1">getCurrentDirection(offset, lockThreshold = </span><span class="s3">10</span><span class="s1">) {</span>
+    <span class="s0">let </span><span class="s1">direction = </span><span class="s0">null</span><span class="s1">;</span>
+    <span class="s0">if </span><span class="s1">(Math.abs(offset.y) &gt; lockThreshold) {</span>
+        <span class="s1">direction = </span><span class="s2">&quot;y&quot;</span><span class="s1">;</span>
+    <span class="s1">}</span>
+    <span class="s0">else if </span><span class="s1">(Math.abs(offset.x) &gt; lockThreshold) {</span>
+        <span class="s1">direction = </span><span class="s2">&quot;x&quot;</span><span class="s1">;</span>
+    <span class="s1">}</span>
+    <span class="s0">return </span><span class="s1">direction;</span>
+<span class="s1">}</span>
+
+<span class="s0">export </span><span class="s1">{ VisualElementDragControls, elementDragControls };</span>
+</pre>
+</body>
+</html>

@@ -1,0 +1,167 @@
+<html>
+<head>
+<title>prefer-optional-chain.js</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #067d17;}
+.s1 { color: #080808;}
+.s2 { color: #0033b3;}
+.s3 { color: #1750eb;}
+.s4 { color: #8c8c8c; font-style: italic;}
+</style>
+</head>
+<body bgcolor="#ffffff">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#c0c0c0" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+prefer-optional-chain.js</font>
+</center></td></tr></table>
+<pre><span class="s0">&quot;use strict&quot;</span><span class="s1">;</span>
+<span class="s1">Object.defineProperty(exports, </span><span class="s0">&quot;__esModule&quot;</span><span class="s1">, { value: </span><span class="s2">true </span><span class="s1">});</span>
+<span class="s2">const </span><span class="s1">utils_1 = require(</span><span class="s0">&quot;@typescript-eslint/utils&quot;</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">util_1 = require(</span><span class="s0">&quot;../util&quot;</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">analyzeChain_1 = require(</span><span class="s0">&quot;./prefer-optional-chain-utils/analyzeChain&quot;</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">checkNullishAndReport_1 = require(</span><span class="s0">&quot;./prefer-optional-chain-utils/checkNullishAndReport&quot;</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">gatherLogicalOperands_1 = require(</span><span class="s0">&quot;./prefer-optional-chain-utils/gatherLogicalOperands&quot;</span><span class="s1">);</span>
+<span class="s1">exports.default = (</span><span class="s3">0</span><span class="s1">, util_1.createRule)({</span>
+    <span class="s1">name: </span><span class="s0">'prefer-optional-chain'</span><span class="s1">,</span>
+    <span class="s1">meta: {</span>
+        <span class="s1">type: </span><span class="s0">'suggestion'</span><span class="s1">,</span>
+        <span class="s1">docs: {</span>
+            <span class="s1">description: </span><span class="s0">'Enforce using concise optional chain expressions instead of chained logical ands, negated logical ors, or empty objects'</span><span class="s1">,</span>
+            <span class="s1">recommended: </span><span class="s0">'stylistic'</span><span class="s1">,</span>
+            <span class="s1">requiresTypeChecking: </span><span class="s2">true</span><span class="s1">,</span>
+        <span class="s1">},</span>
+        <span class="s1">fixable: </span><span class="s0">'code'</span><span class="s1">,</span>
+        <span class="s1">hasSuggestions: </span><span class="s2">true</span><span class="s1">,</span>
+        <span class="s1">messages: {</span>
+            <span class="s1">optionalChainSuggest: </span><span class="s0">'Change to an optional chain.'</span><span class="s1">,</span>
+            <span class="s1">preferOptionalChain: </span><span class="s0">&quot;Prefer using an optional chain expression instead, as it's more concise and easier to read.&quot;</span><span class="s1">,</span>
+        <span class="s1">},</span>
+        <span class="s1">schema: [</span>
+            <span class="s1">{</span>
+                <span class="s1">type: </span><span class="s0">'object'</span><span class="s1">,</span>
+                <span class="s1">additionalProperties: </span><span class="s2">false</span><span class="s1">,</span>
+                <span class="s1">properties: {</span>
+                    <span class="s1">allowPotentiallyUnsafeFixesThatModifyTheReturnTypeIKnowWhatImDoing: {</span>
+                        <span class="s1">type: </span><span class="s0">'boolean'</span><span class="s1">,</span>
+                        <span class="s1">description: </span><span class="s0">'Allow autofixers that will change the return type of the expression. This option is considered unsafe as it may break the build.'</span><span class="s1">,</span>
+                    <span class="s1">},</span>
+                    <span class="s1">checkAny: {</span>
+                        <span class="s1">type: </span><span class="s0">'boolean'</span><span class="s1">,</span>
+                        <span class="s1">description: </span><span class="s0">'Check operands that are typed as `any` when inspecting &quot;loose boolean&quot; operands.'</span><span class="s1">,</span>
+                    <span class="s1">},</span>
+                    <span class="s1">checkBigInt: {</span>
+                        <span class="s1">type: </span><span class="s0">'boolean'</span><span class="s1">,</span>
+                        <span class="s1">description: </span><span class="s0">'Check operands that are typed as `bigint` when inspecting &quot;loose boolean&quot; operands.'</span><span class="s1">,</span>
+                    <span class="s1">},</span>
+                    <span class="s1">checkBoolean: {</span>
+                        <span class="s1">type: </span><span class="s0">'boolean'</span><span class="s1">,</span>
+                        <span class="s1">description: </span><span class="s0">'Check operands that are typed as `boolean` when inspecting &quot;loose boolean&quot; operands.'</span><span class="s1">,</span>
+                    <span class="s1">},</span>
+                    <span class="s1">checkNumber: {</span>
+                        <span class="s1">type: </span><span class="s0">'boolean'</span><span class="s1">,</span>
+                        <span class="s1">description: </span><span class="s0">'Check operands that are typed as `number` when inspecting &quot;loose boolean&quot; operands.'</span><span class="s1">,</span>
+                    <span class="s1">},</span>
+                    <span class="s1">checkString: {</span>
+                        <span class="s1">type: </span><span class="s0">'boolean'</span><span class="s1">,</span>
+                        <span class="s1">description: </span><span class="s0">'Check operands that are typed as `string` when inspecting &quot;loose boolean&quot; operands.'</span><span class="s1">,</span>
+                    <span class="s1">},</span>
+                    <span class="s1">checkUnknown: {</span>
+                        <span class="s1">type: </span><span class="s0">'boolean'</span><span class="s1">,</span>
+                        <span class="s1">description: </span><span class="s0">'Check operands that are typed as `unknown` when inspecting &quot;loose boolean&quot; operands.'</span><span class="s1">,</span>
+                    <span class="s1">},</span>
+                    <span class="s1">requireNullish: {</span>
+                        <span class="s1">type: </span><span class="s0">'boolean'</span><span class="s1">,</span>
+                        <span class="s1">description: </span><span class="s0">'Skip operands that are not typed with `null` and/or `undefined` when inspecting &quot;loose boolean&quot; operands.'</span><span class="s1">,</span>
+                    <span class="s1">},</span>
+                <span class="s1">},</span>
+            <span class="s1">},</span>
+        <span class="s1">],</span>
+    <span class="s1">},</span>
+    <span class="s1">defaultOptions: [</span>
+        <span class="s1">{</span>
+            <span class="s1">allowPotentiallyUnsafeFixesThatModifyTheReturnTypeIKnowWhatImDoing: </span><span class="s2">false</span><span class="s1">,</span>
+            <span class="s1">checkAny: </span><span class="s2">true</span><span class="s1">,</span>
+            <span class="s1">checkBigInt: </span><span class="s2">true</span><span class="s1">,</span>
+            <span class="s1">checkBoolean: </span><span class="s2">true</span><span class="s1">,</span>
+            <span class="s1">checkNumber: </span><span class="s2">true</span><span class="s1">,</span>
+            <span class="s1">checkString: </span><span class="s2">true</span><span class="s1">,</span>
+            <span class="s1">checkUnknown: </span><span class="s2">true</span><span class="s1">,</span>
+            <span class="s1">requireNullish: </span><span class="s2">false</span><span class="s1">,</span>
+        <span class="s1">},</span>
+    <span class="s1">],</span>
+    <span class="s1">create(context, [options]) {</span>
+        <span class="s2">const </span><span class="s1">parserServices = (</span><span class="s3">0</span><span class="s1">, util_1.getParserServices)(context);</span>
+        <span class="s2">const </span><span class="s1">seenLogicals = </span><span class="s2">new </span><span class="s1">Set();</span>
+        <span class="s2">return </span><span class="s1">{</span>
+            <span class="s0">'LogicalExpression[operator!=&quot;??&quot;]'</span><span class="s1">(node) {</span>
+                <span class="s2">if </span><span class="s1">(seenLogicals.has(node)) {</span>
+                    <span class="s2">return</span><span class="s1">;</span>
+                <span class="s1">}</span>
+                <span class="s2">const </span><span class="s1">{ newlySeenLogicals, operands } = (</span><span class="s3">0</span><span class="s1">, gatherLogicalOperands_1.gatherLogicalOperands)(node, parserServices, context.sourceCode, options);</span>
+                <span class="s2">for </span><span class="s1">(</span><span class="s2">const </span><span class="s1">logical of newlySeenLogicals) {</span>
+                    <span class="s1">seenLogicals.add(logical);</span>
+                <span class="s1">}</span>
+                <span class="s2">let </span><span class="s1">currentChain = [];</span>
+                <span class="s2">for </span><span class="s1">(</span><span class="s2">const </span><span class="s1">operand of operands) {</span>
+                    <span class="s2">if </span><span class="s1">(operand.type === gatherLogicalOperands_1.OperandValidity.Invalid) {</span>
+                        <span class="s1">(</span><span class="s3">0</span><span class="s1">, analyzeChain_1.analyzeChain)(context, parserServices, options, node, node.operator, currentChain);</span>
+                        <span class="s1">currentChain = [];</span>
+                    <span class="s1">}</span>
+                    <span class="s2">else </span><span class="s1">{</span>
+                        <span class="s1">currentChain.push(operand);</span>
+                    <span class="s1">}</span>
+                <span class="s1">}</span>
+                <span class="s4">// make sure to check whatever's left</span>
+                <span class="s2">if </span><span class="s1">(currentChain.length &gt; </span><span class="s3">0</span><span class="s1">) {</span>
+                    <span class="s1">(</span><span class="s3">0</span><span class="s1">, analyzeChain_1.analyzeChain)(context, parserServices, options, node, node.operator, currentChain);</span>
+                <span class="s1">}</span>
+            <span class="s1">},</span>
+            <span class="s4">// specific handling for `(foo ?? {}).bar` / `(foo || {}).bar`</span>
+            <span class="s0">'LogicalExpression[operator=&quot;||&quot;], LogicalExpression[operator=&quot;??&quot;]'</span><span class="s1">(node) {</span>
+                <span class="s2">const </span><span class="s1">leftNode = node.left;</span>
+                <span class="s2">const </span><span class="s1">rightNode = node.right;</span>
+                <span class="s2">const </span><span class="s1">parentNode = node.parent;</span>
+                <span class="s2">const </span><span class="s1">isRightNodeAnEmptyObjectLiteral = rightNode.type === utils_1.AST_NODE_TYPES.ObjectExpression &amp;&amp;</span>
+                    <span class="s1">rightNode.properties.length === </span><span class="s3">0</span><span class="s1">;</span>
+                <span class="s2">if </span><span class="s1">(!isRightNodeAnEmptyObjectLiteral ||</span>
+                    <span class="s1">parentNode.type !== utils_1.AST_NODE_TYPES.MemberExpression ||</span>
+                    <span class="s1">parentNode.optional) {</span>
+                    <span class="s2">return</span><span class="s1">;</span>
+                <span class="s1">}</span>
+                <span class="s1">seenLogicals.add(node);</span>
+                <span class="s2">function </span><span class="s1">isLeftSideLowerPrecedence() {</span>
+                    <span class="s2">const </span><span class="s1">logicalTsNode = parserServices.esTreeNodeToTSNodeMap.get(node);</span>
+                    <span class="s2">const </span><span class="s1">leftTsNode = parserServices.esTreeNodeToTSNodeMap.get(leftNode);</span>
+                    <span class="s2">const </span><span class="s1">leftPrecedence = (</span><span class="s3">0</span><span class="s1">, util_1.getOperatorPrecedence)(leftTsNode.kind, logicalTsNode.operatorToken.kind);</span>
+                    <span class="s2">return </span><span class="s1">leftPrecedence &lt; util_1.OperatorPrecedence.LeftHandSide;</span>
+                <span class="s1">}</span>
+                <span class="s1">(</span><span class="s3">0</span><span class="s1">, checkNullishAndReport_1.checkNullishAndReport)(context, parserServices, options, [leftNode], {</span>
+                    <span class="s1">node: parentNode,</span>
+                    <span class="s1">messageId: </span><span class="s0">'preferOptionalChain'</span><span class="s1">,</span>
+                    <span class="s1">suggest: [</span>
+                        <span class="s1">{</span>
+                            <span class="s1">messageId: </span><span class="s0">'optionalChainSuggest'</span><span class="s1">,</span>
+                            <span class="s1">fix: (fixer) =&gt; {</span>
+                                <span class="s2">const </span><span class="s1">leftNodeText = context.sourceCode.getText(leftNode);</span>
+                                <span class="s4">// Any node that is made of an operator with higher or equal precedence,</span>
+                                <span class="s2">const </span><span class="s1">maybeWrappedLeftNode = isLeftSideLowerPrecedence()</span>
+                                    <span class="s1">? </span><span class="s0">`(</span><span class="s1">${leftNodeText}</span><span class="s0">)`</span>
+                                    <span class="s1">: leftNodeText;</span>
+                                <span class="s2">const </span><span class="s1">propertyToBeOptionalText = context.sourceCode.getText(parentNode.property);</span>
+                                <span class="s2">const </span><span class="s1">maybeWrappedProperty = parentNode.computed</span>
+                                    <span class="s1">? </span><span class="s0">`[</span><span class="s1">${propertyToBeOptionalText}</span><span class="s0">]`</span>
+                                    <span class="s1">: propertyToBeOptionalText;</span>
+                                <span class="s2">return </span><span class="s1">fixer.replaceTextRange(parentNode.range, </span><span class="s0">`</span><span class="s1">${maybeWrappedLeftNode}</span><span class="s0">?.</span><span class="s1">${maybeWrappedProperty}</span><span class="s0">`</span><span class="s1">);</span>
+                            <span class="s1">},</span>
+                        <span class="s1">},</span>
+                    <span class="s1">],</span>
+                <span class="s1">});</span>
+            <span class="s1">},</span>
+        <span class="s1">};</span>
+    <span class="s1">},</span>
+<span class="s1">});</span>
+</pre>
+</body>
+</html>

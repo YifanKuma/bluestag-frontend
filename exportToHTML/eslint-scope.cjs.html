@@ -1,0 +1,2361 @@
+<html>
+<head>
+<title>eslint-scope.cjs</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #067d17;}
+.s1 { color: #080808;}
+.s2 { color: #0033b3;}
+.s3 { color: #8c8c8c; font-style: italic;}
+.s4 { color: #8c8c8c; font-style: italic;}
+.s5 { color: #1750eb;}
+</style>
+</head>
+<body bgcolor="#ffffff">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#c0c0c0" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+eslint-scope.cjs</font>
+</center></td></tr></table>
+<pre><span class="s0">'use strict'</span><span class="s1">;</span>
+
+<span class="s1">Object.defineProperty(exports, </span><span class="s0">'__esModule'</span><span class="s1">, { value: </span><span class="s2">true </span><span class="s1">});</span>
+
+<span class="s2">var </span><span class="s1">estraverse = require(</span><span class="s0">'estraverse'</span><span class="s1">);</span>
+<span class="s2">var </span><span class="s1">esrecurse = require(</span><span class="s0">'esrecurse'</span><span class="s1">);</span>
+
+<span class="s2">function </span><span class="s1">_interopDefaultLegacy (e) { </span><span class="s2">return </span><span class="s1">e &amp;&amp; </span><span class="s2">typeof </span><span class="s1">e === </span><span class="s0">'object' </span><span class="s1">&amp;&amp; </span><span class="s0">'default' </span><span class="s2">in </span><span class="s1">e ? e : { </span><span class="s0">'default'</span><span class="s1">: e }; }</span>
+
+<span class="s2">var </span><span class="s1">estraverse__default = </span><span class="s3">/*#__PURE__*/</span><span class="s1">_interopDefaultLegacy(estraverse);</span>
+<span class="s2">var </span><span class="s1">esrecurse__default = </span><span class="s3">/*#__PURE__*/</span><span class="s1">_interopDefaultLegacy(esrecurse);</span>
+
+<span class="s3">/**</span>
+ <span class="s3">* </span><span class="s4">@fileoverview </span><span class="s3">Assertion utilities.</span>
+ <span class="s3">* </span><span class="s4">@author </span><span class="s3">Nicholas C. Zakas</span>
+ <span class="s3">*/</span>
+
+<span class="s3">/**</span>
+ <span class="s3">* Throws an error if the given condition is not truthy.</span>
+ <span class="s3">* </span><span class="s4">@param </span><span class="s3">{boolean} condition The condition to check.</span>
+ <span class="s3">* </span><span class="s4">@param </span><span class="s3">{string} message The message to include with the error.</span>
+ <span class="s3">* </span><span class="s4">@returns </span><span class="s3">{void}</span>
+ <span class="s3">* </span><span class="s4">@throws </span><span class="s3">{Error} When the condition is not truthy.</span>
+ <span class="s3">*/</span>
+<span class="s2">function </span><span class="s1">assert(condition, message = </span><span class="s0">&quot;Assertion failed.&quot;</span><span class="s1">) {</span>
+    <span class="s2">if </span><span class="s1">(!condition) {</span>
+        <span class="s2">throw new </span><span class="s1">Error(message);</span>
+    <span class="s1">}</span>
+<span class="s1">}</span>
+
+<span class="s3">/* 
+  Copyright (C) 2015 Yusuke Suzuki &lt;utatane.tea@gmail.com&gt; 
+ 
+  Redistribution and use in source and binary forms, with or without 
+  modification, are permitted provided that the following conditions are met: 
+ 
+    * Redistributions of source code must retain the above copyright 
+      notice, this list of conditions and the following disclaimer. 
+    * Redistributions in binary form must reproduce the above copyright 
+      notice, this list of conditions and the following disclaimer in the 
+      documentation and/or other materials provided with the distribution. 
+ 
+  THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS &quot;AS IS&quot; 
+  AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE 
+  IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE 
+  ARE DISCLAIMED. IN NO EVENT SHALL &lt;COPYRIGHT HOLDER&gt; BE LIABLE FOR ANY 
+  DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES 
+  (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; 
+  LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND 
+  ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT 
+  (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF 
+  THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE. 
+*/</span>
+
+<span class="s2">const </span><span class="s1">READ = </span><span class="s5">0x1</span><span class="s1">;</span>
+<span class="s2">const </span><span class="s1">WRITE = </span><span class="s5">0x2</span><span class="s1">;</span>
+<span class="s2">const </span><span class="s1">RW = READ | WRITE;</span>
+
+<span class="s3">/**</span>
+ <span class="s3">* A Reference represents a single occurrence of an identifier in code.</span>
+ <span class="s3">* </span><span class="s4">@constructor </span><span class="s3">Reference</span>
+ <span class="s3">*/</span>
+<span class="s2">class </span><span class="s1">Reference {</span>
+    <span class="s1">constructor(ident, scope, flag, writeExpr, maybeImplicitGlobal, partial, init) {</span>
+
+        <span class="s3">/**</span>
+         <span class="s3">* Identifier syntax node.</span>
+         <span class="s3">* </span><span class="s4">@member </span><span class="s3">{espreeIdentifier} Reference#identifier</span>
+         <span class="s3">*/</span>
+        <span class="s2">this</span><span class="s1">.identifier = ident;</span>
+
+        <span class="s3">/**</span>
+         <span class="s3">* Reference to the enclosing Scope.</span>
+         <span class="s3">* </span><span class="s4">@member </span><span class="s3">{Scope} Reference#from</span>
+         <span class="s3">*/</span>
+        <span class="s2">this</span><span class="s1">.from = scope;</span>
+
+        <span class="s3">/**</span>
+         <span class="s3">* Whether the reference comes from a dynamic scope (such as 'eval',</span>
+         <span class="s3">* 'with', etc.), and may be trapped by dynamic scopes.</span>
+         <span class="s3">* </span><span class="s4">@member </span><span class="s3">{boolean} Reference#tainted</span>
+         <span class="s3">*/</span>
+        <span class="s2">this</span><span class="s1">.tainted = </span><span class="s2">false</span><span class="s1">;</span>
+
+        <span class="s3">/**</span>
+         <span class="s3">* The variable this reference is resolved with.</span>
+         <span class="s3">* </span><span class="s4">@member </span><span class="s3">{Variable} Reference#resolved</span>
+         <span class="s3">*/</span>
+        <span class="s2">this</span><span class="s1">.resolved = </span><span class="s2">null</span><span class="s1">;</span>
+
+        <span class="s3">/**</span>
+         <span class="s3">* The read-write mode of the reference. (Value is one of {</span><span class="s4">@link</span>
+         <span class="s3">* Reference.READ}, {</span><span class="s4">@link </span><span class="s3">Reference.RW}, {</span><span class="s4">@link </span><span class="s3">Reference.WRITE}).</span>
+         <span class="s3">* </span><span class="s4">@member </span><span class="s3">{number} Reference#flag</span>
+         <span class="s3">* </span><span class="s4">@private</span>
+         <span class="s3">*/</span>
+        <span class="s2">this</span><span class="s1">.flag = flag;</span>
+        <span class="s2">if </span><span class="s1">(</span><span class="s2">this</span><span class="s1">.isWrite()) {</span>
+
+            <span class="s3">/**</span>
+             <span class="s3">* If reference is writeable, this is the tree being written to it.</span>
+             <span class="s3">* </span><span class="s4">@member </span><span class="s3">{espreeNode} Reference#writeExpr</span>
+             <span class="s3">*/</span>
+            <span class="s2">this</span><span class="s1">.writeExpr = writeExpr;</span>
+
+            <span class="s3">/**</span>
+             <span class="s3">* Whether the Reference might refer to a partial value of writeExpr.</span>
+             <span class="s3">* </span><span class="s4">@member </span><span class="s3">{boolean} Reference#partial</span>
+             <span class="s3">*/</span>
+            <span class="s2">this</span><span class="s1">.partial = partial;</span>
+
+            <span class="s3">/**</span>
+             <span class="s3">* Whether the Reference is to write of initialization.</span>
+             <span class="s3">* </span><span class="s4">@member </span><span class="s3">{boolean} Reference#init</span>
+             <span class="s3">*/</span>
+            <span class="s2">this</span><span class="s1">.init = init;</span>
+        <span class="s1">}</span>
+        <span class="s2">this</span><span class="s1">.__maybeImplicitGlobal = maybeImplicitGlobal;</span>
+    <span class="s1">}</span>
+
+    <span class="s3">/**</span>
+     <span class="s3">* Whether the reference is static.</span>
+     <span class="s3">* </span><span class="s4">@function </span><span class="s3">Reference#isStatic</span>
+     <span class="s3">* </span><span class="s4">@returns </span><span class="s3">{boolean} static</span>
+     <span class="s3">*/</span>
+    <span class="s1">isStatic() {</span>
+        <span class="s2">return </span><span class="s1">!</span><span class="s2">this</span><span class="s1">.tainted &amp;&amp; </span><span class="s2">this</span><span class="s1">.resolved &amp;&amp; </span><span class="s2">this</span><span class="s1">.resolved.scope.isStatic();</span>
+    <span class="s1">}</span>
+
+    <span class="s3">/**</span>
+     <span class="s3">* Whether the reference is writeable.</span>
+     <span class="s3">* </span><span class="s4">@function </span><span class="s3">Reference#isWrite</span>
+     <span class="s3">* </span><span class="s4">@returns </span><span class="s3">{boolean} write</span>
+     <span class="s3">*/</span>
+    <span class="s1">isWrite() {</span>
+        <span class="s2">return </span><span class="s1">!!(</span><span class="s2">this</span><span class="s1">.flag &amp; Reference.WRITE);</span>
+    <span class="s1">}</span>
+
+    <span class="s3">/**</span>
+     <span class="s3">* Whether the reference is readable.</span>
+     <span class="s3">* </span><span class="s4">@function </span><span class="s3">Reference#isRead</span>
+     <span class="s3">* </span><span class="s4">@returns </span><span class="s3">{boolean} read</span>
+     <span class="s3">*/</span>
+    <span class="s1">isRead() {</span>
+        <span class="s2">return </span><span class="s1">!!(</span><span class="s2">this</span><span class="s1">.flag &amp; Reference.READ);</span>
+    <span class="s1">}</span>
+
+    <span class="s3">/**</span>
+     <span class="s3">* Whether the reference is read-only.</span>
+     <span class="s3">* </span><span class="s4">@function </span><span class="s3">Reference#isReadOnly</span>
+     <span class="s3">* </span><span class="s4">@returns </span><span class="s3">{boolean} read only</span>
+     <span class="s3">*/</span>
+    <span class="s1">isReadOnly() {</span>
+        <span class="s2">return this</span><span class="s1">.flag === Reference.READ;</span>
+    <span class="s1">}</span>
+
+    <span class="s3">/**</span>
+     <span class="s3">* Whether the reference is write-only.</span>
+     <span class="s3">* </span><span class="s4">@function </span><span class="s3">Reference#isWriteOnly</span>
+     <span class="s3">* </span><span class="s4">@returns </span><span class="s3">{boolean} write only</span>
+     <span class="s3">*/</span>
+    <span class="s1">isWriteOnly() {</span>
+        <span class="s2">return this</span><span class="s1">.flag === Reference.WRITE;</span>
+    <span class="s1">}</span>
+
+    <span class="s3">/**</span>
+     <span class="s3">* Whether the reference is read-write.</span>
+     <span class="s3">* </span><span class="s4">@function </span><span class="s3">Reference#isReadWrite</span>
+     <span class="s3">* </span><span class="s4">@returns </span><span class="s3">{boolean} read write</span>
+     <span class="s3">*/</span>
+    <span class="s1">isReadWrite() {</span>
+        <span class="s2">return this</span><span class="s1">.flag === Reference.RW;</span>
+    <span class="s1">}</span>
+<span class="s1">}</span>
+
+<span class="s3">/**</span>
+ <span class="s3">* </span><span class="s4">@constant </span><span class="s3">Reference.READ</span>
+ <span class="s3">* </span><span class="s4">@private</span>
+ <span class="s3">*/</span>
+<span class="s1">Reference.READ = READ;</span>
+
+<span class="s3">/**</span>
+ <span class="s3">* </span><span class="s4">@constant </span><span class="s3">Reference.WRITE</span>
+ <span class="s3">* </span><span class="s4">@private</span>
+ <span class="s3">*/</span>
+<span class="s1">Reference.WRITE = WRITE;</span>
+
+<span class="s3">/**</span>
+ <span class="s3">* </span><span class="s4">@constant </span><span class="s3">Reference.RW</span>
+ <span class="s3">* </span><span class="s4">@private</span>
+ <span class="s3">*/</span>
+<span class="s1">Reference.RW = RW;</span>
+
+<span class="s3">/* vim: set sw=4 ts=4 et tw=80 : */</span>
+
+<span class="s3">/* 
+  Copyright (C) 2015 Yusuke Suzuki &lt;utatane.tea@gmail.com&gt; 
+ 
+  Redistribution and use in source and binary forms, with or without 
+  modification, are permitted provided that the following conditions are met: 
+ 
+    * Redistributions of source code must retain the above copyright 
+      notice, this list of conditions and the following disclaimer. 
+    * Redistributions in binary form must reproduce the above copyright 
+      notice, this list of conditions and the following disclaimer in the 
+      documentation and/or other materials provided with the distribution. 
+ 
+  THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS &quot;AS IS&quot; 
+  AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE 
+  IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE 
+  ARE DISCLAIMED. IN NO EVENT SHALL &lt;COPYRIGHT HOLDER&gt; BE LIABLE FOR ANY 
+  DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES 
+  (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; 
+  LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND 
+  ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT 
+  (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF 
+  THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE. 
+*/</span>
+
+<span class="s3">/**</span>
+ <span class="s3">* A Variable represents a locally scoped identifier. These include arguments to</span>
+ <span class="s3">* functions.</span>
+ <span class="s3">* </span><span class="s4">@constructor </span><span class="s3">Variable</span>
+ <span class="s3">*/</span>
+<span class="s2">class </span><span class="s1">Variable {</span>
+    <span class="s1">constructor(name, scope) {</span>
+
+        <span class="s3">/**</span>
+         <span class="s3">* The variable name, as given in the source code.</span>
+         <span class="s3">* </span><span class="s4">@member </span><span class="s3">{string} Variable#name</span>
+         <span class="s3">*/</span>
+        <span class="s2">this</span><span class="s1">.name = name;</span>
+
+        <span class="s3">/**</span>
+         <span class="s3">* List of defining occurrences of this variable (like in 'var ...'</span>
+         <span class="s3">* statements or as parameter), as AST nodes.</span>
+         <span class="s3">* </span><span class="s4">@member </span><span class="s3">{espree.Identifier[]} Variable#identifiers</span>
+         <span class="s3">*/</span>
+        <span class="s2">this</span><span class="s1">.identifiers = [];</span>
+
+        <span class="s3">/**</span>
+         <span class="s3">* List of {</span><span class="s4">@link </span><span class="s3">Reference|references} of this variable (excluding parameter entries)</span>
+         <span class="s3">* in its defining scope and all nested scopes. For defining</span>
+         <span class="s3">* occurrences only see {</span><span class="s4">@link </span><span class="s3">Variable#defs}.</span>
+         <span class="s3">* </span><span class="s4">@member </span><span class="s3">{Reference[]} Variable#references</span>
+         <span class="s3">*/</span>
+        <span class="s2">this</span><span class="s1">.references = [];</span>
+
+        <span class="s3">/**</span>
+         <span class="s3">* List of defining occurrences of this variable (like in 'var ...'</span>
+         <span class="s3">* statements or as parameter), as custom objects.</span>
+         <span class="s3">* </span><span class="s4">@member </span><span class="s3">{Definition[]} Variable#defs</span>
+         <span class="s3">*/</span>
+        <span class="s2">this</span><span class="s1">.defs = [];</span>
+
+        <span class="s2">this</span><span class="s1">.tainted = </span><span class="s2">false</span><span class="s1">;</span>
+
+        <span class="s3">/**</span>
+         <span class="s3">* Whether this is a stack variable.</span>
+         <span class="s3">* </span><span class="s4">@member </span><span class="s3">{boolean} Variable#stack</span>
+         <span class="s3">*/</span>
+        <span class="s2">this</span><span class="s1">.stack = </span><span class="s2">true</span><span class="s1">;</span>
+
+        <span class="s3">/**</span>
+         <span class="s3">* Reference to the enclosing Scope.</span>
+         <span class="s3">* </span><span class="s4">@member </span><span class="s3">{Scope} Variable#scope</span>
+         <span class="s3">*/</span>
+        <span class="s2">this</span><span class="s1">.scope = scope;</span>
+    <span class="s1">}</span>
+<span class="s1">}</span>
+
+<span class="s1">Variable.CatchClause = </span><span class="s0">&quot;CatchClause&quot;</span><span class="s1">;</span>
+<span class="s1">Variable.Parameter = </span><span class="s0">&quot;Parameter&quot;</span><span class="s1">;</span>
+<span class="s1">Variable.FunctionName = </span><span class="s0">&quot;FunctionName&quot;</span><span class="s1">;</span>
+<span class="s1">Variable.ClassName = </span><span class="s0">&quot;ClassName&quot;</span><span class="s1">;</span>
+<span class="s1">Variable.Variable = </span><span class="s0">&quot;Variable&quot;</span><span class="s1">;</span>
+<span class="s1">Variable.ImportBinding = </span><span class="s0">&quot;ImportBinding&quot;</span><span class="s1">;</span>
+<span class="s1">Variable.ImplicitGlobalVariable = </span><span class="s0">&quot;ImplicitGlobalVariable&quot;</span><span class="s1">;</span>
+
+<span class="s3">/* vim: set sw=4 ts=4 et tw=80 : */</span>
+
+<span class="s3">/* 
+  Copyright (C) 2015 Yusuke Suzuki &lt;utatane.tea@gmail.com&gt; 
+ 
+  Redistribution and use in source and binary forms, with or without 
+  modification, are permitted provided that the following conditions are met: 
+ 
+    * Redistributions of source code must retain the above copyright 
+      notice, this list of conditions and the following disclaimer. 
+    * Redistributions in binary form must reproduce the above copyright 
+      notice, this list of conditions and the following disclaimer in the 
+      documentation and/or other materials provided with the distribution. 
+ 
+  THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS &quot;AS IS&quot; 
+  AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE 
+  IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE 
+  ARE DISCLAIMED. IN NO EVENT SHALL &lt;COPYRIGHT HOLDER&gt; BE LIABLE FOR ANY 
+  DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES 
+  (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; 
+  LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND 
+  ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT 
+  (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF 
+  THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE. 
+*/</span>
+
+<span class="s3">/**</span>
+ <span class="s3">* </span><span class="s4">@constructor </span><span class="s3">Definition</span>
+ <span class="s3">*/</span>
+<span class="s2">class </span><span class="s1">Definition {</span>
+    <span class="s1">constructor(type, name, node, parent, index, kind) {</span>
+
+        <span class="s3">/**</span>
+         <span class="s3">* </span><span class="s4">@member </span><span class="s3">{string} Definition#type - type of the occurrence (e.g. &quot;Parameter&quot;, &quot;Variable&quot;, ...).</span>
+         <span class="s3">*/</span>
+        <span class="s2">this</span><span class="s1">.type = type;</span>
+
+        <span class="s3">/**</span>
+         <span class="s3">* </span><span class="s4">@member </span><span class="s3">{espree.Identifier} Definition#name - the identifier AST node of the occurrence.</span>
+         <span class="s3">*/</span>
+        <span class="s2">this</span><span class="s1">.name = name;</span>
+
+        <span class="s3">/**</span>
+         <span class="s3">* </span><span class="s4">@member </span><span class="s3">{espree.Node} Definition#node - the enclosing node of the identifier.</span>
+         <span class="s3">*/</span>
+        <span class="s2">this</span><span class="s1">.node = node;</span>
+
+        <span class="s3">/**</span>
+         <span class="s3">* </span><span class="s4">@member </span><span class="s3">{espree.Node?} Definition#parent - the enclosing statement node of the identifier.</span>
+         <span class="s3">*/</span>
+        <span class="s2">this</span><span class="s1">.parent = parent;</span>
+
+        <span class="s3">/**</span>
+         <span class="s3">* </span><span class="s4">@member </span><span class="s3">{number?} Definition#index - the index in the declaration statement.</span>
+         <span class="s3">*/</span>
+        <span class="s2">this</span><span class="s1">.index = index;</span>
+
+        <span class="s3">/**</span>
+         <span class="s3">* </span><span class="s4">@member </span><span class="s3">{string?} Definition#kind - the kind of the declaration statement.</span>
+         <span class="s3">*/</span>
+        <span class="s2">this</span><span class="s1">.kind = kind;</span>
+    <span class="s1">}</span>
+<span class="s1">}</span>
+
+<span class="s3">/**</span>
+ <span class="s3">* </span><span class="s4">@constructor </span><span class="s3">ParameterDefinition</span>
+ <span class="s3">*/</span>
+<span class="s2">class </span><span class="s1">ParameterDefinition </span><span class="s2">extends </span><span class="s1">Definition {</span>
+    <span class="s1">constructor(name, node, index, rest) {</span>
+        <span class="s2">super</span><span class="s1">(Variable.Parameter, name, node, </span><span class="s2">null</span><span class="s1">, index, </span><span class="s2">null</span><span class="s1">);</span>
+
+        <span class="s3">/**</span>
+         <span class="s3">* Whether the parameter definition is a part of a rest parameter.</span>
+         <span class="s3">* </span><span class="s4">@member </span><span class="s3">{boolean} ParameterDefinition#rest</span>
+         <span class="s3">*/</span>
+        <span class="s2">this</span><span class="s1">.rest = rest;</span>
+    <span class="s1">}</span>
+<span class="s1">}</span>
+
+<span class="s3">/* vim: set sw=4 ts=4 et tw=80 : */</span>
+
+<span class="s3">/* 
+  Copyright (C) 2015 Yusuke Suzuki &lt;utatane.tea@gmail.com&gt; 
+ 
+  Redistribution and use in source and binary forms, with or without 
+  modification, are permitted provided that the following conditions are met: 
+ 
+    * Redistributions of source code must retain the above copyright 
+      notice, this list of conditions and the following disclaimer. 
+    * Redistributions in binary form must reproduce the above copyright 
+      notice, this list of conditions and the following disclaimer in the 
+      documentation and/or other materials provided with the distribution. 
+ 
+  THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS &quot;AS IS&quot; 
+  AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE 
+  IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE 
+  ARE DISCLAIMED. IN NO EVENT SHALL &lt;COPYRIGHT HOLDER&gt; BE LIABLE FOR ANY 
+  DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES 
+  (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; 
+  LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND 
+  ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT 
+  (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF 
+  THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE. 
+*/</span>
+
+<span class="s2">const </span><span class="s1">{ Syntax: Syntax$2 } = estraverse__default[</span><span class="s0">&quot;default&quot;</span><span class="s1">];</span>
+
+<span class="s3">/**</span>
+ <span class="s3">* Test if scope is struct</span>
+ <span class="s3">* </span><span class="s4">@param </span><span class="s3">{Scope} scope scope</span>
+ <span class="s3">* </span><span class="s4">@param </span><span class="s3">{Block} block block</span>
+ <span class="s3">* </span><span class="s4">@param </span><span class="s3">{boolean} isMethodDefinition is method definition</span>
+ <span class="s3">* </span><span class="s4">@returns </span><span class="s3">{boolean} is strict scope</span>
+ <span class="s3">*/</span>
+<span class="s2">function </span><span class="s1">isStrictScope(scope, block, isMethodDefinition) {</span>
+    <span class="s2">let </span><span class="s1">body;</span>
+
+    <span class="s3">// When upper scope is exists and strict, inner scope is also strict.</span>
+    <span class="s2">if </span><span class="s1">(scope.upper &amp;&amp; scope.upper.isStrict) {</span>
+        <span class="s2">return true</span><span class="s1">;</span>
+    <span class="s1">}</span>
+
+    <span class="s2">if </span><span class="s1">(isMethodDefinition) {</span>
+        <span class="s2">return true</span><span class="s1">;</span>
+    <span class="s1">}</span>
+
+    <span class="s2">if </span><span class="s1">(scope.type === </span><span class="s0">&quot;class&quot; </span><span class="s1">|| scope.type === </span><span class="s0">&quot;module&quot;</span><span class="s1">) {</span>
+        <span class="s2">return true</span><span class="s1">;</span>
+    <span class="s1">}</span>
+
+    <span class="s2">if </span><span class="s1">(scope.type === </span><span class="s0">&quot;block&quot; </span><span class="s1">|| scope.type === </span><span class="s0">&quot;switch&quot;</span><span class="s1">) {</span>
+        <span class="s2">return false</span><span class="s1">;</span>
+    <span class="s1">}</span>
+
+    <span class="s2">if </span><span class="s1">(scope.type === </span><span class="s0">&quot;function&quot;</span><span class="s1">) {</span>
+        <span class="s2">if </span><span class="s1">(block.type === Syntax$2.ArrowFunctionExpression &amp;&amp; block.body.type !== Syntax$2.BlockStatement) {</span>
+            <span class="s2">return false</span><span class="s1">;</span>
+        <span class="s1">}</span>
+
+        <span class="s2">if </span><span class="s1">(block.type === Syntax$2.Program) {</span>
+            <span class="s1">body = block;</span>
+        <span class="s1">} </span><span class="s2">else </span><span class="s1">{</span>
+            <span class="s1">body = block.body;</span>
+        <span class="s1">}</span>
+
+        <span class="s2">if </span><span class="s1">(!body) {</span>
+            <span class="s2">return false</span><span class="s1">;</span>
+        <span class="s1">}</span>
+    <span class="s1">} </span><span class="s2">else if </span><span class="s1">(scope.type === </span><span class="s0">&quot;global&quot;</span><span class="s1">) {</span>
+        <span class="s1">body = block;</span>
+    <span class="s1">} </span><span class="s2">else </span><span class="s1">{</span>
+        <span class="s2">return false</span><span class="s1">;</span>
+    <span class="s1">}</span>
+
+    <span class="s3">// Search for a 'use strict' directive.</span>
+    <span class="s2">for </span><span class="s1">(</span><span class="s2">let </span><span class="s1">i = </span><span class="s5">0</span><span class="s1">, iz = body.body.length; i &lt; iz; ++i) {</span>
+        <span class="s2">const </span><span class="s1">stmt = body.body[i];</span>
+
+        <span class="s3">/* 
+         * Check if the current statement is a directive. 
+         * If it isn't, then we're past the directive prologue 
+         * so stop the search because directives cannot 
+         * appear after this point. 
+         * 
+         * Some parsers set `directive:null` on non-directive 
+         * statements, so the `typeof` check is safer than 
+         * checking for property existence. 
+         */</span>
+        <span class="s2">if </span><span class="s1">(</span><span class="s2">typeof </span><span class="s1">stmt.directive !== </span><span class="s0">&quot;string&quot;</span><span class="s1">) {</span>
+            <span class="s2">break</span><span class="s1">;</span>
+        <span class="s1">}</span>
+
+        <span class="s2">if </span><span class="s1">(stmt.directive === </span><span class="s0">&quot;use strict&quot;</span><span class="s1">) {</span>
+            <span class="s2">return true</span><span class="s1">;</span>
+        <span class="s1">}</span>
+    <span class="s1">}</span>
+
+    <span class="s2">return false</span><span class="s1">;</span>
+<span class="s1">}</span>
+
+<span class="s3">/**</span>
+ <span class="s3">* Register scope</span>
+ <span class="s3">* </span><span class="s4">@param </span><span class="s3">{ScopeManager} scopeManager scope manager</span>
+ <span class="s3">* </span><span class="s4">@param </span><span class="s3">{Scope} scope scope</span>
+ <span class="s3">* </span><span class="s4">@returns </span><span class="s3">{void}</span>
+ <span class="s3">*/</span>
+<span class="s2">function </span><span class="s1">registerScope(scopeManager, scope) {</span>
+    <span class="s1">scopeManager.scopes.push(scope);</span>
+
+    <span class="s2">const </span><span class="s1">scopes = scopeManager.__nodeToScope.get(scope.block);</span>
+
+    <span class="s2">if </span><span class="s1">(scopes) {</span>
+        <span class="s1">scopes.push(scope);</span>
+    <span class="s1">} </span><span class="s2">else </span><span class="s1">{</span>
+        <span class="s1">scopeManager.__nodeToScope.set(scope.block, [scope]);</span>
+    <span class="s1">}</span>
+<span class="s1">}</span>
+
+<span class="s3">/**</span>
+ <span class="s3">* Should be statically</span>
+ <span class="s3">* </span><span class="s4">@param </span><span class="s3">{Object} def def</span>
+ <span class="s3">* </span><span class="s4">@returns </span><span class="s3">{boolean} should be statically</span>
+ <span class="s3">*/</span>
+<span class="s2">function </span><span class="s1">shouldBeStatically(def) {</span>
+    <span class="s2">return </span><span class="s1">(</span>
+        <span class="s1">(def.type === Variable.ClassName) ||</span>
+        <span class="s1">(def.type === Variable.Variable &amp;&amp; def.parent.kind !== </span><span class="s0">&quot;var&quot;</span><span class="s1">)</span>
+    <span class="s1">);</span>
+<span class="s1">}</span>
+
+<span class="s3">/**</span>
+ <span class="s3">* </span><span class="s4">@constructor </span><span class="s3">Scope</span>
+ <span class="s3">*/</span>
+<span class="s2">class </span><span class="s1">Scope {</span>
+    <span class="s1">constructor(scopeManager, type, upperScope, block, isMethodDefinition) {</span>
+
+        <span class="s3">/**</span>
+         <span class="s3">* One of &quot;global&quot;, &quot;module&quot;, &quot;function&quot;, &quot;function-expression-name&quot;, &quot;block&quot;, &quot;switch&quot;, &quot;catch&quot;, &quot;with&quot;, &quot;for&quot;,</span>
+         <span class="s3">* &quot;class&quot;, &quot;class-field-initializer&quot;, &quot;class-static-block&quot;.</span>
+         <span class="s3">* </span><span class="s4">@member </span><span class="s3">{string} Scope#type</span>
+         <span class="s3">*/</span>
+        <span class="s2">this</span><span class="s1">.type = type;</span>
+
+        <span class="s3">/**</span>
+         <span class="s3">* The scoped {</span><span class="s4">@link </span><span class="s3">Variable}s of this scope, as &lt;code&gt;{ Variable.name</span>
+         <span class="s3">* : Variable }&lt;/code&gt;.</span>
+         <span class="s3">* </span><span class="s4">@member </span><span class="s3">{Map} Scope#set</span>
+         <span class="s3">*/</span>
+        <span class="s2">this</span><span class="s1">.set = </span><span class="s2">new </span><span class="s1">Map();</span>
+
+        <span class="s3">/**</span>
+         <span class="s3">* The tainted variables of this scope, as &lt;code&gt;{ Variable.name :</span>
+         <span class="s3">* boolean }&lt;/code&gt;.</span>
+         <span class="s3">*  </span><span class="s4">@member </span><span class="s3">{Map} Scope#taints</span>
+         <span class="s3">*/</span>
+        <span class="s2">this</span><span class="s1">.taints = </span><span class="s2">new </span><span class="s1">Map();</span>
+
+        <span class="s3">/**</span>
+         <span class="s3">* Generally, through the lexical scoping of JS you can always know</span>
+         <span class="s3">* which variable an identifier in the source code refers to. There are</span>
+         <span class="s3">* a few exceptions to this rule. With 'global' and 'with' scopes you</span>
+         <span class="s3">* can only decide at runtime which variable a reference refers to.</span>
+         <span class="s3">* Moreover, if 'eval()' is used in a scope, it might introduce new</span>
+         <span class="s3">* bindings in this or its parent scopes.</span>
+         <span class="s3">* All those scopes are considered 'dynamic'.</span>
+         <span class="s3">* </span><span class="s4">@member </span><span class="s3">{boolean} Scope#dynamic</span>
+         <span class="s3">*/</span>
+        <span class="s2">this</span><span class="s1">.dynamic = </span><span class="s2">this</span><span class="s1">.type === </span><span class="s0">&quot;global&quot; </span><span class="s1">|| </span><span class="s2">this</span><span class="s1">.type === </span><span class="s0">&quot;with&quot;</span><span class="s1">;</span>
+
+        <span class="s3">/**</span>
+         <span class="s3">* A reference to the scope-defining syntax node.</span>
+         <span class="s3">* </span><span class="s4">@member </span><span class="s3">{espree.Node} Scope#block</span>
+         <span class="s3">*/</span>
+        <span class="s2">this</span><span class="s1">.block = block;</span>
+
+        <span class="s3">/**</span>
+         <span class="s3">* The {</span><span class="s4">@link </span><span class="s3">Reference|references} that are not resolved with this scope.</span>
+         <span class="s3">* </span><span class="s4">@member </span><span class="s3">{Reference[]} Scope#through</span>
+         <span class="s3">*/</span>
+        <span class="s2">this</span><span class="s1">.through = [];</span>
+
+        <span class="s3">/**</span>
+         <span class="s3">* The scoped {</span><span class="s4">@link </span><span class="s3">Variable}s of this scope. In the case of a</span>
+         <span class="s3">* 'function' scope this includes the automatic argument &lt;em&gt;arguments&lt;/em&gt; as</span>
+         <span class="s3">* its first element, as well as all further formal arguments.</span>
+         <span class="s3">* </span><span class="s4">@member </span><span class="s3">{Variable[]} Scope#variables</span>
+         <span class="s3">*/</span>
+        <span class="s2">this</span><span class="s1">.variables = [];</span>
+
+        <span class="s3">/**</span>
+         <span class="s3">* Any variable {</span><span class="s4">@link </span><span class="s3">Reference|reference} found in this scope. This</span>
+         <span class="s3">* includes occurrences of local variables as well as variables from</span>
+         <span class="s3">* parent scopes (including the global scope). For local variables</span>
+         <span class="s3">* this also includes defining occurrences (like in a 'var' statement).</span>
+         <span class="s3">* In a 'function' scope this does not include the occurrences of the</span>
+         <span class="s3">* formal parameter in the parameter list.</span>
+         <span class="s3">* </span><span class="s4">@member </span><span class="s3">{Reference[]} Scope#references</span>
+         <span class="s3">*/</span>
+        <span class="s2">this</span><span class="s1">.references = [];</span>
+
+        <span class="s3">/**</span>
+         <span class="s3">* For 'global' and 'function' scopes, this is a self-reference. For</span>
+         <span class="s3">* other scope types this is the &lt;em&gt;variableScope&lt;/em&gt; value of the</span>
+         <span class="s3">* parent scope.</span>
+         <span class="s3">* </span><span class="s4">@member </span><span class="s3">{Scope} Scope#variableScope</span>
+         <span class="s3">*/</span>
+        <span class="s2">this</span><span class="s1">.variableScope =</span>
+            <span class="s2">this</span><span class="s1">.type === </span><span class="s0">&quot;global&quot; </span><span class="s1">||</span>
+            <span class="s2">this</span><span class="s1">.type === </span><span class="s0">&quot;module&quot; </span><span class="s1">||</span>
+            <span class="s2">this</span><span class="s1">.type === </span><span class="s0">&quot;function&quot; </span><span class="s1">||</span>
+            <span class="s2">this</span><span class="s1">.type === </span><span class="s0">&quot;class-field-initializer&quot; </span><span class="s1">||</span>
+            <span class="s2">this</span><span class="s1">.type === </span><span class="s0">&quot;class-static-block&quot;</span>
+                <span class="s1">? </span><span class="s2">this</span>
+                <span class="s1">: upperScope.variableScope;</span>
+
+        <span class="s3">/**</span>
+         <span class="s3">* Whether this scope is created by a FunctionExpression.</span>
+         <span class="s3">* </span><span class="s4">@member </span><span class="s3">{boolean} Scope#functionExpressionScope</span>
+         <span class="s3">*/</span>
+        <span class="s2">this</span><span class="s1">.functionExpressionScope = </span><span class="s2">false</span><span class="s1">;</span>
+
+        <span class="s3">/**</span>
+         <span class="s3">* Whether this is a scope that contains an 'eval()' invocation.</span>
+         <span class="s3">* </span><span class="s4">@member </span><span class="s3">{boolean} Scope#directCallToEvalScope</span>
+         <span class="s3">*/</span>
+        <span class="s2">this</span><span class="s1">.directCallToEvalScope = </span><span class="s2">false</span><span class="s1">;</span>
+
+        <span class="s3">/**</span>
+         <span class="s3">* </span><span class="s4">@member </span><span class="s3">{boolean} Scope#thisFound</span>
+         <span class="s3">*/</span>
+        <span class="s2">this</span><span class="s1">.thisFound = </span><span class="s2">false</span><span class="s1">;</span>
+
+        <span class="s2">this</span><span class="s1">.__left = [];</span>
+
+        <span class="s3">/**</span>
+         <span class="s3">* Reference to the parent {</span><span class="s4">@link </span><span class="s3">Scope|scope}.</span>
+         <span class="s3">* </span><span class="s4">@member </span><span class="s3">{Scope} Scope#upper</span>
+         <span class="s3">*/</span>
+        <span class="s2">this</span><span class="s1">.upper = upperScope;</span>
+
+        <span class="s3">/**</span>
+         <span class="s3">* Whether 'use strict' is in effect in this scope.</span>
+         <span class="s3">* </span><span class="s4">@member </span><span class="s3">{boolean} Scope#isStrict</span>
+         <span class="s3">*/</span>
+        <span class="s2">this</span><span class="s1">.isStrict = scopeManager.isStrictModeSupported()</span>
+            <span class="s1">? isStrictScope(</span><span class="s2">this</span><span class="s1">, block, isMethodDefinition)</span>
+            <span class="s1">: </span><span class="s2">false</span><span class="s1">;</span>
+
+        <span class="s3">/**</span>
+         <span class="s3">* List of nested {</span><span class="s4">@link </span><span class="s3">Scope}s.</span>
+         <span class="s3">* </span><span class="s4">@member </span><span class="s3">{Scope[]} Scope#childScopes</span>
+         <span class="s3">*/</span>
+        <span class="s2">this</span><span class="s1">.childScopes = [];</span>
+        <span class="s2">if </span><span class="s1">(</span><span class="s2">this</span><span class="s1">.upper) {</span>
+            <span class="s2">this</span><span class="s1">.upper.childScopes.push(</span><span class="s2">this</span><span class="s1">);</span>
+        <span class="s1">}</span>
+
+        <span class="s2">this</span><span class="s1">.__declaredVariables = scopeManager.__declaredVariables;</span>
+
+        <span class="s1">registerScope(scopeManager, </span><span class="s2">this</span><span class="s1">);</span>
+    <span class="s1">}</span>
+
+    <span class="s1">__shouldStaticallyClose(scopeManager) {</span>
+        <span class="s2">return </span><span class="s1">(!</span><span class="s2">this</span><span class="s1">.dynamic || scopeManager.__isOptimistic());</span>
+    <span class="s1">}</span>
+
+    <span class="s1">__shouldStaticallyCloseForGlobal(ref) {</span>
+
+        <span class="s3">// On global scope, let/const/class declarations should be resolved statically.</span>
+        <span class="s2">const </span><span class="s1">name = ref.identifier.name;</span>
+
+        <span class="s2">if </span><span class="s1">(!</span><span class="s2">this</span><span class="s1">.set.has(name)) {</span>
+            <span class="s2">return false</span><span class="s1">;</span>
+        <span class="s1">}</span>
+
+        <span class="s2">const </span><span class="s1">variable = </span><span class="s2">this</span><span class="s1">.set.get(name);</span>
+        <span class="s2">const </span><span class="s1">defs = variable.defs;</span>
+
+        <span class="s2">return </span><span class="s1">defs.length &gt; </span><span class="s5">0 </span><span class="s1">&amp;&amp; defs.every(shouldBeStatically);</span>
+    <span class="s1">}</span>
+
+    <span class="s1">__staticCloseRef(ref) {</span>
+        <span class="s2">if </span><span class="s1">(!</span><span class="s2">this</span><span class="s1">.__resolve(ref)) {</span>
+            <span class="s2">this</span><span class="s1">.__delegateToUpperScope(ref);</span>
+        <span class="s1">}</span>
+    <span class="s1">}</span>
+
+    <span class="s1">__dynamicCloseRef(ref) {</span>
+
+        <span class="s3">// notify all names are through to global</span>
+        <span class="s2">let </span><span class="s1">current = </span><span class="s2">this</span><span class="s1">;</span>
+
+        <span class="s2">do </span><span class="s1">{</span>
+            <span class="s1">current.through.push(ref);</span>
+            <span class="s1">current = current.upper;</span>
+        <span class="s1">} </span><span class="s2">while </span><span class="s1">(current);</span>
+    <span class="s1">}</span>
+
+    <span class="s1">__globalCloseRef(ref) {</span>
+
+        <span class="s3">// let/const/class declarations should be resolved statically.</span>
+        <span class="s3">// others should be resolved dynamically.</span>
+        <span class="s2">if </span><span class="s1">(</span><span class="s2">this</span><span class="s1">.__shouldStaticallyCloseForGlobal(ref)) {</span>
+            <span class="s2">this</span><span class="s1">.__staticCloseRef(ref);</span>
+        <span class="s1">} </span><span class="s2">else </span><span class="s1">{</span>
+            <span class="s2">this</span><span class="s1">.__dynamicCloseRef(ref);</span>
+        <span class="s1">}</span>
+    <span class="s1">}</span>
+
+    <span class="s1">__close(scopeManager) {</span>
+        <span class="s2">let </span><span class="s1">closeRef;</span>
+
+        <span class="s2">if </span><span class="s1">(</span><span class="s2">this</span><span class="s1">.__shouldStaticallyClose(scopeManager)) {</span>
+            <span class="s1">closeRef = </span><span class="s2">this</span><span class="s1">.__staticCloseRef;</span>
+        <span class="s1">} </span><span class="s2">else if </span><span class="s1">(</span><span class="s2">this</span><span class="s1">.type !== </span><span class="s0">&quot;global&quot;</span><span class="s1">) {</span>
+            <span class="s1">closeRef = </span><span class="s2">this</span><span class="s1">.__dynamicCloseRef;</span>
+        <span class="s1">} </span><span class="s2">else </span><span class="s1">{</span>
+            <span class="s1">closeRef = </span><span class="s2">this</span><span class="s1">.__globalCloseRef;</span>
+        <span class="s1">}</span>
+
+        <span class="s3">// Try Resolving all references in this scope.</span>
+        <span class="s2">for </span><span class="s1">(</span><span class="s2">let </span><span class="s1">i = </span><span class="s5">0</span><span class="s1">, iz = </span><span class="s2">this</span><span class="s1">.__left.length; i &lt; iz; ++i) {</span>
+            <span class="s2">const </span><span class="s1">ref = </span><span class="s2">this</span><span class="s1">.__left[i];</span>
+
+            <span class="s1">closeRef.call(</span><span class="s2">this</span><span class="s1">, ref);</span>
+        <span class="s1">}</span>
+        <span class="s2">this</span><span class="s1">.__left = </span><span class="s2">null</span><span class="s1">;</span>
+
+        <span class="s2">return this</span><span class="s1">.upper;</span>
+    <span class="s1">}</span>
+
+    <span class="s3">// To override by function scopes.</span>
+    <span class="s3">// References in default parameters isn't resolved to variables which are in their function body.</span>
+    <span class="s1">__isValidResolution(ref, variable) { </span><span class="s3">// eslint-disable-line class-methods-use-this, no-unused-vars  -- Desired as instance method with signature</span>
+        <span class="s2">return true</span><span class="s1">;</span>
+    <span class="s1">}</span>
+
+    <span class="s1">__resolve(ref) {</span>
+        <span class="s2">const </span><span class="s1">name = ref.identifier.name;</span>
+
+        <span class="s2">if </span><span class="s1">(!</span><span class="s2">this</span><span class="s1">.set.has(name)) {</span>
+            <span class="s2">return false</span><span class="s1">;</span>
+        <span class="s1">}</span>
+        <span class="s2">const </span><span class="s1">variable = </span><span class="s2">this</span><span class="s1">.set.get(name);</span>
+
+        <span class="s2">if </span><span class="s1">(!</span><span class="s2">this</span><span class="s1">.__isValidResolution(ref, variable)) {</span>
+            <span class="s2">return false</span><span class="s1">;</span>
+        <span class="s1">}</span>
+        <span class="s1">variable.references.push(ref);</span>
+        <span class="s1">variable.stack = variable.stack &amp;&amp; ref.from.variableScope === </span><span class="s2">this</span><span class="s1">.variableScope;</span>
+        <span class="s2">if </span><span class="s1">(ref.tainted) {</span>
+            <span class="s1">variable.tainted = </span><span class="s2">true</span><span class="s1">;</span>
+            <span class="s2">this</span><span class="s1">.taints.set(variable.name, </span><span class="s2">true</span><span class="s1">);</span>
+        <span class="s1">}</span>
+        <span class="s1">ref.resolved = variable;</span>
+
+        <span class="s2">return true</span><span class="s1">;</span>
+    <span class="s1">}</span>
+
+    <span class="s1">__delegateToUpperScope(ref) {</span>
+        <span class="s2">if </span><span class="s1">(</span><span class="s2">this</span><span class="s1">.upper) {</span>
+            <span class="s2">this</span><span class="s1">.upper.__left.push(ref);</span>
+        <span class="s1">}</span>
+        <span class="s2">this</span><span class="s1">.through.push(ref);</span>
+    <span class="s1">}</span>
+
+    <span class="s1">__addDeclaredVariablesOfNode(variable, node) {</span>
+        <span class="s2">if </span><span class="s1">(node === </span><span class="s2">null </span><span class="s1">|| node === </span><span class="s2">void </span><span class="s5">0</span><span class="s1">) {</span>
+            <span class="s2">return</span><span class="s1">;</span>
+        <span class="s1">}</span>
+
+        <span class="s2">let </span><span class="s1">variables = </span><span class="s2">this</span><span class="s1">.__declaredVariables.get(node);</span>
+
+        <span class="s2">if </span><span class="s1">(variables === </span><span class="s2">null </span><span class="s1">|| variables === </span><span class="s2">void </span><span class="s5">0</span><span class="s1">) {</span>
+            <span class="s1">variables = [];</span>
+            <span class="s2">this</span><span class="s1">.__declaredVariables.set(node, variables);</span>
+        <span class="s1">}</span>
+        <span class="s2">if </span><span class="s1">(!variables.includes(variable)) {</span>
+            <span class="s1">variables.push(variable);</span>
+        <span class="s1">}</span>
+    <span class="s1">}</span>
+
+    <span class="s1">__defineGeneric(name, set, variables, node, def) {</span>
+        <span class="s2">let </span><span class="s1">variable;</span>
+
+        <span class="s1">variable = set.get(name);</span>
+        <span class="s2">if </span><span class="s1">(!variable) {</span>
+            <span class="s1">variable = </span><span class="s2">new </span><span class="s1">Variable(name, </span><span class="s2">this</span><span class="s1">);</span>
+            <span class="s1">set.set(name, variable);</span>
+            <span class="s1">variables.push(variable);</span>
+        <span class="s1">}</span>
+
+        <span class="s2">if </span><span class="s1">(def) {</span>
+            <span class="s1">variable.defs.push(def);</span>
+            <span class="s2">this</span><span class="s1">.__addDeclaredVariablesOfNode(variable, def.node);</span>
+            <span class="s2">this</span><span class="s1">.__addDeclaredVariablesOfNode(variable, def.parent);</span>
+        <span class="s1">}</span>
+        <span class="s2">if </span><span class="s1">(node) {</span>
+            <span class="s1">variable.identifiers.push(node);</span>
+        <span class="s1">}</span>
+    <span class="s1">}</span>
+
+    <span class="s1">__define(node, def) {</span>
+        <span class="s2">if </span><span class="s1">(node &amp;&amp; node.type === Syntax$2.Identifier) {</span>
+            <span class="s2">this</span><span class="s1">.__defineGeneric(</span>
+                <span class="s1">node.name,</span>
+                <span class="s2">this</span><span class="s1">.set,</span>
+                <span class="s2">this</span><span class="s1">.variables,</span>
+                <span class="s1">node,</span>
+                <span class="s1">def</span>
+            <span class="s1">);</span>
+        <span class="s1">}</span>
+    <span class="s1">}</span>
+
+    <span class="s1">__referencing(node, assign, writeExpr, maybeImplicitGlobal, partial, init) {</span>
+
+        <span class="s3">// because Array element may be null</span>
+        <span class="s2">if </span><span class="s1">(!node || (node.type !== Syntax$2.Identifier &amp;&amp; node.type !== </span><span class="s0">&quot;JSXIdentifier&quot;</span><span class="s1">)) {</span>
+            <span class="s2">return</span><span class="s1">;</span>
+        <span class="s1">}</span>
+
+        <span class="s3">// Specially handle like `this`.</span>
+        <span class="s2">if </span><span class="s1">(node.name === </span><span class="s0">&quot;super&quot;</span><span class="s1">) {</span>
+            <span class="s2">return</span><span class="s1">;</span>
+        <span class="s1">}</span>
+
+        <span class="s2">const </span><span class="s1">ref = </span><span class="s2">new </span><span class="s1">Reference(node, </span><span class="s2">this</span><span class="s1">, assign || Reference.READ, writeExpr, maybeImplicitGlobal, !!partial, !!init);</span>
+
+        <span class="s2">this</span><span class="s1">.references.push(ref);</span>
+        <span class="s2">this</span><span class="s1">.__left.push(ref);</span>
+    <span class="s1">}</span>
+
+    <span class="s1">__detectEval() {</span>
+        <span class="s2">let </span><span class="s1">current = </span><span class="s2">this</span><span class="s1">;</span>
+
+        <span class="s2">this</span><span class="s1">.directCallToEvalScope = </span><span class="s2">true</span><span class="s1">;</span>
+        <span class="s2">do </span><span class="s1">{</span>
+            <span class="s1">current.dynamic = </span><span class="s2">true</span><span class="s1">;</span>
+            <span class="s1">current = current.upper;</span>
+        <span class="s1">} </span><span class="s2">while </span><span class="s1">(current);</span>
+    <span class="s1">}</span>
+
+    <span class="s1">__detectThis() {</span>
+        <span class="s2">this</span><span class="s1">.thisFound = </span><span class="s2">true</span><span class="s1">;</span>
+    <span class="s1">}</span>
+
+    <span class="s1">__isClosed() {</span>
+        <span class="s2">return this</span><span class="s1">.__left === </span><span class="s2">null</span><span class="s1">;</span>
+    <span class="s1">}</span>
+
+    <span class="s3">/**</span>
+     <span class="s3">* returns resolved {Reference}</span>
+     <span class="s3">* </span><span class="s4">@function </span><span class="s3">Scope#resolve</span>
+     <span class="s3">* </span><span class="s4">@param </span><span class="s3">{Espree.Identifier} ident identifier to be resolved.</span>
+     <span class="s3">* </span><span class="s4">@returns </span><span class="s3">{Reference} reference</span>
+     <span class="s3">*/</span>
+    <span class="s1">resolve(ident) {</span>
+        <span class="s2">let </span><span class="s1">ref, i, iz;</span>
+
+        <span class="s1">assert(</span><span class="s2">this</span><span class="s1">.__isClosed(), </span><span class="s0">&quot;Scope should be closed.&quot;</span><span class="s1">);</span>
+        <span class="s1">assert(ident.type === Syntax$2.Identifier, </span><span class="s0">&quot;Target should be identifier.&quot;</span><span class="s1">);</span>
+        <span class="s2">for </span><span class="s1">(i = </span><span class="s5">0</span><span class="s1">, iz = </span><span class="s2">this</span><span class="s1">.references.length; i &lt; iz; ++i) {</span>
+            <span class="s1">ref = </span><span class="s2">this</span><span class="s1">.references[i];</span>
+            <span class="s2">if </span><span class="s1">(ref.identifier === ident) {</span>
+                <span class="s2">return </span><span class="s1">ref;</span>
+            <span class="s1">}</span>
+        <span class="s1">}</span>
+        <span class="s2">return null</span><span class="s1">;</span>
+    <span class="s1">}</span>
+
+    <span class="s3">/**</span>
+     <span class="s3">* returns this scope is static</span>
+     <span class="s3">* </span><span class="s4">@function </span><span class="s3">Scope#isStatic</span>
+     <span class="s3">* </span><span class="s4">@returns </span><span class="s3">{boolean} static</span>
+     <span class="s3">*/</span>
+    <span class="s1">isStatic() {</span>
+        <span class="s2">return </span><span class="s1">!</span><span class="s2">this</span><span class="s1">.dynamic;</span>
+    <span class="s1">}</span>
+
+    <span class="s3">/**</span>
+     <span class="s3">* returns this scope has materialized arguments</span>
+     <span class="s3">* </span><span class="s4">@function </span><span class="s3">Scope#isArgumentsMaterialized</span>
+     <span class="s3">* </span><span class="s4">@returns </span><span class="s3">{boolean} arguemnts materialized</span>
+     <span class="s3">*/</span>
+    <span class="s1">isArgumentsMaterialized() { </span><span class="s3">// eslint-disable-line class-methods-use-this -- Desired as instance method</span>
+        <span class="s2">return true</span><span class="s1">;</span>
+    <span class="s1">}</span>
+
+    <span class="s3">/**</span>
+     <span class="s3">* returns this scope has materialized `this` reference</span>
+     <span class="s3">* </span><span class="s4">@function </span><span class="s3">Scope#isThisMaterialized</span>
+     <span class="s3">* </span><span class="s4">@returns </span><span class="s3">{boolean} this materialized</span>
+     <span class="s3">*/</span>
+    <span class="s1">isThisMaterialized() { </span><span class="s3">// eslint-disable-line class-methods-use-this -- Desired as instance method</span>
+        <span class="s2">return true</span><span class="s1">;</span>
+    <span class="s1">}</span>
+
+    <span class="s1">isUsedName(name) {</span>
+        <span class="s2">if </span><span class="s1">(</span><span class="s2">this</span><span class="s1">.set.has(name)) {</span>
+            <span class="s2">return true</span><span class="s1">;</span>
+        <span class="s1">}</span>
+        <span class="s2">for </span><span class="s1">(</span><span class="s2">let </span><span class="s1">i = </span><span class="s5">0</span><span class="s1">, iz = </span><span class="s2">this</span><span class="s1">.through.length; i &lt; iz; ++i) {</span>
+            <span class="s2">if </span><span class="s1">(</span><span class="s2">this</span><span class="s1">.through[i].identifier.name === name) {</span>
+                <span class="s2">return true</span><span class="s1">;</span>
+            <span class="s1">}</span>
+        <span class="s1">}</span>
+        <span class="s2">return false</span><span class="s1">;</span>
+    <span class="s1">}</span>
+<span class="s1">}</span>
+
+<span class="s3">/**</span>
+ <span class="s3">* Global scope.</span>
+ <span class="s3">*/</span>
+<span class="s2">class </span><span class="s1">GlobalScope </span><span class="s2">extends </span><span class="s1">Scope {</span>
+    <span class="s1">constructor(scopeManager, block) {</span>
+        <span class="s2">super</span><span class="s1">(scopeManager, </span><span class="s0">&quot;global&quot;</span><span class="s1">, </span><span class="s2">null</span><span class="s1">, block, </span><span class="s2">false</span><span class="s1">);</span>
+        <span class="s2">this</span><span class="s1">.implicit = {</span>
+            <span class="s1">set: </span><span class="s2">new </span><span class="s1">Map(),</span>
+            <span class="s1">variables: [],</span>
+
+            <span class="s3">/**</span>
+             <span class="s3">* List of {</span><span class="s4">@link </span><span class="s3">Reference}s that are left to be resolved (i.e. which</span>
+             <span class="s3">* need to be linked to the variable they refer to).</span>
+             <span class="s3">* </span><span class="s4">@member </span><span class="s3">{Reference[]} Scope#implicit#left</span>
+             <span class="s3">*/</span>
+            <span class="s1">left: []</span>
+        <span class="s1">};</span>
+    <span class="s1">}</span>
+
+    <span class="s1">__close(scopeManager) {</span>
+        <span class="s2">const </span><span class="s1">implicit = [];</span>
+
+        <span class="s2">for </span><span class="s1">(</span><span class="s2">let </span><span class="s1">i = </span><span class="s5">0</span><span class="s1">, iz = </span><span class="s2">this</span><span class="s1">.__left.length; i &lt; iz; ++i) {</span>
+            <span class="s2">const </span><span class="s1">ref = </span><span class="s2">this</span><span class="s1">.__left[i];</span>
+
+            <span class="s2">if </span><span class="s1">(ref.__maybeImplicitGlobal &amp;&amp; !</span><span class="s2">this</span><span class="s1">.set.has(ref.identifier.name)) {</span>
+                <span class="s1">implicit.push(ref.__maybeImplicitGlobal);</span>
+            <span class="s1">}</span>
+        <span class="s1">}</span>
+
+        <span class="s3">// create an implicit global variable from assignment expression</span>
+        <span class="s2">for </span><span class="s1">(</span><span class="s2">let </span><span class="s1">i = </span><span class="s5">0</span><span class="s1">, iz = implicit.length; i &lt; iz; ++i) {</span>
+            <span class="s2">const </span><span class="s1">info = implicit[i];</span>
+
+            <span class="s2">this</span><span class="s1">.__defineImplicit(info.pattern,</span>
+                <span class="s2">new </span><span class="s1">Definition(</span>
+                    <span class="s1">Variable.ImplicitGlobalVariable,</span>
+                    <span class="s1">info.pattern,</span>
+                    <span class="s1">info.node,</span>
+                    <span class="s2">null</span><span class="s1">,</span>
+                    <span class="s2">null</span><span class="s1">,</span>
+                    <span class="s2">null</span>
+                <span class="s1">));</span>
+
+        <span class="s1">}</span>
+
+        <span class="s2">this</span><span class="s1">.implicit.left = </span><span class="s2">this</span><span class="s1">.__left;</span>
+
+        <span class="s2">return super</span><span class="s1">.__close(scopeManager);</span>
+    <span class="s1">}</span>
+
+    <span class="s1">__defineImplicit(node, def) {</span>
+        <span class="s2">if </span><span class="s1">(node &amp;&amp; node.type === Syntax$2.Identifier) {</span>
+            <span class="s2">this</span><span class="s1">.__defineGeneric(</span>
+                <span class="s1">node.name,</span>
+                <span class="s2">this</span><span class="s1">.implicit.set,</span>
+                <span class="s2">this</span><span class="s1">.implicit.variables,</span>
+                <span class="s1">node,</span>
+                <span class="s1">def</span>
+            <span class="s1">);</span>
+        <span class="s1">}</span>
+    <span class="s1">}</span>
+<span class="s1">}</span>
+
+<span class="s3">/**</span>
+ <span class="s3">* Module scope.</span>
+ <span class="s3">*/</span>
+<span class="s2">class </span><span class="s1">ModuleScope </span><span class="s2">extends </span><span class="s1">Scope {</span>
+    <span class="s1">constructor(scopeManager, upperScope, block) {</span>
+        <span class="s2">super</span><span class="s1">(scopeManager, </span><span class="s0">&quot;module&quot;</span><span class="s1">, upperScope, block, </span><span class="s2">false</span><span class="s1">);</span>
+    <span class="s1">}</span>
+<span class="s1">}</span>
+
+<span class="s3">/**</span>
+ <span class="s3">* Function expression name scope.</span>
+ <span class="s3">*/</span>
+<span class="s2">class </span><span class="s1">FunctionExpressionNameScope </span><span class="s2">extends </span><span class="s1">Scope {</span>
+    <span class="s1">constructor(scopeManager, upperScope, block) {</span>
+        <span class="s2">super</span><span class="s1">(scopeManager, </span><span class="s0">&quot;function-expression-name&quot;</span><span class="s1">, upperScope, block, </span><span class="s2">false</span><span class="s1">);</span>
+        <span class="s2">this</span><span class="s1">.__define(block.id,</span>
+            <span class="s2">new </span><span class="s1">Definition(</span>
+                <span class="s1">Variable.FunctionName,</span>
+                <span class="s1">block.id,</span>
+                <span class="s1">block,</span>
+                <span class="s2">null</span><span class="s1">,</span>
+                <span class="s2">null</span><span class="s1">,</span>
+                <span class="s2">null</span>
+            <span class="s1">));</span>
+        <span class="s2">this</span><span class="s1">.functionExpressionScope = </span><span class="s2">true</span><span class="s1">;</span>
+    <span class="s1">}</span>
+<span class="s1">}</span>
+
+<span class="s3">/**</span>
+ <span class="s3">* Catch scope.</span>
+ <span class="s3">*/</span>
+<span class="s2">class </span><span class="s1">CatchScope </span><span class="s2">extends </span><span class="s1">Scope {</span>
+    <span class="s1">constructor(scopeManager, upperScope, block) {</span>
+        <span class="s2">super</span><span class="s1">(scopeManager, </span><span class="s0">&quot;catch&quot;</span><span class="s1">, upperScope, block, </span><span class="s2">false</span><span class="s1">);</span>
+    <span class="s1">}</span>
+<span class="s1">}</span>
+
+<span class="s3">/**</span>
+ <span class="s3">* With statement scope.</span>
+ <span class="s3">*/</span>
+<span class="s2">class </span><span class="s1">WithScope </span><span class="s2">extends </span><span class="s1">Scope {</span>
+    <span class="s1">constructor(scopeManager, upperScope, block) {</span>
+        <span class="s2">super</span><span class="s1">(scopeManager, </span><span class="s0">&quot;with&quot;</span><span class="s1">, upperScope, block, </span><span class="s2">false</span><span class="s1">);</span>
+    <span class="s1">}</span>
+
+    <span class="s1">__close(scopeManager) {</span>
+        <span class="s2">if </span><span class="s1">(</span><span class="s2">this</span><span class="s1">.__shouldStaticallyClose(scopeManager)) {</span>
+            <span class="s2">return super</span><span class="s1">.__close(scopeManager);</span>
+        <span class="s1">}</span>
+
+        <span class="s2">for </span><span class="s1">(</span><span class="s2">let </span><span class="s1">i = </span><span class="s5">0</span><span class="s1">, iz = </span><span class="s2">this</span><span class="s1">.__left.length; i &lt; iz; ++i) {</span>
+            <span class="s2">const </span><span class="s1">ref = </span><span class="s2">this</span><span class="s1">.__left[i];</span>
+
+            <span class="s1">ref.tainted = </span><span class="s2">true</span><span class="s1">;</span>
+            <span class="s2">this</span><span class="s1">.__delegateToUpperScope(ref);</span>
+        <span class="s1">}</span>
+        <span class="s2">this</span><span class="s1">.__left = </span><span class="s2">null</span><span class="s1">;</span>
+
+        <span class="s2">return this</span><span class="s1">.upper;</span>
+    <span class="s1">}</span>
+<span class="s1">}</span>
+
+<span class="s3">/**</span>
+ <span class="s3">* Block scope.</span>
+ <span class="s3">*/</span>
+<span class="s2">class </span><span class="s1">BlockScope </span><span class="s2">extends </span><span class="s1">Scope {</span>
+    <span class="s1">constructor(scopeManager, upperScope, block) {</span>
+        <span class="s2">super</span><span class="s1">(scopeManager, </span><span class="s0">&quot;block&quot;</span><span class="s1">, upperScope, block, </span><span class="s2">false</span><span class="s1">);</span>
+    <span class="s1">}</span>
+<span class="s1">}</span>
+
+<span class="s3">/**</span>
+ <span class="s3">* Switch scope.</span>
+ <span class="s3">*/</span>
+<span class="s2">class </span><span class="s1">SwitchScope </span><span class="s2">extends </span><span class="s1">Scope {</span>
+    <span class="s1">constructor(scopeManager, upperScope, block) {</span>
+        <span class="s2">super</span><span class="s1">(scopeManager, </span><span class="s0">&quot;switch&quot;</span><span class="s1">, upperScope, block, </span><span class="s2">false</span><span class="s1">);</span>
+    <span class="s1">}</span>
+<span class="s1">}</span>
+
+<span class="s3">/**</span>
+ <span class="s3">* Function scope.</span>
+ <span class="s3">*/</span>
+<span class="s2">class </span><span class="s1">FunctionScope </span><span class="s2">extends </span><span class="s1">Scope {</span>
+    <span class="s1">constructor(scopeManager, upperScope, block, isMethodDefinition) {</span>
+        <span class="s2">super</span><span class="s1">(scopeManager, </span><span class="s0">&quot;function&quot;</span><span class="s1">, upperScope, block, isMethodDefinition);</span>
+
+        <span class="s3">// section 9.2.13, FunctionDeclarationInstantiation.</span>
+        <span class="s3">// NOTE Arrow functions never have an arguments objects.</span>
+        <span class="s2">if </span><span class="s1">(</span><span class="s2">this</span><span class="s1">.block.type !== Syntax$2.ArrowFunctionExpression) {</span>
+            <span class="s2">this</span><span class="s1">.__defineArguments();</span>
+        <span class="s1">}</span>
+    <span class="s1">}</span>
+
+    <span class="s1">isArgumentsMaterialized() {</span>
+
+        <span class="s3">// TODO(Constellation)</span>
+        <span class="s3">// We can more aggressive on this condition like this.</span>
+        <span class="s3">//</span>
+        <span class="s3">// function t() {</span>
+        <span class="s3">//     // arguments of t is always hidden.</span>
+        <span class="s3">//     function arguments() {</span>
+        <span class="s3">//     }</span>
+        <span class="s3">// }</span>
+        <span class="s2">if </span><span class="s1">(</span><span class="s2">this</span><span class="s1">.block.type === Syntax$2.ArrowFunctionExpression) {</span>
+            <span class="s2">return false</span><span class="s1">;</span>
+        <span class="s1">}</span>
+
+        <span class="s2">if </span><span class="s1">(!</span><span class="s2">this</span><span class="s1">.isStatic()) {</span>
+            <span class="s2">return true</span><span class="s1">;</span>
+        <span class="s1">}</span>
+
+        <span class="s2">const </span><span class="s1">variable = </span><span class="s2">this</span><span class="s1">.set.get(</span><span class="s0">&quot;arguments&quot;</span><span class="s1">);</span>
+
+        <span class="s1">assert(variable, </span><span class="s0">&quot;Always have arguments variable.&quot;</span><span class="s1">);</span>
+        <span class="s2">return </span><span class="s1">variable.tainted || variable.references.length !== </span><span class="s5">0</span><span class="s1">;</span>
+    <span class="s1">}</span>
+
+    <span class="s1">isThisMaterialized() {</span>
+        <span class="s2">if </span><span class="s1">(!</span><span class="s2">this</span><span class="s1">.isStatic()) {</span>
+            <span class="s2">return true</span><span class="s1">;</span>
+        <span class="s1">}</span>
+        <span class="s2">return this</span><span class="s1">.thisFound;</span>
+    <span class="s1">}</span>
+
+    <span class="s1">__defineArguments() {</span>
+        <span class="s2">this</span><span class="s1">.__defineGeneric(</span>
+            <span class="s0">&quot;arguments&quot;</span><span class="s1">,</span>
+            <span class="s2">this</span><span class="s1">.set,</span>
+            <span class="s2">this</span><span class="s1">.variables,</span>
+            <span class="s2">null</span><span class="s1">,</span>
+            <span class="s2">null</span>
+        <span class="s1">);</span>
+        <span class="s2">this</span><span class="s1">.taints.set(</span><span class="s0">&quot;arguments&quot;</span><span class="s1">, </span><span class="s2">true</span><span class="s1">);</span>
+    <span class="s1">}</span>
+
+    <span class="s3">// References in default parameters isn't resolved to variables which are in their function body.</span>
+    <span class="s3">//     const x = 1</span>
+    <span class="s3">//     function f(a = x) { // This `x` is resolved to the `x` in the outer scope.</span>
+    <span class="s3">//         const x = 2</span>
+    <span class="s3">//         console.log(a)</span>
+    <span class="s3">//     }</span>
+    <span class="s1">__isValidResolution(ref, variable) {</span>
+
+        <span class="s3">// If `options.nodejsScope` is true, `this.block` becomes a Program node.</span>
+        <span class="s2">if </span><span class="s1">(</span><span class="s2">this</span><span class="s1">.block.type === </span><span class="s0">&quot;Program&quot;</span><span class="s1">) {</span>
+            <span class="s2">return true</span><span class="s1">;</span>
+        <span class="s1">}</span>
+
+        <span class="s2">const </span><span class="s1">bodyStart = </span><span class="s2">this</span><span class="s1">.block.body.range[</span><span class="s5">0</span><span class="s1">];</span>
+
+        <span class="s3">// It's invalid resolution in the following case:</span>
+        <span class="s2">return </span><span class="s1">!(</span>
+            <span class="s1">variable.scope === </span><span class="s2">this </span><span class="s1">&amp;&amp;</span>
+            <span class="s1">ref.identifier.range[</span><span class="s5">0</span><span class="s1">] &lt; bodyStart &amp;&amp; </span><span class="s3">// the reference is in the parameter part.</span>
+            <span class="s1">variable.defs.every(d =&gt; d.name.range[</span><span class="s5">0</span><span class="s1">] &gt;= bodyStart) </span><span class="s3">// the variable is in the body.</span>
+        <span class="s1">);</span>
+    <span class="s1">}</span>
+<span class="s1">}</span>
+
+<span class="s3">/**</span>
+ <span class="s3">* Scope of for, for-in, and for-of statements.</span>
+ <span class="s3">*/</span>
+<span class="s2">class </span><span class="s1">ForScope </span><span class="s2">extends </span><span class="s1">Scope {</span>
+    <span class="s1">constructor(scopeManager, upperScope, block) {</span>
+        <span class="s2">super</span><span class="s1">(scopeManager, </span><span class="s0">&quot;for&quot;</span><span class="s1">, upperScope, block, </span><span class="s2">false</span><span class="s1">);</span>
+    <span class="s1">}</span>
+<span class="s1">}</span>
+
+<span class="s3">/**</span>
+ <span class="s3">* Class scope.</span>
+ <span class="s3">*/</span>
+<span class="s2">class </span><span class="s1">ClassScope </span><span class="s2">extends </span><span class="s1">Scope {</span>
+    <span class="s1">constructor(scopeManager, upperScope, block) {</span>
+        <span class="s2">super</span><span class="s1">(scopeManager, </span><span class="s0">&quot;class&quot;</span><span class="s1">, upperScope, block, </span><span class="s2">false</span><span class="s1">);</span>
+    <span class="s1">}</span>
+<span class="s1">}</span>
+
+<span class="s3">/**</span>
+ <span class="s3">* Class field initializer scope.</span>
+ <span class="s3">*/</span>
+<span class="s2">class </span><span class="s1">ClassFieldInitializerScope </span><span class="s2">extends </span><span class="s1">Scope {</span>
+    <span class="s1">constructor(scopeManager, upperScope, block) {</span>
+        <span class="s2">super</span><span class="s1">(scopeManager, </span><span class="s0">&quot;class-field-initializer&quot;</span><span class="s1">, upperScope, block, </span><span class="s2">true</span><span class="s1">);</span>
+    <span class="s1">}</span>
+<span class="s1">}</span>
+
+<span class="s3">/**</span>
+ <span class="s3">* Class static block scope.</span>
+ <span class="s3">*/</span>
+<span class="s2">class </span><span class="s1">ClassStaticBlockScope </span><span class="s2">extends </span><span class="s1">Scope {</span>
+    <span class="s1">constructor(scopeManager, upperScope, block) {</span>
+        <span class="s2">super</span><span class="s1">(scopeManager, </span><span class="s0">&quot;class-static-block&quot;</span><span class="s1">, upperScope, block, </span><span class="s2">true</span><span class="s1">);</span>
+    <span class="s1">}</span>
+<span class="s1">}</span>
+
+<span class="s3">/* vim: set sw=4 ts=4 et tw=80 : */</span>
+
+<span class="s3">/* 
+  Copyright (C) 2015 Yusuke Suzuki &lt;utatane.tea@gmail.com&gt; 
+ 
+  Redistribution and use in source and binary forms, with or without 
+  modification, are permitted provided that the following conditions are met: 
+ 
+    * Redistributions of source code must retain the above copyright 
+      notice, this list of conditions and the following disclaimer. 
+    * Redistributions in binary form must reproduce the above copyright 
+      notice, this list of conditions and the following disclaimer in the 
+      documentation and/or other materials provided with the distribution. 
+ 
+  THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS &quot;AS IS&quot; 
+  AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE 
+  IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE 
+  ARE DISCLAIMED. IN NO EVENT SHALL &lt;COPYRIGHT HOLDER&gt; BE LIABLE FOR ANY 
+  DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES 
+  (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; 
+  LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND 
+  ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT 
+  (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF 
+  THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE. 
+*/</span>
+
+<span class="s3">/**</span>
+ <span class="s3">* </span><span class="s4">@constructor </span><span class="s3">ScopeManager</span>
+ <span class="s3">*/</span>
+<span class="s2">class </span><span class="s1">ScopeManager {</span>
+    <span class="s1">constructor(options) {</span>
+        <span class="s2">this</span><span class="s1">.scopes = [];</span>
+        <span class="s2">this</span><span class="s1">.globalScope = </span><span class="s2">null</span><span class="s1">;</span>
+        <span class="s2">this</span><span class="s1">.__nodeToScope = </span><span class="s2">new </span><span class="s1">WeakMap();</span>
+        <span class="s2">this</span><span class="s1">.__currentScope = </span><span class="s2">null</span><span class="s1">;</span>
+        <span class="s2">this</span><span class="s1">.__options = options;</span>
+        <span class="s2">this</span><span class="s1">.__declaredVariables = </span><span class="s2">new </span><span class="s1">WeakMap();</span>
+    <span class="s1">}</span>
+
+    <span class="s1">__isOptimistic() {</span>
+        <span class="s2">return this</span><span class="s1">.__options.optimistic;</span>
+    <span class="s1">}</span>
+
+    <span class="s1">__ignoreEval() {</span>
+        <span class="s2">return this</span><span class="s1">.__options.ignoreEval;</span>
+    <span class="s1">}</span>
+
+    <span class="s1">__isJSXEnabled() {</span>
+        <span class="s2">return this</span><span class="s1">.__options.jsx === </span><span class="s2">true</span><span class="s1">;</span>
+    <span class="s1">}</span>
+
+    <span class="s1">isGlobalReturn() {</span>
+        <span class="s2">return this</span><span class="s1">.__options.nodejsScope || </span><span class="s2">this</span><span class="s1">.__options.sourceType === </span><span class="s0">&quot;commonjs&quot;</span><span class="s1">;</span>
+    <span class="s1">}</span>
+
+    <span class="s1">isModule() {</span>
+        <span class="s2">return this</span><span class="s1">.__options.sourceType === </span><span class="s0">&quot;module&quot;</span><span class="s1">;</span>
+    <span class="s1">}</span>
+
+    <span class="s1">isImpliedStrict() {</span>
+        <span class="s2">return this</span><span class="s1">.__options.impliedStrict;</span>
+    <span class="s1">}</span>
+
+    <span class="s1">isStrictModeSupported() {</span>
+        <span class="s2">return this</span><span class="s1">.__options.ecmaVersion &gt;= </span><span class="s5">5</span><span class="s1">;</span>
+    <span class="s1">}</span>
+
+    <span class="s3">// Returns appropriate scope for this node.</span>
+    <span class="s1">__get(node) {</span>
+        <span class="s2">return this</span><span class="s1">.__nodeToScope.get(node);</span>
+    <span class="s1">}</span>
+
+    <span class="s3">/**</span>
+     <span class="s3">* Get variables that are declared by the node.</span>
+     <span class="s3">*</span>
+     <span class="s3">* &quot;are declared by the node&quot; means the node is same as `Variable.defs[].node` or `Variable.defs[].parent`.</span>
+     <span class="s3">* If the node declares nothing, this method returns an empty array.</span>
+     <span class="s3">* CAUTION: This API is experimental. See https://github.com/estools/escope/pull/69 for more details.</span>
+     <span class="s3">* </span><span class="s4">@param </span><span class="s3">{Espree.Node} node a node to get.</span>
+     <span class="s3">* </span><span class="s4">@returns </span><span class="s3">{Variable[]} variables that declared by the node.</span>
+     <span class="s3">*/</span>
+    <span class="s1">getDeclaredVariables(node) {</span>
+        <span class="s2">return this</span><span class="s1">.__declaredVariables.get(node) || [];</span>
+    <span class="s1">}</span>
+
+    <span class="s3">/**</span>
+     <span class="s3">* acquire scope from node.</span>
+     <span class="s3">* </span><span class="s4">@function </span><span class="s3">ScopeManager#acquire</span>
+     <span class="s3">* </span><span class="s4">@param </span><span class="s3">{Espree.Node} node node for the acquired scope.</span>
+     <span class="s3">* </span><span class="s4">@param </span><span class="s3">{?boolean} [inner=false] look up the most inner scope, default value is false.</span>
+     <span class="s3">* </span><span class="s4">@returns </span><span class="s3">{Scope?} Scope from node</span>
+     <span class="s3">*/</span>
+    <span class="s1">acquire(node, inner) {</span>
+
+        <span class="s3">/**</span>
+         <span class="s3">* predicate</span>
+         <span class="s3">* </span><span class="s4">@param </span><span class="s3">{Scope} testScope scope to test</span>
+         <span class="s3">* </span><span class="s4">@returns </span><span class="s3">{boolean} predicate</span>
+         <span class="s3">*/</span>
+        <span class="s2">function </span><span class="s1">predicate(testScope) {</span>
+            <span class="s2">if </span><span class="s1">(testScope.type === </span><span class="s0">&quot;function&quot; </span><span class="s1">&amp;&amp; testScope.functionExpressionScope) {</span>
+                <span class="s2">return false</span><span class="s1">;</span>
+            <span class="s1">}</span>
+            <span class="s2">return true</span><span class="s1">;</span>
+        <span class="s1">}</span>
+
+        <span class="s2">const </span><span class="s1">scopes = </span><span class="s2">this</span><span class="s1">.__get(node);</span>
+
+        <span class="s2">if </span><span class="s1">(!scopes || scopes.length === </span><span class="s5">0</span><span class="s1">) {</span>
+            <span class="s2">return null</span><span class="s1">;</span>
+        <span class="s1">}</span>
+
+        <span class="s3">// Heuristic selection from all scopes.</span>
+        <span class="s3">// If you would like to get all scopes, please use ScopeManager#acquireAll.</span>
+        <span class="s2">if </span><span class="s1">(scopes.length === </span><span class="s5">1</span><span class="s1">) {</span>
+            <span class="s2">return </span><span class="s1">scopes[</span><span class="s5">0</span><span class="s1">];</span>
+        <span class="s1">}</span>
+
+        <span class="s2">if </span><span class="s1">(inner) {</span>
+            <span class="s2">for </span><span class="s1">(</span><span class="s2">let </span><span class="s1">i = scopes.length - </span><span class="s5">1</span><span class="s1">; i &gt;= </span><span class="s5">0</span><span class="s1">; --i) {</span>
+                <span class="s2">const </span><span class="s1">scope = scopes[i];</span>
+
+                <span class="s2">if </span><span class="s1">(predicate(scope)) {</span>
+                    <span class="s2">return </span><span class="s1">scope;</span>
+                <span class="s1">}</span>
+            <span class="s1">}</span>
+        <span class="s1">} </span><span class="s2">else </span><span class="s1">{</span>
+            <span class="s2">for </span><span class="s1">(</span><span class="s2">let </span><span class="s1">i = </span><span class="s5">0</span><span class="s1">, iz = scopes.length; i &lt; iz; ++i) {</span>
+                <span class="s2">const </span><span class="s1">scope = scopes[i];</span>
+
+                <span class="s2">if </span><span class="s1">(predicate(scope)) {</span>
+                    <span class="s2">return </span><span class="s1">scope;</span>
+                <span class="s1">}</span>
+            <span class="s1">}</span>
+        <span class="s1">}</span>
+
+        <span class="s2">return null</span><span class="s1">;</span>
+    <span class="s1">}</span>
+
+    <span class="s3">/**</span>
+     <span class="s3">* acquire all scopes from node.</span>
+     <span class="s3">* </span><span class="s4">@function </span><span class="s3">ScopeManager#acquireAll</span>
+     <span class="s3">* </span><span class="s4">@param </span><span class="s3">{Espree.Node} node node for the acquired scope.</span>
+     <span class="s3">* </span><span class="s4">@returns </span><span class="s3">{Scopes?} Scope array</span>
+     <span class="s3">*/</span>
+    <span class="s1">acquireAll(node) {</span>
+        <span class="s2">return this</span><span class="s1">.__get(node);</span>
+    <span class="s1">}</span>
+
+    <span class="s3">/**</span>
+     <span class="s3">* release the node.</span>
+     <span class="s3">* </span><span class="s4">@function </span><span class="s3">ScopeManager#release</span>
+     <span class="s3">* </span><span class="s4">@param </span><span class="s3">{Espree.Node} node releasing node.</span>
+     <span class="s3">* </span><span class="s4">@param </span><span class="s3">{?boolean} [inner=false] look up the most inner scope, default value is false.</span>
+     <span class="s3">* </span><span class="s4">@returns </span><span class="s3">{Scope?} upper scope for the node.</span>
+     <span class="s3">*/</span>
+    <span class="s1">release(node, inner) {</span>
+        <span class="s2">const </span><span class="s1">scopes = </span><span class="s2">this</span><span class="s1">.__get(node);</span>
+
+        <span class="s2">if </span><span class="s1">(scopes &amp;&amp; scopes.length) {</span>
+            <span class="s2">const </span><span class="s1">scope = scopes[</span><span class="s5">0</span><span class="s1">].upper;</span>
+
+            <span class="s2">if </span><span class="s1">(!scope) {</span>
+                <span class="s2">return null</span><span class="s1">;</span>
+            <span class="s1">}</span>
+            <span class="s2">return this</span><span class="s1">.acquire(scope.block, inner);</span>
+        <span class="s1">}</span>
+        <span class="s2">return null</span><span class="s1">;</span>
+    <span class="s1">}</span>
+
+    <span class="s1">attach() { } </span><span class="s3">// eslint-disable-line class-methods-use-this -- Desired as instance method</span>
+
+    <span class="s1">detach() { } </span><span class="s3">// eslint-disable-line class-methods-use-this -- Desired as instance method</span>
+
+    <span class="s1">__nestScope(scope) {</span>
+        <span class="s2">if </span><span class="s1">(scope </span><span class="s2">instanceof </span><span class="s1">GlobalScope) {</span>
+            <span class="s1">assert(</span><span class="s2">this</span><span class="s1">.__currentScope === </span><span class="s2">null</span><span class="s1">);</span>
+            <span class="s2">this</span><span class="s1">.globalScope = scope;</span>
+        <span class="s1">}</span>
+        <span class="s2">this</span><span class="s1">.__currentScope = scope;</span>
+        <span class="s2">return </span><span class="s1">scope;</span>
+    <span class="s1">}</span>
+
+    <span class="s1">__nestGlobalScope(node) {</span>
+        <span class="s2">return this</span><span class="s1">.__nestScope(</span><span class="s2">new </span><span class="s1">GlobalScope(</span><span class="s2">this</span><span class="s1">, node));</span>
+    <span class="s1">}</span>
+
+    <span class="s1">__nestBlockScope(node) {</span>
+        <span class="s2">return this</span><span class="s1">.__nestScope(</span><span class="s2">new </span><span class="s1">BlockScope(</span><span class="s2">this</span><span class="s1">, </span><span class="s2">this</span><span class="s1">.__currentScope, node));</span>
+    <span class="s1">}</span>
+
+    <span class="s1">__nestFunctionScope(node, isMethodDefinition) {</span>
+        <span class="s2">return this</span><span class="s1">.__nestScope(</span><span class="s2">new </span><span class="s1">FunctionScope(</span><span class="s2">this</span><span class="s1">, </span><span class="s2">this</span><span class="s1">.__currentScope, node, isMethodDefinition));</span>
+    <span class="s1">}</span>
+
+    <span class="s1">__nestForScope(node) {</span>
+        <span class="s2">return this</span><span class="s1">.__nestScope(</span><span class="s2">new </span><span class="s1">ForScope(</span><span class="s2">this</span><span class="s1">, </span><span class="s2">this</span><span class="s1">.__currentScope, node));</span>
+    <span class="s1">}</span>
+
+    <span class="s1">__nestCatchScope(node) {</span>
+        <span class="s2">return this</span><span class="s1">.__nestScope(</span><span class="s2">new </span><span class="s1">CatchScope(</span><span class="s2">this</span><span class="s1">, </span><span class="s2">this</span><span class="s1">.__currentScope, node));</span>
+    <span class="s1">}</span>
+
+    <span class="s1">__nestWithScope(node) {</span>
+        <span class="s2">return this</span><span class="s1">.__nestScope(</span><span class="s2">new </span><span class="s1">WithScope(</span><span class="s2">this</span><span class="s1">, </span><span class="s2">this</span><span class="s1">.__currentScope, node));</span>
+    <span class="s1">}</span>
+
+    <span class="s1">__nestClassScope(node) {</span>
+        <span class="s2">return this</span><span class="s1">.__nestScope(</span><span class="s2">new </span><span class="s1">ClassScope(</span><span class="s2">this</span><span class="s1">, </span><span class="s2">this</span><span class="s1">.__currentScope, node));</span>
+    <span class="s1">}</span>
+
+    <span class="s1">__nestClassFieldInitializerScope(node) {</span>
+        <span class="s2">return this</span><span class="s1">.__nestScope(</span><span class="s2">new </span><span class="s1">ClassFieldInitializerScope(</span><span class="s2">this</span><span class="s1">, </span><span class="s2">this</span><span class="s1">.__currentScope, node));</span>
+    <span class="s1">}</span>
+
+    <span class="s1">__nestClassStaticBlockScope(node) {</span>
+        <span class="s2">return this</span><span class="s1">.__nestScope(</span><span class="s2">new </span><span class="s1">ClassStaticBlockScope(</span><span class="s2">this</span><span class="s1">, </span><span class="s2">this</span><span class="s1">.__currentScope, node));</span>
+    <span class="s1">}</span>
+
+    <span class="s1">__nestSwitchScope(node) {</span>
+        <span class="s2">return this</span><span class="s1">.__nestScope(</span><span class="s2">new </span><span class="s1">SwitchScope(</span><span class="s2">this</span><span class="s1">, </span><span class="s2">this</span><span class="s1">.__currentScope, node));</span>
+    <span class="s1">}</span>
+
+    <span class="s1">__nestModuleScope(node) {</span>
+        <span class="s2">return this</span><span class="s1">.__nestScope(</span><span class="s2">new </span><span class="s1">ModuleScope(</span><span class="s2">this</span><span class="s1">, </span><span class="s2">this</span><span class="s1">.__currentScope, node));</span>
+    <span class="s1">}</span>
+
+    <span class="s1">__nestFunctionExpressionNameScope(node) {</span>
+        <span class="s2">return this</span><span class="s1">.__nestScope(</span><span class="s2">new </span><span class="s1">FunctionExpressionNameScope(</span><span class="s2">this</span><span class="s1">, </span><span class="s2">this</span><span class="s1">.__currentScope, node));</span>
+    <span class="s1">}</span>
+
+    <span class="s1">__isES6() {</span>
+        <span class="s2">return this</span><span class="s1">.__options.ecmaVersion &gt;= </span><span class="s5">6</span><span class="s1">;</span>
+    <span class="s1">}</span>
+<span class="s1">}</span>
+
+<span class="s3">/* vim: set sw=4 ts=4 et tw=80 : */</span>
+
+<span class="s3">/* 
+  Copyright (C) 2015 Yusuke Suzuki &lt;utatane.tea@gmail.com&gt; 
+ 
+  Redistribution and use in source and binary forms, with or without 
+  modification, are permitted provided that the following conditions are met: 
+ 
+    * Redistributions of source code must retain the above copyright 
+      notice, this list of conditions and the following disclaimer. 
+    * Redistributions in binary form must reproduce the above copyright 
+      notice, this list of conditions and the following disclaimer in the 
+      documentation and/or other materials provided with the distribution. 
+ 
+  THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS &quot;AS IS&quot; 
+  AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE 
+  IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE 
+  ARE DISCLAIMED. IN NO EVENT SHALL &lt;COPYRIGHT HOLDER&gt; BE LIABLE FOR ANY 
+  DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES 
+  (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; 
+  LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND 
+  ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT 
+  (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF 
+  THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE. 
+*/</span>
+
+<span class="s2">const </span><span class="s1">{ Syntax: Syntax$1 } = estraverse__default[</span><span class="s0">&quot;default&quot;</span><span class="s1">];</span>
+
+<span class="s3">/**</span>
+ <span class="s3">* Get last array element</span>
+ <span class="s3">* </span><span class="s4">@param </span><span class="s3">{Array} xs array</span>
+ <span class="s3">* </span><span class="s4">@returns </span><span class="s3">{any} Last elment</span>
+ <span class="s3">*/</span>
+<span class="s2">function </span><span class="s1">getLast(xs) {</span>
+    <span class="s2">return </span><span class="s1">xs.at(-</span><span class="s5">1</span><span class="s1">) || </span><span class="s2">null</span><span class="s1">;</span>
+<span class="s1">}</span>
+
+<span class="s3">/**</span>
+ <span class="s3">* Visitor for destructuring patterns.</span>
+ <span class="s3">*/</span>
+<span class="s2">class </span><span class="s1">PatternVisitor </span><span class="s2">extends </span><span class="s1">esrecurse__default[</span><span class="s0">&quot;default&quot;</span><span class="s1">].Visitor {</span>
+    <span class="s2">static </span><span class="s1">isPattern(node) {</span>
+        <span class="s2">const </span><span class="s1">nodeType = node.type;</span>
+
+        <span class="s2">return </span><span class="s1">(</span>
+            <span class="s1">nodeType === Syntax$1.Identifier ||</span>
+            <span class="s1">nodeType === Syntax$1.ObjectPattern ||</span>
+            <span class="s1">nodeType === Syntax$1.ArrayPattern ||</span>
+            <span class="s1">nodeType === Syntax$1.SpreadElement ||</span>
+            <span class="s1">nodeType === Syntax$1.RestElement ||</span>
+            <span class="s1">nodeType === Syntax$1.AssignmentPattern</span>
+        <span class="s1">);</span>
+    <span class="s1">}</span>
+
+    <span class="s1">constructor(options, rootPattern, callback) {</span>
+        <span class="s2">super</span><span class="s1">(</span><span class="s2">null</span><span class="s1">, options);</span>
+        <span class="s2">this</span><span class="s1">.rootPattern = rootPattern;</span>
+        <span class="s2">this</span><span class="s1">.callback = callback;</span>
+        <span class="s2">this</span><span class="s1">.assignments = [];</span>
+        <span class="s2">this</span><span class="s1">.rightHandNodes = [];</span>
+        <span class="s2">this</span><span class="s1">.restElements = [];</span>
+    <span class="s1">}</span>
+
+    <span class="s1">Identifier(pattern) {</span>
+        <span class="s2">const </span><span class="s1">lastRestElement = getLast(</span><span class="s2">this</span><span class="s1">.restElements);</span>
+
+        <span class="s2">this</span><span class="s1">.callback(pattern, {</span>
+            <span class="s1">topLevel: pattern === </span><span class="s2">this</span><span class="s1">.rootPattern,</span>
+            <span class="s1">rest: lastRestElement !== </span><span class="s2">null </span><span class="s1">&amp;&amp; lastRestElement !== </span><span class="s2">void </span><span class="s5">0 </span><span class="s1">&amp;&amp; lastRestElement.argument === pattern,</span>
+            <span class="s1">assignments: </span><span class="s2">this</span><span class="s1">.assignments</span>
+        <span class="s1">});</span>
+    <span class="s1">}</span>
+
+    <span class="s1">Property(property) {</span>
+
+        <span class="s3">// Computed property's key is a right hand node.</span>
+        <span class="s2">if </span><span class="s1">(property.computed) {</span>
+            <span class="s2">this</span><span class="s1">.rightHandNodes.push(property.key);</span>
+        <span class="s1">}</span>
+
+        <span class="s3">// If it's shorthand, its key is same as its value.</span>
+        <span class="s3">// If it's shorthand and has its default value, its key is same as its value.left (the value is AssignmentPattern).</span>
+        <span class="s3">// If it's not shorthand, the name of new variable is its value's.</span>
+        <span class="s2">this</span><span class="s1">.visit(property.value);</span>
+    <span class="s1">}</span>
+
+    <span class="s1">ArrayPattern(pattern) {</span>
+        <span class="s2">for </span><span class="s1">(</span><span class="s2">let </span><span class="s1">i = </span><span class="s5">0</span><span class="s1">, iz = pattern.elements.length; i &lt; iz; ++i) {</span>
+            <span class="s2">const </span><span class="s1">element = pattern.elements[i];</span>
+
+            <span class="s2">this</span><span class="s1">.visit(element);</span>
+        <span class="s1">}</span>
+    <span class="s1">}</span>
+
+    <span class="s1">AssignmentPattern(pattern) {</span>
+        <span class="s2">this</span><span class="s1">.assignments.push(pattern);</span>
+        <span class="s2">this</span><span class="s1">.visit(pattern.left);</span>
+        <span class="s2">this</span><span class="s1">.rightHandNodes.push(pattern.right);</span>
+        <span class="s2">this</span><span class="s1">.assignments.pop();</span>
+    <span class="s1">}</span>
+
+    <span class="s1">RestElement(pattern) {</span>
+        <span class="s2">this</span><span class="s1">.restElements.push(pattern);</span>
+        <span class="s2">this</span><span class="s1">.visit(pattern.argument);</span>
+        <span class="s2">this</span><span class="s1">.restElements.pop();</span>
+    <span class="s1">}</span>
+
+    <span class="s1">MemberExpression(node) {</span>
+
+        <span class="s3">// Computed property's key is a right hand node.</span>
+        <span class="s2">if </span><span class="s1">(node.computed) {</span>
+            <span class="s2">this</span><span class="s1">.rightHandNodes.push(node.property);</span>
+        <span class="s1">}</span>
+
+        <span class="s3">// the object is only read, write to its property.</span>
+        <span class="s2">this</span><span class="s1">.rightHandNodes.push(node.object);</span>
+    <span class="s1">}</span>
+
+    <span class="s3">//</span>
+    <span class="s3">// ForInStatement.left and AssignmentExpression.left are LeftHandSideExpression.</span>
+    <span class="s3">// By spec, LeftHandSideExpression is Pattern or MemberExpression.</span>
+    <span class="s3">//   (see also: https://github.com/estree/estree/pull/20#issuecomment-74584758)</span>
+    <span class="s3">// But espree 2.0 parses to ArrayExpression, ObjectExpression, etc...</span>
+    <span class="s3">//</span>
+
+    <span class="s1">SpreadElement(node) {</span>
+        <span class="s2">this</span><span class="s1">.visit(node.argument);</span>
+    <span class="s1">}</span>
+
+    <span class="s1">ArrayExpression(node) {</span>
+        <span class="s1">node.elements.forEach(</span><span class="s2">this</span><span class="s1">.visit, </span><span class="s2">this</span><span class="s1">);</span>
+    <span class="s1">}</span>
+
+    <span class="s1">AssignmentExpression(node) {</span>
+        <span class="s2">this</span><span class="s1">.assignments.push(node);</span>
+        <span class="s2">this</span><span class="s1">.visit(node.left);</span>
+        <span class="s2">this</span><span class="s1">.rightHandNodes.push(node.right);</span>
+        <span class="s2">this</span><span class="s1">.assignments.pop();</span>
+    <span class="s1">}</span>
+
+    <span class="s1">CallExpression(node) {</span>
+
+        <span class="s3">// arguments are right hand nodes.</span>
+        <span class="s1">node.arguments.forEach(a =&gt; {</span>
+            <span class="s2">this</span><span class="s1">.rightHandNodes.push(a);</span>
+        <span class="s1">});</span>
+        <span class="s2">this</span><span class="s1">.visit(node.callee);</span>
+    <span class="s1">}</span>
+<span class="s1">}</span>
+
+<span class="s3">/* vim: set sw=4 ts=4 et tw=80 : */</span>
+
+<span class="s3">/* 
+  Copyright (C) 2015 Yusuke Suzuki &lt;utatane.tea@gmail.com&gt; 
+ 
+  Redistribution and use in source and binary forms, with or without 
+  modification, are permitted provided that the following conditions are met: 
+ 
+    * Redistributions of source code must retain the above copyright 
+      notice, this list of conditions and the following disclaimer. 
+    * Redistributions in binary form must reproduce the above copyright 
+      notice, this list of conditions and the following disclaimer in the 
+      documentation and/or other materials provided with the distribution. 
+ 
+  THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS &quot;AS IS&quot; 
+  AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE 
+  IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE 
+  ARE DISCLAIMED. IN NO EVENT SHALL &lt;COPYRIGHT HOLDER&gt; BE LIABLE FOR ANY 
+  DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES 
+  (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; 
+  LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND 
+  ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT 
+  (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF 
+  THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE. 
+*/</span>
+
+<span class="s2">const </span><span class="s1">{ Syntax } = estraverse__default[</span><span class="s0">&quot;default&quot;</span><span class="s1">];</span>
+
+<span class="s3">/**</span>
+ <span class="s3">* Traverse identifier in pattern</span>
+ <span class="s3">* </span><span class="s4">@param </span><span class="s3">{Object} options options</span>
+ <span class="s3">* </span><span class="s4">@param </span><span class="s3">{pattern} rootPattern root pattern</span>
+ <span class="s3">* </span><span class="s4">@param </span><span class="s3">{Refencer} referencer referencer</span>
+ <span class="s3">* </span><span class="s4">@param </span><span class="s3">{callback} callback callback</span>
+ <span class="s3">* </span><span class="s4">@returns </span><span class="s3">{void}</span>
+ <span class="s3">*/</span>
+<span class="s2">function </span><span class="s1">traverseIdentifierInPattern(options, rootPattern, referencer, callback) {</span>
+
+    <span class="s3">// Call the callback at left hand identifier nodes, and Collect right hand nodes.</span>
+    <span class="s2">const </span><span class="s1">visitor = </span><span class="s2">new </span><span class="s1">PatternVisitor(options, rootPattern, callback);</span>
+
+    <span class="s1">visitor.visit(rootPattern);</span>
+
+    <span class="s3">// Process the right hand nodes recursively.</span>
+    <span class="s2">if </span><span class="s1">(referencer !== </span><span class="s2">null </span><span class="s1">&amp;&amp; referencer !== </span><span class="s2">void </span><span class="s5">0</span><span class="s1">) {</span>
+        <span class="s1">visitor.rightHandNodes.forEach(referencer.visit, referencer);</span>
+    <span class="s1">}</span>
+<span class="s1">}</span>
+
+<span class="s3">// Importing ImportDeclaration.</span>
+<span class="s3">// http://people.mozilla.org/~jorendorff/es6-draft.html#sec-moduledeclarationinstantiation</span>
+<span class="s3">// https://github.com/estree/estree/blob/master/es6.md#importdeclaration</span>
+<span class="s3">// FIXME: Now, we don't create module environment, because the context is</span>
+<span class="s3">// implementation dependent.</span>
+
+<span class="s3">/**</span>
+ <span class="s3">* Visitor for import specifiers.</span>
+ <span class="s3">*/</span>
+<span class="s2">class </span><span class="s1">Importer </span><span class="s2">extends </span><span class="s1">esrecurse__default[</span><span class="s0">&quot;default&quot;</span><span class="s1">].Visitor {</span>
+    <span class="s1">constructor(declaration, referencer) {</span>
+        <span class="s2">super</span><span class="s1">(</span><span class="s2">null</span><span class="s1">, referencer.options);</span>
+        <span class="s2">this</span><span class="s1">.declaration = declaration;</span>
+        <span class="s2">this</span><span class="s1">.referencer = referencer;</span>
+    <span class="s1">}</span>
+
+    <span class="s1">visitImport(id, specifier) {</span>
+        <span class="s2">this</span><span class="s1">.referencer.visitPattern(id, pattern =&gt; {</span>
+            <span class="s2">this</span><span class="s1">.referencer.currentScope().__define(pattern,</span>
+                <span class="s2">new </span><span class="s1">Definition(</span>
+                    <span class="s1">Variable.ImportBinding,</span>
+                    <span class="s1">pattern,</span>
+                    <span class="s1">specifier,</span>
+                    <span class="s2">this</span><span class="s1">.declaration,</span>
+                    <span class="s2">null</span><span class="s1">,</span>
+                    <span class="s2">null</span>
+                <span class="s1">));</span>
+        <span class="s1">});</span>
+    <span class="s1">}</span>
+
+    <span class="s1">ImportNamespaceSpecifier(node) {</span>
+        <span class="s2">const </span><span class="s1">local = (node.local || node.id);</span>
+
+        <span class="s2">if </span><span class="s1">(local) {</span>
+            <span class="s2">this</span><span class="s1">.visitImport(local, node);</span>
+        <span class="s1">}</span>
+    <span class="s1">}</span>
+
+    <span class="s1">ImportDefaultSpecifier(node) {</span>
+        <span class="s2">const </span><span class="s1">local = (node.local || node.id);</span>
+
+        <span class="s2">this</span><span class="s1">.visitImport(local, node);</span>
+    <span class="s1">}</span>
+
+    <span class="s1">ImportSpecifier(node) {</span>
+        <span class="s2">const </span><span class="s1">local = (node.local || node.id);</span>
+
+        <span class="s2">if </span><span class="s1">(node.name) {</span>
+            <span class="s2">this</span><span class="s1">.visitImport(node.name, node);</span>
+        <span class="s1">} </span><span class="s2">else </span><span class="s1">{</span>
+            <span class="s2">this</span><span class="s1">.visitImport(local, node);</span>
+        <span class="s1">}</span>
+    <span class="s1">}</span>
+<span class="s1">}</span>
+
+<span class="s3">/**</span>
+ <span class="s3">* Referencing variables and creating bindings.</span>
+ <span class="s3">*/</span>
+<span class="s2">class </span><span class="s1">Referencer </span><span class="s2">extends </span><span class="s1">esrecurse__default[</span><span class="s0">&quot;default&quot;</span><span class="s1">].Visitor {</span>
+    <span class="s1">constructor(options, scopeManager) {</span>
+        <span class="s2">super</span><span class="s1">(</span><span class="s2">null</span><span class="s1">, options);</span>
+        <span class="s2">this</span><span class="s1">.options = options;</span>
+        <span class="s2">this</span><span class="s1">.scopeManager = scopeManager;</span>
+        <span class="s2">this</span><span class="s1">.parent = </span><span class="s2">null</span><span class="s1">;</span>
+        <span class="s2">this</span><span class="s1">.isInnerMethodDefinition = </span><span class="s2">false</span><span class="s1">;</span>
+    <span class="s1">}</span>
+
+    <span class="s1">currentScope() {</span>
+        <span class="s2">return this</span><span class="s1">.scopeManager.__currentScope;</span>
+    <span class="s1">}</span>
+
+    <span class="s1">close(node) {</span>
+        <span class="s2">while </span><span class="s1">(</span><span class="s2">this</span><span class="s1">.currentScope() &amp;&amp; node === </span><span class="s2">this</span><span class="s1">.currentScope().block) {</span>
+            <span class="s2">this</span><span class="s1">.scopeManager.__currentScope = </span><span class="s2">this</span><span class="s1">.currentScope().__close(</span><span class="s2">this</span><span class="s1">.scopeManager);</span>
+        <span class="s1">}</span>
+    <span class="s1">}</span>
+
+    <span class="s1">pushInnerMethodDefinition(isInnerMethodDefinition) {</span>
+        <span class="s2">const </span><span class="s1">previous = </span><span class="s2">this</span><span class="s1">.isInnerMethodDefinition;</span>
+
+        <span class="s2">this</span><span class="s1">.isInnerMethodDefinition = isInnerMethodDefinition;</span>
+        <span class="s2">return </span><span class="s1">previous;</span>
+    <span class="s1">}</span>
+
+    <span class="s1">popInnerMethodDefinition(isInnerMethodDefinition) {</span>
+        <span class="s2">this</span><span class="s1">.isInnerMethodDefinition = isInnerMethodDefinition;</span>
+    <span class="s1">}</span>
+
+    <span class="s1">referencingDefaultValue(pattern, assignments, maybeImplicitGlobal, init) {</span>
+        <span class="s2">const </span><span class="s1">scope = </span><span class="s2">this</span><span class="s1">.currentScope();</span>
+
+        <span class="s1">assignments.forEach(assignment =&gt; {</span>
+            <span class="s1">scope.__referencing(</span>
+                <span class="s1">pattern,</span>
+                <span class="s1">Reference.WRITE,</span>
+                <span class="s1">assignment.right,</span>
+                <span class="s1">maybeImplicitGlobal,</span>
+                <span class="s1">pattern !== assignment.left,</span>
+                <span class="s1">init</span>
+            <span class="s1">);</span>
+        <span class="s1">});</span>
+    <span class="s1">}</span>
+
+    <span class="s1">visitPattern(node, options, callback) {</span>
+        <span class="s2">let </span><span class="s1">visitPatternOptions = options;</span>
+        <span class="s2">let </span><span class="s1">visitPatternCallback = callback;</span>
+
+        <span class="s2">if </span><span class="s1">(</span><span class="s2">typeof </span><span class="s1">options === </span><span class="s0">&quot;function&quot;</span><span class="s1">) {</span>
+            <span class="s1">visitPatternCallback = options;</span>
+            <span class="s1">visitPatternOptions = { processRightHandNodes: </span><span class="s2">false </span><span class="s1">};</span>
+        <span class="s1">}</span>
+
+        <span class="s1">traverseIdentifierInPattern(</span>
+            <span class="s2">this</span><span class="s1">.options,</span>
+            <span class="s1">node,</span>
+            <span class="s1">visitPatternOptions.processRightHandNodes ? </span><span class="s2">this </span><span class="s1">: </span><span class="s2">null</span><span class="s1">,</span>
+            <span class="s1">visitPatternCallback</span>
+        <span class="s1">);</span>
+    <span class="s1">}</span>
+
+    <span class="s1">visitFunction(node) {</span>
+        <span class="s2">let </span><span class="s1">i, iz;</span>
+
+        <span class="s3">// FunctionDeclaration name is defined in upper scope</span>
+        <span class="s3">// NOTE: Not referring variableScope. It is intended.</span>
+        <span class="s3">// Since</span>
+        <span class="s3">//  in ES5, FunctionDeclaration should be in FunctionBody.</span>
+        <span class="s3">//  in ES6, FunctionDeclaration should be block scoped.</span>
+
+        <span class="s2">if </span><span class="s1">(node.type === Syntax.FunctionDeclaration) {</span>
+
+            <span class="s3">// id is defined in upper scope</span>
+            <span class="s2">this</span><span class="s1">.currentScope().__define(node.id,</span>
+                <span class="s2">new </span><span class="s1">Definition(</span>
+                    <span class="s1">Variable.FunctionName,</span>
+                    <span class="s1">node.id,</span>
+                    <span class="s1">node,</span>
+                    <span class="s2">null</span><span class="s1">,</span>
+                    <span class="s2">null</span><span class="s1">,</span>
+                    <span class="s2">null</span>
+                <span class="s1">));</span>
+        <span class="s1">}</span>
+
+        <span class="s3">// FunctionExpression with name creates its special scope;</span>
+        <span class="s3">// FunctionExpressionNameScope.</span>
+        <span class="s2">if </span><span class="s1">(node.type === Syntax.FunctionExpression &amp;&amp; node.id) {</span>
+            <span class="s2">this</span><span class="s1">.scopeManager.__nestFunctionExpressionNameScope(node);</span>
+        <span class="s1">}</span>
+
+        <span class="s3">// Consider this function is in the MethodDefinition.</span>
+        <span class="s2">this</span><span class="s1">.scopeManager.__nestFunctionScope(node, </span><span class="s2">this</span><span class="s1">.isInnerMethodDefinition);</span>
+
+        <span class="s2">const </span><span class="s1">that = </span><span class="s2">this</span><span class="s1">;</span>
+
+        <span class="s3">/**</span>
+         <span class="s3">* Visit pattern callback</span>
+         <span class="s3">* </span><span class="s4">@param </span><span class="s3">{pattern} pattern pattern</span>
+         <span class="s3">* </span><span class="s4">@param </span><span class="s3">{Object} info info</span>
+         <span class="s3">* </span><span class="s4">@returns </span><span class="s3">{void}</span>
+         <span class="s3">*/</span>
+        <span class="s2">function </span><span class="s1">visitPatternCallback(pattern, info) {</span>
+            <span class="s1">that.currentScope().__define(pattern,</span>
+                <span class="s2">new </span><span class="s1">ParameterDefinition(</span>
+                    <span class="s1">pattern,</span>
+                    <span class="s1">node,</span>
+                    <span class="s1">i,</span>
+                    <span class="s1">info.rest</span>
+                <span class="s1">));</span>
+
+            <span class="s1">that.referencingDefaultValue(pattern, info.assignments, </span><span class="s2">null</span><span class="s1">, </span><span class="s2">true</span><span class="s1">);</span>
+        <span class="s1">}</span>
+
+        <span class="s3">// Process parameter declarations.</span>
+        <span class="s2">for </span><span class="s1">(i = </span><span class="s5">0</span><span class="s1">, iz = node.params.length; i &lt; iz; ++i) {</span>
+            <span class="s2">this</span><span class="s1">.visitPattern(node.params[i], { processRightHandNodes: </span><span class="s2">true </span><span class="s1">}, visitPatternCallback);</span>
+        <span class="s1">}</span>
+
+        <span class="s3">// if there's a rest argument, add that</span>
+        <span class="s2">if </span><span class="s1">(node.rest) {</span>
+            <span class="s2">this</span><span class="s1">.visitPattern({</span>
+                <span class="s1">type: </span><span class="s0">&quot;RestElement&quot;</span><span class="s1">,</span>
+                <span class="s1">argument: node.rest</span>
+            <span class="s1">}, pattern =&gt; {</span>
+                <span class="s2">this</span><span class="s1">.currentScope().__define(pattern,</span>
+                    <span class="s2">new </span><span class="s1">ParameterDefinition(</span>
+                        <span class="s1">pattern,</span>
+                        <span class="s1">node,</span>
+                        <span class="s1">node.params.length,</span>
+                        <span class="s2">true</span>
+                    <span class="s1">));</span>
+            <span class="s1">});</span>
+        <span class="s1">}</span>
+
+        <span class="s3">// In TypeScript there are a number of function-like constructs which have no body,</span>
+        <span class="s3">// so check it exists before traversing</span>
+        <span class="s2">if </span><span class="s1">(node.body) {</span>
+
+            <span class="s3">// Skip BlockStatement to prevent creating BlockStatement scope.</span>
+            <span class="s2">if </span><span class="s1">(node.body.type === Syntax.BlockStatement) {</span>
+                <span class="s2">this</span><span class="s1">.visitChildren(node.body);</span>
+            <span class="s1">} </span><span class="s2">else </span><span class="s1">{</span>
+                <span class="s2">this</span><span class="s1">.visit(node.body);</span>
+            <span class="s1">}</span>
+        <span class="s1">}</span>
+
+        <span class="s2">this</span><span class="s1">.close(node);</span>
+    <span class="s1">}</span>
+
+    <span class="s1">visitClass(node) {</span>
+        <span class="s2">if </span><span class="s1">(node.type === Syntax.ClassDeclaration) {</span>
+            <span class="s2">this</span><span class="s1">.currentScope().__define(node.id,</span>
+                <span class="s2">new </span><span class="s1">Definition(</span>
+                    <span class="s1">Variable.ClassName,</span>
+                    <span class="s1">node.id,</span>
+                    <span class="s1">node,</span>
+                    <span class="s2">null</span><span class="s1">,</span>
+                    <span class="s2">null</span><span class="s1">,</span>
+                    <span class="s2">null</span>
+                <span class="s1">));</span>
+        <span class="s1">}</span>
+
+        <span class="s2">this</span><span class="s1">.scopeManager.__nestClassScope(node);</span>
+
+        <span class="s2">if </span><span class="s1">(node.id) {</span>
+            <span class="s2">this</span><span class="s1">.currentScope().__define(node.id,</span>
+                <span class="s2">new </span><span class="s1">Definition(</span>
+                    <span class="s1">Variable.ClassName,</span>
+                    <span class="s1">node.id,</span>
+                    <span class="s1">node</span>
+                <span class="s1">));</span>
+        <span class="s1">}</span>
+
+        <span class="s2">this</span><span class="s1">.visit(node.superClass);</span>
+        <span class="s2">this</span><span class="s1">.visit(node.body);</span>
+
+        <span class="s2">this</span><span class="s1">.close(node);</span>
+    <span class="s1">}</span>
+
+    <span class="s1">visitProperty(node) {</span>
+        <span class="s2">let </span><span class="s1">previous;</span>
+
+        <span class="s2">if </span><span class="s1">(node.computed) {</span>
+            <span class="s2">this</span><span class="s1">.visit(node.key);</span>
+        <span class="s1">}</span>
+
+        <span class="s2">const </span><span class="s1">isMethodDefinition = node.type === Syntax.MethodDefinition;</span>
+
+        <span class="s2">if </span><span class="s1">(isMethodDefinition) {</span>
+            <span class="s1">previous = </span><span class="s2">this</span><span class="s1">.pushInnerMethodDefinition(</span><span class="s2">true</span><span class="s1">);</span>
+        <span class="s1">}</span>
+        <span class="s2">this</span><span class="s1">.visit(node.value);</span>
+        <span class="s2">if </span><span class="s1">(isMethodDefinition) {</span>
+            <span class="s2">this</span><span class="s1">.popInnerMethodDefinition(previous);</span>
+        <span class="s1">}</span>
+    <span class="s1">}</span>
+
+    <span class="s1">visitForIn(node) {</span>
+        <span class="s2">if </span><span class="s1">(node.left.type === Syntax.VariableDeclaration &amp;&amp; node.left.kind !== </span><span class="s0">&quot;var&quot;</span><span class="s1">) {</span>
+            <span class="s2">this</span><span class="s1">.scopeManager.__nestForScope(node);</span>
+        <span class="s1">}</span>
+
+        <span class="s2">if </span><span class="s1">(node.left.type === Syntax.VariableDeclaration) {</span>
+            <span class="s2">this</span><span class="s1">.visit(node.left);</span>
+            <span class="s2">this</span><span class="s1">.visitPattern(node.left.declarations[</span><span class="s5">0</span><span class="s1">].id, pattern =&gt; {</span>
+                <span class="s2">this</span><span class="s1">.currentScope().__referencing(pattern, Reference.WRITE, node.right, </span><span class="s2">null</span><span class="s1">, </span><span class="s2">true</span><span class="s1">, </span><span class="s2">true</span><span class="s1">);</span>
+            <span class="s1">});</span>
+        <span class="s1">} </span><span class="s2">else </span><span class="s1">{</span>
+            <span class="s2">this</span><span class="s1">.visitPattern(node.left, { processRightHandNodes: </span><span class="s2">true </span><span class="s1">}, (pattern, info) =&gt; {</span>
+                <span class="s2">let </span><span class="s1">maybeImplicitGlobal = </span><span class="s2">null</span><span class="s1">;</span>
+
+                <span class="s2">if </span><span class="s1">(!</span><span class="s2">this</span><span class="s1">.currentScope().isStrict) {</span>
+                    <span class="s1">maybeImplicitGlobal = {</span>
+                        <span class="s1">pattern,</span>
+                        <span class="s1">node</span>
+                    <span class="s1">};</span>
+                <span class="s1">}</span>
+                <span class="s2">this</span><span class="s1">.referencingDefaultValue(pattern, info.assignments, maybeImplicitGlobal, </span><span class="s2">false</span><span class="s1">);</span>
+                <span class="s2">this</span><span class="s1">.currentScope().__referencing(pattern, Reference.WRITE, node.right, maybeImplicitGlobal, </span><span class="s2">true</span><span class="s1">, </span><span class="s2">false</span><span class="s1">);</span>
+            <span class="s1">});</span>
+        <span class="s1">}</span>
+        <span class="s2">this</span><span class="s1">.visit(node.right);</span>
+        <span class="s2">this</span><span class="s1">.visit(node.body);</span>
+
+        <span class="s2">this</span><span class="s1">.close(node);</span>
+    <span class="s1">}</span>
+
+    <span class="s1">visitVariableDeclaration(variableTargetScope, type, node, index) {</span>
+
+        <span class="s2">const </span><span class="s1">decl = node.declarations[index];</span>
+        <span class="s2">const </span><span class="s1">init = decl.init;</span>
+
+        <span class="s2">this</span><span class="s1">.visitPattern(decl.id, { processRightHandNodes: </span><span class="s2">true </span><span class="s1">}, (pattern, info) =&gt; {</span>
+            <span class="s1">variableTargetScope.__define(</span>
+                <span class="s1">pattern,</span>
+                <span class="s2">new </span><span class="s1">Definition(</span>
+                    <span class="s1">type,</span>
+                    <span class="s1">pattern,</span>
+                    <span class="s1">decl,</span>
+                    <span class="s1">node,</span>
+                    <span class="s1">index,</span>
+                    <span class="s1">node.kind</span>
+                <span class="s1">)</span>
+            <span class="s1">);</span>
+
+            <span class="s2">this</span><span class="s1">.referencingDefaultValue(pattern, info.assignments, </span><span class="s2">null</span><span class="s1">, </span><span class="s2">true</span><span class="s1">);</span>
+            <span class="s2">if </span><span class="s1">(init) {</span>
+                <span class="s2">this</span><span class="s1">.currentScope().__referencing(pattern, Reference.WRITE, init, </span><span class="s2">null</span><span class="s1">, !info.topLevel, </span><span class="s2">true</span><span class="s1">);</span>
+            <span class="s1">}</span>
+        <span class="s1">});</span>
+    <span class="s1">}</span>
+
+    <span class="s1">AssignmentExpression(node) {</span>
+        <span class="s2">if </span><span class="s1">(PatternVisitor.isPattern(node.left)) {</span>
+            <span class="s2">if </span><span class="s1">(node.operator === </span><span class="s0">&quot;=&quot;</span><span class="s1">) {</span>
+                <span class="s2">this</span><span class="s1">.visitPattern(node.left, { processRightHandNodes: </span><span class="s2">true </span><span class="s1">}, (pattern, info) =&gt; {</span>
+                    <span class="s2">let </span><span class="s1">maybeImplicitGlobal = </span><span class="s2">null</span><span class="s1">;</span>
+
+                    <span class="s2">if </span><span class="s1">(!</span><span class="s2">this</span><span class="s1">.currentScope().isStrict) {</span>
+                        <span class="s1">maybeImplicitGlobal = {</span>
+                            <span class="s1">pattern,</span>
+                            <span class="s1">node</span>
+                        <span class="s1">};</span>
+                    <span class="s1">}</span>
+                    <span class="s2">this</span><span class="s1">.referencingDefaultValue(pattern, info.assignments, maybeImplicitGlobal, </span><span class="s2">false</span><span class="s1">);</span>
+                    <span class="s2">this</span><span class="s1">.currentScope().__referencing(pattern, Reference.WRITE, node.right, maybeImplicitGlobal, !info.topLevel, </span><span class="s2">false</span><span class="s1">);</span>
+                <span class="s1">});</span>
+            <span class="s1">} </span><span class="s2">else </span><span class="s1">{</span>
+                <span class="s2">this</span><span class="s1">.currentScope().__referencing(node.left, Reference.RW, node.right);</span>
+            <span class="s1">}</span>
+        <span class="s1">} </span><span class="s2">else </span><span class="s1">{</span>
+            <span class="s2">this</span><span class="s1">.visit(node.left);</span>
+        <span class="s1">}</span>
+        <span class="s2">this</span><span class="s1">.visit(node.right);</span>
+    <span class="s1">}</span>
+
+    <span class="s1">CatchClause(node) {</span>
+        <span class="s2">this</span><span class="s1">.scopeManager.__nestCatchScope(node);</span>
+
+        <span class="s2">this</span><span class="s1">.visitPattern(node.param, { processRightHandNodes: </span><span class="s2">true </span><span class="s1">}, (pattern, info) =&gt; {</span>
+            <span class="s2">this</span><span class="s1">.currentScope().__define(pattern,</span>
+                <span class="s2">new </span><span class="s1">Definition(</span>
+                    <span class="s1">Variable.CatchClause,</span>
+                    <span class="s1">pattern,</span>
+                    <span class="s1">node,</span>
+                    <span class="s2">null</span><span class="s1">,</span>
+                    <span class="s2">null</span><span class="s1">,</span>
+                    <span class="s2">null</span>
+                <span class="s1">));</span>
+            <span class="s2">this</span><span class="s1">.referencingDefaultValue(pattern, info.assignments, </span><span class="s2">null</span><span class="s1">, </span><span class="s2">true</span><span class="s1">);</span>
+        <span class="s1">});</span>
+        <span class="s2">this</span><span class="s1">.visit(node.body);</span>
+
+        <span class="s2">this</span><span class="s1">.close(node);</span>
+    <span class="s1">}</span>
+
+    <span class="s1">Program(node) {</span>
+        <span class="s2">this</span><span class="s1">.scopeManager.__nestGlobalScope(node);</span>
+
+        <span class="s2">if </span><span class="s1">(</span><span class="s2">this</span><span class="s1">.scopeManager.isGlobalReturn()) {</span>
+
+            <span class="s3">// Force strictness of GlobalScope to false when using node.js scope.</span>
+            <span class="s2">this</span><span class="s1">.currentScope().isStrict = </span><span class="s2">false</span><span class="s1">;</span>
+            <span class="s2">this</span><span class="s1">.scopeManager.__nestFunctionScope(node, </span><span class="s2">false</span><span class="s1">);</span>
+        <span class="s1">}</span>
+
+        <span class="s2">if </span><span class="s1">(</span><span class="s2">this</span><span class="s1">.scopeManager.__isES6() &amp;&amp; </span><span class="s2">this</span><span class="s1">.scopeManager.isModule()) {</span>
+            <span class="s2">this</span><span class="s1">.scopeManager.__nestModuleScope(node);</span>
+        <span class="s1">}</span>
+
+        <span class="s2">if </span><span class="s1">(</span><span class="s2">this</span><span class="s1">.scopeManager.isStrictModeSupported() &amp;&amp; </span><span class="s2">this</span><span class="s1">.scopeManager.isImpliedStrict()) {</span>
+            <span class="s2">this</span><span class="s1">.currentScope().isStrict = </span><span class="s2">true</span><span class="s1">;</span>
+        <span class="s1">}</span>
+
+        <span class="s2">this</span><span class="s1">.visitChildren(node);</span>
+        <span class="s2">this</span><span class="s1">.close(node);</span>
+    <span class="s1">}</span>
+
+    <span class="s1">Identifier(node) {</span>
+        <span class="s2">this</span><span class="s1">.currentScope().__referencing(node);</span>
+    <span class="s1">}</span>
+
+    <span class="s3">// eslint-disable-next-line class-methods-use-this -- Desired as instance method</span>
+    <span class="s1">PrivateIdentifier() {</span>
+
+        <span class="s3">// Do nothing.</span>
+    <span class="s1">}</span>
+
+    <span class="s1">UpdateExpression(node) {</span>
+        <span class="s2">if </span><span class="s1">(PatternVisitor.isPattern(node.argument)) {</span>
+            <span class="s2">this</span><span class="s1">.currentScope().__referencing(node.argument, Reference.RW, </span><span class="s2">null</span><span class="s1">);</span>
+        <span class="s1">} </span><span class="s2">else </span><span class="s1">{</span>
+            <span class="s2">this</span><span class="s1">.visitChildren(node);</span>
+        <span class="s1">}</span>
+    <span class="s1">}</span>
+
+    <span class="s1">MemberExpression(node) {</span>
+        <span class="s2">this</span><span class="s1">.visit(node.object);</span>
+        <span class="s2">if </span><span class="s1">(node.computed) {</span>
+            <span class="s2">this</span><span class="s1">.visit(node.property);</span>
+        <span class="s1">}</span>
+    <span class="s1">}</span>
+
+    <span class="s1">Property(node) {</span>
+        <span class="s2">this</span><span class="s1">.visitProperty(node);</span>
+    <span class="s1">}</span>
+
+    <span class="s1">PropertyDefinition(node) {</span>
+        <span class="s2">const </span><span class="s1">{ computed, key, value } = node;</span>
+
+        <span class="s2">if </span><span class="s1">(computed) {</span>
+            <span class="s2">this</span><span class="s1">.visit(key);</span>
+        <span class="s1">}</span>
+        <span class="s2">if </span><span class="s1">(value) {</span>
+            <span class="s2">this</span><span class="s1">.scopeManager.__nestClassFieldInitializerScope(value);</span>
+            <span class="s2">this</span><span class="s1">.visit(value);</span>
+            <span class="s2">this</span><span class="s1">.close(value);</span>
+        <span class="s1">}</span>
+    <span class="s1">}</span>
+
+    <span class="s1">StaticBlock(node) {</span>
+        <span class="s2">this</span><span class="s1">.scopeManager.__nestClassStaticBlockScope(node);</span>
+
+        <span class="s2">this</span><span class="s1">.visitChildren(node);</span>
+
+        <span class="s2">this</span><span class="s1">.close(node);</span>
+    <span class="s1">}</span>
+
+    <span class="s1">MethodDefinition(node) {</span>
+        <span class="s2">this</span><span class="s1">.visitProperty(node);</span>
+    <span class="s1">}</span>
+
+    <span class="s1">BreakStatement() {} </span><span class="s3">// eslint-disable-line class-methods-use-this -- Desired as instance method</span>
+
+    <span class="s1">ContinueStatement() {} </span><span class="s3">// eslint-disable-line class-methods-use-this -- Desired as instance method</span>
+
+    <span class="s1">LabeledStatement(node) {</span>
+        <span class="s2">this</span><span class="s1">.visit(node.body);</span>
+    <span class="s1">}</span>
+
+    <span class="s1">ForStatement(node) {</span>
+
+        <span class="s3">// Create ForStatement declaration.</span>
+        <span class="s3">// NOTE: In ES6, ForStatement dynamically generates</span>
+        <span class="s3">// per iteration environment. However, escope is</span>
+        <span class="s3">// a static analyzer, we only generate one scope for ForStatement.</span>
+        <span class="s2">if </span><span class="s1">(node.init &amp;&amp; node.init.type === Syntax.VariableDeclaration &amp;&amp; node.init.kind !== </span><span class="s0">&quot;var&quot;</span><span class="s1">) {</span>
+            <span class="s2">this</span><span class="s1">.scopeManager.__nestForScope(node);</span>
+        <span class="s1">}</span>
+
+        <span class="s2">this</span><span class="s1">.visitChildren(node);</span>
+
+        <span class="s2">this</span><span class="s1">.close(node);</span>
+    <span class="s1">}</span>
+
+    <span class="s1">ClassExpression(node) {</span>
+        <span class="s2">this</span><span class="s1">.visitClass(node);</span>
+    <span class="s1">}</span>
+
+    <span class="s1">ClassDeclaration(node) {</span>
+        <span class="s2">this</span><span class="s1">.visitClass(node);</span>
+    <span class="s1">}</span>
+
+    <span class="s1">CallExpression(node) {</span>
+
+        <span class="s3">// Check this is direct call to eval</span>
+        <span class="s2">if </span><span class="s1">(!</span><span class="s2">this</span><span class="s1">.scopeManager.__ignoreEval() &amp;&amp; node.callee.type === Syntax.Identifier &amp;&amp; node.callee.name === </span><span class="s0">&quot;eval&quot;</span><span class="s1">) {</span>
+
+            <span class="s3">// NOTE: This should be `variableScope`. Since direct eval call always creates Lexical environment and</span>
+            <span class="s3">// let / const should be enclosed into it. Only VariableDeclaration affects on the caller's environment.</span>
+            <span class="s2">this</span><span class="s1">.currentScope().variableScope.__detectEval();</span>
+        <span class="s1">}</span>
+        <span class="s2">this</span><span class="s1">.visitChildren(node);</span>
+    <span class="s1">}</span>
+
+    <span class="s1">BlockStatement(node) {</span>
+        <span class="s2">if </span><span class="s1">(</span><span class="s2">this</span><span class="s1">.scopeManager.__isES6()) {</span>
+            <span class="s2">this</span><span class="s1">.scopeManager.__nestBlockScope(node);</span>
+        <span class="s1">}</span>
+
+        <span class="s2">this</span><span class="s1">.visitChildren(node);</span>
+
+        <span class="s2">this</span><span class="s1">.close(node);</span>
+    <span class="s1">}</span>
+
+    <span class="s1">ThisExpression() {</span>
+        <span class="s2">this</span><span class="s1">.currentScope().variableScope.__detectThis();</span>
+    <span class="s1">}</span>
+
+    <span class="s1">WithStatement(node) {</span>
+        <span class="s2">this</span><span class="s1">.visit(node.object);</span>
+
+        <span class="s3">// Then nest scope for WithStatement.</span>
+        <span class="s2">this</span><span class="s1">.scopeManager.__nestWithScope(node);</span>
+
+        <span class="s2">this</span><span class="s1">.visit(node.body);</span>
+
+        <span class="s2">this</span><span class="s1">.close(node);</span>
+    <span class="s1">}</span>
+
+    <span class="s1">VariableDeclaration(node) {</span>
+        <span class="s2">const </span><span class="s1">variableTargetScope = (node.kind === </span><span class="s0">&quot;var&quot;</span><span class="s1">) ? </span><span class="s2">this</span><span class="s1">.currentScope().variableScope : </span><span class="s2">this</span><span class="s1">.currentScope();</span>
+
+        <span class="s2">for </span><span class="s1">(</span><span class="s2">let </span><span class="s1">i = </span><span class="s5">0</span><span class="s1">, iz = node.declarations.length; i &lt; iz; ++i) {</span>
+            <span class="s2">const </span><span class="s1">decl = node.declarations[i];</span>
+
+            <span class="s2">this</span><span class="s1">.visitVariableDeclaration(variableTargetScope, Variable.Variable, node, i);</span>
+            <span class="s2">if </span><span class="s1">(decl.init) {</span>
+                <span class="s2">this</span><span class="s1">.visit(decl.init);</span>
+            <span class="s1">}</span>
+        <span class="s1">}</span>
+    <span class="s1">}</span>
+
+    <span class="s3">// sec 13.11.8</span>
+    <span class="s1">SwitchStatement(node) {</span>
+        <span class="s2">this</span><span class="s1">.visit(node.discriminant);</span>
+
+        <span class="s2">if </span><span class="s1">(</span><span class="s2">this</span><span class="s1">.scopeManager.__isES6()) {</span>
+            <span class="s2">this</span><span class="s1">.scopeManager.__nestSwitchScope(node);</span>
+        <span class="s1">}</span>
+
+        <span class="s2">for </span><span class="s1">(</span><span class="s2">let </span><span class="s1">i = </span><span class="s5">0</span><span class="s1">, iz = node.cases.length; i &lt; iz; ++i) {</span>
+            <span class="s2">this</span><span class="s1">.visit(node.cases[i]);</span>
+        <span class="s1">}</span>
+
+        <span class="s2">this</span><span class="s1">.close(node);</span>
+    <span class="s1">}</span>
+
+    <span class="s1">FunctionDeclaration(node) {</span>
+        <span class="s2">this</span><span class="s1">.visitFunction(node);</span>
+    <span class="s1">}</span>
+
+    <span class="s1">FunctionExpression(node) {</span>
+        <span class="s2">this</span><span class="s1">.visitFunction(node);</span>
+    <span class="s1">}</span>
+
+    <span class="s1">ForOfStatement(node) {</span>
+        <span class="s2">this</span><span class="s1">.visitForIn(node);</span>
+    <span class="s1">}</span>
+
+    <span class="s1">ForInStatement(node) {</span>
+        <span class="s2">this</span><span class="s1">.visitForIn(node);</span>
+    <span class="s1">}</span>
+
+    <span class="s1">ArrowFunctionExpression(node) {</span>
+        <span class="s2">this</span><span class="s1">.visitFunction(node);</span>
+    <span class="s1">}</span>
+
+    <span class="s1">ImportDeclaration(node) {</span>
+        <span class="s1">assert(</span><span class="s2">this</span><span class="s1">.scopeManager.__isES6() &amp;&amp; </span><span class="s2">this</span><span class="s1">.scopeManager.isModule(), </span><span class="s0">&quot;ImportDeclaration should appear when the mode is ES6 and in the module context.&quot;</span><span class="s1">);</span>
+
+        <span class="s2">const </span><span class="s1">importer = </span><span class="s2">new </span><span class="s1">Importer(node, </span><span class="s2">this</span><span class="s1">);</span>
+
+        <span class="s1">importer.visit(node);</span>
+    <span class="s1">}</span>
+
+    <span class="s1">visitExportDeclaration(node) {</span>
+        <span class="s2">if </span><span class="s1">(node.source) {</span>
+            <span class="s2">return</span><span class="s1">;</span>
+        <span class="s1">}</span>
+        <span class="s2">if </span><span class="s1">(node.declaration) {</span>
+            <span class="s2">this</span><span class="s1">.visit(node.declaration);</span>
+            <span class="s2">return</span><span class="s1">;</span>
+        <span class="s1">}</span>
+
+        <span class="s2">this</span><span class="s1">.visitChildren(node);</span>
+    <span class="s1">}</span>
+
+    <span class="s3">// TODO: ExportDeclaration doesn't exist. for bc?</span>
+    <span class="s1">ExportDeclaration(node) {</span>
+        <span class="s2">this</span><span class="s1">.visitExportDeclaration(node);</span>
+    <span class="s1">}</span>
+
+    <span class="s1">ExportAllDeclaration(node) {</span>
+        <span class="s2">this</span><span class="s1">.visitExportDeclaration(node);</span>
+    <span class="s1">}</span>
+
+    <span class="s1">ExportDefaultDeclaration(node) {</span>
+        <span class="s2">this</span><span class="s1">.visitExportDeclaration(node);</span>
+    <span class="s1">}</span>
+
+    <span class="s1">ExportNamedDeclaration(node) {</span>
+        <span class="s2">this</span><span class="s1">.visitExportDeclaration(node);</span>
+    <span class="s1">}</span>
+
+    <span class="s1">ExportSpecifier(node) {</span>
+
+        <span class="s3">// TODO: `node.id` doesn't exist. for bc?</span>
+        <span class="s2">const </span><span class="s1">local = (node.id || node.local);</span>
+
+        <span class="s2">this</span><span class="s1">.visit(local);</span>
+    <span class="s1">}</span>
+
+    <span class="s1">MetaProperty() { </span><span class="s3">// eslint-disable-line class-methods-use-this -- Desired as instance method</span>
+
+        <span class="s3">// do nothing.</span>
+    <span class="s1">}</span>
+
+    <span class="s1">JSXIdentifier(node) {</span>
+
+        <span class="s3">// Special case: &quot;this&quot; should not count as a reference</span>
+        <span class="s2">if </span><span class="s1">(</span><span class="s2">this</span><span class="s1">.scopeManager.__isJSXEnabled() &amp;&amp; node.name !== </span><span class="s0">&quot;this&quot;</span><span class="s1">) {</span>
+            <span class="s2">this</span><span class="s1">.currentScope().__referencing(node);</span>
+        <span class="s1">}</span>
+    <span class="s1">}</span>
+
+    <span class="s1">JSXMemberExpression(node) {</span>
+        <span class="s2">this</span><span class="s1">.visit(node.object);</span>
+    <span class="s1">}</span>
+
+    <span class="s1">JSXElement(node) {</span>
+        <span class="s2">if </span><span class="s1">(</span><span class="s2">this</span><span class="s1">.scopeManager.__isJSXEnabled()) {</span>
+            <span class="s2">this</span><span class="s1">.visit(node.openingElement);</span>
+            <span class="s1">node.children.forEach(</span><span class="s2">this</span><span class="s1">.visit, </span><span class="s2">this</span><span class="s1">);</span>
+        <span class="s1">} </span><span class="s2">else </span><span class="s1">{</span>
+            <span class="s2">this</span><span class="s1">.visitChildren(node);</span>
+        <span class="s1">}</span>
+    <span class="s1">}</span>
+
+    <span class="s1">JSXOpeningElement(node) {</span>
+        <span class="s2">if </span><span class="s1">(</span><span class="s2">this</span><span class="s1">.scopeManager.__isJSXEnabled()) {</span>
+
+            <span class="s2">const </span><span class="s1">nameNode = node.name;</span>
+            <span class="s2">const </span><span class="s1">isComponentName = nameNode.type === </span><span class="s0">&quot;JSXIdentifier&quot; </span><span class="s1">&amp;&amp; nameNode.name[</span><span class="s5">0</span><span class="s1">].toUpperCase() === nameNode.name[</span><span class="s5">0</span><span class="s1">];</span>
+            <span class="s2">const </span><span class="s1">isComponent = isComponentName || nameNode.type === </span><span class="s0">&quot;JSXMemberExpression&quot;</span><span class="s1">;</span>
+
+            <span class="s3">// we only want to visit JSXIdentifier nodes if they are capitalized</span>
+            <span class="s2">if </span><span class="s1">(isComponent) {</span>
+                <span class="s2">this</span><span class="s1">.visit(nameNode);</span>
+            <span class="s1">}</span>
+        <span class="s1">}</span>
+
+        <span class="s1">node.attributes.forEach(</span><span class="s2">this</span><span class="s1">.visit, </span><span class="s2">this</span><span class="s1">);</span>
+    <span class="s1">}</span>
+
+    <span class="s1">JSXAttribute(node) {</span>
+        <span class="s2">if </span><span class="s1">(node.value) {</span>
+            <span class="s2">this</span><span class="s1">.visit(node.value);</span>
+        <span class="s1">}</span>
+    <span class="s1">}</span>
+
+    <span class="s1">JSXExpressionContainer(node) {</span>
+        <span class="s2">this</span><span class="s1">.visit(node.expression);</span>
+    <span class="s1">}</span>
+
+    <span class="s1">JSXNamespacedName(node) {</span>
+        <span class="s2">this</span><span class="s1">.visit(node.namespace);</span>
+        <span class="s2">this</span><span class="s1">.visit(node.name);</span>
+    <span class="s1">}</span>
+<span class="s1">}</span>
+
+<span class="s3">/* vim: set sw=4 ts=4 et tw=80 : */</span>
+
+<span class="s2">const </span><span class="s1">version = </span><span class="s0">&quot;8.4.0&quot;</span><span class="s1">;</span>
+
+<span class="s3">/* 
+  Copyright (C) 2012-2014 Yusuke Suzuki &lt;utatane.tea@gmail.com&gt; 
+  Copyright (C) 2013 Alex Seville &lt;hi@alexanderseville.com&gt; 
+  Copyright (C) 2014 Thiago de Arruda &lt;tpadilha84@gmail.com&gt; 
+ 
+  Redistribution and use in source and binary forms, with or without 
+  modification, are permitted provided that the following conditions are met: 
+ 
+    * Redistributions of source code must retain the above copyright 
+      notice, this list of conditions and the following disclaimer. 
+    * Redistributions in binary form must reproduce the above copyright 
+      notice, this list of conditions and the following disclaimer in the 
+      documentation and/or other materials provided with the distribution. 
+ 
+  THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS &quot;AS IS&quot; 
+  AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE 
+  IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE 
+  ARE DISCLAIMED. IN NO EVENT SHALL &lt;COPYRIGHT HOLDER&gt; BE LIABLE FOR ANY 
+  DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES 
+  (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; 
+  LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND 
+  ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT 
+  (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF 
+  THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE. 
+*/</span>
+
+<span class="s3">/**</span>
+ <span class="s3">* Set the default options</span>
+ <span class="s3">* </span><span class="s4">@returns </span><span class="s3">{Object} options</span>
+ <span class="s3">*/</span>
+<span class="s2">function </span><span class="s1">defaultOptions() {</span>
+    <span class="s2">return </span><span class="s1">{</span>
+        <span class="s1">optimistic: </span><span class="s2">false</span><span class="s1">,</span>
+        <span class="s1">nodejsScope: </span><span class="s2">false</span><span class="s1">,</span>
+        <span class="s1">impliedStrict: </span><span class="s2">false</span><span class="s1">,</span>
+        <span class="s1">sourceType: </span><span class="s0">&quot;script&quot;</span><span class="s1">, </span><span class="s3">// one of ['script', 'module', 'commonjs']</span>
+        <span class="s1">ecmaVersion: </span><span class="s5">5</span><span class="s1">,</span>
+        <span class="s1">childVisitorKeys: </span><span class="s2">null</span><span class="s1">,</span>
+        <span class="s1">fallback: </span><span class="s0">&quot;iteration&quot;</span>
+    <span class="s1">};</span>
+<span class="s1">}</span>
+
+<span class="s3">/**</span>
+ <span class="s3">* Preform deep update on option object</span>
+ <span class="s3">* </span><span class="s4">@param </span><span class="s3">{Object} target Options</span>
+ <span class="s3">* </span><span class="s4">@param </span><span class="s3">{Object} override Updates</span>
+ <span class="s3">* </span><span class="s4">@returns </span><span class="s3">{Object} Updated options</span>
+ <span class="s3">*/</span>
+<span class="s2">function </span><span class="s1">updateDeeply(target, override) {</span>
+
+    <span class="s3">/**</span>
+     <span class="s3">* Is hash object</span>
+     <span class="s3">* </span><span class="s4">@param </span><span class="s3">{Object} value Test value</span>
+     <span class="s3">* </span><span class="s4">@returns </span><span class="s3">{boolean} Result</span>
+     <span class="s3">*/</span>
+    <span class="s2">function </span><span class="s1">isHashObject(value) {</span>
+        <span class="s2">return typeof </span><span class="s1">value === </span><span class="s0">&quot;object&quot; </span><span class="s1">&amp;&amp; value </span><span class="s2">instanceof </span><span class="s1">Object &amp;&amp; !(value </span><span class="s2">instanceof </span><span class="s1">Array) &amp;&amp; !(value </span><span class="s2">instanceof </span><span class="s1">RegExp);</span>
+    <span class="s1">}</span>
+
+    <span class="s2">for </span><span class="s1">(</span><span class="s2">const </span><span class="s1">key </span><span class="s2">in </span><span class="s1">override) {</span>
+        <span class="s2">if </span><span class="s1">(Object.hasOwn(override, key)) {</span>
+            <span class="s2">const </span><span class="s1">val = override[key];</span>
+
+            <span class="s2">if </span><span class="s1">(isHashObject(val)) {</span>
+                <span class="s2">if </span><span class="s1">(isHashObject(target[key])) {</span>
+                    <span class="s1">updateDeeply(target[key], val);</span>
+                <span class="s1">} </span><span class="s2">else </span><span class="s1">{</span>
+                    <span class="s1">target[key] = updateDeeply({}, val);</span>
+                <span class="s1">}</span>
+            <span class="s1">} </span><span class="s2">else </span><span class="s1">{</span>
+                <span class="s1">target[key] = val;</span>
+            <span class="s1">}</span>
+        <span class="s1">}</span>
+    <span class="s1">}</span>
+    <span class="s2">return </span><span class="s1">target;</span>
+<span class="s1">}</span>
+
+<span class="s3">/**</span>
+ <span class="s3">* Main interface function. Takes an Espree syntax tree and returns the</span>
+ <span class="s3">* analyzed scopes.</span>
+ <span class="s3">* </span><span class="s4">@function </span><span class="s3">analyze</span>
+ <span class="s3">* </span><span class="s4">@param </span><span class="s3">{espree.Tree} tree Abstract Syntax Tree</span>
+ <span class="s3">* </span><span class="s4">@param </span><span class="s3">{Object} providedOptions Options that tailor the scope analysis</span>
+ <span class="s3">* </span><span class="s4">@param </span><span class="s3">{boolean} [providedOptions.optimistic=false] the optimistic flag</span>
+ <span class="s3">* </span><span class="s4">@param </span><span class="s3">{boolean} [providedOptions.ignoreEval=false] whether to check 'eval()' calls</span>
+ <span class="s3">* </span><span class="s4">@param </span><span class="s3">{boolean} [providedOptions.nodejsScope=false] whether the whole</span>
+ <span class="s3">* script is executed under node.js environment. When enabled, escope adds</span>
+ <span class="s3">* a function scope immediately following the global scope.</span>
+ <span class="s3">* </span><span class="s4">@param </span><span class="s3">{boolean} [providedOptions.impliedStrict=false] implied strict mode</span>
+ <span class="s3">* (if ecmaVersion &gt;= 5).</span>
+ <span class="s3">* </span><span class="s4">@param </span><span class="s3">{string} [providedOptions.sourceType='script'] the source type of the script. one of 'script', 'module', and 'commonjs'</span>
+ <span class="s3">* </span><span class="s4">@param </span><span class="s3">{number} [providedOptions.ecmaVersion=5] which ECMAScript version is considered</span>
+ <span class="s3">* </span><span class="s4">@param </span><span class="s3">{boolean} [providedOptions.jsx=false] support JSX references</span>
+ <span class="s3">* </span><span class="s4">@param </span><span class="s3">{Object} [providedOptions.childVisitorKeys=null] Additional known visitor keys. See [esrecurse](https://github.com/estools/esrecurse)'s the `childVisitorKeys` option.</span>
+ <span class="s3">* </span><span class="s4">@param </span><span class="s3">{string} [providedOptions.fallback='iteration'] A kind of the fallback in order to encounter with unknown node. See [esrecurse](https://github.com/estools/esrecurse)'s the `fallback` option.</span>
+ <span class="s3">* </span><span class="s4">@returns </span><span class="s3">{ScopeManager} ScopeManager</span>
+ <span class="s3">*/</span>
+<span class="s2">function </span><span class="s1">analyze(tree, providedOptions) {</span>
+    <span class="s2">const </span><span class="s1">options = updateDeeply(defaultOptions(), providedOptions);</span>
+    <span class="s2">const </span><span class="s1">scopeManager = </span><span class="s2">new </span><span class="s1">ScopeManager(options);</span>
+    <span class="s2">const </span><span class="s1">referencer = </span><span class="s2">new </span><span class="s1">Referencer(options, scopeManager);</span>
+
+    <span class="s1">referencer.visit(tree);</span>
+
+    <span class="s1">assert(scopeManager.__currentScope === </span><span class="s2">null</span><span class="s1">, </span><span class="s0">&quot;currentScope should be null.&quot;</span><span class="s1">);</span>
+
+    <span class="s2">return </span><span class="s1">scopeManager;</span>
+<span class="s1">}</span>
+
+<span class="s3">/* vim: set sw=4 ts=4 et tw=80 : */</span>
+
+<span class="s1">exports.Definition = Definition;</span>
+<span class="s1">exports.PatternVisitor = PatternVisitor;</span>
+<span class="s1">exports.Reference = Reference;</span>
+<span class="s1">exports.Referencer = Referencer;</span>
+<span class="s1">exports.Scope = Scope;</span>
+<span class="s1">exports.ScopeManager = ScopeManager;</span>
+<span class="s1">exports.Variable = Variable;</span>
+<span class="s1">exports.analyze = analyze;</span>
+<span class="s1">exports.version = version;</span>
+<span class="s3">//# sourceMappingURL=eslint-scope.cjs.map</span>
+</pre>
+</body>
+</html>

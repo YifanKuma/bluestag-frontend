@@ -1,0 +1,1633 @@
+<html>
+<head>
+<title>create-projection-node.mjs</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #0033b3;}
+.s1 { color: #080808;}
+.s2 { color: #067d17;}
+.s3 { color: #1750eb;}
+.s4 { color: #8c8c8c; font-style: italic;}
+</style>
+</head>
+<body bgcolor="#ffffff">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#c0c0c0" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+create-projection-node.mjs</font>
+</center></td></tr></table>
+<pre><span class="s0">import </span><span class="s1">{ statsBuffer, isSVGElement, isSVGSVGElement, frame, getValueTransition, cancelFrame, time, frameData, frameSteps, microtask, activeAnimations, motionValue, mixNumber } from </span><span class="s2">'motion-dom'</span><span class="s1">;</span>
+<span class="s0">import </span><span class="s1">{ SubscriptionManager, clamp, noop } from </span><span class="s2">'motion-utils'</span><span class="s1">;</span>
+<span class="s0">import </span><span class="s1">{ animateSingleValue } from </span><span class="s2">'../../animation/animate/single-value.mjs'</span><span class="s1">;</span>
+<span class="s0">import </span><span class="s1">{ getOptimisedAppearId } from </span><span class="s2">'../../animation/optimized-appear/get-appear-id.mjs'</span><span class="s1">;</span>
+<span class="s0">import </span><span class="s1">{ FlatTree } from </span><span class="s2">'../../render/utils/flat-tree.mjs'</span><span class="s1">;</span>
+<span class="s0">import </span><span class="s1">{ delay } from </span><span class="s2">'../../utils/delay.mjs'</span><span class="s1">;</span>
+<span class="s0">import </span><span class="s1">{ resolveMotionValue } from </span><span class="s2">'../../value/utils/resolve-motion-value.mjs'</span><span class="s1">;</span>
+<span class="s0">import </span><span class="s1">{ mixValues } from </span><span class="s2">'../animation/mix-values.mjs'</span><span class="s1">;</span>
+<span class="s0">import </span><span class="s1">{ copyBoxInto, copyAxisDeltaInto } from </span><span class="s2">'../geometry/copy.mjs'</span><span class="s1">;</span>
+<span class="s0">import </span><span class="s1">{ translateAxis, transformBox, applyBoxDelta, applyTreeDeltas } from </span><span class="s2">'../geometry/delta-apply.mjs'</span><span class="s1">;</span>
+<span class="s0">import </span><span class="s1">{ calcLength, calcRelativePosition, calcRelativeBox, calcBoxDelta, isNear } from </span><span class="s2">'../geometry/delta-calc.mjs'</span><span class="s1">;</span>
+<span class="s0">import </span><span class="s1">{ removeBoxTransforms } from </span><span class="s2">'../geometry/delta-remove.mjs'</span><span class="s1">;</span>
+<span class="s0">import </span><span class="s1">{ createBox, createDelta } from </span><span class="s2">'../geometry/models.mjs'</span><span class="s1">;</span>
+<span class="s0">import </span><span class="s1">{ boxEqualsRounded, isDeltaZero, axisDeltaEquals, aspectRatio, boxEquals } from </span><span class="s2">'../geometry/utils.mjs'</span><span class="s1">;</span>
+<span class="s0">import </span><span class="s1">{ NodeStack } from </span><span class="s2">'../shared/stack.mjs'</span><span class="s1">;</span>
+<span class="s0">import </span><span class="s1">{ scaleCorrectors } from </span><span class="s2">'../styles/scale-correction.mjs'</span><span class="s1">;</span>
+<span class="s0">import </span><span class="s1">{ buildProjectionTransform } from </span><span class="s2">'../styles/transform.mjs'</span><span class="s1">;</span>
+<span class="s0">import </span><span class="s1">{ eachAxis } from </span><span class="s2">'../utils/each-axis.mjs'</span><span class="s1">;</span>
+<span class="s0">import </span><span class="s1">{ hasTransform, hasScale, has2DTranslate } from </span><span class="s2">'../utils/has-transform.mjs'</span><span class="s1">;</span>
+<span class="s0">import </span><span class="s1">{ globalProjectionState } from </span><span class="s2">'./state.mjs'</span><span class="s1">;</span>
+
+<span class="s0">const </span><span class="s1">metrics = {</span>
+    <span class="s1">nodes: </span><span class="s3">0</span><span class="s1">,</span>
+    <span class="s1">calculatedTargetDeltas: </span><span class="s3">0</span><span class="s1">,</span>
+    <span class="s1">calculatedProjections: </span><span class="s3">0</span><span class="s1">,</span>
+<span class="s1">};</span>
+<span class="s0">const </span><span class="s1">transformAxes = [</span><span class="s2">&quot;&quot;</span><span class="s1">, </span><span class="s2">&quot;X&quot;</span><span class="s1">, </span><span class="s2">&quot;Y&quot;</span><span class="s1">, </span><span class="s2">&quot;Z&quot;</span><span class="s1">];</span>
+<span class="s4">/**</span>
+ <span class="s4">* We use 1000 as the animation target as 0-1000 maps better to pixels than 0-1</span>
+ <span class="s4">* which has a noticeable difference in spring animations</span>
+ <span class="s4">*/</span>
+<span class="s0">const </span><span class="s1">animationTarget = </span><span class="s3">1000</span><span class="s1">;</span>
+<span class="s0">let </span><span class="s1">id = </span><span class="s3">0</span><span class="s1">;</span>
+<span class="s0">function </span><span class="s1">resetDistortingTransform(key, visualElement, values, sharedAnimationValues) {</span>
+    <span class="s0">const </span><span class="s1">{ latestValues } = visualElement;</span>
+    <span class="s4">// Record the distorting transform and then temporarily set it to 0</span>
+    <span class="s0">if </span><span class="s1">(latestValues[key]) {</span>
+        <span class="s1">values[key] = latestValues[key];</span>
+        <span class="s1">visualElement.setStaticValue(key, </span><span class="s3">0</span><span class="s1">);</span>
+        <span class="s0">if </span><span class="s1">(sharedAnimationValues) {</span>
+            <span class="s1">sharedAnimationValues[key] = </span><span class="s3">0</span><span class="s1">;</span>
+        <span class="s1">}</span>
+    <span class="s1">}</span>
+<span class="s1">}</span>
+<span class="s0">function </span><span class="s1">cancelTreeOptimisedTransformAnimations(projectionNode) {</span>
+    <span class="s1">projectionNode.hasCheckedOptimisedAppear = </span><span class="s0">true</span><span class="s1">;</span>
+    <span class="s0">if </span><span class="s1">(projectionNode.root === projectionNode)</span>
+        <span class="s0">return</span><span class="s1">;</span>
+    <span class="s0">const </span><span class="s1">{ visualElement } = projectionNode.options;</span>
+    <span class="s0">if </span><span class="s1">(!visualElement)</span>
+        <span class="s0">return</span><span class="s1">;</span>
+    <span class="s0">const </span><span class="s1">appearId = getOptimisedAppearId(visualElement);</span>
+    <span class="s0">if </span><span class="s1">(window.MotionHasOptimisedAnimation(appearId, </span><span class="s2">&quot;transform&quot;</span><span class="s1">)) {</span>
+        <span class="s0">const </span><span class="s1">{ layout, layoutId } = projectionNode.options;</span>
+        <span class="s1">window.MotionCancelOptimisedAnimation(appearId, </span><span class="s2">&quot;transform&quot;</span><span class="s1">, frame, !(layout || layoutId));</span>
+    <span class="s1">}</span>
+    <span class="s0">const </span><span class="s1">{ parent } = projectionNode;</span>
+    <span class="s0">if </span><span class="s1">(parent &amp;&amp; !parent.hasCheckedOptimisedAppear) {</span>
+        <span class="s1">cancelTreeOptimisedTransformAnimations(parent);</span>
+    <span class="s1">}</span>
+<span class="s1">}</span>
+<span class="s0">function </span><span class="s1">createProjectionNode({ attachResizeListener, defaultParent, measureScroll, checkIsScrollRoot, resetTransform, }) {</span>
+    <span class="s0">return class </span><span class="s1">ProjectionNode {</span>
+        <span class="s1">constructor(latestValues = {}, parent = defaultParent?.()) {</span>
+            <span class="s4">/**</span>
+             <span class="s4">* A unique ID generated for every projection node.</span>
+             <span class="s4">*/</span>
+            <span class="s0">this</span><span class="s1">.id = id++;</span>
+            <span class="s4">/**</span>
+             <span class="s4">* An id that represents a unique session instigated by startUpdate.</span>
+             <span class="s4">*/</span>
+            <span class="s0">this</span><span class="s1">.animationId = </span><span class="s3">0</span><span class="s1">;</span>
+            <span class="s0">this</span><span class="s1">.animationCommitId = </span><span class="s3">0</span><span class="s1">;</span>
+            <span class="s4">/**</span>
+             <span class="s4">* A Set containing all this component's children. This is used to iterate</span>
+             <span class="s4">* through the children.</span>
+             <span class="s4">*</span>
+             <span class="s4">* TODO: This could be faster to iterate as a flat array stored on the root node.</span>
+             <span class="s4">*/</span>
+            <span class="s0">this</span><span class="s1">.children = </span><span class="s0">new </span><span class="s1">Set();</span>
+            <span class="s4">/**</span>
+             <span class="s4">* Options for the node. We use this to configure what kind of layout animations</span>
+             <span class="s4">* we should perform (if any).</span>
+             <span class="s4">*/</span>
+            <span class="s0">this</span><span class="s1">.options = {};</span>
+            <span class="s4">/**</span>
+             <span class="s4">* We use this to detect when its safe to shut down part of a projection tree.</span>
+             <span class="s4">* We have to keep projecting children for scale correction and relative projection</span>
+             <span class="s4">* until all their parents stop performing layout animations.</span>
+             <span class="s4">*/</span>
+            <span class="s0">this</span><span class="s1">.isTreeAnimating = </span><span class="s0">false</span><span class="s1">;</span>
+            <span class="s0">this</span><span class="s1">.isAnimationBlocked = </span><span class="s0">false</span><span class="s1">;</span>
+            <span class="s4">/**</span>
+             <span class="s4">* Flag to true if we think this layout has been changed. We can't always know this,</span>
+             <span class="s4">* currently we set it to true every time a component renders, or if it has a layoutDependency</span>
+             <span class="s4">* if that has changed between renders. Additionally, components can be grouped by LayoutGroup</span>
+             <span class="s4">* and if one node is dirtied, they all are.</span>
+             <span class="s4">*/</span>
+            <span class="s0">this</span><span class="s1">.isLayoutDirty = </span><span class="s0">false</span><span class="s1">;</span>
+            <span class="s4">/**</span>
+             <span class="s4">* Flag to true if we think the projection calculations for this node needs</span>
+             <span class="s4">* recalculating as a result of an updated transform or layout animation.</span>
+             <span class="s4">*/</span>
+            <span class="s0">this</span><span class="s1">.isProjectionDirty = </span><span class="s0">false</span><span class="s1">;</span>
+            <span class="s4">/**</span>
+             <span class="s4">* Flag to true if the layout *or* transform has changed. This then gets propagated</span>
+             <span class="s4">* throughout the projection tree, forcing any element below to recalculate on the next frame.</span>
+             <span class="s4">*/</span>
+            <span class="s0">this</span><span class="s1">.isSharedProjectionDirty = </span><span class="s0">false</span><span class="s1">;</span>
+            <span class="s4">/**</span>
+             <span class="s4">* Flag transform dirty. This gets propagated throughout the whole tree but is only</span>
+             <span class="s4">* respected by shared nodes.</span>
+             <span class="s4">*/</span>
+            <span class="s0">this</span><span class="s1">.isTransformDirty = </span><span class="s0">false</span><span class="s1">;</span>
+            <span class="s4">/**</span>
+             <span class="s4">* Block layout updates for instant layout transitions throughout the tree.</span>
+             <span class="s4">*/</span>
+            <span class="s0">this</span><span class="s1">.updateManuallyBlocked = </span><span class="s0">false</span><span class="s1">;</span>
+            <span class="s0">this</span><span class="s1">.updateBlockedByResize = </span><span class="s0">false</span><span class="s1">;</span>
+            <span class="s4">/**</span>
+             <span class="s4">* Set to true between the start of the first `willUpdate` call and the end of the `didUpdate`</span>
+             <span class="s4">* call.</span>
+             <span class="s4">*/</span>
+            <span class="s0">this</span><span class="s1">.isUpdating = </span><span class="s0">false</span><span class="s1">;</span>
+            <span class="s4">/**</span>
+             <span class="s4">* If this is an SVG element we currently disable projection transforms</span>
+             <span class="s4">*/</span>
+            <span class="s0">this</span><span class="s1">.isSVG = </span><span class="s0">false</span><span class="s1">;</span>
+            <span class="s4">/**</span>
+             <span class="s4">* Flag to true (during promotion) if a node doing an instant layout transition needs to reset</span>
+             <span class="s4">* its projection styles.</span>
+             <span class="s4">*/</span>
+            <span class="s0">this</span><span class="s1">.needsReset = </span><span class="s0">false</span><span class="s1">;</span>
+            <span class="s4">/**</span>
+             <span class="s4">* Flags whether this node should have its transform reset prior to measuring.</span>
+             <span class="s4">*/</span>
+            <span class="s0">this</span><span class="s1">.shouldResetTransform = </span><span class="s0">false</span><span class="s1">;</span>
+            <span class="s4">/**</span>
+             <span class="s4">* Store whether this node has been checked for optimised appear animations. As</span>
+             <span class="s4">* effects fire bottom-up, and we want to look up the tree for appear animations,</span>
+             <span class="s4">* this makes sure we only check each path once, stopping at nodes that</span>
+             <span class="s4">* have already been checked.</span>
+             <span class="s4">*/</span>
+            <span class="s0">this</span><span class="s1">.hasCheckedOptimisedAppear = </span><span class="s0">false</span><span class="s1">;</span>
+            <span class="s4">/**</span>
+             <span class="s4">* An object representing the calculated contextual/accumulated/tree scale.</span>
+             <span class="s4">* This will be used to scale calculcated projection transforms, as these are</span>
+             <span class="s4">* calculated in screen-space but need to be scaled for elements to layoutly</span>
+             <span class="s4">* make it to their calculated destinations.</span>
+             <span class="s4">*</span>
+             <span class="s4">* TODO: Lazy-init</span>
+             <span class="s4">*/</span>
+            <span class="s0">this</span><span class="s1">.treeScale = { x: </span><span class="s3">1</span><span class="s1">, y: </span><span class="s3">1 </span><span class="s1">};</span>
+            <span class="s4">/**</span>
+             <span class="s4">*</span>
+             <span class="s4">*/</span>
+            <span class="s0">this</span><span class="s1">.eventHandlers = </span><span class="s0">new </span><span class="s1">Map();</span>
+            <span class="s0">this</span><span class="s1">.hasTreeAnimated = </span><span class="s0">false</span><span class="s1">;</span>
+            <span class="s4">// Note: Currently only running on root node</span>
+            <span class="s0">this</span><span class="s1">.updateScheduled = </span><span class="s0">false</span><span class="s1">;</span>
+            <span class="s0">this</span><span class="s1">.scheduleUpdate = () =&gt; </span><span class="s0">this</span><span class="s1">.update();</span>
+            <span class="s0">this</span><span class="s1">.projectionUpdateScheduled = </span><span class="s0">false</span><span class="s1">;</span>
+            <span class="s0">this</span><span class="s1">.checkUpdateFailed = () =&gt; {</span>
+                <span class="s0">if </span><span class="s1">(</span><span class="s0">this</span><span class="s1">.isUpdating) {</span>
+                    <span class="s0">this</span><span class="s1">.isUpdating = </span><span class="s0">false</span><span class="s1">;</span>
+                    <span class="s0">this</span><span class="s1">.clearAllSnapshots();</span>
+                <span class="s1">}</span>
+            <span class="s1">};</span>
+            <span class="s4">/**</span>
+             <span class="s4">* This is a multi-step process as shared nodes might be of different depths. Nodes</span>
+             <span class="s4">* are sorted by depth order, so we need to resolve the entire tree before moving to</span>
+             <span class="s4">* the next step.</span>
+             <span class="s4">*/</span>
+            <span class="s0">this</span><span class="s1">.updateProjection = () =&gt; {</span>
+                <span class="s0">this</span><span class="s1">.projectionUpdateScheduled = </span><span class="s0">false</span><span class="s1">;</span>
+                <span class="s4">/**</span>
+                 <span class="s4">* Reset debug counts. Manually resetting rather than creating a new</span>
+                 <span class="s4">* object each frame.</span>
+                 <span class="s4">*/</span>
+                <span class="s0">if </span><span class="s1">(statsBuffer.value) {</span>
+                    <span class="s1">metrics.nodes =</span>
+                        <span class="s1">metrics.calculatedTargetDeltas =</span>
+                            <span class="s1">metrics.calculatedProjections =</span>
+                                <span class="s3">0</span><span class="s1">;</span>
+                <span class="s1">}</span>
+                <span class="s0">this</span><span class="s1">.nodes.forEach(propagateDirtyNodes);</span>
+                <span class="s0">this</span><span class="s1">.nodes.forEach(resolveTargetDelta);</span>
+                <span class="s0">this</span><span class="s1">.nodes.forEach(calcProjection);</span>
+                <span class="s0">this</span><span class="s1">.nodes.forEach(cleanDirtyNodes);</span>
+                <span class="s0">if </span><span class="s1">(statsBuffer.addProjectionMetrics) {</span>
+                    <span class="s1">statsBuffer.addProjectionMetrics(metrics);</span>
+                <span class="s1">}</span>
+            <span class="s1">};</span>
+            <span class="s4">/**</span>
+             <span class="s4">* Frame calculations</span>
+             <span class="s4">*/</span>
+            <span class="s0">this</span><span class="s1">.resolvedRelativeTargetAt = </span><span class="s3">0.0</span><span class="s1">;</span>
+            <span class="s0">this</span><span class="s1">.hasProjected = </span><span class="s0">false</span><span class="s1">;</span>
+            <span class="s0">this</span><span class="s1">.isVisible = </span><span class="s0">true</span><span class="s1">;</span>
+            <span class="s0">this</span><span class="s1">.animationProgress = </span><span class="s3">0</span><span class="s1">;</span>
+            <span class="s4">/**</span>
+             <span class="s4">* Shared layout</span>
+             <span class="s4">*/</span>
+            <span class="s4">// TODO Only running on root node</span>
+            <span class="s0">this</span><span class="s1">.sharedNodes = </span><span class="s0">new </span><span class="s1">Map();</span>
+            <span class="s0">this</span><span class="s1">.latestValues = latestValues;</span>
+            <span class="s0">this</span><span class="s1">.root = parent ? parent.root || parent : </span><span class="s0">this</span><span class="s1">;</span>
+            <span class="s0">this</span><span class="s1">.path = parent ? [...parent.path, parent] : [];</span>
+            <span class="s0">this</span><span class="s1">.parent = parent;</span>
+            <span class="s0">this</span><span class="s1">.depth = parent ? parent.depth + </span><span class="s3">1 </span><span class="s1">: </span><span class="s3">0</span><span class="s1">;</span>
+            <span class="s0">for </span><span class="s1">(</span><span class="s0">let </span><span class="s1">i = </span><span class="s3">0</span><span class="s1">; i &lt; </span><span class="s0">this</span><span class="s1">.path.length; i++) {</span>
+                <span class="s0">this</span><span class="s1">.path[i].shouldResetTransform = </span><span class="s0">true</span><span class="s1">;</span>
+            <span class="s1">}</span>
+            <span class="s0">if </span><span class="s1">(</span><span class="s0">this</span><span class="s1">.root === </span><span class="s0">this</span><span class="s1">)</span>
+                <span class="s0">this</span><span class="s1">.nodes = </span><span class="s0">new </span><span class="s1">FlatTree();</span>
+        <span class="s1">}</span>
+        <span class="s1">addEventListener(name, handler) {</span>
+            <span class="s0">if </span><span class="s1">(!</span><span class="s0">this</span><span class="s1">.eventHandlers.has(name)) {</span>
+                <span class="s0">this</span><span class="s1">.eventHandlers.set(name, </span><span class="s0">new </span><span class="s1">SubscriptionManager());</span>
+            <span class="s1">}</span>
+            <span class="s0">return this</span><span class="s1">.eventHandlers.get(name).add(handler);</span>
+        <span class="s1">}</span>
+        <span class="s1">notifyListeners(name, ...args) {</span>
+            <span class="s0">const </span><span class="s1">subscriptionManager = </span><span class="s0">this</span><span class="s1">.eventHandlers.get(name);</span>
+            <span class="s1">subscriptionManager &amp;&amp; subscriptionManager.notify(...args);</span>
+        <span class="s1">}</span>
+        <span class="s1">hasListeners(name) {</span>
+            <span class="s0">return this</span><span class="s1">.eventHandlers.has(name);</span>
+        <span class="s1">}</span>
+        <span class="s4">/**</span>
+         <span class="s4">* Lifecycles</span>
+         <span class="s4">*/</span>
+        <span class="s1">mount(instance) {</span>
+            <span class="s0">if </span><span class="s1">(</span><span class="s0">this</span><span class="s1">.instance)</span>
+                <span class="s0">return</span><span class="s1">;</span>
+            <span class="s0">this</span><span class="s1">.isSVG = isSVGElement(instance) &amp;&amp; !isSVGSVGElement(instance);</span>
+            <span class="s0">this</span><span class="s1">.instance = instance;</span>
+            <span class="s0">const </span><span class="s1">{ layoutId, layout, visualElement } = </span><span class="s0">this</span><span class="s1">.options;</span>
+            <span class="s0">if </span><span class="s1">(visualElement &amp;&amp; !visualElement.current) {</span>
+                <span class="s1">visualElement.mount(instance);</span>
+            <span class="s1">}</span>
+            <span class="s0">this</span><span class="s1">.root.nodes.add(</span><span class="s0">this</span><span class="s1">);</span>
+            <span class="s0">this</span><span class="s1">.parent &amp;&amp; </span><span class="s0">this</span><span class="s1">.parent.children.add(</span><span class="s0">this</span><span class="s1">);</span>
+            <span class="s0">if </span><span class="s1">(</span><span class="s0">this</span><span class="s1">.root.hasTreeAnimated &amp;&amp; (layout || layoutId)) {</span>
+                <span class="s0">this</span><span class="s1">.isLayoutDirty = </span><span class="s0">true</span><span class="s1">;</span>
+            <span class="s1">}</span>
+            <span class="s0">if </span><span class="s1">(attachResizeListener) {</span>
+                <span class="s0">let </span><span class="s1">cancelDelay;</span>
+                <span class="s0">let </span><span class="s1">innerWidth = </span><span class="s3">0</span><span class="s1">;</span>
+                <span class="s0">const </span><span class="s1">resizeUnblockUpdate = () =&gt; (</span><span class="s0">this</span><span class="s1">.root.updateBlockedByResize = </span><span class="s0">false</span><span class="s1">);</span>
+                <span class="s4">// Set initial innerWidth in a frame.read callback to batch the read</span>
+                <span class="s1">frame.read(() =&gt; {</span>
+                    <span class="s1">innerWidth = window.innerWidth;</span>
+                <span class="s1">});</span>
+                <span class="s1">attachResizeListener(instance, () =&gt; {</span>
+                    <span class="s0">const </span><span class="s1">newInnerWidth = window.innerWidth;</span>
+                    <span class="s0">if </span><span class="s1">(newInnerWidth === innerWidth)</span>
+                        <span class="s0">return</span><span class="s1">;</span>
+                    <span class="s1">innerWidth = newInnerWidth;</span>
+                    <span class="s0">this</span><span class="s1">.root.updateBlockedByResize = </span><span class="s0">true</span><span class="s1">;</span>
+                    <span class="s1">cancelDelay &amp;&amp; cancelDelay();</span>
+                    <span class="s1">cancelDelay = delay(resizeUnblockUpdate, </span><span class="s3">250</span><span class="s1">);</span>
+                    <span class="s0">if </span><span class="s1">(globalProjectionState.hasAnimatedSinceResize) {</span>
+                        <span class="s1">globalProjectionState.hasAnimatedSinceResize = </span><span class="s0">false</span><span class="s1">;</span>
+                        <span class="s0">this</span><span class="s1">.nodes.forEach(finishAnimation);</span>
+                    <span class="s1">}</span>
+                <span class="s1">});</span>
+            <span class="s1">}</span>
+            <span class="s0">if </span><span class="s1">(layoutId) {</span>
+                <span class="s0">this</span><span class="s1">.root.registerSharedNode(layoutId, </span><span class="s0">this</span><span class="s1">);</span>
+            <span class="s1">}</span>
+            <span class="s4">// Only register the handler if it requires layout animation</span>
+            <span class="s0">if </span><span class="s1">(</span><span class="s0">this</span><span class="s1">.options.animate !== </span><span class="s0">false </span><span class="s1">&amp;&amp;</span>
+                <span class="s1">visualElement &amp;&amp;</span>
+                <span class="s1">(layoutId || layout)) {</span>
+                <span class="s0">this</span><span class="s1">.addEventListener(</span><span class="s2">&quot;didUpdate&quot;</span><span class="s1">, ({ delta, hasLayoutChanged, hasRelativeLayoutChanged, layout: newLayout, }) =&gt; {</span>
+                    <span class="s0">if </span><span class="s1">(</span><span class="s0">this</span><span class="s1">.isTreeAnimationBlocked()) {</span>
+                        <span class="s0">this</span><span class="s1">.target = undefined;</span>
+                        <span class="s0">this</span><span class="s1">.relativeTarget = undefined;</span>
+                        <span class="s0">return</span><span class="s1">;</span>
+                    <span class="s1">}</span>
+                    <span class="s4">// TODO: Check here if an animation exists</span>
+                    <span class="s0">const </span><span class="s1">layoutTransition = </span><span class="s0">this</span><span class="s1">.options.transition ||</span>
+                        <span class="s1">visualElement.getDefaultTransition() ||</span>
+                        <span class="s1">defaultLayoutTransition;</span>
+                    <span class="s0">const </span><span class="s1">{ onLayoutAnimationStart, onLayoutAnimationComplete, } = visualElement.getProps();</span>
+                    <span class="s4">/**</span>
+                     <span class="s4">* The target layout of the element might stay the same,</span>
+                     <span class="s4">* but its position relative to its parent has changed.</span>
+                     <span class="s4">*/</span>
+                    <span class="s0">const </span><span class="s1">hasTargetChanged = !</span><span class="s0">this</span><span class="s1">.targetLayout ||</span>
+                        <span class="s1">!boxEqualsRounded(</span><span class="s0">this</span><span class="s1">.targetLayout, newLayout);</span>
+                    <span class="s4">/* 
+                     * Note: Disabled to fix relative animations always triggering new 
+                     * layout animations. If this causes further issues, we can try 
+                     * a different approach to detecting relative target changes. 
+                     */</span>
+                    <span class="s4">// || hasRelativeLayoutChanged</span>
+                    <span class="s4">/**</span>
+                     <span class="s4">* If the layout hasn't seemed to have changed, it might be that the</span>
+                     <span class="s4">* element is visually in the same place in the document but its position</span>
+                     <span class="s4">* relative to its parent has indeed changed. So here we check for that.</span>
+                     <span class="s4">*/</span>
+                    <span class="s0">const </span><span class="s1">hasOnlyRelativeTargetChanged = !hasLayoutChanged &amp;&amp; hasRelativeLayoutChanged;</span>
+                    <span class="s0">if </span><span class="s1">(</span><span class="s0">this</span><span class="s1">.options.layoutRoot ||</span>
+                        <span class="s0">this</span><span class="s1">.resumeFrom ||</span>
+                        <span class="s1">hasOnlyRelativeTargetChanged ||</span>
+                        <span class="s1">(hasLayoutChanged &amp;&amp;</span>
+                            <span class="s1">(hasTargetChanged || !</span><span class="s0">this</span><span class="s1">.currentAnimation))) {</span>
+                        <span class="s0">if </span><span class="s1">(</span><span class="s0">this</span><span class="s1">.resumeFrom) {</span>
+                            <span class="s0">this</span><span class="s1">.resumingFrom = </span><span class="s0">this</span><span class="s1">.resumeFrom;</span>
+                            <span class="s0">this</span><span class="s1">.resumingFrom.resumingFrom = undefined;</span>
+                        <span class="s1">}</span>
+                        <span class="s0">const </span><span class="s1">animationOptions = {</span>
+                            <span class="s1">...getValueTransition(layoutTransition, </span><span class="s2">&quot;layout&quot;</span><span class="s1">),</span>
+                            <span class="s1">onPlay: onLayoutAnimationStart,</span>
+                            <span class="s1">onComplete: onLayoutAnimationComplete,</span>
+                        <span class="s1">};</span>
+                        <span class="s0">if </span><span class="s1">(visualElement.shouldReduceMotion ||</span>
+                            <span class="s0">this</span><span class="s1">.options.layoutRoot) {</span>
+                            <span class="s1">animationOptions.delay = </span><span class="s3">0</span><span class="s1">;</span>
+                            <span class="s1">animationOptions.type = </span><span class="s0">false</span><span class="s1">;</span>
+                        <span class="s1">}</span>
+                        <span class="s0">this</span><span class="s1">.startAnimation(animationOptions);</span>
+                        <span class="s4">/**</span>
+                         <span class="s4">* Set animation origin after starting animation to avoid layout jump</span>
+                         <span class="s4">* caused by stopping previous layout animation</span>
+                         <span class="s4">*/</span>
+                        <span class="s0">this</span><span class="s1">.setAnimationOrigin(delta, hasOnlyRelativeTargetChanged);</span>
+                    <span class="s1">}</span>
+                    <span class="s0">else </span><span class="s1">{</span>
+                        <span class="s4">/**</span>
+                         <span class="s4">* If the layout hasn't changed and we have an animation that hasn't started yet,</span>
+                         <span class="s4">* finish it immediately. Otherwise it will be animating from a location</span>
+                         <span class="s4">* that was probably never commited to screen and look like a jumpy box.</span>
+                         <span class="s4">*/</span>
+                        <span class="s0">if </span><span class="s1">(!hasLayoutChanged) {</span>
+                            <span class="s1">finishAnimation(</span><span class="s0">this</span><span class="s1">);</span>
+                        <span class="s1">}</span>
+                        <span class="s0">if </span><span class="s1">(</span><span class="s0">this</span><span class="s1">.isLead() &amp;&amp; </span><span class="s0">this</span><span class="s1">.options.onExitComplete) {</span>
+                            <span class="s0">this</span><span class="s1">.options.onExitComplete();</span>
+                        <span class="s1">}</span>
+                    <span class="s1">}</span>
+                    <span class="s0">this</span><span class="s1">.targetLayout = newLayout;</span>
+                <span class="s1">});</span>
+            <span class="s1">}</span>
+        <span class="s1">}</span>
+        <span class="s1">unmount() {</span>
+            <span class="s0">this</span><span class="s1">.options.layoutId &amp;&amp; </span><span class="s0">this</span><span class="s1">.willUpdate();</span>
+            <span class="s0">this</span><span class="s1">.root.nodes.remove(</span><span class="s0">this</span><span class="s1">);</span>
+            <span class="s0">const </span><span class="s1">stack = </span><span class="s0">this</span><span class="s1">.getStack();</span>
+            <span class="s1">stack &amp;&amp; stack.remove(</span><span class="s0">this</span><span class="s1">);</span>
+            <span class="s0">this</span><span class="s1">.parent &amp;&amp; </span><span class="s0">this</span><span class="s1">.parent.children.delete(</span><span class="s0">this</span><span class="s1">);</span>
+            <span class="s0">this</span><span class="s1">.instance = undefined;</span>
+            <span class="s0">this</span><span class="s1">.eventHandlers.clear();</span>
+            <span class="s1">cancelFrame(</span><span class="s0">this</span><span class="s1">.updateProjection);</span>
+        <span class="s1">}</span>
+        <span class="s4">// only on the root</span>
+        <span class="s1">blockUpdate() {</span>
+            <span class="s0">this</span><span class="s1">.updateManuallyBlocked = </span><span class="s0">true</span><span class="s1">;</span>
+        <span class="s1">}</span>
+        <span class="s1">unblockUpdate() {</span>
+            <span class="s0">this</span><span class="s1">.updateManuallyBlocked = </span><span class="s0">false</span><span class="s1">;</span>
+        <span class="s1">}</span>
+        <span class="s1">isUpdateBlocked() {</span>
+            <span class="s0">return this</span><span class="s1">.updateManuallyBlocked || </span><span class="s0">this</span><span class="s1">.updateBlockedByResize;</span>
+        <span class="s1">}</span>
+        <span class="s1">isTreeAnimationBlocked() {</span>
+            <span class="s0">return </span><span class="s1">(</span><span class="s0">this</span><span class="s1">.isAnimationBlocked ||</span>
+                <span class="s1">(</span><span class="s0">this</span><span class="s1">.parent &amp;&amp; </span><span class="s0">this</span><span class="s1">.parent.isTreeAnimationBlocked()) ||</span>
+                <span class="s0">false</span><span class="s1">);</span>
+        <span class="s1">}</span>
+        <span class="s4">// Note: currently only running on root node</span>
+        <span class="s1">startUpdate() {</span>
+            <span class="s0">if </span><span class="s1">(</span><span class="s0">this</span><span class="s1">.isUpdateBlocked())</span>
+                <span class="s0">return</span><span class="s1">;</span>
+            <span class="s0">this</span><span class="s1">.isUpdating = </span><span class="s0">true</span><span class="s1">;</span>
+            <span class="s0">this</span><span class="s1">.nodes &amp;&amp; </span><span class="s0">this</span><span class="s1">.nodes.forEach(resetSkewAndRotation);</span>
+            <span class="s0">this</span><span class="s1">.animationId++;</span>
+        <span class="s1">}</span>
+        <span class="s1">getTransformTemplate() {</span>
+            <span class="s0">const </span><span class="s1">{ visualElement } = </span><span class="s0">this</span><span class="s1">.options;</span>
+            <span class="s0">return </span><span class="s1">visualElement &amp;&amp; visualElement.getProps().transformTemplate;</span>
+        <span class="s1">}</span>
+        <span class="s1">willUpdate(shouldNotifyListeners = </span><span class="s0">true</span><span class="s1">) {</span>
+            <span class="s0">this</span><span class="s1">.root.hasTreeAnimated = </span><span class="s0">true</span><span class="s1">;</span>
+            <span class="s0">if </span><span class="s1">(</span><span class="s0">this</span><span class="s1">.root.isUpdateBlocked()) {</span>
+                <span class="s0">this</span><span class="s1">.options.onExitComplete &amp;&amp; </span><span class="s0">this</span><span class="s1">.options.onExitComplete();</span>
+                <span class="s0">return</span><span class="s1">;</span>
+            <span class="s1">}</span>
+            <span class="s4">/**</span>
+             <span class="s4">* If we're running optimised appear animations then these must be</span>
+             <span class="s4">* cancelled before measuring the DOM. This is so we can measure</span>
+             <span class="s4">* the true layout of the element rather than the WAAPI animation</span>
+             <span class="s4">* which will be unaffected by the resetSkewAndRotate step.</span>
+             <span class="s4">*</span>
+             <span class="s4">* Note: This is a DOM write. Worst case scenario is this is sandwiched</span>
+             <span class="s4">* between other snapshot reads which will cause unnecessary style recalculations.</span>
+             <span class="s4">* This has to happen here though, as we don't yet know which nodes will need</span>
+             <span class="s4">* snapshots in startUpdate(), but we only want to cancel optimised animations</span>
+             <span class="s4">* if a layout animation measurement is actually going to be affected by them.</span>
+             <span class="s4">*/</span>
+            <span class="s0">if </span><span class="s1">(window.MotionCancelOptimisedAnimation &amp;&amp;</span>
+                <span class="s1">!</span><span class="s0">this</span><span class="s1">.hasCheckedOptimisedAppear) {</span>
+                <span class="s1">cancelTreeOptimisedTransformAnimations(</span><span class="s0">this</span><span class="s1">);</span>
+            <span class="s1">}</span>
+            <span class="s1">!</span><span class="s0">this</span><span class="s1">.root.isUpdating &amp;&amp; </span><span class="s0">this</span><span class="s1">.root.startUpdate();</span>
+            <span class="s0">if </span><span class="s1">(</span><span class="s0">this</span><span class="s1">.isLayoutDirty)</span>
+                <span class="s0">return</span><span class="s1">;</span>
+            <span class="s0">this</span><span class="s1">.isLayoutDirty = </span><span class="s0">true</span><span class="s1">;</span>
+            <span class="s0">for </span><span class="s1">(</span><span class="s0">let </span><span class="s1">i = </span><span class="s3">0</span><span class="s1">; i &lt; </span><span class="s0">this</span><span class="s1">.path.length; i++) {</span>
+                <span class="s0">const </span><span class="s1">node = </span><span class="s0">this</span><span class="s1">.path[i];</span>
+                <span class="s1">node.shouldResetTransform = </span><span class="s0">true</span><span class="s1">;</span>
+                <span class="s1">node.updateScroll(</span><span class="s2">&quot;snapshot&quot;</span><span class="s1">);</span>
+                <span class="s0">if </span><span class="s1">(node.options.layoutRoot) {</span>
+                    <span class="s1">node.willUpdate(</span><span class="s0">false</span><span class="s1">);</span>
+                <span class="s1">}</span>
+            <span class="s1">}</span>
+            <span class="s0">const </span><span class="s1">{ layoutId, layout } = </span><span class="s0">this</span><span class="s1">.options;</span>
+            <span class="s0">if </span><span class="s1">(layoutId === undefined &amp;&amp; !layout)</span>
+                <span class="s0">return</span><span class="s1">;</span>
+            <span class="s0">const </span><span class="s1">transformTemplate = </span><span class="s0">this</span><span class="s1">.getTransformTemplate();</span>
+            <span class="s0">this</span><span class="s1">.prevTransformTemplateValue = transformTemplate</span>
+                <span class="s1">? transformTemplate(</span><span class="s0">this</span><span class="s1">.latestValues, </span><span class="s2">&quot;&quot;</span><span class="s1">)</span>
+                <span class="s1">: undefined;</span>
+            <span class="s0">this</span><span class="s1">.updateSnapshot();</span>
+            <span class="s1">shouldNotifyListeners &amp;&amp; </span><span class="s0">this</span><span class="s1">.notifyListeners(</span><span class="s2">&quot;willUpdate&quot;</span><span class="s1">);</span>
+        <span class="s1">}</span>
+        <span class="s1">update() {</span>
+            <span class="s0">this</span><span class="s1">.updateScheduled = </span><span class="s0">false</span><span class="s1">;</span>
+            <span class="s0">const </span><span class="s1">updateWasBlocked = </span><span class="s0">this</span><span class="s1">.isUpdateBlocked();</span>
+            <span class="s4">// When doing an instant transition, we skip the layout update,</span>
+            <span class="s4">// but should still clean up the measurements so that the next</span>
+            <span class="s4">// snapshot could be taken correctly.</span>
+            <span class="s0">if </span><span class="s1">(updateWasBlocked) {</span>
+                <span class="s0">this</span><span class="s1">.unblockUpdate();</span>
+                <span class="s0">this</span><span class="s1">.clearAllSnapshots();</span>
+                <span class="s0">this</span><span class="s1">.nodes.forEach(clearMeasurements);</span>
+                <span class="s0">return</span><span class="s1">;</span>
+            <span class="s1">}</span>
+            <span class="s4">/**</span>
+             <span class="s4">* If this is a repeat of didUpdate then ignore the animation.</span>
+             <span class="s4">*/</span>
+            <span class="s0">if </span><span class="s1">(</span><span class="s0">this</span><span class="s1">.animationId &lt;= </span><span class="s0">this</span><span class="s1">.animationCommitId) {</span>
+                <span class="s0">this</span><span class="s1">.nodes.forEach(clearIsLayoutDirty);</span>
+                <span class="s0">return</span><span class="s1">;</span>
+            <span class="s1">}</span>
+            <span class="s0">this</span><span class="s1">.animationCommitId = </span><span class="s0">this</span><span class="s1">.animationId;</span>
+            <span class="s0">if </span><span class="s1">(!</span><span class="s0">this</span><span class="s1">.isUpdating) {</span>
+                <span class="s0">this</span><span class="s1">.nodes.forEach(clearIsLayoutDirty);</span>
+            <span class="s1">}</span>
+            <span class="s0">else </span><span class="s1">{</span>
+                <span class="s0">this</span><span class="s1">.isUpdating = </span><span class="s0">false</span><span class="s1">;</span>
+                <span class="s4">/**</span>
+                 <span class="s4">* Write</span>
+                 <span class="s4">*/</span>
+                <span class="s0">this</span><span class="s1">.nodes.forEach(resetTransformStyle);</span>
+                <span class="s4">/**</span>
+                 <span class="s4">* Read ==================</span>
+                 <span class="s4">*/</span>
+                <span class="s4">// Update layout measurements of updated children</span>
+                <span class="s0">this</span><span class="s1">.nodes.forEach(updateLayout);</span>
+                <span class="s4">/**</span>
+                 <span class="s4">* Write</span>
+                 <span class="s4">*/</span>
+                <span class="s4">// Notify listeners that the layout is updated</span>
+                <span class="s0">this</span><span class="s1">.nodes.forEach(notifyLayoutUpdate);</span>
+            <span class="s1">}</span>
+            <span class="s0">this</span><span class="s1">.clearAllSnapshots();</span>
+            <span class="s4">/**</span>
+             <span class="s4">* Manually flush any pending updates. Ideally</span>
+             <span class="s4">* we could leave this to the following requestAnimationFrame but this seems</span>
+             <span class="s4">* to leave a flash of incorrectly styled content.</span>
+             <span class="s4">*/</span>
+            <span class="s0">const </span><span class="s1">now = time.now();</span>
+            <span class="s1">frameData.delta = clamp(</span><span class="s3">0</span><span class="s1">, </span><span class="s3">1000 </span><span class="s1">/ </span><span class="s3">60</span><span class="s1">, now - frameData.timestamp);</span>
+            <span class="s1">frameData.timestamp = now;</span>
+            <span class="s1">frameData.isProcessing = </span><span class="s0">true</span><span class="s1">;</span>
+            <span class="s1">frameSteps.update.process(frameData);</span>
+            <span class="s1">frameSteps.preRender.process(frameData);</span>
+            <span class="s1">frameSteps.render.process(frameData);</span>
+            <span class="s1">frameData.isProcessing = </span><span class="s0">false</span><span class="s1">;</span>
+        <span class="s1">}</span>
+        <span class="s1">didUpdate() {</span>
+            <span class="s0">if </span><span class="s1">(!</span><span class="s0">this</span><span class="s1">.updateScheduled) {</span>
+                <span class="s0">this</span><span class="s1">.updateScheduled = </span><span class="s0">true</span><span class="s1">;</span>
+                <span class="s1">microtask.read(</span><span class="s0">this</span><span class="s1">.scheduleUpdate);</span>
+            <span class="s1">}</span>
+        <span class="s1">}</span>
+        <span class="s1">clearAllSnapshots() {</span>
+            <span class="s0">this</span><span class="s1">.nodes.forEach(clearSnapshot);</span>
+            <span class="s0">this</span><span class="s1">.sharedNodes.forEach(removeLeadSnapshots);</span>
+        <span class="s1">}</span>
+        <span class="s1">scheduleUpdateProjection() {</span>
+            <span class="s0">if </span><span class="s1">(!</span><span class="s0">this</span><span class="s1">.projectionUpdateScheduled) {</span>
+                <span class="s0">this</span><span class="s1">.projectionUpdateScheduled = </span><span class="s0">true</span><span class="s1">;</span>
+                <span class="s1">frame.preRender(</span><span class="s0">this</span><span class="s1">.updateProjection, </span><span class="s0">false</span><span class="s1">, </span><span class="s0">true</span><span class="s1">);</span>
+            <span class="s1">}</span>
+        <span class="s1">}</span>
+        <span class="s1">scheduleCheckAfterUnmount() {</span>
+            <span class="s4">/**</span>
+             <span class="s4">* If the unmounting node is in a layoutGroup and did trigger a willUpdate,</span>
+             <span class="s4">* we manually call didUpdate to give a chance to the siblings to animate.</span>
+             <span class="s4">* Otherwise, cleanup all snapshots to prevents future nodes from reusing them.</span>
+             <span class="s4">*/</span>
+            <span class="s1">frame.postRender(() =&gt; {</span>
+                <span class="s0">if </span><span class="s1">(</span><span class="s0">this</span><span class="s1">.isLayoutDirty) {</span>
+                    <span class="s0">this</span><span class="s1">.root.didUpdate();</span>
+                <span class="s1">}</span>
+                <span class="s0">else </span><span class="s1">{</span>
+                    <span class="s0">this</span><span class="s1">.root.checkUpdateFailed();</span>
+                <span class="s1">}</span>
+            <span class="s1">});</span>
+        <span class="s1">}</span>
+        <span class="s4">/**</span>
+         <span class="s4">* Update measurements</span>
+         <span class="s4">*/</span>
+        <span class="s1">updateSnapshot() {</span>
+            <span class="s0">if </span><span class="s1">(</span><span class="s0">this</span><span class="s1">.snapshot || !</span><span class="s0">this</span><span class="s1">.instance)</span>
+                <span class="s0">return</span><span class="s1">;</span>
+            <span class="s0">this</span><span class="s1">.snapshot = </span><span class="s0">this</span><span class="s1">.measure();</span>
+            <span class="s0">if </span><span class="s1">(</span><span class="s0">this</span><span class="s1">.snapshot &amp;&amp;</span>
+                <span class="s1">!calcLength(</span><span class="s0">this</span><span class="s1">.snapshot.measuredBox.x) &amp;&amp;</span>
+                <span class="s1">!calcLength(</span><span class="s0">this</span><span class="s1">.snapshot.measuredBox.y)) {</span>
+                <span class="s0">this</span><span class="s1">.snapshot = undefined;</span>
+            <span class="s1">}</span>
+        <span class="s1">}</span>
+        <span class="s1">updateLayout() {</span>
+            <span class="s0">if </span><span class="s1">(!</span><span class="s0">this</span><span class="s1">.instance)</span>
+                <span class="s0">return</span><span class="s1">;</span>
+            <span class="s0">this</span><span class="s1">.updateScroll();</span>
+            <span class="s0">if </span><span class="s1">(!(</span><span class="s0">this</span><span class="s1">.options.alwaysMeasureLayout &amp;&amp; </span><span class="s0">this</span><span class="s1">.isLead()) &amp;&amp;</span>
+                <span class="s1">!</span><span class="s0">this</span><span class="s1">.isLayoutDirty) {</span>
+                <span class="s0">return</span><span class="s1">;</span>
+            <span class="s1">}</span>
+            <span class="s4">/**</span>
+             <span class="s4">* When a node is mounted, it simply resumes from the prevLead's</span>
+             <span class="s4">* snapshot instead of taking a new one, but the ancestors scroll</span>
+             <span class="s4">* might have updated while the prevLead is unmounted. We need to</span>
+             <span class="s4">* update the scroll again to make sure the layout we measure is</span>
+             <span class="s4">* up to date.</span>
+             <span class="s4">*/</span>
+            <span class="s0">if </span><span class="s1">(</span><span class="s0">this</span><span class="s1">.resumeFrom &amp;&amp; !</span><span class="s0">this</span><span class="s1">.resumeFrom.instance) {</span>
+                <span class="s0">for </span><span class="s1">(</span><span class="s0">let </span><span class="s1">i = </span><span class="s3">0</span><span class="s1">; i &lt; </span><span class="s0">this</span><span class="s1">.path.length; i++) {</span>
+                    <span class="s0">const </span><span class="s1">node = </span><span class="s0">this</span><span class="s1">.path[i];</span>
+                    <span class="s1">node.updateScroll();</span>
+                <span class="s1">}</span>
+            <span class="s1">}</span>
+            <span class="s0">const </span><span class="s1">prevLayout = </span><span class="s0">this</span><span class="s1">.layout;</span>
+            <span class="s0">this</span><span class="s1">.layout = </span><span class="s0">this</span><span class="s1">.measure(</span><span class="s0">false</span><span class="s1">);</span>
+            <span class="s0">this</span><span class="s1">.layoutCorrected = createBox();</span>
+            <span class="s0">this</span><span class="s1">.isLayoutDirty = </span><span class="s0">false</span><span class="s1">;</span>
+            <span class="s0">this</span><span class="s1">.projectionDelta = undefined;</span>
+            <span class="s0">this</span><span class="s1">.notifyListeners(</span><span class="s2">&quot;measure&quot;</span><span class="s1">, </span><span class="s0">this</span><span class="s1">.layout.layoutBox);</span>
+            <span class="s0">const </span><span class="s1">{ visualElement } = </span><span class="s0">this</span><span class="s1">.options;</span>
+            <span class="s1">visualElement &amp;&amp;</span>
+                <span class="s1">visualElement.notify(</span><span class="s2">&quot;LayoutMeasure&quot;</span><span class="s1">, </span><span class="s0">this</span><span class="s1">.layout.layoutBox, prevLayout ? prevLayout.layoutBox : undefined);</span>
+        <span class="s1">}</span>
+        <span class="s1">updateScroll(phase = </span><span class="s2">&quot;measure&quot;</span><span class="s1">) {</span>
+            <span class="s0">let </span><span class="s1">needsMeasurement = Boolean(</span><span class="s0">this</span><span class="s1">.options.layoutScroll &amp;&amp; </span><span class="s0">this</span><span class="s1">.instance);</span>
+            <span class="s0">if </span><span class="s1">(</span><span class="s0">this</span><span class="s1">.scroll &amp;&amp;</span>
+                <span class="s0">this</span><span class="s1">.scroll.animationId === </span><span class="s0">this</span><span class="s1">.root.animationId &amp;&amp;</span>
+                <span class="s0">this</span><span class="s1">.scroll.phase === phase) {</span>
+                <span class="s1">needsMeasurement = </span><span class="s0">false</span><span class="s1">;</span>
+            <span class="s1">}</span>
+            <span class="s0">if </span><span class="s1">(needsMeasurement &amp;&amp; </span><span class="s0">this</span><span class="s1">.instance) {</span>
+                <span class="s0">const </span><span class="s1">isRoot = checkIsScrollRoot(</span><span class="s0">this</span><span class="s1">.instance);</span>
+                <span class="s0">this</span><span class="s1">.scroll = {</span>
+                    <span class="s1">animationId: </span><span class="s0">this</span><span class="s1">.root.animationId,</span>
+                    <span class="s1">phase,</span>
+                    <span class="s1">isRoot,</span>
+                    <span class="s1">offset: measureScroll(</span><span class="s0">this</span><span class="s1">.instance),</span>
+                    <span class="s1">wasRoot: </span><span class="s0">this</span><span class="s1">.scroll ? </span><span class="s0">this</span><span class="s1">.scroll.isRoot : isRoot,</span>
+                <span class="s1">};</span>
+            <span class="s1">}</span>
+        <span class="s1">}</span>
+        <span class="s1">resetTransform() {</span>
+            <span class="s0">if </span><span class="s1">(!resetTransform)</span>
+                <span class="s0">return</span><span class="s1">;</span>
+            <span class="s0">const </span><span class="s1">isResetRequested = </span><span class="s0">this</span><span class="s1">.isLayoutDirty ||</span>
+                <span class="s0">this</span><span class="s1">.shouldResetTransform ||</span>
+                <span class="s0">this</span><span class="s1">.options.alwaysMeasureLayout;</span>
+            <span class="s0">const </span><span class="s1">hasProjection = </span><span class="s0">this</span><span class="s1">.projectionDelta &amp;&amp; !isDeltaZero(</span><span class="s0">this</span><span class="s1">.projectionDelta);</span>
+            <span class="s0">const </span><span class="s1">transformTemplate = </span><span class="s0">this</span><span class="s1">.getTransformTemplate();</span>
+            <span class="s0">const </span><span class="s1">transformTemplateValue = transformTemplate</span>
+                <span class="s1">? transformTemplate(</span><span class="s0">this</span><span class="s1">.latestValues, </span><span class="s2">&quot;&quot;</span><span class="s1">)</span>
+                <span class="s1">: undefined;</span>
+            <span class="s0">const </span><span class="s1">transformTemplateHasChanged = transformTemplateValue !== </span><span class="s0">this</span><span class="s1">.prevTransformTemplateValue;</span>
+            <span class="s0">if </span><span class="s1">(isResetRequested &amp;&amp;</span>
+                <span class="s0">this</span><span class="s1">.instance &amp;&amp;</span>
+                <span class="s1">(hasProjection ||</span>
+                    <span class="s1">hasTransform(</span><span class="s0">this</span><span class="s1">.latestValues) ||</span>
+                    <span class="s1">transformTemplateHasChanged)) {</span>
+                <span class="s1">resetTransform(</span><span class="s0">this</span><span class="s1">.instance, transformTemplateValue);</span>
+                <span class="s0">this</span><span class="s1">.shouldResetTransform = </span><span class="s0">false</span><span class="s1">;</span>
+                <span class="s0">this</span><span class="s1">.scheduleRender();</span>
+            <span class="s1">}</span>
+        <span class="s1">}</span>
+        <span class="s1">measure(removeTransform = </span><span class="s0">true</span><span class="s1">) {</span>
+            <span class="s0">const </span><span class="s1">pageBox = </span><span class="s0">this</span><span class="s1">.measurePageBox();</span>
+            <span class="s0">let </span><span class="s1">layoutBox = </span><span class="s0">this</span><span class="s1">.removeElementScroll(pageBox);</span>
+            <span class="s4">/**</span>
+             <span class="s4">* Measurements taken during the pre-render stage</span>
+             <span class="s4">* still have transforms applied so we remove them</span>
+             <span class="s4">* via calculation.</span>
+             <span class="s4">*/</span>
+            <span class="s0">if </span><span class="s1">(removeTransform) {</span>
+                <span class="s1">layoutBox = </span><span class="s0">this</span><span class="s1">.removeTransform(layoutBox);</span>
+            <span class="s1">}</span>
+            <span class="s1">roundBox(layoutBox);</span>
+            <span class="s0">return </span><span class="s1">{</span>
+                <span class="s1">animationId: </span><span class="s0">this</span><span class="s1">.root.animationId,</span>
+                <span class="s1">measuredBox: pageBox,</span>
+                <span class="s1">layoutBox,</span>
+                <span class="s1">latestValues: {},</span>
+                <span class="s1">source: </span><span class="s0">this</span><span class="s1">.id,</span>
+            <span class="s1">};</span>
+        <span class="s1">}</span>
+        <span class="s1">measurePageBox() {</span>
+            <span class="s0">const </span><span class="s1">{ visualElement } = </span><span class="s0">this</span><span class="s1">.options;</span>
+            <span class="s0">if </span><span class="s1">(!visualElement)</span>
+                <span class="s0">return </span><span class="s1">createBox();</span>
+            <span class="s0">const </span><span class="s1">box = visualElement.measureViewportBox();</span>
+            <span class="s0">const </span><span class="s1">wasInScrollRoot = </span><span class="s0">this</span><span class="s1">.scroll?.wasRoot || </span><span class="s0">this</span><span class="s1">.path.some(checkNodeWasScrollRoot);</span>
+            <span class="s0">if </span><span class="s1">(!wasInScrollRoot) {</span>
+                <span class="s4">// Remove viewport scroll to give page-relative coordinates</span>
+                <span class="s0">const </span><span class="s1">{ scroll } = </span><span class="s0">this</span><span class="s1">.root;</span>
+                <span class="s0">if </span><span class="s1">(scroll) {</span>
+                    <span class="s1">translateAxis(box.x, scroll.offset.x);</span>
+                    <span class="s1">translateAxis(box.y, scroll.offset.y);</span>
+                <span class="s1">}</span>
+            <span class="s1">}</span>
+            <span class="s0">return </span><span class="s1">box;</span>
+        <span class="s1">}</span>
+        <span class="s1">removeElementScroll(box) {</span>
+            <span class="s0">const </span><span class="s1">boxWithoutScroll = createBox();</span>
+            <span class="s1">copyBoxInto(boxWithoutScroll, box);</span>
+            <span class="s0">if </span><span class="s1">(</span><span class="s0">this</span><span class="s1">.scroll?.wasRoot) {</span>
+                <span class="s0">return </span><span class="s1">boxWithoutScroll;</span>
+            <span class="s1">}</span>
+            <span class="s4">/**</span>
+             <span class="s4">* Performance TODO: Keep a cumulative scroll offset down the tree</span>
+             <span class="s4">* rather than loop back up the path.</span>
+             <span class="s4">*/</span>
+            <span class="s0">for </span><span class="s1">(</span><span class="s0">let </span><span class="s1">i = </span><span class="s3">0</span><span class="s1">; i &lt; </span><span class="s0">this</span><span class="s1">.path.length; i++) {</span>
+                <span class="s0">const </span><span class="s1">node = </span><span class="s0">this</span><span class="s1">.path[i];</span>
+                <span class="s0">const </span><span class="s1">{ scroll, options } = node;</span>
+                <span class="s0">if </span><span class="s1">(node !== </span><span class="s0">this</span><span class="s1">.root &amp;&amp; scroll &amp;&amp; options.layoutScroll) {</span>
+                    <span class="s4">/**</span>
+                     <span class="s4">* If this is a new scroll root, we want to remove all previous scrolls</span>
+                     <span class="s4">* from the viewport box.</span>
+                     <span class="s4">*/</span>
+                    <span class="s0">if </span><span class="s1">(scroll.wasRoot) {</span>
+                        <span class="s1">copyBoxInto(boxWithoutScroll, box);</span>
+                    <span class="s1">}</span>
+                    <span class="s1">translateAxis(boxWithoutScroll.x, scroll.offset.x);</span>
+                    <span class="s1">translateAxis(boxWithoutScroll.y, scroll.offset.y);</span>
+                <span class="s1">}</span>
+            <span class="s1">}</span>
+            <span class="s0">return </span><span class="s1">boxWithoutScroll;</span>
+        <span class="s1">}</span>
+        <span class="s1">applyTransform(box, transformOnly = </span><span class="s0">false</span><span class="s1">) {</span>
+            <span class="s0">const </span><span class="s1">withTransforms = createBox();</span>
+            <span class="s1">copyBoxInto(withTransforms, box);</span>
+            <span class="s0">for </span><span class="s1">(</span><span class="s0">let </span><span class="s1">i = </span><span class="s3">0</span><span class="s1">; i &lt; </span><span class="s0">this</span><span class="s1">.path.length; i++) {</span>
+                <span class="s0">const </span><span class="s1">node = </span><span class="s0">this</span><span class="s1">.path[i];</span>
+                <span class="s0">if </span><span class="s1">(!transformOnly &amp;&amp;</span>
+                    <span class="s1">node.options.layoutScroll &amp;&amp;</span>
+                    <span class="s1">node.scroll &amp;&amp;</span>
+                    <span class="s1">node !== node.root) {</span>
+                    <span class="s1">transformBox(withTransforms, {</span>
+                        <span class="s1">x: -node.scroll.offset.x,</span>
+                        <span class="s1">y: -node.scroll.offset.y,</span>
+                    <span class="s1">});</span>
+                <span class="s1">}</span>
+                <span class="s0">if </span><span class="s1">(!hasTransform(node.latestValues))</span>
+                    <span class="s0">continue</span><span class="s1">;</span>
+                <span class="s1">transformBox(withTransforms, node.latestValues);</span>
+            <span class="s1">}</span>
+            <span class="s0">if </span><span class="s1">(hasTransform(</span><span class="s0">this</span><span class="s1">.latestValues)) {</span>
+                <span class="s1">transformBox(withTransforms, </span><span class="s0">this</span><span class="s1">.latestValues);</span>
+            <span class="s1">}</span>
+            <span class="s0">return </span><span class="s1">withTransforms;</span>
+        <span class="s1">}</span>
+        <span class="s1">removeTransform(box) {</span>
+            <span class="s0">const </span><span class="s1">boxWithoutTransform = createBox();</span>
+            <span class="s1">copyBoxInto(boxWithoutTransform, box);</span>
+            <span class="s0">for </span><span class="s1">(</span><span class="s0">let </span><span class="s1">i = </span><span class="s3">0</span><span class="s1">; i &lt; </span><span class="s0">this</span><span class="s1">.path.length; i++) {</span>
+                <span class="s0">const </span><span class="s1">node = </span><span class="s0">this</span><span class="s1">.path[i];</span>
+                <span class="s0">if </span><span class="s1">(!node.instance)</span>
+                    <span class="s0">continue</span><span class="s1">;</span>
+                <span class="s0">if </span><span class="s1">(!hasTransform(node.latestValues))</span>
+                    <span class="s0">continue</span><span class="s1">;</span>
+                <span class="s1">hasScale(node.latestValues) &amp;&amp; node.updateSnapshot();</span>
+                <span class="s0">const </span><span class="s1">sourceBox = createBox();</span>
+                <span class="s0">const </span><span class="s1">nodeBox = node.measurePageBox();</span>
+                <span class="s1">copyBoxInto(sourceBox, nodeBox);</span>
+                <span class="s1">removeBoxTransforms(boxWithoutTransform, node.latestValues, node.snapshot ? node.snapshot.layoutBox : undefined, sourceBox);</span>
+            <span class="s1">}</span>
+            <span class="s0">if </span><span class="s1">(hasTransform(</span><span class="s0">this</span><span class="s1">.latestValues)) {</span>
+                <span class="s1">removeBoxTransforms(boxWithoutTransform, </span><span class="s0">this</span><span class="s1">.latestValues);</span>
+            <span class="s1">}</span>
+            <span class="s0">return </span><span class="s1">boxWithoutTransform;</span>
+        <span class="s1">}</span>
+        <span class="s1">setTargetDelta(delta) {</span>
+            <span class="s0">this</span><span class="s1">.targetDelta = delta;</span>
+            <span class="s0">this</span><span class="s1">.root.scheduleUpdateProjection();</span>
+            <span class="s0">this</span><span class="s1">.isProjectionDirty = </span><span class="s0">true</span><span class="s1">;</span>
+        <span class="s1">}</span>
+        <span class="s1">setOptions(options) {</span>
+            <span class="s0">this</span><span class="s1">.options = {</span>
+                <span class="s1">...</span><span class="s0">this</span><span class="s1">.options,</span>
+                <span class="s1">...options,</span>
+                <span class="s1">crossfade: options.crossfade !== undefined ? options.crossfade : </span><span class="s0">true</span><span class="s1">,</span>
+            <span class="s1">};</span>
+        <span class="s1">}</span>
+        <span class="s1">clearMeasurements() {</span>
+            <span class="s0">this</span><span class="s1">.scroll = undefined;</span>
+            <span class="s0">this</span><span class="s1">.layout = undefined;</span>
+            <span class="s0">this</span><span class="s1">.snapshot = undefined;</span>
+            <span class="s0">this</span><span class="s1">.prevTransformTemplateValue = undefined;</span>
+            <span class="s0">this</span><span class="s1">.targetDelta = undefined;</span>
+            <span class="s0">this</span><span class="s1">.target = undefined;</span>
+            <span class="s0">this</span><span class="s1">.isLayoutDirty = </span><span class="s0">false</span><span class="s1">;</span>
+        <span class="s1">}</span>
+        <span class="s1">forceRelativeParentToResolveTarget() {</span>
+            <span class="s0">if </span><span class="s1">(!</span><span class="s0">this</span><span class="s1">.relativeParent)</span>
+                <span class="s0">return</span><span class="s1">;</span>
+            <span class="s4">/**</span>
+             <span class="s4">* If the parent target isn't up-to-date, force it to update.</span>
+             <span class="s4">* This is an unfortunate de-optimisation as it means any updating relative</span>
+             <span class="s4">* projection will cause all the relative parents to recalculate back</span>
+             <span class="s4">* up the tree.</span>
+             <span class="s4">*/</span>
+            <span class="s0">if </span><span class="s1">(</span><span class="s0">this</span><span class="s1">.relativeParent.resolvedRelativeTargetAt !==</span>
+                <span class="s1">frameData.timestamp) {</span>
+                <span class="s0">this</span><span class="s1">.relativeParent.resolveTargetDelta(</span><span class="s0">true</span><span class="s1">);</span>
+            <span class="s1">}</span>
+        <span class="s1">}</span>
+        <span class="s1">resolveTargetDelta(forceRecalculation = </span><span class="s0">false</span><span class="s1">) {</span>
+            <span class="s4">/**</span>
+             <span class="s4">* Once the dirty status of nodes has been spread through the tree, we also</span>
+             <span class="s4">* need to check if we have a shared node of a different depth that has itself</span>
+             <span class="s4">* been dirtied.</span>
+             <span class="s4">*/</span>
+            <span class="s0">const </span><span class="s1">lead = </span><span class="s0">this</span><span class="s1">.getLead();</span>
+            <span class="s0">this</span><span class="s1">.isProjectionDirty || (</span><span class="s0">this</span><span class="s1">.isProjectionDirty = lead.isProjectionDirty);</span>
+            <span class="s0">this</span><span class="s1">.isTransformDirty || (</span><span class="s0">this</span><span class="s1">.isTransformDirty = lead.isTransformDirty);</span>
+            <span class="s0">this</span><span class="s1">.isSharedProjectionDirty || (</span><span class="s0">this</span><span class="s1">.isSharedProjectionDirty = lead.isSharedProjectionDirty);</span>
+            <span class="s0">const </span><span class="s1">isShared = Boolean(</span><span class="s0">this</span><span class="s1">.resumingFrom) || </span><span class="s0">this </span><span class="s1">!== lead;</span>
+            <span class="s4">/**</span>
+             <span class="s4">* We don't use transform for this step of processing so we don't</span>
+             <span class="s4">* need to check whether any nodes have changed transform.</span>
+             <span class="s4">*/</span>
+            <span class="s0">const </span><span class="s1">canSkip = !(forceRecalculation ||</span>
+                <span class="s1">(isShared &amp;&amp; </span><span class="s0">this</span><span class="s1">.isSharedProjectionDirty) ||</span>
+                <span class="s0">this</span><span class="s1">.isProjectionDirty ||</span>
+                <span class="s0">this</span><span class="s1">.parent?.isProjectionDirty ||</span>
+                <span class="s0">this</span><span class="s1">.attemptToResolveRelativeTarget ||</span>
+                <span class="s0">this</span><span class="s1">.root.updateBlockedByResize);</span>
+            <span class="s0">if </span><span class="s1">(canSkip)</span>
+                <span class="s0">return</span><span class="s1">;</span>
+            <span class="s0">const </span><span class="s1">{ layout, layoutId } = </span><span class="s0">this</span><span class="s1">.options;</span>
+            <span class="s4">/**</span>
+             <span class="s4">* If we have no layout, we can't perform projection, so early return</span>
+             <span class="s4">*/</span>
+            <span class="s0">if </span><span class="s1">(!</span><span class="s0">this</span><span class="s1">.layout || !(layout || layoutId))</span>
+                <span class="s0">return</span><span class="s1">;</span>
+            <span class="s0">this</span><span class="s1">.resolvedRelativeTargetAt = frameData.timestamp;</span>
+            <span class="s4">/**</span>
+             <span class="s4">* If we don't have a targetDelta but do have a layout, we can attempt to resolve</span>
+             <span class="s4">* a relativeParent. This will allow a component to perform scale correction</span>
+             <span class="s4">* even if no animation has started.</span>
+             <span class="s4">*/</span>
+            <span class="s0">if </span><span class="s1">(!</span><span class="s0">this</span><span class="s1">.targetDelta &amp;&amp; !</span><span class="s0">this</span><span class="s1">.relativeTarget) {</span>
+                <span class="s0">const </span><span class="s1">relativeParent = </span><span class="s0">this</span><span class="s1">.getClosestProjectingParent();</span>
+                <span class="s0">if </span><span class="s1">(relativeParent &amp;&amp;</span>
+                    <span class="s1">relativeParent.layout &amp;&amp;</span>
+                    <span class="s0">this</span><span class="s1">.animationProgress !== </span><span class="s3">1</span><span class="s1">) {</span>
+                    <span class="s0">this</span><span class="s1">.relativeParent = relativeParent;</span>
+                    <span class="s0">this</span><span class="s1">.forceRelativeParentToResolveTarget();</span>
+                    <span class="s0">this</span><span class="s1">.relativeTarget = createBox();</span>
+                    <span class="s0">this</span><span class="s1">.relativeTargetOrigin = createBox();</span>
+                    <span class="s1">calcRelativePosition(</span><span class="s0">this</span><span class="s1">.relativeTargetOrigin, </span><span class="s0">this</span><span class="s1">.layout.layoutBox, relativeParent.layout.layoutBox);</span>
+                    <span class="s1">copyBoxInto(</span><span class="s0">this</span><span class="s1">.relativeTarget, </span><span class="s0">this</span><span class="s1">.relativeTargetOrigin);</span>
+                <span class="s1">}</span>
+                <span class="s0">else </span><span class="s1">{</span>
+                    <span class="s0">this</span><span class="s1">.relativeParent = </span><span class="s0">this</span><span class="s1">.relativeTarget = undefined;</span>
+                <span class="s1">}</span>
+            <span class="s1">}</span>
+            <span class="s4">/**</span>
+             <span class="s4">* If we have no relative target or no target delta our target isn't valid</span>
+             <span class="s4">* for this frame.</span>
+             <span class="s4">*/</span>
+            <span class="s0">if </span><span class="s1">(!</span><span class="s0">this</span><span class="s1">.relativeTarget &amp;&amp; !</span><span class="s0">this</span><span class="s1">.targetDelta)</span>
+                <span class="s0">return</span><span class="s1">;</span>
+            <span class="s4">/**</span>
+             <span class="s4">* Lazy-init target data structure</span>
+             <span class="s4">*/</span>
+            <span class="s0">if </span><span class="s1">(!</span><span class="s0">this</span><span class="s1">.target) {</span>
+                <span class="s0">this</span><span class="s1">.target = createBox();</span>
+                <span class="s0">this</span><span class="s1">.targetWithTransforms = createBox();</span>
+            <span class="s1">}</span>
+            <span class="s4">/**</span>
+             <span class="s4">* If we've got a relative box for this component, resolve it into a target relative to the parent.</span>
+             <span class="s4">*/</span>
+            <span class="s0">if </span><span class="s1">(</span><span class="s0">this</span><span class="s1">.relativeTarget &amp;&amp;</span>
+                <span class="s0">this</span><span class="s1">.relativeTargetOrigin &amp;&amp;</span>
+                <span class="s0">this</span><span class="s1">.relativeParent &amp;&amp;</span>
+                <span class="s0">this</span><span class="s1">.relativeParent.target) {</span>
+                <span class="s0">this</span><span class="s1">.forceRelativeParentToResolveTarget();</span>
+                <span class="s1">calcRelativeBox(</span><span class="s0">this</span><span class="s1">.target, </span><span class="s0">this</span><span class="s1">.relativeTarget, </span><span class="s0">this</span><span class="s1">.relativeParent.target);</span>
+                <span class="s4">/**</span>
+                 <span class="s4">* If we've only got a targetDelta, resolve it into a target</span>
+                 <span class="s4">*/</span>
+            <span class="s1">}</span>
+            <span class="s0">else if </span><span class="s1">(</span><span class="s0">this</span><span class="s1">.targetDelta) {</span>
+                <span class="s0">if </span><span class="s1">(Boolean(</span><span class="s0">this</span><span class="s1">.resumingFrom)) {</span>
+                    <span class="s4">// TODO: This is creating a new object every frame</span>
+                    <span class="s0">this</span><span class="s1">.target = </span><span class="s0">this</span><span class="s1">.applyTransform(</span><span class="s0">this</span><span class="s1">.layout.layoutBox);</span>
+                <span class="s1">}</span>
+                <span class="s0">else </span><span class="s1">{</span>
+                    <span class="s1">copyBoxInto(</span><span class="s0">this</span><span class="s1">.target, </span><span class="s0">this</span><span class="s1">.layout.layoutBox);</span>
+                <span class="s1">}</span>
+                <span class="s1">applyBoxDelta(</span><span class="s0">this</span><span class="s1">.target, </span><span class="s0">this</span><span class="s1">.targetDelta);</span>
+            <span class="s1">}</span>
+            <span class="s0">else </span><span class="s1">{</span>
+                <span class="s4">/**</span>
+                 <span class="s4">* If no target, use own layout as target</span>
+                 <span class="s4">*/</span>
+                <span class="s1">copyBoxInto(</span><span class="s0">this</span><span class="s1">.target, </span><span class="s0">this</span><span class="s1">.layout.layoutBox);</span>
+            <span class="s1">}</span>
+            <span class="s4">/**</span>
+             <span class="s4">* If we've been told to attempt to resolve a relative target, do so.</span>
+             <span class="s4">*/</span>
+            <span class="s0">if </span><span class="s1">(</span><span class="s0">this</span><span class="s1">.attemptToResolveRelativeTarget) {</span>
+                <span class="s0">this</span><span class="s1">.attemptToResolveRelativeTarget = </span><span class="s0">false</span><span class="s1">;</span>
+                <span class="s0">const </span><span class="s1">relativeParent = </span><span class="s0">this</span><span class="s1">.getClosestProjectingParent();</span>
+                <span class="s0">if </span><span class="s1">(relativeParent &amp;&amp;</span>
+                    <span class="s1">Boolean(relativeParent.resumingFrom) ===</span>
+                        <span class="s1">Boolean(</span><span class="s0">this</span><span class="s1">.resumingFrom) &amp;&amp;</span>
+                    <span class="s1">!relativeParent.options.layoutScroll &amp;&amp;</span>
+                    <span class="s1">relativeParent.target &amp;&amp;</span>
+                    <span class="s0">this</span><span class="s1">.animationProgress !== </span><span class="s3">1</span><span class="s1">) {</span>
+                    <span class="s0">this</span><span class="s1">.relativeParent = relativeParent;</span>
+                    <span class="s0">this</span><span class="s1">.forceRelativeParentToResolveTarget();</span>
+                    <span class="s0">this</span><span class="s1">.relativeTarget = createBox();</span>
+                    <span class="s0">this</span><span class="s1">.relativeTargetOrigin = createBox();</span>
+                    <span class="s1">calcRelativePosition(</span><span class="s0">this</span><span class="s1">.relativeTargetOrigin, </span><span class="s0">this</span><span class="s1">.target, relativeParent.target);</span>
+                    <span class="s1">copyBoxInto(</span><span class="s0">this</span><span class="s1">.relativeTarget, </span><span class="s0">this</span><span class="s1">.relativeTargetOrigin);</span>
+                <span class="s1">}</span>
+                <span class="s0">else </span><span class="s1">{</span>
+                    <span class="s0">this</span><span class="s1">.relativeParent = </span><span class="s0">this</span><span class="s1">.relativeTarget = undefined;</span>
+                <span class="s1">}</span>
+            <span class="s1">}</span>
+            <span class="s4">/**</span>
+             <span class="s4">* Increase debug counter for resolved target deltas</span>
+             <span class="s4">*/</span>
+            <span class="s0">if </span><span class="s1">(statsBuffer.value) {</span>
+                <span class="s1">metrics.calculatedTargetDeltas++;</span>
+            <span class="s1">}</span>
+        <span class="s1">}</span>
+        <span class="s1">getClosestProjectingParent() {</span>
+            <span class="s0">if </span><span class="s1">(!</span><span class="s0">this</span><span class="s1">.parent ||</span>
+                <span class="s1">hasScale(</span><span class="s0">this</span><span class="s1">.parent.latestValues) ||</span>
+                <span class="s1">has2DTranslate(</span><span class="s0">this</span><span class="s1">.parent.latestValues)) {</span>
+                <span class="s0">return </span><span class="s1">undefined;</span>
+            <span class="s1">}</span>
+            <span class="s0">if </span><span class="s1">(</span><span class="s0">this</span><span class="s1">.parent.isProjecting()) {</span>
+                <span class="s0">return this</span><span class="s1">.parent;</span>
+            <span class="s1">}</span>
+            <span class="s0">else </span><span class="s1">{</span>
+                <span class="s0">return this</span><span class="s1">.parent.getClosestProjectingParent();</span>
+            <span class="s1">}</span>
+        <span class="s1">}</span>
+        <span class="s1">isProjecting() {</span>
+            <span class="s0">return </span><span class="s1">Boolean((</span><span class="s0">this</span><span class="s1">.relativeTarget ||</span>
+                <span class="s0">this</span><span class="s1">.targetDelta ||</span>
+                <span class="s0">this</span><span class="s1">.options.layoutRoot) &amp;&amp;</span>
+                <span class="s0">this</span><span class="s1">.layout);</span>
+        <span class="s1">}</span>
+        <span class="s1">calcProjection() {</span>
+            <span class="s0">const </span><span class="s1">lead = </span><span class="s0">this</span><span class="s1">.getLead();</span>
+            <span class="s0">const </span><span class="s1">isShared = Boolean(</span><span class="s0">this</span><span class="s1">.resumingFrom) || </span><span class="s0">this </span><span class="s1">!== lead;</span>
+            <span class="s0">let </span><span class="s1">canSkip = </span><span class="s0">true</span><span class="s1">;</span>
+            <span class="s4">/**</span>
+             <span class="s4">* If this is a normal layout animation and neither this node nor its nearest projecting</span>
+             <span class="s4">* is dirty then we can't skip.</span>
+             <span class="s4">*/</span>
+            <span class="s0">if </span><span class="s1">(</span><span class="s0">this</span><span class="s1">.isProjectionDirty || </span><span class="s0">this</span><span class="s1">.parent?.isProjectionDirty) {</span>
+                <span class="s1">canSkip = </span><span class="s0">false</span><span class="s1">;</span>
+            <span class="s1">}</span>
+            <span class="s4">/**</span>
+             <span class="s4">* If this is a shared layout animation and this node's shared projection is dirty then</span>
+             <span class="s4">* we can't skip.</span>
+             <span class="s4">*/</span>
+            <span class="s0">if </span><span class="s1">(isShared &amp;&amp;</span>
+                <span class="s1">(</span><span class="s0">this</span><span class="s1">.isSharedProjectionDirty || </span><span class="s0">this</span><span class="s1">.isTransformDirty)) {</span>
+                <span class="s1">canSkip = </span><span class="s0">false</span><span class="s1">;</span>
+            <span class="s1">}</span>
+            <span class="s4">/**</span>
+             <span class="s4">* If we have resolved the target this frame we must recalculate the</span>
+             <span class="s4">* projection to ensure it visually represents the internal calculations.</span>
+             <span class="s4">*/</span>
+            <span class="s0">if </span><span class="s1">(</span><span class="s0">this</span><span class="s1">.resolvedRelativeTargetAt === frameData.timestamp) {</span>
+                <span class="s1">canSkip = </span><span class="s0">false</span><span class="s1">;</span>
+            <span class="s1">}</span>
+            <span class="s0">if </span><span class="s1">(canSkip)</span>
+                <span class="s0">return</span><span class="s1">;</span>
+            <span class="s0">const </span><span class="s1">{ layout, layoutId } = </span><span class="s0">this</span><span class="s1">.options;</span>
+            <span class="s4">/**</span>
+             <span class="s4">* If this section of the tree isn't animating we can</span>
+             <span class="s4">* delete our target sources for the following frame.</span>
+             <span class="s4">*/</span>
+            <span class="s0">this</span><span class="s1">.isTreeAnimating = Boolean((</span><span class="s0">this</span><span class="s1">.parent &amp;&amp; </span><span class="s0">this</span><span class="s1">.parent.isTreeAnimating) ||</span>
+                <span class="s0">this</span><span class="s1">.currentAnimation ||</span>
+                <span class="s0">this</span><span class="s1">.pendingAnimation);</span>
+            <span class="s0">if </span><span class="s1">(!</span><span class="s0">this</span><span class="s1">.isTreeAnimating) {</span>
+                <span class="s0">this</span><span class="s1">.targetDelta = </span><span class="s0">this</span><span class="s1">.relativeTarget = undefined;</span>
+            <span class="s1">}</span>
+            <span class="s0">if </span><span class="s1">(!</span><span class="s0">this</span><span class="s1">.layout || !(layout || layoutId))</span>
+                <span class="s0">return</span><span class="s1">;</span>
+            <span class="s4">/**</span>
+             <span class="s4">* Reset the corrected box with the latest values from box, as we're then going</span>
+             <span class="s4">* to perform mutative operations on it.</span>
+             <span class="s4">*/</span>
+            <span class="s1">copyBoxInto(</span><span class="s0">this</span><span class="s1">.layoutCorrected, </span><span class="s0">this</span><span class="s1">.layout.layoutBox);</span>
+            <span class="s4">/**</span>
+             <span class="s4">* Record previous tree scales before updating.</span>
+             <span class="s4">*/</span>
+            <span class="s0">const </span><span class="s1">prevTreeScaleX = </span><span class="s0">this</span><span class="s1">.treeScale.x;</span>
+            <span class="s0">const </span><span class="s1">prevTreeScaleY = </span><span class="s0">this</span><span class="s1">.treeScale.y;</span>
+            <span class="s4">/**</span>
+             <span class="s4">* Apply all the parent deltas to this box to produce the corrected box. This</span>
+             <span class="s4">* is the layout box, as it will appear on screen as a result of the transforms of its parents.</span>
+             <span class="s4">*/</span>
+            <span class="s1">applyTreeDeltas(</span><span class="s0">this</span><span class="s1">.layoutCorrected, </span><span class="s0">this</span><span class="s1">.treeScale, </span><span class="s0">this</span><span class="s1">.path, isShared);</span>
+            <span class="s4">/**</span>
+             <span class="s4">* If this layer needs to perform scale correction but doesn't have a target,</span>
+             <span class="s4">* use the layout as the target.</span>
+             <span class="s4">*/</span>
+            <span class="s0">if </span><span class="s1">(lead.layout &amp;&amp;</span>
+                <span class="s1">!lead.target &amp;&amp;</span>
+                <span class="s1">(</span><span class="s0">this</span><span class="s1">.treeScale.x !== </span><span class="s3">1 </span><span class="s1">|| </span><span class="s0">this</span><span class="s1">.treeScale.y !== </span><span class="s3">1</span><span class="s1">)) {</span>
+                <span class="s1">lead.target = lead.layout.layoutBox;</span>
+                <span class="s1">lead.targetWithTransforms = createBox();</span>
+            <span class="s1">}</span>
+            <span class="s0">const </span><span class="s1">{ target } = lead;</span>
+            <span class="s0">if </span><span class="s1">(!target) {</span>
+                <span class="s4">/**</span>
+                 <span class="s4">* If we don't have a target to project into, but we were previously</span>
+                 <span class="s4">* projecting, we want to remove the stored transform and schedule</span>
+                 <span class="s4">* a render to ensure the elements reflect the removed transform.</span>
+                 <span class="s4">*/</span>
+                <span class="s0">if </span><span class="s1">(</span><span class="s0">this</span><span class="s1">.prevProjectionDelta) {</span>
+                    <span class="s0">this</span><span class="s1">.createProjectionDeltas();</span>
+                    <span class="s0">this</span><span class="s1">.scheduleRender();</span>
+                <span class="s1">}</span>
+                <span class="s0">return</span><span class="s1">;</span>
+            <span class="s1">}</span>
+            <span class="s0">if </span><span class="s1">(!</span><span class="s0">this</span><span class="s1">.projectionDelta || !</span><span class="s0">this</span><span class="s1">.prevProjectionDelta) {</span>
+                <span class="s0">this</span><span class="s1">.createProjectionDeltas();</span>
+            <span class="s1">}</span>
+            <span class="s0">else </span><span class="s1">{</span>
+                <span class="s1">copyAxisDeltaInto(</span><span class="s0">this</span><span class="s1">.prevProjectionDelta.x, </span><span class="s0">this</span><span class="s1">.projectionDelta.x);</span>
+                <span class="s1">copyAxisDeltaInto(</span><span class="s0">this</span><span class="s1">.prevProjectionDelta.y, </span><span class="s0">this</span><span class="s1">.projectionDelta.y);</span>
+            <span class="s1">}</span>
+            <span class="s4">/**</span>
+             <span class="s4">* Update the delta between the corrected box and the target box before user-set transforms were applied.</span>
+             <span class="s4">* This will allow us to calculate the corrected borderRadius and boxShadow to compensate</span>
+             <span class="s4">* for our layout reprojection, but still allow them to be scaled correctly by the user.</span>
+             <span class="s4">* It might be that to simplify this we may want to accept that user-set scale is also corrected</span>
+             <span class="s4">* and we wouldn't have to keep and calc both deltas, OR we could support a user setting</span>
+             <span class="s4">* to allow people to choose whether these styles are corrected based on just the</span>
+             <span class="s4">* layout reprojection or the final bounding box.</span>
+             <span class="s4">*/</span>
+            <span class="s1">calcBoxDelta(</span><span class="s0">this</span><span class="s1">.projectionDelta, </span><span class="s0">this</span><span class="s1">.layoutCorrected, target, </span><span class="s0">this</span><span class="s1">.latestValues);</span>
+            <span class="s0">if </span><span class="s1">(</span><span class="s0">this</span><span class="s1">.treeScale.x !== prevTreeScaleX ||</span>
+                <span class="s0">this</span><span class="s1">.treeScale.y !== prevTreeScaleY ||</span>
+                <span class="s1">!axisDeltaEquals(</span><span class="s0">this</span><span class="s1">.projectionDelta.x, </span><span class="s0">this</span><span class="s1">.prevProjectionDelta.x) ||</span>
+                <span class="s1">!axisDeltaEquals(</span><span class="s0">this</span><span class="s1">.projectionDelta.y, </span><span class="s0">this</span><span class="s1">.prevProjectionDelta.y)) {</span>
+                <span class="s0">this</span><span class="s1">.hasProjected = </span><span class="s0">true</span><span class="s1">;</span>
+                <span class="s0">this</span><span class="s1">.scheduleRender();</span>
+                <span class="s0">this</span><span class="s1">.notifyListeners(</span><span class="s2">&quot;projectionUpdate&quot;</span><span class="s1">, target);</span>
+            <span class="s1">}</span>
+            <span class="s4">/**</span>
+             <span class="s4">* Increase debug counter for recalculated projections</span>
+             <span class="s4">*/</span>
+            <span class="s0">if </span><span class="s1">(statsBuffer.value) {</span>
+                <span class="s1">metrics.calculatedProjections++;</span>
+            <span class="s1">}</span>
+        <span class="s1">}</span>
+        <span class="s1">hide() {</span>
+            <span class="s0">this</span><span class="s1">.isVisible = </span><span class="s0">false</span><span class="s1">;</span>
+            <span class="s4">// TODO: Schedule render</span>
+        <span class="s1">}</span>
+        <span class="s1">show() {</span>
+            <span class="s0">this</span><span class="s1">.isVisible = </span><span class="s0">true</span><span class="s1">;</span>
+            <span class="s4">// TODO: Schedule render</span>
+        <span class="s1">}</span>
+        <span class="s1">scheduleRender(notifyAll = </span><span class="s0">true</span><span class="s1">) {</span>
+            <span class="s0">this</span><span class="s1">.options.visualElement?.scheduleRender();</span>
+            <span class="s0">if </span><span class="s1">(notifyAll) {</span>
+                <span class="s0">const </span><span class="s1">stack = </span><span class="s0">this</span><span class="s1">.getStack();</span>
+                <span class="s1">stack &amp;&amp; stack.scheduleRender();</span>
+            <span class="s1">}</span>
+            <span class="s0">if </span><span class="s1">(</span><span class="s0">this</span><span class="s1">.resumingFrom &amp;&amp; !</span><span class="s0">this</span><span class="s1">.resumingFrom.instance) {</span>
+                <span class="s0">this</span><span class="s1">.resumingFrom = undefined;</span>
+            <span class="s1">}</span>
+        <span class="s1">}</span>
+        <span class="s1">createProjectionDeltas() {</span>
+            <span class="s0">this</span><span class="s1">.prevProjectionDelta = createDelta();</span>
+            <span class="s0">this</span><span class="s1">.projectionDelta = createDelta();</span>
+            <span class="s0">this</span><span class="s1">.projectionDeltaWithTransform = createDelta();</span>
+        <span class="s1">}</span>
+        <span class="s1">setAnimationOrigin(delta, hasOnlyRelativeTargetChanged = </span><span class="s0">false</span><span class="s1">) {</span>
+            <span class="s0">const </span><span class="s1">snapshot = </span><span class="s0">this</span><span class="s1">.snapshot;</span>
+            <span class="s0">const </span><span class="s1">snapshotLatestValues = snapshot ? snapshot.latestValues : {};</span>
+            <span class="s0">const </span><span class="s1">mixedValues = { ...</span><span class="s0">this</span><span class="s1">.latestValues };</span>
+            <span class="s0">const </span><span class="s1">targetDelta = createDelta();</span>
+            <span class="s0">if </span><span class="s1">(!</span><span class="s0">this</span><span class="s1">.relativeParent ||</span>
+                <span class="s1">!</span><span class="s0">this</span><span class="s1">.relativeParent.options.layoutRoot) {</span>
+                <span class="s0">this</span><span class="s1">.relativeTarget = </span><span class="s0">this</span><span class="s1">.relativeTargetOrigin = undefined;</span>
+            <span class="s1">}</span>
+            <span class="s0">this</span><span class="s1">.attemptToResolveRelativeTarget = !hasOnlyRelativeTargetChanged;</span>
+            <span class="s0">const </span><span class="s1">relativeLayout = createBox();</span>
+            <span class="s0">const </span><span class="s1">snapshotSource = snapshot ? snapshot.source : undefined;</span>
+            <span class="s0">const </span><span class="s1">layoutSource = </span><span class="s0">this</span><span class="s1">.layout ? </span><span class="s0">this</span><span class="s1">.layout.source : undefined;</span>
+            <span class="s0">const </span><span class="s1">isSharedLayoutAnimation = snapshotSource !== layoutSource;</span>
+            <span class="s0">const </span><span class="s1">stack = </span><span class="s0">this</span><span class="s1">.getStack();</span>
+            <span class="s0">const </span><span class="s1">isOnlyMember = !stack || stack.members.length &lt;= </span><span class="s3">1</span><span class="s1">;</span>
+            <span class="s0">const </span><span class="s1">shouldCrossfadeOpacity = Boolean(isSharedLayoutAnimation &amp;&amp;</span>
+                <span class="s1">!isOnlyMember &amp;&amp;</span>
+                <span class="s0">this</span><span class="s1">.options.crossfade === </span><span class="s0">true </span><span class="s1">&amp;&amp;</span>
+                <span class="s1">!</span><span class="s0">this</span><span class="s1">.path.some(hasOpacityCrossfade));</span>
+            <span class="s0">this</span><span class="s1">.animationProgress = </span><span class="s3">0</span><span class="s1">;</span>
+            <span class="s0">let </span><span class="s1">prevRelativeTarget;</span>
+            <span class="s0">this</span><span class="s1">.mixTargetDelta = (latest) =&gt; {</span>
+                <span class="s0">const </span><span class="s1">progress = latest / </span><span class="s3">1000</span><span class="s1">;</span>
+                <span class="s1">mixAxisDelta(targetDelta.x, delta.x, progress);</span>
+                <span class="s1">mixAxisDelta(targetDelta.y, delta.y, progress);</span>
+                <span class="s0">this</span><span class="s1">.setTargetDelta(targetDelta);</span>
+                <span class="s0">if </span><span class="s1">(</span><span class="s0">this</span><span class="s1">.relativeTarget &amp;&amp;</span>
+                    <span class="s0">this</span><span class="s1">.relativeTargetOrigin &amp;&amp;</span>
+                    <span class="s0">this</span><span class="s1">.layout &amp;&amp;</span>
+                    <span class="s0">this</span><span class="s1">.relativeParent &amp;&amp;</span>
+                    <span class="s0">this</span><span class="s1">.relativeParent.layout) {</span>
+                    <span class="s1">calcRelativePosition(relativeLayout, </span><span class="s0">this</span><span class="s1">.layout.layoutBox, </span><span class="s0">this</span><span class="s1">.relativeParent.layout.layoutBox);</span>
+                    <span class="s1">mixBox(</span><span class="s0">this</span><span class="s1">.relativeTarget, </span><span class="s0">this</span><span class="s1">.relativeTargetOrigin, relativeLayout, progress);</span>
+                    <span class="s4">/**</span>
+                     <span class="s4">* If this is an unchanged relative target we can consider the</span>
+                     <span class="s4">* projection not dirty.</span>
+                     <span class="s4">*/</span>
+                    <span class="s0">if </span><span class="s1">(prevRelativeTarget &amp;&amp;</span>
+                        <span class="s1">boxEquals(</span><span class="s0">this</span><span class="s1">.relativeTarget, prevRelativeTarget)) {</span>
+                        <span class="s0">this</span><span class="s1">.isProjectionDirty = </span><span class="s0">false</span><span class="s1">;</span>
+                    <span class="s1">}</span>
+                    <span class="s0">if </span><span class="s1">(!prevRelativeTarget)</span>
+                        <span class="s1">prevRelativeTarget = createBox();</span>
+                    <span class="s1">copyBoxInto(prevRelativeTarget, </span><span class="s0">this</span><span class="s1">.relativeTarget);</span>
+                <span class="s1">}</span>
+                <span class="s0">if </span><span class="s1">(isSharedLayoutAnimation) {</span>
+                    <span class="s0">this</span><span class="s1">.animationValues = mixedValues;</span>
+                    <span class="s1">mixValues(mixedValues, snapshotLatestValues, </span><span class="s0">this</span><span class="s1">.latestValues, progress, shouldCrossfadeOpacity, isOnlyMember);</span>
+                <span class="s1">}</span>
+                <span class="s0">this</span><span class="s1">.root.scheduleUpdateProjection();</span>
+                <span class="s0">this</span><span class="s1">.scheduleRender();</span>
+                <span class="s0">this</span><span class="s1">.animationProgress = progress;</span>
+            <span class="s1">};</span>
+            <span class="s0">this</span><span class="s1">.mixTargetDelta(</span><span class="s0">this</span><span class="s1">.options.layoutRoot ? </span><span class="s3">1000 </span><span class="s1">: </span><span class="s3">0</span><span class="s1">);</span>
+        <span class="s1">}</span>
+        <span class="s1">startAnimation(options) {</span>
+            <span class="s0">this</span><span class="s1">.notifyListeners(</span><span class="s2">&quot;animationStart&quot;</span><span class="s1">);</span>
+            <span class="s0">this</span><span class="s1">.currentAnimation?.stop();</span>
+            <span class="s0">this</span><span class="s1">.resumingFrom?.currentAnimation?.stop();</span>
+            <span class="s0">if </span><span class="s1">(</span><span class="s0">this</span><span class="s1">.pendingAnimation) {</span>
+                <span class="s1">cancelFrame(</span><span class="s0">this</span><span class="s1">.pendingAnimation);</span>
+                <span class="s0">this</span><span class="s1">.pendingAnimation = undefined;</span>
+            <span class="s1">}</span>
+            <span class="s4">/**</span>
+             <span class="s4">* Start the animation in the next frame to have a frame with progress 0,</span>
+             <span class="s4">* where the target is the same as when the animation started, so we can</span>
+             <span class="s4">* calculate the relative positions correctly for instant transitions.</span>
+             <span class="s4">*/</span>
+            <span class="s0">this</span><span class="s1">.pendingAnimation = frame.update(() =&gt; {</span>
+                <span class="s1">globalProjectionState.hasAnimatedSinceResize = </span><span class="s0">true</span><span class="s1">;</span>
+                <span class="s1">activeAnimations.layout++;</span>
+                <span class="s0">this</span><span class="s1">.motionValue || (</span><span class="s0">this</span><span class="s1">.motionValue = motionValue(</span><span class="s3">0</span><span class="s1">));</span>
+                <span class="s0">this</span><span class="s1">.currentAnimation = animateSingleValue(</span><span class="s0">this</span><span class="s1">.motionValue, [</span><span class="s3">0</span><span class="s1">, </span><span class="s3">1000</span><span class="s1">], {</span>
+                    <span class="s1">...options,</span>
+                    <span class="s1">velocity: </span><span class="s3">0</span><span class="s1">,</span>
+                    <span class="s1">isSync: </span><span class="s0">true</span><span class="s1">,</span>
+                    <span class="s1">onUpdate: (latest) =&gt; {</span>
+                        <span class="s0">this</span><span class="s1">.mixTargetDelta(latest);</span>
+                        <span class="s1">options.onUpdate &amp;&amp; options.onUpdate(latest);</span>
+                    <span class="s1">},</span>
+                    <span class="s1">onStop: () =&gt; {</span>
+                        <span class="s1">activeAnimations.layout--;</span>
+                    <span class="s1">},</span>
+                    <span class="s1">onComplete: () =&gt; {</span>
+                        <span class="s1">activeAnimations.layout--;</span>
+                        <span class="s1">options.onComplete &amp;&amp; options.onComplete();</span>
+                        <span class="s0">this</span><span class="s1">.completeAnimation();</span>
+                    <span class="s1">},</span>
+                <span class="s1">});</span>
+                <span class="s0">if </span><span class="s1">(</span><span class="s0">this</span><span class="s1">.resumingFrom) {</span>
+                    <span class="s0">this</span><span class="s1">.resumingFrom.currentAnimation = </span><span class="s0">this</span><span class="s1">.currentAnimation;</span>
+                <span class="s1">}</span>
+                <span class="s0">this</span><span class="s1">.pendingAnimation = undefined;</span>
+            <span class="s1">});</span>
+        <span class="s1">}</span>
+        <span class="s1">completeAnimation() {</span>
+            <span class="s0">if </span><span class="s1">(</span><span class="s0">this</span><span class="s1">.resumingFrom) {</span>
+                <span class="s0">this</span><span class="s1">.resumingFrom.currentAnimation = undefined;</span>
+                <span class="s0">this</span><span class="s1">.resumingFrom.preserveOpacity = undefined;</span>
+            <span class="s1">}</span>
+            <span class="s0">const </span><span class="s1">stack = </span><span class="s0">this</span><span class="s1">.getStack();</span>
+            <span class="s1">stack &amp;&amp; stack.exitAnimationComplete();</span>
+            <span class="s0">this</span><span class="s1">.resumingFrom =</span>
+                <span class="s0">this</span><span class="s1">.currentAnimation =</span>
+                    <span class="s0">this</span><span class="s1">.animationValues =</span>
+                        <span class="s1">undefined;</span>
+            <span class="s0">this</span><span class="s1">.notifyListeners(</span><span class="s2">&quot;animationComplete&quot;</span><span class="s1">);</span>
+        <span class="s1">}</span>
+        <span class="s1">finishAnimation() {</span>
+            <span class="s0">if </span><span class="s1">(</span><span class="s0">this</span><span class="s1">.currentAnimation) {</span>
+                <span class="s0">this</span><span class="s1">.mixTargetDelta &amp;&amp; </span><span class="s0">this</span><span class="s1">.mixTargetDelta(animationTarget);</span>
+                <span class="s0">this</span><span class="s1">.currentAnimation.stop();</span>
+            <span class="s1">}</span>
+            <span class="s0">this</span><span class="s1">.completeAnimation();</span>
+        <span class="s1">}</span>
+        <span class="s1">applyTransformsToTarget() {</span>
+            <span class="s0">const </span><span class="s1">lead = </span><span class="s0">this</span><span class="s1">.getLead();</span>
+            <span class="s0">let </span><span class="s1">{ targetWithTransforms, target, layout, latestValues } = lead;</span>
+            <span class="s0">if </span><span class="s1">(!targetWithTransforms || !target || !layout)</span>
+                <span class="s0">return</span><span class="s1">;</span>
+            <span class="s4">/**</span>
+             <span class="s4">* If we're only animating position, and this element isn't the lead element,</span>
+             <span class="s4">* then instead of projecting into the lead box we instead want to calculate</span>
+             <span class="s4">* a new target that aligns the two boxes but maintains the layout shape.</span>
+             <span class="s4">*/</span>
+            <span class="s0">if </span><span class="s1">(</span><span class="s0">this </span><span class="s1">!== lead &amp;&amp;</span>
+                <span class="s0">this</span><span class="s1">.layout &amp;&amp;</span>
+                <span class="s1">layout &amp;&amp;</span>
+                <span class="s1">shouldAnimatePositionOnly(</span><span class="s0">this</span><span class="s1">.options.animationType, </span><span class="s0">this</span><span class="s1">.layout.layoutBox, layout.layoutBox)) {</span>
+                <span class="s1">target = </span><span class="s0">this</span><span class="s1">.target || createBox();</span>
+                <span class="s0">const </span><span class="s1">xLength = calcLength(</span><span class="s0">this</span><span class="s1">.layout.layoutBox.x);</span>
+                <span class="s1">target.x.min = lead.target.x.min;</span>
+                <span class="s1">target.x.max = target.x.min + xLength;</span>
+                <span class="s0">const </span><span class="s1">yLength = calcLength(</span><span class="s0">this</span><span class="s1">.layout.layoutBox.y);</span>
+                <span class="s1">target.y.min = lead.target.y.min;</span>
+                <span class="s1">target.y.max = target.y.min + yLength;</span>
+            <span class="s1">}</span>
+            <span class="s1">copyBoxInto(targetWithTransforms, target);</span>
+            <span class="s4">/**</span>
+             <span class="s4">* Apply the latest user-set transforms to the targetBox to produce the targetBoxFinal.</span>
+             <span class="s4">* This is the final box that we will then project into by calculating a transform delta and</span>
+             <span class="s4">* applying it to the corrected box.</span>
+             <span class="s4">*/</span>
+            <span class="s1">transformBox(targetWithTransforms, latestValues);</span>
+            <span class="s4">/**</span>
+             <span class="s4">* Update the delta between the corrected box and the final target box, after</span>
+             <span class="s4">* user-set transforms are applied to it. This will be used by the renderer to</span>
+             <span class="s4">* create a transform style that will reproject the element from its layout layout</span>
+             <span class="s4">* into the desired bounding box.</span>
+             <span class="s4">*/</span>
+            <span class="s1">calcBoxDelta(</span><span class="s0">this</span><span class="s1">.projectionDeltaWithTransform, </span><span class="s0">this</span><span class="s1">.layoutCorrected, targetWithTransforms, latestValues);</span>
+        <span class="s1">}</span>
+        <span class="s1">registerSharedNode(layoutId, node) {</span>
+            <span class="s0">if </span><span class="s1">(!</span><span class="s0">this</span><span class="s1">.sharedNodes.has(layoutId)) {</span>
+                <span class="s0">this</span><span class="s1">.sharedNodes.set(layoutId, </span><span class="s0">new </span><span class="s1">NodeStack());</span>
+            <span class="s1">}</span>
+            <span class="s0">const </span><span class="s1">stack = </span><span class="s0">this</span><span class="s1">.sharedNodes.get(layoutId);</span>
+            <span class="s1">stack.add(node);</span>
+            <span class="s0">const </span><span class="s1">config = node.options.initialPromotionConfig;</span>
+            <span class="s1">node.promote({</span>
+                <span class="s1">transition: config ? config.transition : undefined,</span>
+                <span class="s1">preserveFollowOpacity: config &amp;&amp; config.shouldPreserveFollowOpacity</span>
+                    <span class="s1">? config.shouldPreserveFollowOpacity(node)</span>
+                    <span class="s1">: undefined,</span>
+            <span class="s1">});</span>
+        <span class="s1">}</span>
+        <span class="s1">isLead() {</span>
+            <span class="s0">const </span><span class="s1">stack = </span><span class="s0">this</span><span class="s1">.getStack();</span>
+            <span class="s0">return </span><span class="s1">stack ? stack.lead === </span><span class="s0">this </span><span class="s1">: </span><span class="s0">true</span><span class="s1">;</span>
+        <span class="s1">}</span>
+        <span class="s1">getLead() {</span>
+            <span class="s0">const </span><span class="s1">{ layoutId } = </span><span class="s0">this</span><span class="s1">.options;</span>
+            <span class="s0">return </span><span class="s1">layoutId ? </span><span class="s0">this</span><span class="s1">.getStack()?.lead || </span><span class="s0">this </span><span class="s1">: </span><span class="s0">this</span><span class="s1">;</span>
+        <span class="s1">}</span>
+        <span class="s1">getPrevLead() {</span>
+            <span class="s0">const </span><span class="s1">{ layoutId } = </span><span class="s0">this</span><span class="s1">.options;</span>
+            <span class="s0">return </span><span class="s1">layoutId ? </span><span class="s0">this</span><span class="s1">.getStack()?.prevLead : undefined;</span>
+        <span class="s1">}</span>
+        <span class="s1">getStack() {</span>
+            <span class="s0">const </span><span class="s1">{ layoutId } = </span><span class="s0">this</span><span class="s1">.options;</span>
+            <span class="s0">if </span><span class="s1">(layoutId)</span>
+                <span class="s0">return this</span><span class="s1">.root.sharedNodes.get(layoutId);</span>
+        <span class="s1">}</span>
+        <span class="s1">promote({ needsReset, transition, preserveFollowOpacity, } = {}) {</span>
+            <span class="s0">const </span><span class="s1">stack = </span><span class="s0">this</span><span class="s1">.getStack();</span>
+            <span class="s0">if </span><span class="s1">(stack)</span>
+                <span class="s1">stack.promote(</span><span class="s0">this</span><span class="s1">, preserveFollowOpacity);</span>
+            <span class="s0">if </span><span class="s1">(needsReset) {</span>
+                <span class="s0">this</span><span class="s1">.projectionDelta = undefined;</span>
+                <span class="s0">this</span><span class="s1">.needsReset = </span><span class="s0">true</span><span class="s1">;</span>
+            <span class="s1">}</span>
+            <span class="s0">if </span><span class="s1">(transition)</span>
+                <span class="s0">this</span><span class="s1">.setOptions({ transition });</span>
+        <span class="s1">}</span>
+        <span class="s1">relegate() {</span>
+            <span class="s0">const </span><span class="s1">stack = </span><span class="s0">this</span><span class="s1">.getStack();</span>
+            <span class="s0">if </span><span class="s1">(stack) {</span>
+                <span class="s0">return </span><span class="s1">stack.relegate(</span><span class="s0">this</span><span class="s1">);</span>
+            <span class="s1">}</span>
+            <span class="s0">else </span><span class="s1">{</span>
+                <span class="s0">return false</span><span class="s1">;</span>
+            <span class="s1">}</span>
+        <span class="s1">}</span>
+        <span class="s1">resetSkewAndRotation() {</span>
+            <span class="s0">const </span><span class="s1">{ visualElement } = </span><span class="s0">this</span><span class="s1">.options;</span>
+            <span class="s0">if </span><span class="s1">(!visualElement)</span>
+                <span class="s0">return</span><span class="s1">;</span>
+            <span class="s4">// If there's no detected skew or rotation values, we can early return without a forced render.</span>
+            <span class="s0">let </span><span class="s1">hasDistortingTransform = </span><span class="s0">false</span><span class="s1">;</span>
+            <span class="s4">/**</span>
+             <span class="s4">* An unrolled check for rotation values. Most elements don't have any rotation and</span>
+             <span class="s4">* skipping the nested loop and new object creation is 50% faster.</span>
+             <span class="s4">*/</span>
+            <span class="s0">const </span><span class="s1">{ latestValues } = visualElement;</span>
+            <span class="s0">if </span><span class="s1">(latestValues.z ||</span>
+                <span class="s1">latestValues.rotate ||</span>
+                <span class="s1">latestValues.rotateX ||</span>
+                <span class="s1">latestValues.rotateY ||</span>
+                <span class="s1">latestValues.rotateZ ||</span>
+                <span class="s1">latestValues.skewX ||</span>
+                <span class="s1">latestValues.skewY) {</span>
+                <span class="s1">hasDistortingTransform = </span><span class="s0">true</span><span class="s1">;</span>
+            <span class="s1">}</span>
+            <span class="s4">// If there's no distorting values, we don't need to do any more.</span>
+            <span class="s0">if </span><span class="s1">(!hasDistortingTransform)</span>
+                <span class="s0">return</span><span class="s1">;</span>
+            <span class="s0">const </span><span class="s1">resetValues = {};</span>
+            <span class="s0">if </span><span class="s1">(latestValues.z) {</span>
+                <span class="s1">resetDistortingTransform(</span><span class="s2">&quot;z&quot;</span><span class="s1">, visualElement, resetValues, </span><span class="s0">this</span><span class="s1">.animationValues);</span>
+            <span class="s1">}</span>
+            <span class="s4">// Check the skew and rotate value of all axes and reset to 0</span>
+            <span class="s0">for </span><span class="s1">(</span><span class="s0">let </span><span class="s1">i = </span><span class="s3">0</span><span class="s1">; i &lt; transformAxes.length; i++) {</span>
+                <span class="s1">resetDistortingTransform(</span><span class="s2">`rotate</span><span class="s1">${transformAxes[i]}</span><span class="s2">`</span><span class="s1">, visualElement, resetValues, </span><span class="s0">this</span><span class="s1">.animationValues);</span>
+                <span class="s1">resetDistortingTransform(</span><span class="s2">`skew</span><span class="s1">${transformAxes[i]}</span><span class="s2">`</span><span class="s1">, visualElement, resetValues, </span><span class="s0">this</span><span class="s1">.animationValues);</span>
+            <span class="s1">}</span>
+            <span class="s4">// Force a render of this element to apply the transform with all skews and rotations</span>
+            <span class="s4">// set to 0.</span>
+            <span class="s1">visualElement.render();</span>
+            <span class="s4">// Put back all the values we reset</span>
+            <span class="s0">for </span><span class="s1">(</span><span class="s0">const </span><span class="s1">key </span><span class="s0">in </span><span class="s1">resetValues) {</span>
+                <span class="s1">visualElement.setStaticValue(key, resetValues[key]);</span>
+                <span class="s0">if </span><span class="s1">(</span><span class="s0">this</span><span class="s1">.animationValues) {</span>
+                    <span class="s0">this</span><span class="s1">.animationValues[key] = resetValues[key];</span>
+                <span class="s1">}</span>
+            <span class="s1">}</span>
+            <span class="s4">// Schedule a render for the next frame. This ensures we won't visually</span>
+            <span class="s4">// see the element with the reset rotate value applied.</span>
+            <span class="s1">visualElement.scheduleRender();</span>
+        <span class="s1">}</span>
+        <span class="s1">applyProjectionStyles(targetStyle, </span><span class="s4">// CSSStyleDeclaration - doesn't allow numbers to be assigned to properties</span>
+        <span class="s1">styleProp) {</span>
+            <span class="s0">if </span><span class="s1">(!</span><span class="s0">this</span><span class="s1">.instance || </span><span class="s0">this</span><span class="s1">.isSVG)</span>
+                <span class="s0">return</span><span class="s1">;</span>
+            <span class="s0">if </span><span class="s1">(!</span><span class="s0">this</span><span class="s1">.isVisible) {</span>
+                <span class="s1">targetStyle.visibility = </span><span class="s2">&quot;hidden&quot;</span><span class="s1">;</span>
+                <span class="s0">return</span><span class="s1">;</span>
+            <span class="s1">}</span>
+            <span class="s0">const </span><span class="s1">transformTemplate = </span><span class="s0">this</span><span class="s1">.getTransformTemplate();</span>
+            <span class="s0">if </span><span class="s1">(</span><span class="s0">this</span><span class="s1">.needsReset) {</span>
+                <span class="s0">this</span><span class="s1">.needsReset = </span><span class="s0">false</span><span class="s1">;</span>
+                <span class="s1">targetStyle.visibility = </span><span class="s2">&quot;&quot;</span><span class="s1">;</span>
+                <span class="s1">targetStyle.opacity = </span><span class="s2">&quot;&quot;</span><span class="s1">;</span>
+                <span class="s1">targetStyle.pointerEvents =</span>
+                    <span class="s1">resolveMotionValue(styleProp?.pointerEvents) || </span><span class="s2">&quot;&quot;</span><span class="s1">;</span>
+                <span class="s1">targetStyle.transform = transformTemplate</span>
+                    <span class="s1">? transformTemplate(</span><span class="s0">this</span><span class="s1">.latestValues, </span><span class="s2">&quot;&quot;</span><span class="s1">)</span>
+                    <span class="s1">: </span><span class="s2">&quot;none&quot;</span><span class="s1">;</span>
+                <span class="s0">return</span><span class="s1">;</span>
+            <span class="s1">}</span>
+            <span class="s0">const </span><span class="s1">lead = </span><span class="s0">this</span><span class="s1">.getLead();</span>
+            <span class="s0">if </span><span class="s1">(!</span><span class="s0">this</span><span class="s1">.projectionDelta || !</span><span class="s0">this</span><span class="s1">.layout || !lead.target) {</span>
+                <span class="s0">if </span><span class="s1">(</span><span class="s0">this</span><span class="s1">.options.layoutId) {</span>
+                    <span class="s1">targetStyle.opacity =</span>
+                        <span class="s0">this</span><span class="s1">.latestValues.opacity !== undefined</span>
+                            <span class="s1">? </span><span class="s0">this</span><span class="s1">.latestValues.opacity</span>
+                            <span class="s1">: </span><span class="s3">1</span><span class="s1">;</span>
+                    <span class="s1">targetStyle.pointerEvents =</span>
+                        <span class="s1">resolveMotionValue(styleProp?.pointerEvents) || </span><span class="s2">&quot;&quot;</span><span class="s1">;</span>
+                <span class="s1">}</span>
+                <span class="s0">if </span><span class="s1">(</span><span class="s0">this</span><span class="s1">.hasProjected &amp;&amp; !hasTransform(</span><span class="s0">this</span><span class="s1">.latestValues)) {</span>
+                    <span class="s1">targetStyle.transform = transformTemplate</span>
+                        <span class="s1">? transformTemplate({}, </span><span class="s2">&quot;&quot;</span><span class="s1">)</span>
+                        <span class="s1">: </span><span class="s2">&quot;none&quot;</span><span class="s1">;</span>
+                    <span class="s0">this</span><span class="s1">.hasProjected = </span><span class="s0">false</span><span class="s1">;</span>
+                <span class="s1">}</span>
+                <span class="s0">return</span><span class="s1">;</span>
+            <span class="s1">}</span>
+            <span class="s1">targetStyle.visibility = </span><span class="s2">&quot;&quot;</span><span class="s1">;</span>
+            <span class="s0">const </span><span class="s1">valuesToRender = lead.animationValues || lead.latestValues;</span>
+            <span class="s0">this</span><span class="s1">.applyTransformsToTarget();</span>
+            <span class="s0">let </span><span class="s1">transform = buildProjectionTransform(</span><span class="s0">this</span><span class="s1">.projectionDeltaWithTransform, </span><span class="s0">this</span><span class="s1">.treeScale, valuesToRender);</span>
+            <span class="s0">if </span><span class="s1">(transformTemplate) {</span>
+                <span class="s1">transform = transformTemplate(valuesToRender, transform);</span>
+            <span class="s1">}</span>
+            <span class="s1">targetStyle.transform = transform;</span>
+            <span class="s0">const </span><span class="s1">{ x, y } = </span><span class="s0">this</span><span class="s1">.projectionDelta;</span>
+            <span class="s1">targetStyle.transformOrigin = </span><span class="s2">`</span><span class="s1">${x.origin * </span><span class="s3">100</span><span class="s1">}</span><span class="s2">% </span><span class="s1">${y.origin * </span><span class="s3">100</span><span class="s1">}</span><span class="s2">% 0`</span><span class="s1">;</span>
+            <span class="s0">if </span><span class="s1">(lead.animationValues) {</span>
+                <span class="s4">/**</span>
+                 <span class="s4">* If the lead component is animating, assign this either the entering/leaving</span>
+                 <span class="s4">* opacity</span>
+                 <span class="s4">*/</span>
+                <span class="s1">targetStyle.opacity =</span>
+                    <span class="s1">lead === </span><span class="s0">this</span>
+                        <span class="s1">? valuesToRender.opacity ??</span>
+                            <span class="s0">this</span><span class="s1">.latestValues.opacity ??</span>
+                            <span class="s3">1</span>
+                        <span class="s1">: </span><span class="s0">this</span><span class="s1">.preserveOpacity</span>
+                            <span class="s1">? </span><span class="s0">this</span><span class="s1">.latestValues.opacity</span>
+                            <span class="s1">: valuesToRender.opacityExit;</span>
+            <span class="s1">}</span>
+            <span class="s0">else </span><span class="s1">{</span>
+                <span class="s4">/**</span>
+                 <span class="s4">* Or we're not animating at all, set the lead component to its layout</span>
+                 <span class="s4">* opacity and other components to hidden.</span>
+                 <span class="s4">*/</span>
+                <span class="s1">targetStyle.opacity =</span>
+                    <span class="s1">lead === </span><span class="s0">this</span>
+                        <span class="s1">? valuesToRender.opacity !== undefined</span>
+                            <span class="s1">? valuesToRender.opacity</span>
+                            <span class="s1">: </span><span class="s2">&quot;&quot;</span>
+                        <span class="s1">: valuesToRender.opacityExit !== undefined</span>
+                            <span class="s1">? valuesToRender.opacityExit</span>
+                            <span class="s1">: </span><span class="s3">0</span><span class="s1">;</span>
+            <span class="s1">}</span>
+            <span class="s4">/**</span>
+             <span class="s4">* Apply scale correction</span>
+             <span class="s4">*/</span>
+            <span class="s0">for </span><span class="s1">(</span><span class="s0">const </span><span class="s1">key </span><span class="s0">in </span><span class="s1">scaleCorrectors) {</span>
+                <span class="s0">if </span><span class="s1">(valuesToRender[key] === undefined)</span>
+                    <span class="s0">continue</span><span class="s1">;</span>
+                <span class="s0">const </span><span class="s1">{ correct, applyTo, isCSSVariable } = scaleCorrectors[key];</span>
+                <span class="s4">/**</span>
+                 <span class="s4">* Only apply scale correction to the value if we have an</span>
+                 <span class="s4">* active projection transform. Otherwise these values become</span>
+                 <span class="s4">* vulnerable to distortion if the element changes size without</span>
+                 <span class="s4">* a corresponding layout animation.</span>
+                 <span class="s4">*/</span>
+                <span class="s0">const </span><span class="s1">corrected = transform === </span><span class="s2">&quot;none&quot;</span>
+                    <span class="s1">? valuesToRender[key]</span>
+                    <span class="s1">: correct(valuesToRender[key], lead);</span>
+                <span class="s0">if </span><span class="s1">(applyTo) {</span>
+                    <span class="s0">const </span><span class="s1">num = applyTo.length;</span>
+                    <span class="s0">for </span><span class="s1">(</span><span class="s0">let </span><span class="s1">i = </span><span class="s3">0</span><span class="s1">; i &lt; num; i++) {</span>
+                        <span class="s1">targetStyle[applyTo[i]] = corrected;</span>
+                    <span class="s1">}</span>
+                <span class="s1">}</span>
+                <span class="s0">else </span><span class="s1">{</span>
+                    <span class="s4">// If this is a CSS variable, set it directly on the instance.</span>
+                    <span class="s4">// Replacing this function from creating styles to setting them</span>
+                    <span class="s4">// would be a good place to remove per frame object creation</span>
+                    <span class="s0">if </span><span class="s1">(isCSSVariable) {</span>
+                        <span class="s0">this</span><span class="s1">.options.visualElement.renderState.vars[key] = corrected;</span>
+                    <span class="s1">}</span>
+                    <span class="s0">else </span><span class="s1">{</span>
+                        <span class="s1">targetStyle[key] = corrected;</span>
+                    <span class="s1">}</span>
+                <span class="s1">}</span>
+            <span class="s1">}</span>
+            <span class="s4">/**</span>
+             <span class="s4">* Disable pointer events on follow components. This is to ensure</span>
+             <span class="s4">* that if a follow component covers a lead component it doesn't block</span>
+             <span class="s4">* pointer events on the lead.</span>
+             <span class="s4">*/</span>
+            <span class="s0">if </span><span class="s1">(</span><span class="s0">this</span><span class="s1">.options.layoutId) {</span>
+                <span class="s1">targetStyle.pointerEvents =</span>
+                    <span class="s1">lead === </span><span class="s0">this</span>
+                        <span class="s1">? resolveMotionValue(styleProp?.pointerEvents) || </span><span class="s2">&quot;&quot;</span>
+                        <span class="s1">: </span><span class="s2">&quot;none&quot;</span><span class="s1">;</span>
+            <span class="s1">}</span>
+        <span class="s1">}</span>
+        <span class="s1">clearSnapshot() {</span>
+            <span class="s0">this</span><span class="s1">.resumeFrom = </span><span class="s0">this</span><span class="s1">.snapshot = undefined;</span>
+        <span class="s1">}</span>
+        <span class="s4">// Only run on root</span>
+        <span class="s1">resetTree() {</span>
+            <span class="s0">this</span><span class="s1">.root.nodes.forEach((node) =&gt; node.currentAnimation?.stop());</span>
+            <span class="s0">this</span><span class="s1">.root.nodes.forEach(clearMeasurements);</span>
+            <span class="s0">this</span><span class="s1">.root.sharedNodes.clear();</span>
+        <span class="s1">}</span>
+    <span class="s1">};</span>
+<span class="s1">}</span>
+<span class="s0">function </span><span class="s1">updateLayout(node) {</span>
+    <span class="s1">node.updateLayout();</span>
+<span class="s1">}</span>
+<span class="s0">function </span><span class="s1">notifyLayoutUpdate(node) {</span>
+    <span class="s0">const </span><span class="s1">snapshot = node.resumeFrom?.snapshot || node.snapshot;</span>
+    <span class="s0">if </span><span class="s1">(node.isLead() &amp;&amp;</span>
+        <span class="s1">node.layout &amp;&amp;</span>
+        <span class="s1">snapshot &amp;&amp;</span>
+        <span class="s1">node.hasListeners(</span><span class="s2">&quot;didUpdate&quot;</span><span class="s1">)) {</span>
+        <span class="s0">const </span><span class="s1">{ layoutBox: layout, measuredBox: measuredLayout } = node.layout;</span>
+        <span class="s0">const </span><span class="s1">{ animationType } = node.options;</span>
+        <span class="s0">const </span><span class="s1">isShared = snapshot.source !== node.layout.source;</span>
+        <span class="s4">// TODO Maybe we want to also resize the layout snapshot so we don't trigger</span>
+        <span class="s4">// animations for instance if layout=&quot;size&quot; and an element has only changed position</span>
+        <span class="s0">if </span><span class="s1">(animationType === </span><span class="s2">&quot;size&quot;</span><span class="s1">) {</span>
+            <span class="s1">eachAxis((axis) =&gt; {</span>
+                <span class="s0">const </span><span class="s1">axisSnapshot = isShared</span>
+                    <span class="s1">? snapshot.measuredBox[axis]</span>
+                    <span class="s1">: snapshot.layoutBox[axis];</span>
+                <span class="s0">const </span><span class="s1">length = calcLength(axisSnapshot);</span>
+                <span class="s1">axisSnapshot.min = layout[axis].min;</span>
+                <span class="s1">axisSnapshot.max = axisSnapshot.min + length;</span>
+            <span class="s1">});</span>
+        <span class="s1">}</span>
+        <span class="s0">else if </span><span class="s1">(shouldAnimatePositionOnly(animationType, snapshot.layoutBox, layout)) {</span>
+            <span class="s1">eachAxis((axis) =&gt; {</span>
+                <span class="s0">const </span><span class="s1">axisSnapshot = isShared</span>
+                    <span class="s1">? snapshot.measuredBox[axis]</span>
+                    <span class="s1">: snapshot.layoutBox[axis];</span>
+                <span class="s0">const </span><span class="s1">length = calcLength(layout[axis]);</span>
+                <span class="s1">axisSnapshot.max = axisSnapshot.min + length;</span>
+                <span class="s4">/**</span>
+                 <span class="s4">* Ensure relative target gets resized and rerendererd</span>
+                 <span class="s4">*/</span>
+                <span class="s0">if </span><span class="s1">(node.relativeTarget &amp;&amp; !node.currentAnimation) {</span>
+                    <span class="s1">node.isProjectionDirty = </span><span class="s0">true</span><span class="s1">;</span>
+                    <span class="s1">node.relativeTarget[axis].max =</span>
+                        <span class="s1">node.relativeTarget[axis].min + length;</span>
+                <span class="s1">}</span>
+            <span class="s1">});</span>
+        <span class="s1">}</span>
+        <span class="s0">const </span><span class="s1">layoutDelta = createDelta();</span>
+        <span class="s1">calcBoxDelta(layoutDelta, layout, snapshot.layoutBox);</span>
+        <span class="s0">const </span><span class="s1">visualDelta = createDelta();</span>
+        <span class="s0">if </span><span class="s1">(isShared) {</span>
+            <span class="s1">calcBoxDelta(visualDelta, node.applyTransform(measuredLayout, </span><span class="s0">true</span><span class="s1">), snapshot.measuredBox);</span>
+        <span class="s1">}</span>
+        <span class="s0">else </span><span class="s1">{</span>
+            <span class="s1">calcBoxDelta(visualDelta, layout, snapshot.layoutBox);</span>
+        <span class="s1">}</span>
+        <span class="s0">const </span><span class="s1">hasLayoutChanged = !isDeltaZero(layoutDelta);</span>
+        <span class="s0">let </span><span class="s1">hasRelativeLayoutChanged = </span><span class="s0">false</span><span class="s1">;</span>
+        <span class="s0">if </span><span class="s1">(!node.resumeFrom) {</span>
+            <span class="s0">const </span><span class="s1">relativeParent = node.getClosestProjectingParent();</span>
+            <span class="s4">/**</span>
+             <span class="s4">* If the relativeParent is itself resuming from a different element then</span>
+             <span class="s4">* the relative snapshot is not relavent</span>
+             <span class="s4">*/</span>
+            <span class="s0">if </span><span class="s1">(relativeParent &amp;&amp; !relativeParent.resumeFrom) {</span>
+                <span class="s0">const </span><span class="s1">{ snapshot: parentSnapshot, layout: parentLayout } = relativeParent;</span>
+                <span class="s0">if </span><span class="s1">(parentSnapshot &amp;&amp; parentLayout) {</span>
+                    <span class="s0">const </span><span class="s1">relativeSnapshot = createBox();</span>
+                    <span class="s1">calcRelativePosition(relativeSnapshot, snapshot.layoutBox, parentSnapshot.layoutBox);</span>
+                    <span class="s0">const </span><span class="s1">relativeLayout = createBox();</span>
+                    <span class="s1">calcRelativePosition(relativeLayout, layout, parentLayout.layoutBox);</span>
+                    <span class="s0">if </span><span class="s1">(!boxEqualsRounded(relativeSnapshot, relativeLayout)) {</span>
+                        <span class="s1">hasRelativeLayoutChanged = </span><span class="s0">true</span><span class="s1">;</span>
+                    <span class="s1">}</span>
+                    <span class="s0">if </span><span class="s1">(relativeParent.options.layoutRoot) {</span>
+                        <span class="s1">node.relativeTarget = relativeLayout;</span>
+                        <span class="s1">node.relativeTargetOrigin = relativeSnapshot;</span>
+                        <span class="s1">node.relativeParent = relativeParent;</span>
+                    <span class="s1">}</span>
+                <span class="s1">}</span>
+            <span class="s1">}</span>
+        <span class="s1">}</span>
+        <span class="s1">node.notifyListeners(</span><span class="s2">&quot;didUpdate&quot;</span><span class="s1">, {</span>
+            <span class="s1">layout,</span>
+            <span class="s1">snapshot,</span>
+            <span class="s1">delta: visualDelta,</span>
+            <span class="s1">layoutDelta,</span>
+            <span class="s1">hasLayoutChanged,</span>
+            <span class="s1">hasRelativeLayoutChanged,</span>
+        <span class="s1">});</span>
+    <span class="s1">}</span>
+    <span class="s0">else if </span><span class="s1">(node.isLead()) {</span>
+        <span class="s0">const </span><span class="s1">{ onExitComplete } = node.options;</span>
+        <span class="s1">onExitComplete &amp;&amp; onExitComplete();</span>
+    <span class="s1">}</span>
+    <span class="s4">/**</span>
+     <span class="s4">* Clearing transition</span>
+     <span class="s4">* TODO: Investigate why this transition is being passed in as {type: false } from Framer</span>
+     <span class="s4">* and why we need it at all</span>
+     <span class="s4">*/</span>
+    <span class="s1">node.options.transition = undefined;</span>
+<span class="s1">}</span>
+<span class="s0">function </span><span class="s1">propagateDirtyNodes(node) {</span>
+    <span class="s4">/**</span>
+     <span class="s4">* Increase debug counter for nodes encountered this frame</span>
+     <span class="s4">*/</span>
+    <span class="s0">if </span><span class="s1">(statsBuffer.value) {</span>
+        <span class="s1">metrics.nodes++;</span>
+    <span class="s1">}</span>
+    <span class="s0">if </span><span class="s1">(!node.parent)</span>
+        <span class="s0">return</span><span class="s1">;</span>
+    <span class="s4">/**</span>
+     <span class="s4">* If this node isn't projecting, propagate isProjectionDirty. It will have</span>
+     <span class="s4">* no performance impact but it will allow the next child that *is* projecting</span>
+     <span class="s4">* but *isn't* dirty to just check its parent to see if *any* ancestor needs</span>
+     <span class="s4">* correcting.</span>
+     <span class="s4">*/</span>
+    <span class="s0">if </span><span class="s1">(!node.isProjecting()) {</span>
+        <span class="s1">node.isProjectionDirty = node.parent.isProjectionDirty;</span>
+    <span class="s1">}</span>
+    <span class="s4">/**</span>
+     <span class="s4">* Propagate isSharedProjectionDirty and isTransformDirty</span>
+     <span class="s4">* throughout the whole tree. A future revision can take another look at</span>
+     <span class="s4">* this but for safety we still recalcualte shared nodes.</span>
+     <span class="s4">*/</span>
+    <span class="s1">node.isSharedProjectionDirty || (node.isSharedProjectionDirty = Boolean(node.isProjectionDirty ||</span>
+        <span class="s1">node.parent.isProjectionDirty ||</span>
+        <span class="s1">node.parent.isSharedProjectionDirty));</span>
+    <span class="s1">node.isTransformDirty || (node.isTransformDirty = node.parent.isTransformDirty);</span>
+<span class="s1">}</span>
+<span class="s0">function </span><span class="s1">cleanDirtyNodes(node) {</span>
+    <span class="s1">node.isProjectionDirty =</span>
+        <span class="s1">node.isSharedProjectionDirty =</span>
+            <span class="s1">node.isTransformDirty =</span>
+                <span class="s0">false</span><span class="s1">;</span>
+<span class="s1">}</span>
+<span class="s0">function </span><span class="s1">clearSnapshot(node) {</span>
+    <span class="s1">node.clearSnapshot();</span>
+<span class="s1">}</span>
+<span class="s0">function </span><span class="s1">clearMeasurements(node) {</span>
+    <span class="s1">node.clearMeasurements();</span>
+<span class="s1">}</span>
+<span class="s0">function </span><span class="s1">clearIsLayoutDirty(node) {</span>
+    <span class="s1">node.isLayoutDirty = </span><span class="s0">false</span><span class="s1">;</span>
+<span class="s1">}</span>
+<span class="s0">function </span><span class="s1">resetTransformStyle(node) {</span>
+    <span class="s0">const </span><span class="s1">{ visualElement } = node.options;</span>
+    <span class="s0">if </span><span class="s1">(visualElement &amp;&amp; visualElement.getProps().onBeforeLayoutMeasure) {</span>
+        <span class="s1">visualElement.notify(</span><span class="s2">&quot;BeforeLayoutMeasure&quot;</span><span class="s1">);</span>
+    <span class="s1">}</span>
+    <span class="s1">node.resetTransform();</span>
+<span class="s1">}</span>
+<span class="s0">function </span><span class="s1">finishAnimation(node) {</span>
+    <span class="s1">node.finishAnimation();</span>
+    <span class="s1">node.targetDelta = node.relativeTarget = node.target = undefined;</span>
+    <span class="s1">node.isProjectionDirty = </span><span class="s0">true</span><span class="s1">;</span>
+<span class="s1">}</span>
+<span class="s0">function </span><span class="s1">resolveTargetDelta(node) {</span>
+    <span class="s1">node.resolveTargetDelta();</span>
+<span class="s1">}</span>
+<span class="s0">function </span><span class="s1">calcProjection(node) {</span>
+    <span class="s1">node.calcProjection();</span>
+<span class="s1">}</span>
+<span class="s0">function </span><span class="s1">resetSkewAndRotation(node) {</span>
+    <span class="s1">node.resetSkewAndRotation();</span>
+<span class="s1">}</span>
+<span class="s0">function </span><span class="s1">removeLeadSnapshots(stack) {</span>
+    <span class="s1">stack.removeLeadSnapshot();</span>
+<span class="s1">}</span>
+<span class="s0">function </span><span class="s1">mixAxisDelta(output, delta, p) {</span>
+    <span class="s1">output.translate = mixNumber(delta.translate, </span><span class="s3">0</span><span class="s1">, p);</span>
+    <span class="s1">output.scale = mixNumber(delta.scale, </span><span class="s3">1</span><span class="s1">, p);</span>
+    <span class="s1">output.origin = delta.origin;</span>
+    <span class="s1">output.originPoint = delta.originPoint;</span>
+<span class="s1">}</span>
+<span class="s0">function </span><span class="s1">mixAxis(output, from, to, p) {</span>
+    <span class="s1">output.min = mixNumber(from.min, to.min, p);</span>
+    <span class="s1">output.max = mixNumber(from.max, to.max, p);</span>
+<span class="s1">}</span>
+<span class="s0">function </span><span class="s1">mixBox(output, from, to, p) {</span>
+    <span class="s1">mixAxis(output.x, from.x, to.x, p);</span>
+    <span class="s1">mixAxis(output.y, from.y, to.y, p);</span>
+<span class="s1">}</span>
+<span class="s0">function </span><span class="s1">hasOpacityCrossfade(node) {</span>
+    <span class="s0">return </span><span class="s1">(node.animationValues &amp;&amp; node.animationValues.opacityExit !== undefined);</span>
+<span class="s1">}</span>
+<span class="s0">const </span><span class="s1">defaultLayoutTransition = {</span>
+    <span class="s1">duration: </span><span class="s3">0.45</span><span class="s1">,</span>
+    <span class="s1">ease: [</span><span class="s3">0.4</span><span class="s1">, </span><span class="s3">0</span><span class="s1">, </span><span class="s3">0.1</span><span class="s1">, </span><span class="s3">1</span><span class="s1">],</span>
+<span class="s1">};</span>
+<span class="s0">const </span><span class="s1">userAgentContains = (string) =&gt; </span><span class="s0">typeof </span><span class="s1">navigator !== </span><span class="s2">&quot;undefined&quot; </span><span class="s1">&amp;&amp;</span>
+    <span class="s1">navigator.userAgent &amp;&amp;</span>
+    <span class="s1">navigator.userAgent.toLowerCase().includes(string);</span>
+<span class="s4">/**</span>
+ <span class="s4">* Measured bounding boxes must be rounded in Safari and</span>
+ <span class="s4">* left untouched in Chrome, otherwise non-integer layouts within scaled-up elements</span>
+ <span class="s4">* can appear to jump.</span>
+ <span class="s4">*/</span>
+<span class="s0">const </span><span class="s1">roundPoint = userAgentContains(</span><span class="s2">&quot;applewebkit/&quot;</span><span class="s1">) &amp;&amp; !userAgentContains(</span><span class="s2">&quot;chrome/&quot;</span><span class="s1">)</span>
+    <span class="s1">? Math.round</span>
+    <span class="s1">: noop;</span>
+<span class="s0">function </span><span class="s1">roundAxis(axis) {</span>
+    <span class="s4">// Round to the nearest .5 pixels to support subpixel layouts</span>
+    <span class="s1">axis.min = roundPoint(axis.min);</span>
+    <span class="s1">axis.max = roundPoint(axis.max);</span>
+<span class="s1">}</span>
+<span class="s0">function </span><span class="s1">roundBox(box) {</span>
+    <span class="s1">roundAxis(box.x);</span>
+    <span class="s1">roundAxis(box.y);</span>
+<span class="s1">}</span>
+<span class="s0">function </span><span class="s1">shouldAnimatePositionOnly(animationType, snapshot, layout) {</span>
+    <span class="s0">return </span><span class="s1">(animationType === </span><span class="s2">&quot;position&quot; </span><span class="s1">||</span>
+        <span class="s1">(animationType === </span><span class="s2">&quot;preserve-aspect&quot; </span><span class="s1">&amp;&amp;</span>
+            <span class="s1">!isNear(aspectRatio(snapshot), aspectRatio(layout), </span><span class="s3">0.2</span><span class="s1">)));</span>
+<span class="s1">}</span>
+<span class="s0">function </span><span class="s1">checkNodeWasScrollRoot(node) {</span>
+    <span class="s0">return </span><span class="s1">node !== node.root &amp;&amp; node.scroll?.wasRoot;</span>
+<span class="s1">}</span>
+
+<span class="s0">export </span><span class="s1">{ cleanDirtyNodes, createProjectionNode, mixAxis, mixAxisDelta, mixBox, propagateDirtyNodes };</span>
+</pre>
+</body>
+</html>

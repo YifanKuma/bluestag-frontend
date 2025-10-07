@@ -1,0 +1,498 @@
+<html>
+<head>
+<title>VisualElement.mjs</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #0033b3;}
+.s1 { color: #080808;}
+.s2 { color: #067d17;}
+.s3 { color: #8c8c8c; font-style: italic;}
+.s4 { color: #1750eb;}
+</style>
+</head>
+<body bgcolor="#ffffff">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#c0c0c0" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+VisualElement.mjs</font>
+</center></td></tr></table>
+<pre><span class="s0">import </span><span class="s1">{ KeyframeResolver, time, frame, isMotionValue, cancelFrame, transformProps, motionValue, findValueType, complex, getAnimatableNone, microtask } from </span><span class="s2">'motion-dom'</span><span class="s1">;</span>
+<span class="s0">import </span><span class="s1">{ warnOnce, isNumericalString, isZeroValueString, SubscriptionManager } from </span><span class="s2">'motion-utils'</span><span class="s1">;</span>
+<span class="s0">import </span><span class="s1">{ featureDefinitions } from </span><span class="s2">'../motion/features/definitions.mjs'</span><span class="s1">;</span>
+<span class="s0">import </span><span class="s1">{ createBox } from </span><span class="s2">'../projection/geometry/models.mjs'</span><span class="s1">;</span>
+<span class="s0">import </span><span class="s1">{ initPrefersReducedMotion } from </span><span class="s2">'../utils/reduced-motion/index.mjs'</span><span class="s1">;</span>
+<span class="s0">import </span><span class="s1">{ hasReducedMotionListener, prefersReducedMotion } from </span><span class="s2">'../utils/reduced-motion/state.mjs'</span><span class="s1">;</span>
+<span class="s0">import </span><span class="s1">{ visualElementStore } from </span><span class="s2">'./store.mjs'</span><span class="s1">;</span>
+<span class="s0">import </span><span class="s1">{ isControllingVariants, isVariantNode } from </span><span class="s2">'./utils/is-controlling-variants.mjs'</span><span class="s1">;</span>
+<span class="s0">import </span><span class="s1">{ updateMotionValuesFromProps } from </span><span class="s2">'./utils/motion-values.mjs'</span><span class="s1">;</span>
+<span class="s0">import </span><span class="s1">{ resolveVariantFromProps } from </span><span class="s2">'./utils/resolve-variants.mjs'</span><span class="s1">;</span>
+
+<span class="s0">const </span><span class="s1">propEventHandlers = [</span>
+    <span class="s2">&quot;AnimationStart&quot;</span><span class="s1">,</span>
+    <span class="s2">&quot;AnimationComplete&quot;</span><span class="s1">,</span>
+    <span class="s2">&quot;Update&quot;</span><span class="s1">,</span>
+    <span class="s2">&quot;BeforeLayoutMeasure&quot;</span><span class="s1">,</span>
+    <span class="s2">&quot;LayoutMeasure&quot;</span><span class="s1">,</span>
+    <span class="s2">&quot;LayoutAnimationStart&quot;</span><span class="s1">,</span>
+    <span class="s2">&quot;LayoutAnimationComplete&quot;</span><span class="s1">,</span>
+<span class="s1">];</span>
+<span class="s3">/**</span>
+ <span class="s3">* A VisualElement is an imperative abstraction around UI elements such as</span>
+ <span class="s3">* HTMLElement, SVGElement, Three.Object3D etc.</span>
+ <span class="s3">*/</span>
+<span class="s0">class </span><span class="s1">VisualElement {</span>
+    <span class="s3">/**</span>
+     <span class="s3">* This method takes React props and returns found MotionValues. For example, HTML</span>
+     <span class="s3">* MotionValues will be found within the style prop, whereas for Three.js within attribute arrays.</span>
+     <span class="s3">*</span>
+     <span class="s3">* This isn't an abstract method as it needs calling in the constructor, but it is</span>
+     <span class="s3">* intended to be one.</span>
+     <span class="s3">*/</span>
+    <span class="s1">scrapeMotionValuesFromProps(_props, _prevProps, _visualElement) {</span>
+        <span class="s0">return </span><span class="s1">{};</span>
+    <span class="s1">}</span>
+    <span class="s1">constructor({ parent, props, presenceContext, reducedMotionConfig, blockInitialAnimation, visualState, }, options = {}) {</span>
+        <span class="s3">/**</span>
+         <span class="s3">* A reference to the current underlying Instance, e.g. a HTMLElement</span>
+         <span class="s3">* or Three.Mesh etc.</span>
+         <span class="s3">*/</span>
+        <span class="s0">this</span><span class="s1">.current = </span><span class="s0">null</span><span class="s1">;</span>
+        <span class="s3">/**</span>
+         <span class="s3">* A set containing references to this VisualElement's children.</span>
+         <span class="s3">*/</span>
+        <span class="s0">this</span><span class="s1">.children = </span><span class="s0">new </span><span class="s1">Set();</span>
+        <span class="s3">/**</span>
+         <span class="s3">* Determine what role this visual element should take in the variant tree.</span>
+         <span class="s3">*/</span>
+        <span class="s0">this</span><span class="s1">.isVariantNode = </span><span class="s0">false</span><span class="s1">;</span>
+        <span class="s0">this</span><span class="s1">.isControllingVariants = </span><span class="s0">false</span><span class="s1">;</span>
+        <span class="s3">/**</span>
+         <span class="s3">* Decides whether this VisualElement should animate in reduced motion</span>
+         <span class="s3">* mode.</span>
+         <span class="s3">*</span>
+         <span class="s3">* TODO: This is currently set on every individual VisualElement but feels</span>
+         <span class="s3">* like it could be set globally.</span>
+         <span class="s3">*/</span>
+        <span class="s0">this</span><span class="s1">.shouldReduceMotion = </span><span class="s0">null</span><span class="s1">;</span>
+        <span class="s3">/**</span>
+         <span class="s3">* A map of all motion values attached to this visual element. Motion</span>
+         <span class="s3">* values are source of truth for any given animated value. A motion</span>
+         <span class="s3">* value might be provided externally by the component via props.</span>
+         <span class="s3">*/</span>
+        <span class="s0">this</span><span class="s1">.values = </span><span class="s0">new </span><span class="s1">Map();</span>
+        <span class="s0">this</span><span class="s1">.KeyframeResolver = KeyframeResolver;</span>
+        <span class="s3">/**</span>
+         <span class="s3">* Cleanup functions for active features (hover/tap/exit etc)</span>
+         <span class="s3">*/</span>
+        <span class="s0">this</span><span class="s1">.features = {};</span>
+        <span class="s3">/**</span>
+         <span class="s3">* A map of every subscription that binds the provided or generated</span>
+         <span class="s3">* motion values onChange listeners to this visual element.</span>
+         <span class="s3">*/</span>
+        <span class="s0">this</span><span class="s1">.valueSubscriptions = </span><span class="s0">new </span><span class="s1">Map();</span>
+        <span class="s3">/**</span>
+         <span class="s3">* A reference to the previously-provided motion values as returned</span>
+         <span class="s3">* from scrapeMotionValuesFromProps. We use the keys in here to determine</span>
+         <span class="s3">* if any motion values need to be removed after props are updated.</span>
+         <span class="s3">*/</span>
+        <span class="s0">this</span><span class="s1">.prevMotionValues = {};</span>
+        <span class="s3">/**</span>
+         <span class="s3">* An object containing a SubscriptionManager for each active event.</span>
+         <span class="s3">*/</span>
+        <span class="s0">this</span><span class="s1">.events = {};</span>
+        <span class="s3">/**</span>
+         <span class="s3">* An object containing an unsubscribe function for each prop event subscription.</span>
+         <span class="s3">* For example, every &quot;Update&quot; event can have multiple subscribers via</span>
+         <span class="s3">* VisualElement.on(), but only one of those can be defined via the onUpdate prop.</span>
+         <span class="s3">*/</span>
+        <span class="s0">this</span><span class="s1">.propEventSubscriptions = {};</span>
+        <span class="s0">this</span><span class="s1">.notifyUpdate = () =&gt; </span><span class="s0">this</span><span class="s1">.notify(</span><span class="s2">&quot;Update&quot;</span><span class="s1">, </span><span class="s0">this</span><span class="s1">.latestValues);</span>
+        <span class="s0">this</span><span class="s1">.render = () =&gt; {</span>
+            <span class="s0">if </span><span class="s1">(!</span><span class="s0">this</span><span class="s1">.current)</span>
+                <span class="s0">return</span><span class="s1">;</span>
+            <span class="s0">this</span><span class="s1">.triggerBuild();</span>
+            <span class="s0">this</span><span class="s1">.renderInstance(</span><span class="s0">this</span><span class="s1">.current, </span><span class="s0">this</span><span class="s1">.renderState, </span><span class="s0">this</span><span class="s1">.props.style, </span><span class="s0">this</span><span class="s1">.projection);</span>
+        <span class="s1">};</span>
+        <span class="s0">this</span><span class="s1">.renderScheduledAt = </span><span class="s4">0.0</span><span class="s1">;</span>
+        <span class="s0">this</span><span class="s1">.scheduleRender = () =&gt; {</span>
+            <span class="s0">const </span><span class="s1">now = time.now();</span>
+            <span class="s0">if </span><span class="s1">(</span><span class="s0">this</span><span class="s1">.renderScheduledAt &lt; now) {</span>
+                <span class="s0">this</span><span class="s1">.renderScheduledAt = now;</span>
+                <span class="s1">frame.render(</span><span class="s0">this</span><span class="s1">.render, </span><span class="s0">false</span><span class="s1">, </span><span class="s0">true</span><span class="s1">);</span>
+            <span class="s1">}</span>
+        <span class="s1">};</span>
+        <span class="s0">const </span><span class="s1">{ latestValues, renderState } = visualState;</span>
+        <span class="s0">this</span><span class="s1">.latestValues = latestValues;</span>
+        <span class="s0">this</span><span class="s1">.baseTarget = { ...latestValues };</span>
+        <span class="s0">this</span><span class="s1">.initialValues = props.initial ? { ...latestValues } : {};</span>
+        <span class="s0">this</span><span class="s1">.renderState = renderState;</span>
+        <span class="s0">this</span><span class="s1">.parent = parent;</span>
+        <span class="s0">this</span><span class="s1">.props = props;</span>
+        <span class="s0">this</span><span class="s1">.presenceContext = presenceContext;</span>
+        <span class="s0">this</span><span class="s1">.depth = parent ? parent.depth + </span><span class="s4">1 </span><span class="s1">: </span><span class="s4">0</span><span class="s1">;</span>
+        <span class="s0">this</span><span class="s1">.reducedMotionConfig = reducedMotionConfig;</span>
+        <span class="s0">this</span><span class="s1">.options = options;</span>
+        <span class="s0">this</span><span class="s1">.blockInitialAnimation = Boolean(blockInitialAnimation);</span>
+        <span class="s0">this</span><span class="s1">.isControllingVariants = isControllingVariants(props);</span>
+        <span class="s0">this</span><span class="s1">.isVariantNode = isVariantNode(props);</span>
+        <span class="s0">if </span><span class="s1">(</span><span class="s0">this</span><span class="s1">.isVariantNode) {</span>
+            <span class="s0">this</span><span class="s1">.variantChildren = </span><span class="s0">new </span><span class="s1">Set();</span>
+        <span class="s1">}</span>
+        <span class="s0">this</span><span class="s1">.manuallyAnimateOnMount = Boolean(parent &amp;&amp; parent.current);</span>
+        <span class="s3">/**</span>
+         <span class="s3">* Any motion values that are provided to the element when created</span>
+         <span class="s3">* aren't yet bound to the element, as this would technically be impure.</span>
+         <span class="s3">* However, we iterate through the motion values and set them to the</span>
+         <span class="s3">* initial values for this component.</span>
+         <span class="s3">*</span>
+         <span class="s3">* TODO: This is impure and we should look at changing this to run on mount.</span>
+         <span class="s3">* Doing so will break some tests but this isn't necessarily a breaking change,</span>
+         <span class="s3">* more a reflection of the test.</span>
+         <span class="s3">*/</span>
+        <span class="s0">const </span><span class="s1">{ willChange, ...initialMotionValues } = </span><span class="s0">this</span><span class="s1">.scrapeMotionValuesFromProps(props, {}, </span><span class="s0">this</span><span class="s1">);</span>
+        <span class="s0">for </span><span class="s1">(</span><span class="s0">const </span><span class="s1">key </span><span class="s0">in </span><span class="s1">initialMotionValues) {</span>
+            <span class="s0">const </span><span class="s1">value = initialMotionValues[key];</span>
+            <span class="s0">if </span><span class="s1">(latestValues[key] !== undefined &amp;&amp; isMotionValue(value)) {</span>
+                <span class="s1">value.set(latestValues[key]);</span>
+            <span class="s1">}</span>
+        <span class="s1">}</span>
+    <span class="s1">}</span>
+    <span class="s1">mount(instance) {</span>
+        <span class="s0">this</span><span class="s1">.current = instance;</span>
+        <span class="s1">visualElementStore.set(instance, </span><span class="s0">this</span><span class="s1">);</span>
+        <span class="s0">if </span><span class="s1">(</span><span class="s0">this</span><span class="s1">.projection &amp;&amp; !</span><span class="s0">this</span><span class="s1">.projection.instance) {</span>
+            <span class="s0">this</span><span class="s1">.projection.mount(instance);</span>
+        <span class="s1">}</span>
+        <span class="s0">if </span><span class="s1">(</span><span class="s0">this</span><span class="s1">.parent &amp;&amp; </span><span class="s0">this</span><span class="s1">.isVariantNode &amp;&amp; !</span><span class="s0">this</span><span class="s1">.isControllingVariants) {</span>
+            <span class="s0">this</span><span class="s1">.removeFromVariantTree = </span><span class="s0">this</span><span class="s1">.parent.addVariantChild(</span><span class="s0">this</span><span class="s1">);</span>
+        <span class="s1">}</span>
+        <span class="s0">this</span><span class="s1">.values.forEach((value, key) =&gt; </span><span class="s0">this</span><span class="s1">.bindToMotionValue(key, value));</span>
+        <span class="s0">if </span><span class="s1">(!hasReducedMotionListener.current) {</span>
+            <span class="s1">initPrefersReducedMotion();</span>
+        <span class="s1">}</span>
+        <span class="s0">this</span><span class="s1">.shouldReduceMotion =</span>
+            <span class="s0">this</span><span class="s1">.reducedMotionConfig === </span><span class="s2">&quot;never&quot;</span>
+                <span class="s1">? </span><span class="s0">false</span>
+                <span class="s1">: </span><span class="s0">this</span><span class="s1">.reducedMotionConfig === </span><span class="s2">&quot;always&quot;</span>
+                    <span class="s1">? </span><span class="s0">true</span>
+                    <span class="s1">: prefersReducedMotion.current;</span>
+        <span class="s0">if </span><span class="s1">(process.env.NODE_ENV !== </span><span class="s2">&quot;production&quot;</span><span class="s1">) {</span>
+            <span class="s1">warnOnce(</span><span class="s0">this</span><span class="s1">.shouldReduceMotion !== </span><span class="s0">true</span><span class="s1">, </span><span class="s2">&quot;You have Reduced Motion enabled on your device. Animations may not appear as expected.&quot;</span><span class="s1">, </span><span class="s2">&quot;reduced-motion-disabled&quot;</span><span class="s1">);</span>
+        <span class="s1">}</span>
+        <span class="s0">this</span><span class="s1">.parent?.addChild(</span><span class="s0">this</span><span class="s1">);</span>
+        <span class="s0">this</span><span class="s1">.update(</span><span class="s0">this</span><span class="s1">.props, </span><span class="s0">this</span><span class="s1">.presenceContext);</span>
+    <span class="s1">}</span>
+    <span class="s1">unmount() {</span>
+        <span class="s0">this</span><span class="s1">.projection &amp;&amp; </span><span class="s0">this</span><span class="s1">.projection.unmount();</span>
+        <span class="s1">cancelFrame(</span><span class="s0">this</span><span class="s1">.notifyUpdate);</span>
+        <span class="s1">cancelFrame(</span><span class="s0">this</span><span class="s1">.render);</span>
+        <span class="s0">this</span><span class="s1">.valueSubscriptions.forEach((remove) =&gt; remove());</span>
+        <span class="s0">this</span><span class="s1">.valueSubscriptions.clear();</span>
+        <span class="s0">this</span><span class="s1">.removeFromVariantTree &amp;&amp; </span><span class="s0">this</span><span class="s1">.removeFromVariantTree();</span>
+        <span class="s0">this</span><span class="s1">.parent?.removeChild(</span><span class="s0">this</span><span class="s1">);</span>
+        <span class="s0">for </span><span class="s1">(</span><span class="s0">const </span><span class="s1">key </span><span class="s0">in this</span><span class="s1">.events) {</span>
+            <span class="s0">this</span><span class="s1">.events[key].clear();</span>
+        <span class="s1">}</span>
+        <span class="s0">for </span><span class="s1">(</span><span class="s0">const </span><span class="s1">key </span><span class="s0">in this</span><span class="s1">.features) {</span>
+            <span class="s0">const </span><span class="s1">feature = </span><span class="s0">this</span><span class="s1">.features[key];</span>
+            <span class="s0">if </span><span class="s1">(feature) {</span>
+                <span class="s1">feature.unmount();</span>
+                <span class="s1">feature.isMounted = </span><span class="s0">false</span><span class="s1">;</span>
+            <span class="s1">}</span>
+        <span class="s1">}</span>
+        <span class="s0">this</span><span class="s1">.current = </span><span class="s0">null</span><span class="s1">;</span>
+    <span class="s1">}</span>
+    <span class="s1">addChild(child) {</span>
+        <span class="s0">this</span><span class="s1">.children.add(child);</span>
+        <span class="s0">this</span><span class="s1">.enteringChildren ?? (</span><span class="s0">this</span><span class="s1">.enteringChildren = </span><span class="s0">new </span><span class="s1">Set());</span>
+        <span class="s0">this</span><span class="s1">.enteringChildren.add(child);</span>
+    <span class="s1">}</span>
+    <span class="s1">removeChild(child) {</span>
+        <span class="s0">this</span><span class="s1">.children.delete(child);</span>
+        <span class="s0">this</span><span class="s1">.enteringChildren &amp;&amp; </span><span class="s0">this</span><span class="s1">.enteringChildren.delete(child);</span>
+    <span class="s1">}</span>
+    <span class="s1">bindToMotionValue(key, value) {</span>
+        <span class="s0">if </span><span class="s1">(</span><span class="s0">this</span><span class="s1">.valueSubscriptions.has(key)) {</span>
+            <span class="s0">this</span><span class="s1">.valueSubscriptions.get(key)();</span>
+        <span class="s1">}</span>
+        <span class="s0">const </span><span class="s1">valueIsTransform = transformProps.has(key);</span>
+        <span class="s0">if </span><span class="s1">(valueIsTransform &amp;&amp; </span><span class="s0">this</span><span class="s1">.onBindTransform) {</span>
+            <span class="s0">this</span><span class="s1">.onBindTransform();</span>
+        <span class="s1">}</span>
+        <span class="s0">const </span><span class="s1">removeOnChange = value.on(</span><span class="s2">&quot;change&quot;</span><span class="s1">, (latestValue) =&gt; {</span>
+            <span class="s0">this</span><span class="s1">.latestValues[key] = latestValue;</span>
+            <span class="s0">this</span><span class="s1">.props.onUpdate &amp;&amp; frame.preRender(</span><span class="s0">this</span><span class="s1">.notifyUpdate);</span>
+            <span class="s0">if </span><span class="s1">(valueIsTransform &amp;&amp; </span><span class="s0">this</span><span class="s1">.projection) {</span>
+                <span class="s0">this</span><span class="s1">.projection.isTransformDirty = </span><span class="s0">true</span><span class="s1">;</span>
+            <span class="s1">}</span>
+            <span class="s0">this</span><span class="s1">.scheduleRender();</span>
+        <span class="s1">});</span>
+        <span class="s0">let </span><span class="s1">removeSyncCheck;</span>
+        <span class="s0">if </span><span class="s1">(window.MotionCheckAppearSync) {</span>
+            <span class="s1">removeSyncCheck = window.MotionCheckAppearSync(</span><span class="s0">this</span><span class="s1">, key, value);</span>
+        <span class="s1">}</span>
+        <span class="s0">this</span><span class="s1">.valueSubscriptions.set(key, () =&gt; {</span>
+            <span class="s1">removeOnChange();</span>
+            <span class="s0">if </span><span class="s1">(removeSyncCheck)</span>
+                <span class="s1">removeSyncCheck();</span>
+            <span class="s0">if </span><span class="s1">(value.owner)</span>
+                <span class="s1">value.stop();</span>
+        <span class="s1">});</span>
+    <span class="s1">}</span>
+    <span class="s1">sortNodePosition(other) {</span>
+        <span class="s3">/**</span>
+         <span class="s3">* If these nodes aren't even of the same type we can't compare their depth.</span>
+         <span class="s3">*/</span>
+        <span class="s0">if </span><span class="s1">(!</span><span class="s0">this</span><span class="s1">.current ||</span>
+            <span class="s1">!</span><span class="s0">this</span><span class="s1">.sortInstanceNodePosition ||</span>
+            <span class="s0">this</span><span class="s1">.type !== other.type) {</span>
+            <span class="s0">return </span><span class="s4">0</span><span class="s1">;</span>
+        <span class="s1">}</span>
+        <span class="s0">return this</span><span class="s1">.sortInstanceNodePosition(</span><span class="s0">this</span><span class="s1">.current, other.current);</span>
+    <span class="s1">}</span>
+    <span class="s1">updateFeatures() {</span>
+        <span class="s0">let </span><span class="s1">key = </span><span class="s2">&quot;animation&quot;</span><span class="s1">;</span>
+        <span class="s0">for </span><span class="s1">(key </span><span class="s0">in </span><span class="s1">featureDefinitions) {</span>
+            <span class="s0">const </span><span class="s1">featureDefinition = featureDefinitions[key];</span>
+            <span class="s0">if </span><span class="s1">(!featureDefinition)</span>
+                <span class="s0">continue</span><span class="s1">;</span>
+            <span class="s0">const </span><span class="s1">{ isEnabled, Feature: FeatureConstructor } = featureDefinition;</span>
+            <span class="s3">/**</span>
+             <span class="s3">* If this feature is enabled but not active, make a new instance.</span>
+             <span class="s3">*/</span>
+            <span class="s0">if </span><span class="s1">(!</span><span class="s0">this</span><span class="s1">.features[key] &amp;&amp;</span>
+                <span class="s1">FeatureConstructor &amp;&amp;</span>
+                <span class="s1">isEnabled(</span><span class="s0">this</span><span class="s1">.props)) {</span>
+                <span class="s0">this</span><span class="s1">.features[key] = </span><span class="s0">new </span><span class="s1">FeatureConstructor(</span><span class="s0">this</span><span class="s1">);</span>
+            <span class="s1">}</span>
+            <span class="s3">/**</span>
+             <span class="s3">* If we have a feature, mount or update it.</span>
+             <span class="s3">*/</span>
+            <span class="s0">if </span><span class="s1">(</span><span class="s0">this</span><span class="s1">.features[key]) {</span>
+                <span class="s0">const </span><span class="s1">feature = </span><span class="s0">this</span><span class="s1">.features[key];</span>
+                <span class="s0">if </span><span class="s1">(feature.isMounted) {</span>
+                    <span class="s1">feature.update();</span>
+                <span class="s1">}</span>
+                <span class="s0">else </span><span class="s1">{</span>
+                    <span class="s1">feature.mount();</span>
+                    <span class="s1">feature.isMounted = </span><span class="s0">true</span><span class="s1">;</span>
+                <span class="s1">}</span>
+            <span class="s1">}</span>
+        <span class="s1">}</span>
+    <span class="s1">}</span>
+    <span class="s1">triggerBuild() {</span>
+        <span class="s0">this</span><span class="s1">.build(</span><span class="s0">this</span><span class="s1">.renderState, </span><span class="s0">this</span><span class="s1">.latestValues, </span><span class="s0">this</span><span class="s1">.props);</span>
+    <span class="s1">}</span>
+    <span class="s3">/**</span>
+     <span class="s3">* Measure the current viewport box with or without transforms.</span>
+     <span class="s3">* Only measures axis-aligned boxes, rotate and skew must be manually</span>
+     <span class="s3">* removed with a re-render to work.</span>
+     <span class="s3">*/</span>
+    <span class="s1">measureViewportBox() {</span>
+        <span class="s0">return this</span><span class="s1">.current</span>
+            <span class="s1">? </span><span class="s0">this</span><span class="s1">.measureInstanceViewportBox(</span><span class="s0">this</span><span class="s1">.current, </span><span class="s0">this</span><span class="s1">.props)</span>
+            <span class="s1">: createBox();</span>
+    <span class="s1">}</span>
+    <span class="s1">getStaticValue(key) {</span>
+        <span class="s0">return this</span><span class="s1">.latestValues[key];</span>
+    <span class="s1">}</span>
+    <span class="s1">setStaticValue(key, value) {</span>
+        <span class="s0">this</span><span class="s1">.latestValues[key] = value;</span>
+    <span class="s1">}</span>
+    <span class="s3">/**</span>
+     <span class="s3">* Update the provided props. Ensure any newly-added motion values are</span>
+     <span class="s3">* added to our map, old ones removed, and listeners updated.</span>
+     <span class="s3">*/</span>
+    <span class="s1">update(props, presenceContext) {</span>
+        <span class="s0">if </span><span class="s1">(props.transformTemplate || </span><span class="s0">this</span><span class="s1">.props.transformTemplate) {</span>
+            <span class="s0">this</span><span class="s1">.scheduleRender();</span>
+        <span class="s1">}</span>
+        <span class="s0">this</span><span class="s1">.prevProps = </span><span class="s0">this</span><span class="s1">.props;</span>
+        <span class="s0">this</span><span class="s1">.props = props;</span>
+        <span class="s0">this</span><span class="s1">.prevPresenceContext = </span><span class="s0">this</span><span class="s1">.presenceContext;</span>
+        <span class="s0">this</span><span class="s1">.presenceContext = presenceContext;</span>
+        <span class="s3">/**</span>
+         <span class="s3">* Update prop event handlers ie onAnimationStart, onAnimationComplete</span>
+         <span class="s3">*/</span>
+        <span class="s0">for </span><span class="s1">(</span><span class="s0">let </span><span class="s1">i = </span><span class="s4">0</span><span class="s1">; i &lt; propEventHandlers.length; i++) {</span>
+            <span class="s0">const </span><span class="s1">key = propEventHandlers[i];</span>
+            <span class="s0">if </span><span class="s1">(</span><span class="s0">this</span><span class="s1">.propEventSubscriptions[key]) {</span>
+                <span class="s0">this</span><span class="s1">.propEventSubscriptions[key]();</span>
+                <span class="s0">delete this</span><span class="s1">.propEventSubscriptions[key];</span>
+            <span class="s1">}</span>
+            <span class="s0">const </span><span class="s1">listenerName = (</span><span class="s2">&quot;on&quot; </span><span class="s1">+ key);</span>
+            <span class="s0">const </span><span class="s1">listener = props[listenerName];</span>
+            <span class="s0">if </span><span class="s1">(listener) {</span>
+                <span class="s0">this</span><span class="s1">.propEventSubscriptions[key] = </span><span class="s0">this</span><span class="s1">.on(key, listener);</span>
+            <span class="s1">}</span>
+        <span class="s1">}</span>
+        <span class="s0">this</span><span class="s1">.prevMotionValues = updateMotionValuesFromProps(</span><span class="s0">this</span><span class="s1">, </span><span class="s0">this</span><span class="s1">.scrapeMotionValuesFromProps(props, </span><span class="s0">this</span><span class="s1">.prevProps, </span><span class="s0">this</span><span class="s1">), </span><span class="s0">this</span><span class="s1">.prevMotionValues);</span>
+        <span class="s0">if </span><span class="s1">(</span><span class="s0">this</span><span class="s1">.handleChildMotionValue) {</span>
+            <span class="s0">this</span><span class="s1">.handleChildMotionValue();</span>
+        <span class="s1">}</span>
+    <span class="s1">}</span>
+    <span class="s1">getProps() {</span>
+        <span class="s0">return this</span><span class="s1">.props;</span>
+    <span class="s1">}</span>
+    <span class="s3">/**</span>
+     <span class="s3">* Returns the variant definition with a given name.</span>
+     <span class="s3">*/</span>
+    <span class="s1">getVariant(name) {</span>
+        <span class="s0">return this</span><span class="s1">.props.variants ? </span><span class="s0">this</span><span class="s1">.props.variants[name] : undefined;</span>
+    <span class="s1">}</span>
+    <span class="s3">/**</span>
+     <span class="s3">* Returns the defined default transition on this component.</span>
+     <span class="s3">*/</span>
+    <span class="s1">getDefaultTransition() {</span>
+        <span class="s0">return this</span><span class="s1">.props.transition;</span>
+    <span class="s1">}</span>
+    <span class="s1">getTransformPagePoint() {</span>
+        <span class="s0">return this</span><span class="s1">.props.transformPagePoint;</span>
+    <span class="s1">}</span>
+    <span class="s1">getClosestVariantNode() {</span>
+        <span class="s0">return this</span><span class="s1">.isVariantNode</span>
+            <span class="s1">? </span><span class="s0">this</span>
+            <span class="s1">: </span><span class="s0">this</span><span class="s1">.parent</span>
+                <span class="s1">? </span><span class="s0">this</span><span class="s1">.parent.getClosestVariantNode()</span>
+                <span class="s1">: undefined;</span>
+    <span class="s1">}</span>
+    <span class="s3">/**</span>
+     <span class="s3">* Add a child visual element to our set of children.</span>
+     <span class="s3">*/</span>
+    <span class="s1">addVariantChild(child) {</span>
+        <span class="s0">const </span><span class="s1">closestVariantNode = </span><span class="s0">this</span><span class="s1">.getClosestVariantNode();</span>
+        <span class="s0">if </span><span class="s1">(closestVariantNode) {</span>
+            <span class="s1">closestVariantNode.variantChildren &amp;&amp;</span>
+                <span class="s1">closestVariantNode.variantChildren.add(child);</span>
+            <span class="s0">return </span><span class="s1">() =&gt; closestVariantNode.variantChildren.delete(child);</span>
+        <span class="s1">}</span>
+    <span class="s1">}</span>
+    <span class="s3">/**</span>
+     <span class="s3">* Add a motion value and bind it to this visual element.</span>
+     <span class="s3">*/</span>
+    <span class="s1">addValue(key, value) {</span>
+        <span class="s3">// Remove existing value if it exists</span>
+        <span class="s0">const </span><span class="s1">existingValue = </span><span class="s0">this</span><span class="s1">.values.get(key);</span>
+        <span class="s0">if </span><span class="s1">(value !== existingValue) {</span>
+            <span class="s0">if </span><span class="s1">(existingValue)</span>
+                <span class="s0">this</span><span class="s1">.removeValue(key);</span>
+            <span class="s0">this</span><span class="s1">.bindToMotionValue(key, value);</span>
+            <span class="s0">this</span><span class="s1">.values.set(key, value);</span>
+            <span class="s0">this</span><span class="s1">.latestValues[key] = value.get();</span>
+        <span class="s1">}</span>
+    <span class="s1">}</span>
+    <span class="s3">/**</span>
+     <span class="s3">* Remove a motion value and unbind any active subscriptions.</span>
+     <span class="s3">*/</span>
+    <span class="s1">removeValue(key) {</span>
+        <span class="s0">this</span><span class="s1">.values.delete(key);</span>
+        <span class="s0">const </span><span class="s1">unsubscribe = </span><span class="s0">this</span><span class="s1">.valueSubscriptions.get(key);</span>
+        <span class="s0">if </span><span class="s1">(unsubscribe) {</span>
+            <span class="s1">unsubscribe();</span>
+            <span class="s0">this</span><span class="s1">.valueSubscriptions.delete(key);</span>
+        <span class="s1">}</span>
+        <span class="s0">delete this</span><span class="s1">.latestValues[key];</span>
+        <span class="s0">this</span><span class="s1">.removeValueFromRenderState(key, </span><span class="s0">this</span><span class="s1">.renderState);</span>
+    <span class="s1">}</span>
+    <span class="s3">/**</span>
+     <span class="s3">* Check whether we have a motion value for this key</span>
+     <span class="s3">*/</span>
+    <span class="s1">hasValue(key) {</span>
+        <span class="s0">return this</span><span class="s1">.values.has(key);</span>
+    <span class="s1">}</span>
+    <span class="s1">getValue(key, defaultValue) {</span>
+        <span class="s0">if </span><span class="s1">(</span><span class="s0">this</span><span class="s1">.props.values &amp;&amp; </span><span class="s0">this</span><span class="s1">.props.values[key]) {</span>
+            <span class="s0">return this</span><span class="s1">.props.values[key];</span>
+        <span class="s1">}</span>
+        <span class="s0">let </span><span class="s1">value = </span><span class="s0">this</span><span class="s1">.values.get(key);</span>
+        <span class="s0">if </span><span class="s1">(value === undefined &amp;&amp; defaultValue !== undefined) {</span>
+            <span class="s1">value = motionValue(defaultValue === </span><span class="s0">null </span><span class="s1">? undefined : defaultValue, { owner: </span><span class="s0">this </span><span class="s1">});</span>
+            <span class="s0">this</span><span class="s1">.addValue(key, value);</span>
+        <span class="s1">}</span>
+        <span class="s0">return </span><span class="s1">value;</span>
+    <span class="s1">}</span>
+    <span class="s3">/**</span>
+     <span class="s3">* If we're trying to animate to a previously unencountered value,</span>
+     <span class="s3">* we need to check for it in our state and as a last resort read it</span>
+     <span class="s3">* directly from the instance (which might have performance implications).</span>
+     <span class="s3">*/</span>
+    <span class="s1">readValue(key, target) {</span>
+        <span class="s0">let </span><span class="s1">value = </span><span class="s0">this</span><span class="s1">.latestValues[key] !== undefined || !</span><span class="s0">this</span><span class="s1">.current</span>
+            <span class="s1">? </span><span class="s0">this</span><span class="s1">.latestValues[key]</span>
+            <span class="s1">: </span><span class="s0">this</span><span class="s1">.getBaseTargetFromProps(</span><span class="s0">this</span><span class="s1">.props, key) ??</span>
+                <span class="s0">this</span><span class="s1">.readValueFromInstance(</span><span class="s0">this</span><span class="s1">.current, key, </span><span class="s0">this</span><span class="s1">.options);</span>
+        <span class="s0">if </span><span class="s1">(value !== undefined &amp;&amp; value !== </span><span class="s0">null</span><span class="s1">) {</span>
+            <span class="s0">if </span><span class="s1">(</span><span class="s0">typeof </span><span class="s1">value === </span><span class="s2">&quot;string&quot; </span><span class="s1">&amp;&amp;</span>
+                <span class="s1">(isNumericalString(value) || isZeroValueString(value))) {</span>
+                <span class="s3">// If this is a number read as a string, ie &quot;0&quot; or &quot;200&quot;, convert it to a number</span>
+                <span class="s1">value = parseFloat(value);</span>
+            <span class="s1">}</span>
+            <span class="s0">else if </span><span class="s1">(!findValueType(value) &amp;&amp; complex.test(target)) {</span>
+                <span class="s1">value = getAnimatableNone(key, target);</span>
+            <span class="s1">}</span>
+            <span class="s0">this</span><span class="s1">.setBaseTarget(key, isMotionValue(value) ? value.get() : value);</span>
+        <span class="s1">}</span>
+        <span class="s0">return </span><span class="s1">isMotionValue(value) ? value.get() : value;</span>
+    <span class="s1">}</span>
+    <span class="s3">/**</span>
+     <span class="s3">* Set the base target to later animate back to. This is currently</span>
+     <span class="s3">* only hydrated on creation and when we first read a value.</span>
+     <span class="s3">*/</span>
+    <span class="s1">setBaseTarget(key, value) {</span>
+        <span class="s0">this</span><span class="s1">.baseTarget[key] = value;</span>
+    <span class="s1">}</span>
+    <span class="s3">/**</span>
+     <span class="s3">* Find the base target for a value thats been removed from all animation</span>
+     <span class="s3">* props.</span>
+     <span class="s3">*/</span>
+    <span class="s1">getBaseTarget(key) {</span>
+        <span class="s0">const </span><span class="s1">{ initial } = </span><span class="s0">this</span><span class="s1">.props;</span>
+        <span class="s0">let </span><span class="s1">valueFromInitial;</span>
+        <span class="s0">if </span><span class="s1">(</span><span class="s0">typeof </span><span class="s1">initial === </span><span class="s2">&quot;string&quot; </span><span class="s1">|| </span><span class="s0">typeof </span><span class="s1">initial === </span><span class="s2">&quot;object&quot;</span><span class="s1">) {</span>
+            <span class="s0">const </span><span class="s1">variant = resolveVariantFromProps(</span><span class="s0">this</span><span class="s1">.props, initial, </span><span class="s0">this</span><span class="s1">.presenceContext?.custom);</span>
+            <span class="s0">if </span><span class="s1">(variant) {</span>
+                <span class="s1">valueFromInitial = variant[key];</span>
+            <span class="s1">}</span>
+        <span class="s1">}</span>
+        <span class="s3">/**</span>
+         <span class="s3">* If this value still exists in the current initial variant, read that.</span>
+         <span class="s3">*/</span>
+        <span class="s0">if </span><span class="s1">(initial &amp;&amp; valueFromInitial !== undefined) {</span>
+            <span class="s0">return </span><span class="s1">valueFromInitial;</span>
+        <span class="s1">}</span>
+        <span class="s3">/**</span>
+         <span class="s3">* Alternatively, if this VisualElement config has defined a getBaseTarget</span>
+         <span class="s3">* so we can read the value from an alternative source, try that.</span>
+         <span class="s3">*/</span>
+        <span class="s0">const </span><span class="s1">target = </span><span class="s0">this</span><span class="s1">.getBaseTargetFromProps(</span><span class="s0">this</span><span class="s1">.props, key);</span>
+        <span class="s0">if </span><span class="s1">(target !== undefined &amp;&amp; !isMotionValue(target))</span>
+            <span class="s0">return </span><span class="s1">target;</span>
+        <span class="s3">/**</span>
+         <span class="s3">* If the value was initially defined on initial, but it doesn't any more,</span>
+         <span class="s3">* return undefined. Otherwise return the value as initially read from the DOM.</span>
+         <span class="s3">*/</span>
+        <span class="s0">return this</span><span class="s1">.initialValues[key] !== undefined &amp;&amp;</span>
+            <span class="s1">valueFromInitial === undefined</span>
+            <span class="s1">? undefined</span>
+            <span class="s1">: </span><span class="s0">this</span><span class="s1">.baseTarget[key];</span>
+    <span class="s1">}</span>
+    <span class="s1">on(eventName, callback) {</span>
+        <span class="s0">if </span><span class="s1">(!</span><span class="s0">this</span><span class="s1">.events[eventName]) {</span>
+            <span class="s0">this</span><span class="s1">.events[eventName] = </span><span class="s0">new </span><span class="s1">SubscriptionManager();</span>
+        <span class="s1">}</span>
+        <span class="s0">return this</span><span class="s1">.events[eventName].add(callback);</span>
+    <span class="s1">}</span>
+    <span class="s1">notify(eventName, ...args) {</span>
+        <span class="s0">if </span><span class="s1">(</span><span class="s0">this</span><span class="s1">.events[eventName]) {</span>
+            <span class="s0">this</span><span class="s1">.events[eventName].notify(...args);</span>
+        <span class="s1">}</span>
+    <span class="s1">}</span>
+    <span class="s1">scheduleRenderMicrotask() {</span>
+        <span class="s1">microtask.render(</span><span class="s0">this</span><span class="s1">.render);</span>
+    <span class="s1">}</span>
+<span class="s1">}</span>
+
+<span class="s0">export </span><span class="s1">{ VisualElement };</span>
+</pre>
+</body>
+</html>

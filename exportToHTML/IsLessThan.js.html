@@ -1,0 +1,118 @@
+<html>
+<head>
+<title>IsLessThan.js</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #067d17;}
+.s1 { color: #080808;}
+.s2 { color: #0033b3;}
+.s3 { color: #8c8c8c; font-style: italic;}
+.s4 { color: #1750eb;}
+</style>
+</head>
+<body bgcolor="#ffffff">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#c0c0c0" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+IsLessThan.js</font>
+</center></td></tr></table>
+<pre><span class="s0">'use strict'</span><span class="s1">;</span>
+
+<span class="s2">var </span><span class="s1">GetIntrinsic = require(</span><span class="s0">'get-intrinsic'</span><span class="s1">);</span>
+
+<span class="s2">var </span><span class="s1">$Number = GetIntrinsic(</span><span class="s0">'%Number%'</span><span class="s1">);</span>
+<span class="s2">var </span><span class="s1">$TypeError = require(</span><span class="s0">'es-errors/type'</span><span class="s1">);</span>
+<span class="s2">var </span><span class="s1">min = require(</span><span class="s0">'math-intrinsics/min'</span><span class="s1">);</span>
+<span class="s2">var </span><span class="s1">$isNaN = require(</span><span class="s0">'math-intrinsics/isNaN'</span><span class="s1">);</span>
+
+<span class="s2">var </span><span class="s1">$charCodeAt = require(</span><span class="s0">'call-bound'</span><span class="s1">)(</span><span class="s0">'String.prototype.charCodeAt'</span><span class="s1">);</span>
+
+<span class="s2">var </span><span class="s1">StringToBigInt = require(</span><span class="s0">'./StringToBigInt'</span><span class="s1">);</span>
+<span class="s2">var </span><span class="s1">ToNumeric = require(</span><span class="s0">'./ToNumeric'</span><span class="s1">);</span>
+<span class="s2">var </span><span class="s1">ToPrimitive = require(</span><span class="s0">'./ToPrimitive'</span><span class="s1">);</span>
+
+<span class="s2">var </span><span class="s1">BigIntLessThan = require(</span><span class="s0">'./BigInt/lessThan'</span><span class="s1">);</span>
+<span class="s2">var </span><span class="s1">NumberLessThan = require(</span><span class="s0">'./Number/lessThan'</span><span class="s1">);</span>
+
+<span class="s3">// https://262.ecma-international.org/14.0/#sec-islessthan</span>
+
+<span class="s3">// eslint-disable-next-line max-statements, max-lines-per-function</span>
+<span class="s1">module.exports = </span><span class="s2">function </span><span class="s1">IsLessThan(x, y, LeftFirst) {</span>
+	<span class="s2">if </span><span class="s1">(</span><span class="s2">typeof </span><span class="s1">LeftFirst !== </span><span class="s0">'boolean'</span><span class="s1">) {</span>
+		<span class="s2">throw new </span><span class="s1">$TypeError(</span><span class="s0">'Assertion failed: LeftFirst argument must be a Boolean'</span><span class="s1">);</span>
+	<span class="s1">}</span>
+	<span class="s2">var </span><span class="s1">px;</span>
+	<span class="s2">var </span><span class="s1">py;</span>
+	<span class="s2">if </span><span class="s1">(LeftFirst) {</span>
+		<span class="s1">px = ToPrimitive(x, $Number);</span>
+		<span class="s1">py = ToPrimitive(y, $Number);</span>
+	<span class="s1">} </span><span class="s2">else </span><span class="s1">{</span>
+		<span class="s1">py = ToPrimitive(y, $Number);</span>
+		<span class="s1">px = ToPrimitive(x, $Number);</span>
+	<span class="s1">}</span>
+
+	<span class="s2">if </span><span class="s1">(</span><span class="s2">typeof </span><span class="s1">px === </span><span class="s0">'string' </span><span class="s1">&amp;&amp; </span><span class="s2">typeof </span><span class="s1">py === </span><span class="s0">'string'</span><span class="s1">) { </span><span class="s3">// step 3</span>
+		<span class="s3">// a. Let lx be the length of px.</span>
+		<span class="s3">// b. Let ly be the length of py.</span>
+		<span class="s3">// c. For each integer i starting with 0 such that i &lt; min(lx, ly), in ascending order, do</span>
+		<span class="s3">// i. Let cx be the integer that is the numeric value of the code unit at index i within px.</span>
+		<span class="s3">// ii. Let cy be the integer that is the numeric value of the code unit at index i within py.</span>
+		<span class="s3">// iii. If cx &lt; cy, return true.</span>
+		<span class="s3">// iv. If cx &gt; cy, return false.</span>
+		<span class="s3">// d. If lx &lt; ly, return true. Otherwise, return false.</span>
+
+		<span class="s2">var </span><span class="s1">lx = px.length; </span><span class="s3">// step 3.a</span>
+		<span class="s2">var </span><span class="s1">ly = py.length; </span><span class="s3">// step 3.b</span>
+		<span class="s2">for </span><span class="s1">(</span><span class="s2">var </span><span class="s1">i = </span><span class="s4">0</span><span class="s1">; i &lt; min(lx, ly); i++) { </span><span class="s3">// step 3.c</span>
+			<span class="s2">var </span><span class="s1">cx = $charCodeAt(px, i); </span><span class="s3">// step 3.c.i</span>
+			<span class="s2">var </span><span class="s1">cy = $charCodeAt(py, i); </span><span class="s3">// step 3.c.ii</span>
+			<span class="s2">if </span><span class="s1">(cx &lt; cy) {</span>
+				<span class="s2">return true</span><span class="s1">; </span><span class="s3">// step 3.c.iii</span>
+			<span class="s1">}</span>
+			<span class="s2">if </span><span class="s1">(cx &gt; cy) {</span>
+				<span class="s2">return false</span><span class="s1">; </span><span class="s3">// step 3.c.iv</span>
+			<span class="s1">}</span>
+		<span class="s1">}</span>
+		<span class="s2">return </span><span class="s1">lx &lt; ly; </span><span class="s3">// step 3.d</span>
+	<span class="s1">}</span>
+
+	<span class="s2">var </span><span class="s1">nx;</span>
+	<span class="s2">var </span><span class="s1">ny;</span>
+	<span class="s2">if </span><span class="s1">(</span><span class="s2">typeof </span><span class="s1">px === </span><span class="s0">'bigint' </span><span class="s1">&amp;&amp; </span><span class="s2">typeof </span><span class="s1">py === </span><span class="s0">'string'</span><span class="s1">) {</span>
+		<span class="s1">ny = StringToBigInt(py);</span>
+		<span class="s2">if </span><span class="s1">(</span><span class="s2">typeof </span><span class="s1">ny === </span><span class="s0">'undefined'</span><span class="s1">) {</span>
+			<span class="s2">return void </span><span class="s1">undefined;</span>
+		<span class="s1">}</span>
+		<span class="s2">return </span><span class="s1">BigIntLessThan(px, ny);</span>
+	<span class="s1">}</span>
+	<span class="s2">if </span><span class="s1">(</span><span class="s2">typeof </span><span class="s1">px === </span><span class="s0">'string' </span><span class="s1">&amp;&amp; </span><span class="s2">typeof </span><span class="s1">py === </span><span class="s0">'bigint'</span><span class="s1">) {</span>
+		<span class="s1">nx = StringToBigInt(px);</span>
+		<span class="s2">if </span><span class="s1">(</span><span class="s2">typeof </span><span class="s1">nx === </span><span class="s0">'undefined'</span><span class="s1">) {</span>
+			<span class="s2">return void </span><span class="s1">undefined;</span>
+		<span class="s1">}</span>
+		<span class="s2">return </span><span class="s1">BigIntLessThan(nx, py);</span>
+	<span class="s1">}</span>
+
+	<span class="s1">nx = ToNumeric(px);</span>
+	<span class="s1">ny = ToNumeric(py);</span>
+
+	<span class="s2">if </span><span class="s1">(</span><span class="s2">typeof </span><span class="s1">nx === </span><span class="s2">typeof </span><span class="s1">ny) {</span>
+		<span class="s2">return typeof </span><span class="s1">nx === </span><span class="s0">'number' </span><span class="s1">? NumberLessThan(nx, ny) : BigIntLessThan(nx, ny);</span>
+	<span class="s1">}</span>
+
+	<span class="s2">if </span><span class="s1">($isNaN(nx) || $isNaN(ny)) {</span>
+		<span class="s2">return void </span><span class="s1">undefined;</span>
+	<span class="s1">}</span>
+
+	<span class="s2">if </span><span class="s1">(nx === -Infinity || ny === Infinity) {</span>
+		<span class="s2">return true</span><span class="s1">;</span>
+	<span class="s1">}</span>
+	<span class="s2">if </span><span class="s1">(nx === Infinity || ny === -Infinity) {</span>
+		<span class="s2">return false</span><span class="s1">;</span>
+	<span class="s1">}</span>
+
+	<span class="s2">return </span><span class="s1">nx &lt; ny; </span><span class="s3">// by now, these are both finite, and the same type</span>
+<span class="s1">};</span>
+</pre>
+</body>
+</html>

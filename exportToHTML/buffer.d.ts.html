@@ -1,0 +1,1954 @@
+<html>
+<head>
+<title>buffer.d.ts</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #8c8c8c; font-style: italic;}
+.s1 { color: #080808;}
+.s2 { color: #0033b3;}
+.s3 { color: #067d17;}
+.s4 { color: #8c8c8c; font-style: italic;}
+.s5 { color: #1750eb;}
+</style>
+</head>
+<body bgcolor="#ffffff">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#c0c0c0" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+buffer.d.ts</font>
+</center></td></tr></table>
+<pre><span class="s0">// If lib.dom.d.ts or lib.webworker.d.ts is loaded, then use the global types.</span>
+<span class="s0">// Otherwise, use the types from node.</span>
+<span class="s1">type _Blob = </span><span class="s2">typeof </span><span class="s1">globalThis </span><span class="s2">extends </span><span class="s1">{ onmessage: any; Blob: any } ? {} : </span><span class="s2">import</span><span class="s1">(</span><span class="s3">&quot;buffer&quot;</span><span class="s1">).Blob;</span>
+<span class="s1">type _File = </span><span class="s2">typeof </span><span class="s1">globalThis </span><span class="s2">extends </span><span class="s1">{ onmessage: any; File: any } ? {} : </span><span class="s2">import</span><span class="s1">(</span><span class="s3">&quot;buffer&quot;</span><span class="s1">).File;</span>
+
+<span class="s0">/**</span>
+ <span class="s0">* `Buffer` objects are used to represent a fixed-length sequence of bytes. Many</span>
+ <span class="s0">* Node.js APIs support `Buffer`s.</span>
+ <span class="s0">*</span>
+ <span class="s0">* The `Buffer` class is a subclass of JavaScript's [`Uint8Array`](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Uint8Array) class and</span>
+ <span class="s0">* extends it with methods that cover additional use cases. Node.js APIs accept</span>
+ <span class="s0">* plain [`Uint8Array`](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Uint8Array) s wherever `Buffer`s are supported as well.</span>
+ <span class="s0">*</span>
+ <span class="s0">* While the `Buffer` class is available within the global scope, it is still</span>
+ <span class="s0">* recommended to explicitly reference it via an import or require statement.</span>
+ <span class="s0">*</span>
+ <span class="s0">* ```js</span>
+ <span class="s0">* import { Buffer } from 'node:buffer';</span>
+ <span class="s0">*</span>
+ <span class="s0">* // Creates a zero-filled Buffer of length 10.</span>
+ <span class="s0">* const buf1 = Buffer.alloc(10);</span>
+ <span class="s0">*</span>
+ <span class="s0">* // Creates a Buffer of length 10,</span>
+ <span class="s0">* // filled with bytes which all have the value `1`.</span>
+ <span class="s0">* const buf2 = Buffer.alloc(10, 1);</span>
+ <span class="s0">*</span>
+ <span class="s0">* // Creates an uninitialized buffer of length 10.</span>
+ <span class="s0">* // This is faster than calling Buffer.alloc() but the returned</span>
+ <span class="s0">* // Buffer instance might contain old data that needs to be</span>
+ <span class="s0">* // overwritten using fill(), write(), or other functions that fill the Buffer's</span>
+ <span class="s0">* // contents.</span>
+ <span class="s0">* const buf3 = Buffer.allocUnsafe(10);</span>
+ <span class="s0">*</span>
+ <span class="s0">* // Creates a Buffer containing the bytes [1, 2, 3].</span>
+ <span class="s0">* const buf4 = Buffer.from([1, 2, 3]);</span>
+ <span class="s0">*</span>
+ <span class="s0">* // Creates a Buffer containing the bytes [1, 1, 1, 1] – the entries</span>
+ <span class="s0">* // are all truncated using `(value &amp;#x26; 255)` to fit into the range 0–255.</span>
+ <span class="s0">* const buf5 = Buffer.from([257, 257.5, -255, '1']);</span>
+ <span class="s0">*</span>
+ <span class="s0">* // Creates a Buffer containing the UTF-8-encoded bytes for the string 'tést':</span>
+ <span class="s0">* // [0x74, 0xc3, 0xa9, 0x73, 0x74] (in hexadecimal notation)</span>
+ <span class="s0">* // [116, 195, 169, 115, 116] (in decimal notation)</span>
+ <span class="s0">* const buf6 = Buffer.from('tést');</span>
+ <span class="s0">*</span>
+ <span class="s0">* // Creates a Buffer containing the Latin-1 bytes [0x74, 0xe9, 0x73, 0x74].</span>
+ <span class="s0">* const buf7 = Buffer.from('tést', 'latin1');</span>
+ <span class="s0">* ```</span>
+ <span class="s0">* </span><span class="s4">@see </span><span class="s0">[source](https://github.com/nodejs/node/blob/v20.13.1/lib/buffer.js)</span>
+ <span class="s0">*/</span>
+<span class="s1">declare module </span><span class="s3">&quot;buffer&quot; </span><span class="s1">{</span>
+    <span class="s2">import </span><span class="s1">{ BinaryLike } from </span><span class="s3">&quot;node:crypto&quot;</span><span class="s1">;</span>
+    <span class="s2">import </span><span class="s1">{ ReadableStream as WebReadableStream } from </span><span class="s3">&quot;node:stream/web&quot;</span><span class="s1">;</span>
+    <span class="s0">/**</span>
+     <span class="s0">* This function returns `true` if `input` contains only valid UTF-8-encoded data,</span>
+     <span class="s0">* including the case in which `input` is empty.</span>
+     <span class="s0">*</span>
+     <span class="s0">* Throws if the `input` is a detached array buffer.</span>
+     <span class="s0">* </span><span class="s4">@since </span><span class="s0">v19.4.0, v18.14.0</span>
+     <span class="s0">* </span><span class="s4">@param </span><span class="s0">input The input to validate.</span>
+     <span class="s0">*/</span>
+    <span class="s2">export function </span><span class="s1">isUtf8(input: Buffer | ArrayBuffer | NodeJS.TypedArray): boolean;</span>
+    <span class="s0">/**</span>
+     <span class="s0">* This function returns `true` if `input` contains only valid ASCII-encoded data,</span>
+     <span class="s0">* including the case in which `input` is empty.</span>
+     <span class="s0">*</span>
+     <span class="s0">* Throws if the `input` is a detached array buffer.</span>
+     <span class="s0">* </span><span class="s4">@since </span><span class="s0">v19.6.0, v18.15.0</span>
+     <span class="s0">* </span><span class="s4">@param </span><span class="s0">input The input to validate.</span>
+     <span class="s0">*/</span>
+    <span class="s2">export function </span><span class="s1">isAscii(input: Buffer | ArrayBuffer | NodeJS.TypedArray): boolean;</span>
+    <span class="s2">export let </span><span class="s1">INSPECT_MAX_BYTES: number;</span>
+    <span class="s2">export const </span><span class="s1">kMaxLength: number;</span>
+    <span class="s2">export const </span><span class="s1">kStringMaxLength: number;</span>
+    <span class="s2">export const </span><span class="s1">constants: {</span>
+        <span class="s1">MAX_LENGTH: number;</span>
+        <span class="s1">MAX_STRING_LENGTH: number;</span>
+    <span class="s1">};</span>
+    <span class="s2">export </span><span class="s1">type TranscodeEncoding =</span>
+        <span class="s1">| </span><span class="s3">&quot;ascii&quot;</span>
+        <span class="s1">| </span><span class="s3">&quot;utf8&quot;</span>
+        <span class="s1">| </span><span class="s3">&quot;utf-8&quot;</span>
+        <span class="s1">| </span><span class="s3">&quot;utf16le&quot;</span>
+        <span class="s1">| </span><span class="s3">&quot;utf-16le&quot;</span>
+        <span class="s1">| </span><span class="s3">&quot;ucs2&quot;</span>
+        <span class="s1">| </span><span class="s3">&quot;ucs-2&quot;</span>
+        <span class="s1">| </span><span class="s3">&quot;latin1&quot;</span>
+        <span class="s1">| </span><span class="s3">&quot;binary&quot;</span><span class="s1">;</span>
+    <span class="s0">/**</span>
+     <span class="s0">* Re-encodes the given `Buffer` or `Uint8Array` instance from one character</span>
+     <span class="s0">* encoding to another. Returns a new `Buffer` instance.</span>
+     <span class="s0">*</span>
+     <span class="s0">* Throws if the `fromEnc` or `toEnc` specify invalid character encodings or if</span>
+     <span class="s0">* conversion from `fromEnc` to `toEnc` is not permitted.</span>
+     <span class="s0">*</span>
+     <span class="s0">* Encodings supported by `buffer.transcode()` are: `'ascii'`, `'utf8'`, `'utf16le'`, `'ucs2'`, `'latin1'`, and `'binary'`.</span>
+     <span class="s0">*</span>
+     <span class="s0">* The transcoding process will use substitution characters if a given byte</span>
+     <span class="s0">* sequence cannot be adequately represented in the target encoding. For instance:</span>
+     <span class="s0">*</span>
+     <span class="s0">* ```js</span>
+     <span class="s0">* import { Buffer, transcode } from 'node:buffer';</span>
+     <span class="s0">*</span>
+     <span class="s0">* const newBuf = transcode(Buffer.from('€'), 'utf8', 'ascii');</span>
+     <span class="s0">* console.log(newBuf.toString('ascii'));</span>
+     <span class="s0">* // Prints: '?'</span>
+     <span class="s0">* ```</span>
+     <span class="s0">*</span>
+     <span class="s0">* Because the Euro (`€`) sign is not representable in US-ASCII, it is replaced</span>
+     <span class="s0">* with `?` in the transcoded `Buffer`.</span>
+     <span class="s0">* </span><span class="s4">@since </span><span class="s0">v7.1.0</span>
+     <span class="s0">* </span><span class="s4">@param </span><span class="s0">source A `Buffer` or `Uint8Array` instance.</span>
+     <span class="s0">* </span><span class="s4">@param </span><span class="s0">fromEnc The current encoding.</span>
+     <span class="s0">* </span><span class="s4">@param </span><span class="s0">toEnc To target encoding.</span>
+     <span class="s0">*/</span>
+    <span class="s2">export function </span><span class="s1">transcode(source: Uint8Array, fromEnc: TranscodeEncoding, toEnc: TranscodeEncoding): Buffer;</span>
+    <span class="s0">/**</span>
+     <span class="s0">* Resolves a `'blob:nodedata:...'` an associated `Blob` object registered using</span>
+     <span class="s0">* a prior call to `URL.createObjectURL()`.</span>
+     <span class="s0">* </span><span class="s4">@since </span><span class="s0">v16.7.0</span>
+     <span class="s0">* </span><span class="s4">@experimental</span>
+     <span class="s0">* </span><span class="s4">@param </span><span class="s0">id A `'blob:nodedata:...` URL string returned by a prior call to `URL.createObjectURL()`.</span>
+     <span class="s0">*/</span>
+    <span class="s2">export function </span><span class="s1">resolveObjectURL(id: string): Blob | undefined;</span>
+    <span class="s2">export </span><span class="s1">{ type AllowSharedBuffer, Buffer, type NonSharedBuffer };</span>
+    <span class="s0">/**</span>
+     <span class="s0">* </span><span class="s4">@experimental</span>
+     <span class="s0">*/</span>
+    <span class="s2">export interface </span><span class="s1">BlobOptions {</span>
+        <span class="s0">/**</span>
+         <span class="s0">* One of either `'transparent'` or `'native'`. When set to `'native'`, line endings in string source parts</span>
+         <span class="s0">* will be converted to the platform native line-ending as specified by `import { EOL } from 'node:node:os'`.</span>
+         <span class="s0">*/</span>
+        <span class="s1">endings?: </span><span class="s3">&quot;transparent&quot; </span><span class="s1">| </span><span class="s3">&quot;native&quot;</span><span class="s1">;</span>
+        <span class="s0">/**</span>
+         <span class="s0">* The Blob content-type. The intent is for `type` to convey</span>
+         <span class="s0">* the MIME media type of the data, however no validation of the type format</span>
+         <span class="s0">* is performed.</span>
+         <span class="s0">*/</span>
+        <span class="s1">type?: string | undefined;</span>
+    <span class="s1">}</span>
+    <span class="s0">/**</span>
+     <span class="s0">* A [`Blob`](https://developer.mozilla.org/en-US/docs/Web/API/Blob) encapsulates immutable, raw data that can be safely shared across</span>
+     <span class="s0">* multiple worker threads.</span>
+     <span class="s0">* </span><span class="s4">@since </span><span class="s0">v15.7.0, v14.18.0</span>
+     <span class="s0">*/</span>
+    <span class="s2">export class </span><span class="s1">Blob {</span>
+        <span class="s0">/**</span>
+         <span class="s0">* The total size of the `Blob` in bytes.</span>
+         <span class="s0">* </span><span class="s4">@since </span><span class="s0">v15.7.0, v14.18.0</span>
+         <span class="s0">*/</span>
+        <span class="s1">readonly size: number;</span>
+        <span class="s0">/**</span>
+         <span class="s0">* The content-type of the `Blob`.</span>
+         <span class="s0">* </span><span class="s4">@since </span><span class="s0">v15.7.0, v14.18.0</span>
+         <span class="s0">*/</span>
+        <span class="s1">readonly type: string;</span>
+        <span class="s0">/**</span>
+         <span class="s0">* Creates a new `Blob` object containing a concatenation of the given sources.</span>
+         <span class="s0">*</span>
+         <span class="s0">* {ArrayBuffer}, {TypedArray}, {DataView}, and {Buffer} sources are copied into</span>
+         <span class="s0">* the 'Blob' and can therefore be safely modified after the 'Blob' is created.</span>
+         <span class="s0">*</span>
+         <span class="s0">* String sources are also copied into the `Blob`.</span>
+         <span class="s0">*/</span>
+        <span class="s1">constructor(sources: Array&lt;ArrayBuffer | BinaryLike | Blob&gt;, options?: BlobOptions);</span>
+        <span class="s0">/**</span>
+         <span class="s0">* Returns a promise that fulfills with an [ArrayBuffer](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/ArrayBuffer) containing a copy of</span>
+         <span class="s0">* the `Blob` data.</span>
+         <span class="s0">* </span><span class="s4">@since </span><span class="s0">v15.7.0, v14.18.0</span>
+         <span class="s0">*/</span>
+        <span class="s1">arrayBuffer(): Promise&lt;ArrayBuffer&gt;;</span>
+        <span class="s0">/**</span>
+         <span class="s0">* The `blob.bytes()` method returns the byte of the `Blob` object as a `Promise&lt;Uint8Array&gt;`.</span>
+         <span class="s0">*</span>
+         <span class="s0">* ```js</span>
+         <span class="s0">* const blob = new Blob(['hello']);</span>
+         <span class="s0">* blob.bytes().then((bytes) =&gt; {</span>
+         <span class="s0">*   console.log(bytes); // Outputs: Uint8Array(5) [ 104, 101, 108, 108, 111 ]</span>
+         <span class="s0">* });</span>
+         <span class="s0">* ```</span>
+         <span class="s0">* </span><span class="s4">@since </span><span class="s0">v20.16.0</span>
+         <span class="s0">*/</span>
+        <span class="s1">bytes(): Promise&lt;Uint8Array&gt;;</span>
+        <span class="s0">/**</span>
+         <span class="s0">* Creates and returns a new `Blob` containing a subset of this `Blob` objects</span>
+         <span class="s0">* data. The original `Blob` is not altered.</span>
+         <span class="s0">* </span><span class="s4">@since </span><span class="s0">v15.7.0, v14.18.0</span>
+         <span class="s0">* </span><span class="s4">@param </span><span class="s0">start The starting index.</span>
+         <span class="s0">* </span><span class="s4">@param </span><span class="s0">end The ending index.</span>
+         <span class="s0">* </span><span class="s4">@param </span><span class="s0">type The content-type for the new `Blob`</span>
+         <span class="s0">*/</span>
+        <span class="s1">slice(start?: number, end?: number, type?: string): Blob;</span>
+        <span class="s0">/**</span>
+         <span class="s0">* Returns a promise that fulfills with the contents of the `Blob` decoded as a</span>
+         <span class="s0">* UTF-8 string.</span>
+         <span class="s0">* </span><span class="s4">@since </span><span class="s0">v15.7.0, v14.18.0</span>
+         <span class="s0">*/</span>
+        <span class="s1">text(): Promise&lt;string&gt;;</span>
+        <span class="s0">/**</span>
+         <span class="s0">* Returns a new `ReadableStream` that allows the content of the `Blob` to be read.</span>
+         <span class="s0">* </span><span class="s4">@since </span><span class="s0">v16.7.0</span>
+         <span class="s0">*/</span>
+        <span class="s1">stream(): WebReadableStream;</span>
+    <span class="s1">}</span>
+    <span class="s2">export interface </span><span class="s1">FileOptions {</span>
+        <span class="s0">/**</span>
+         <span class="s0">* One of either `'transparent'` or `'native'`. When set to `'native'`, line endings in string source parts will be</span>
+         <span class="s0">* converted to the platform native line-ending as specified by `import { EOL } from 'node:node:os'`.</span>
+         <span class="s0">*/</span>
+        <span class="s1">endings?: </span><span class="s3">&quot;native&quot; </span><span class="s1">| </span><span class="s3">&quot;transparent&quot;</span><span class="s1">;</span>
+        <span class="s0">/** The File content-type. */</span>
+        <span class="s1">type?: string;</span>
+        <span class="s0">/** The last modified date of the file. `Default`: Date.now(). */</span>
+        <span class="s1">lastModified?: number;</span>
+    <span class="s1">}</span>
+    <span class="s0">/**</span>
+     <span class="s0">* A [`File`](https://developer.mozilla.org/en-US/docs/Web/API/File) provides information about files.</span>
+     <span class="s0">* </span><span class="s4">@since </span><span class="s0">v19.2.0, v18.13.0</span>
+     <span class="s0">*/</span>
+    <span class="s2">export class </span><span class="s1">File </span><span class="s2">extends </span><span class="s1">Blob {</span>
+        <span class="s1">constructor(sources: Array&lt;BinaryLike | Blob&gt;, fileName: string, options?: FileOptions);</span>
+        <span class="s0">/**</span>
+         <span class="s0">* The name of the `File`.</span>
+         <span class="s0">* </span><span class="s4">@since </span><span class="s0">v19.2.0, v18.13.0</span>
+         <span class="s0">*/</span>
+        <span class="s1">readonly name: string;</span>
+        <span class="s0">/**</span>
+         <span class="s0">* The last modified date of the `File`.</span>
+         <span class="s0">* </span><span class="s4">@since </span><span class="s0">v19.2.0, v18.13.0</span>
+         <span class="s0">*/</span>
+        <span class="s1">readonly lastModified: number;</span>
+    <span class="s1">}</span>
+    <span class="s2">export import </span><span class="s1">atob = globalThis.atob;</span>
+    <span class="s2">export import </span><span class="s1">btoa = globalThis.btoa;</span>
+    <span class="s2">export </span><span class="s1">type WithImplicitCoercion&lt;T&gt; =</span>
+        <span class="s1">| T</span>
+        <span class="s1">| { valueOf(): T }</span>
+        <span class="s1">| (T </span><span class="s2">extends </span><span class="s1">string ? { [Symbol.toPrimitive](hint: </span><span class="s3">&quot;string&quot;</span><span class="s1">): T } : never);</span>
+    <span class="s1">global {</span>
+        <span class="s1">namespace NodeJS {</span>
+            <span class="s2">export </span><span class="s1">{ BufferEncoding };</span>
+        <span class="s1">}</span>
+        <span class="s0">// Buffer class</span>
+        <span class="s1">type BufferEncoding =</span>
+            <span class="s1">| </span><span class="s3">&quot;ascii&quot;</span>
+            <span class="s1">| </span><span class="s3">&quot;utf8&quot;</span>
+            <span class="s1">| </span><span class="s3">&quot;utf-8&quot;</span>
+            <span class="s1">| </span><span class="s3">&quot;utf16le&quot;</span>
+            <span class="s1">| </span><span class="s3">&quot;utf-16le&quot;</span>
+            <span class="s1">| </span><span class="s3">&quot;ucs2&quot;</span>
+            <span class="s1">| </span><span class="s3">&quot;ucs-2&quot;</span>
+            <span class="s1">| </span><span class="s3">&quot;base64&quot;</span>
+            <span class="s1">| </span><span class="s3">&quot;base64url&quot;</span>
+            <span class="s1">| </span><span class="s3">&quot;latin1&quot;</span>
+            <span class="s1">| </span><span class="s3">&quot;binary&quot;</span>
+            <span class="s1">| </span><span class="s3">&quot;hex&quot;</span><span class="s1">;</span>
+        <span class="s0">/**</span>
+         <span class="s0">* Raw data is stored in instances of the Buffer class.</span>
+         <span class="s0">* A Buffer is similar to an array of integers but corresponds to a raw memory allocation outside the V8 heap.  A Buffer cannot be resized.</span>
+         <span class="s0">* Valid string encodings: 'ascii'|'utf8'|'utf16le'|'ucs2'(alias of 'utf16le')|'base64'|'base64url'|'binary'(deprecated)|'hex'</span>
+         <span class="s0">*/</span>
+        <span class="s2">interface </span><span class="s1">BufferConstructor {</span>
+            <span class="s0">// see buffer.buffer.d.ts for implementation specific to TypeScript 5.7 and later</span>
+            <span class="s0">// see ts5.6/buffer.buffer.d.ts for implementation specific to TypeScript 5.6 and earlier</span>
+
+            <span class="s0">/**</span>
+             <span class="s0">* Returns `true` if `obj` is a `Buffer`, `false` otherwise.</span>
+             <span class="s0">*</span>
+             <span class="s0">* ```js</span>
+             <span class="s0">* import { Buffer } from 'node:buffer';</span>
+             <span class="s0">*</span>
+             <span class="s0">* Buffer.isBuffer(Buffer.alloc(10)); // true</span>
+             <span class="s0">* Buffer.isBuffer(Buffer.from('foo')); // true</span>
+             <span class="s0">* Buffer.isBuffer('a string'); // false</span>
+             <span class="s0">* Buffer.isBuffer([]); // false</span>
+             <span class="s0">* Buffer.isBuffer(new Uint8Array(1024)); // false</span>
+             <span class="s0">* ```</span>
+             <span class="s0">* </span><span class="s4">@since </span><span class="s0">v0.1.101</span>
+             <span class="s0">*/</span>
+            <span class="s1">isBuffer(obj: any): obj is Buffer;</span>
+            <span class="s0">/**</span>
+             <span class="s0">* Returns `true` if `encoding` is the name of a supported character encoding,</span>
+             <span class="s0">* or `false` otherwise.</span>
+             <span class="s0">*</span>
+             <span class="s0">* ```js</span>
+             <span class="s0">* import { Buffer } from 'node:buffer';</span>
+             <span class="s0">*</span>
+             <span class="s0">* console.log(Buffer.isEncoding('utf8'));</span>
+             <span class="s0">* // Prints: true</span>
+             <span class="s0">*</span>
+             <span class="s0">* console.log(Buffer.isEncoding('hex'));</span>
+             <span class="s0">* // Prints: true</span>
+             <span class="s0">*</span>
+             <span class="s0">* console.log(Buffer.isEncoding('utf/8'));</span>
+             <span class="s0">* // Prints: false</span>
+             <span class="s0">*</span>
+             <span class="s0">* console.log(Buffer.isEncoding(''));</span>
+             <span class="s0">* // Prints: false</span>
+             <span class="s0">* ```</span>
+             <span class="s0">* </span><span class="s4">@since </span><span class="s0">v0.9.1</span>
+             <span class="s0">* </span><span class="s4">@param </span><span class="s0">encoding A character encoding name to check.</span>
+             <span class="s0">*/</span>
+            <span class="s1">isEncoding(encoding: string): encoding is BufferEncoding;</span>
+            <span class="s0">/**</span>
+             <span class="s0">* Returns the byte length of a string when encoded using `encoding`.</span>
+             <span class="s0">* This is not the same as [`String.prototype.length`](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/String/length), which does not account</span>
+             <span class="s0">* for the encoding that is used to convert the string into bytes.</span>
+             <span class="s0">*</span>
+             <span class="s0">* For `'base64'`, `'base64url'`, and `'hex'`, this function assumes valid input.</span>
+             <span class="s0">* For strings that contain non-base64/hex-encoded data (e.g. whitespace), the</span>
+             <span class="s0">* return value might be greater than the length of a `Buffer` created from the</span>
+             <span class="s0">* string.</span>
+             <span class="s0">*</span>
+             <span class="s0">* ```js</span>
+             <span class="s0">* import { Buffer } from 'node:buffer';</span>
+             <span class="s0">*</span>
+             <span class="s0">* const str = '\u00bd + \u00bc = \u00be';</span>
+             <span class="s0">*</span>
+             <span class="s0">* console.log(`${str}: ${str.length} characters, ` +</span>
+             <span class="s0">*             `${Buffer.byteLength(str, 'utf8')} bytes`);</span>
+             <span class="s0">* // Prints: ½ + ¼ = ¾: 9 characters, 12 bytes</span>
+             <span class="s0">* ```</span>
+             <span class="s0">*</span>
+             <span class="s0">* When `string` is a</span>
+             <span class="s0">* `Buffer`/[`DataView`](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/DataView)/[`TypedArray`](https://developer.mozilla.org/en-US/docs/Web/JavaScript/-</span>
+             <span class="s0">* Reference/Global_Objects/TypedArray)/[`ArrayBuffer`](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/ArrayBuffer)/[`SharedArrayBuffer`](https://develop-</span>
+             <span class="s0">* er.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/SharedArrayBuffer), the byte length as reported by `.byteLength`is returned.</span>
+             <span class="s0">* </span><span class="s4">@since </span><span class="s0">v0.1.90</span>
+             <span class="s0">* </span><span class="s4">@param </span><span class="s0">string A value to calculate the length of.</span>
+             <span class="s0">* </span><span class="s4">@param </span><span class="s0">[encoding='utf8'] If `string` is a string, this is its encoding.</span>
+             <span class="s0">* </span><span class="s4">@return </span><span class="s0">The number of bytes contained within `string`.</span>
+             <span class="s0">*/</span>
+            <span class="s1">byteLength(</span>
+                <span class="s1">string: string | Buffer | NodeJS.ArrayBufferView | ArrayBuffer | SharedArrayBuffer,</span>
+                <span class="s1">encoding?: BufferEncoding,</span>
+            <span class="s1">): number;</span>
+            <span class="s0">/**</span>
+             <span class="s0">* Compares `buf1` to `buf2`, typically for the purpose of sorting arrays of `Buffer` instances. This is equivalent to calling `buf1.compare(buf2)`.</span>
+             <span class="s0">*</span>
+             <span class="s0">* ```js</span>
+             <span class="s0">* import { Buffer } from 'node:buffer';</span>
+             <span class="s0">*</span>
+             <span class="s0">* const buf1 = Buffer.from('1234');</span>
+             <span class="s0">* const buf2 = Buffer.from('0123');</span>
+             <span class="s0">* const arr = [buf1, buf2];</span>
+             <span class="s0">*</span>
+             <span class="s0">* console.log(arr.sort(Buffer.compare));</span>
+             <span class="s0">* // Prints: [ &lt;Buffer 30 31 32 33&gt;, &lt;Buffer 31 32 33 34&gt; ]</span>
+             <span class="s0">* // (This result is equal to: [buf2, buf1].)</span>
+             <span class="s0">* ```</span>
+             <span class="s0">* </span><span class="s4">@since </span><span class="s0">v0.11.13</span>
+             <span class="s0">* </span><span class="s4">@return </span><span class="s0">Either `-1`, `0`, or `1`, depending on the result of the comparison. See `compare` for details.</span>
+             <span class="s0">*/</span>
+            <span class="s1">compare(buf1: Uint8Array, buf2: Uint8Array): -</span><span class="s5">1 </span><span class="s1">| </span><span class="s5">0 </span><span class="s1">| </span><span class="s5">1</span><span class="s1">;</span>
+            <span class="s0">/**</span>
+             <span class="s0">* This is the size (in bytes) of pre-allocated internal `Buffer` instances used</span>
+             <span class="s0">* for pooling. This value may be modified.</span>
+             <span class="s0">* </span><span class="s4">@since </span><span class="s0">v0.11.3</span>
+             <span class="s0">*/</span>
+            <span class="s1">poolSize: number;</span>
+        <span class="s1">}</span>
+        <span class="s2">interface </span><span class="s1">Buffer {</span>
+            <span class="s0">// see buffer.buffer.d.ts for implementation specific to TypeScript 5.7 and later</span>
+            <span class="s0">// see ts5.6/buffer.buffer.d.ts for implementation specific to TypeScript 5.6 and earlier</span>
+
+            <span class="s0">/**</span>
+             <span class="s0">* Writes `string` to `buf` at `offset` according to the character encoding in`encoding`. The `length` parameter is the number of bytes to write. If `buf` did</span>
+             <span class="s0">* not contain enough space to fit the entire string, only part of `string` will be</span>
+             <span class="s0">* written. However, partially encoded characters will not be written.</span>
+             <span class="s0">*</span>
+             <span class="s0">* ```js</span>
+             <span class="s0">* import { Buffer } from 'node:buffer';</span>
+             <span class="s0">*</span>
+             <span class="s0">* const buf = Buffer.alloc(256);</span>
+             <span class="s0">*</span>
+             <span class="s0">* const len = buf.write('\u00bd + \u00bc = \u00be', 0);</span>
+             <span class="s0">*</span>
+             <span class="s0">* console.log(`${len} bytes: ${buf.toString('utf8', 0, len)}`);</span>
+             <span class="s0">* // Prints: 12 bytes: ½ + ¼ = ¾</span>
+             <span class="s0">*</span>
+             <span class="s0">* const buffer = Buffer.alloc(10);</span>
+             <span class="s0">*</span>
+             <span class="s0">* const length = buffer.write('abcd', 8);</span>
+             <span class="s0">*</span>
+             <span class="s0">* console.log(`${length} bytes: ${buffer.toString('utf8', 8, 10)}`);</span>
+             <span class="s0">* // Prints: 2 bytes : ab</span>
+             <span class="s0">* ```</span>
+             <span class="s0">* </span><span class="s4">@since </span><span class="s0">v0.1.90</span>
+             <span class="s0">* </span><span class="s4">@param </span><span class="s0">string String to write to `buf`.</span>
+             <span class="s0">* </span><span class="s4">@param </span><span class="s0">[offset=0] Number of bytes to skip before starting to write `string`.</span>
+             <span class="s0">* </span><span class="s4">@param </span><span class="s0">[length=buf.length - offset] Maximum number of bytes to write (written bytes will not exceed `buf.length - offset`).</span>
+             <span class="s0">* </span><span class="s4">@param </span><span class="s0">[encoding='utf8'] The character encoding of `string`.</span>
+             <span class="s0">* </span><span class="s4">@return </span><span class="s0">Number of bytes written.</span>
+             <span class="s0">*/</span>
+            <span class="s1">write(string: string, encoding?: BufferEncoding): number;</span>
+            <span class="s1">write(string: string, offset: number, encoding?: BufferEncoding): number;</span>
+            <span class="s1">write(string: string, offset: number, length: number, encoding?: BufferEncoding): number;</span>
+            <span class="s0">/**</span>
+             <span class="s0">* Decodes `buf` to a string according to the specified character encoding in`encoding`. `start` and `end` may be passed to decode only a subset of `buf`.</span>
+             <span class="s0">*</span>
+             <span class="s0">* If `encoding` is `'utf8'` and a byte sequence in the input is not valid UTF-8,</span>
+             <span class="s0">* then each invalid byte is replaced with the replacement character `U+FFFD`.</span>
+             <span class="s0">*</span>
+             <span class="s0">* The maximum length of a string instance (in UTF-16 code units) is available</span>
+             <span class="s0">* as {</span><span class="s4">@link </span><span class="s0">constants.MAX_STRING_LENGTH}.</span>
+             <span class="s0">*</span>
+             <span class="s0">* ```js</span>
+             <span class="s0">* import { Buffer } from 'node:buffer';</span>
+             <span class="s0">*</span>
+             <span class="s0">* const buf1 = Buffer.allocUnsafe(26);</span>
+             <span class="s0">*</span>
+             <span class="s0">* for (let i = 0; i &lt; 26; i++) {</span>
+             <span class="s0">*   // 97 is the decimal ASCII value for 'a'.</span>
+             <span class="s0">*   buf1[i] = i + 97;</span>
+             <span class="s0">* }</span>
+             <span class="s0">*</span>
+             <span class="s0">* console.log(buf1.toString('utf8'));</span>
+             <span class="s0">* // Prints: abcdefghijklmnopqrstuvwxyz</span>
+             <span class="s0">* console.log(buf1.toString('utf8', 0, 5));</span>
+             <span class="s0">* // Prints: abcde</span>
+             <span class="s0">*</span>
+             <span class="s0">* const buf2 = Buffer.from('tést');</span>
+             <span class="s0">*</span>
+             <span class="s0">* console.log(buf2.toString('hex'));</span>
+             <span class="s0">* // Prints: 74c3a97374</span>
+             <span class="s0">* console.log(buf2.toString('utf8', 0, 3));</span>
+             <span class="s0">* // Prints: té</span>
+             <span class="s0">* console.log(buf2.toString(undefined, 0, 3));</span>
+             <span class="s0">* // Prints: té</span>
+             <span class="s0">* ```</span>
+             <span class="s0">* </span><span class="s4">@since </span><span class="s0">v0.1.90</span>
+             <span class="s0">* </span><span class="s4">@param </span><span class="s0">[encoding='utf8'] The character encoding to use.</span>
+             <span class="s0">* </span><span class="s4">@param </span><span class="s0">[start=0] The byte offset to start decoding at.</span>
+             <span class="s0">* </span><span class="s4">@param </span><span class="s0">[end=buf.length] The byte offset to stop decoding at (not inclusive).</span>
+             <span class="s0">*/</span>
+            <span class="s1">toString(encoding?: BufferEncoding, start?: number, end?: number): string;</span>
+            <span class="s0">/**</span>
+             <span class="s0">* Returns a JSON representation of `buf`. [`JSON.stringify()`](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/JSON/stringify) implicitly calls</span>
+             <span class="s0">* this function when stringifying a `Buffer` instance.</span>
+             <span class="s0">*</span>
+             <span class="s0">* `Buffer.from()` accepts objects in the format returned from this method.</span>
+             <span class="s0">* In particular, `Buffer.from(buf.toJSON())` works like `Buffer.from(buf)`.</span>
+             <span class="s0">*</span>
+             <span class="s0">* ```js</span>
+             <span class="s0">* import { Buffer } from 'node:buffer';</span>
+             <span class="s0">*</span>
+             <span class="s0">* const buf = Buffer.from([0x1, 0x2, 0x3, 0x4, 0x5]);</span>
+             <span class="s0">* const json = JSON.stringify(buf);</span>
+             <span class="s0">*</span>
+             <span class="s0">* console.log(json);</span>
+             <span class="s0">* // Prints: {&quot;type&quot;:&quot;Buffer&quot;,&quot;data&quot;:[1,2,3,4,5]}</span>
+             <span class="s0">*</span>
+             <span class="s0">* const copy = JSON.parse(json, (key, value) =&gt; {</span>
+             <span class="s0">*   return value &amp;#x26;&amp;#x26; value.type === 'Buffer' ?</span>
+             <span class="s0">*     Buffer.from(value) :</span>
+             <span class="s0">*     value;</span>
+             <span class="s0">* });</span>
+             <span class="s0">*</span>
+             <span class="s0">* console.log(copy);</span>
+             <span class="s0">* // Prints: &lt;Buffer 01 02 03 04 05&gt;</span>
+             <span class="s0">* ```</span>
+             <span class="s0">* </span><span class="s4">@since </span><span class="s0">v0.9.2</span>
+             <span class="s0">*/</span>
+            <span class="s1">toJSON(): {</span>
+                <span class="s1">type: </span><span class="s3">&quot;Buffer&quot;</span><span class="s1">;</span>
+                <span class="s1">data: number[];</span>
+            <span class="s1">};</span>
+            <span class="s0">/**</span>
+             <span class="s0">* Returns `true` if both `buf` and `otherBuffer` have exactly the same bytes,`false` otherwise. Equivalent to `buf.compare(otherBuffer) === 0`.</span>
+             <span class="s0">*</span>
+             <span class="s0">* ```js</span>
+             <span class="s0">* import { Buffer } from 'node:buffer';</span>
+             <span class="s0">*</span>
+             <span class="s0">* const buf1 = Buffer.from('ABC');</span>
+             <span class="s0">* const buf2 = Buffer.from('414243', 'hex');</span>
+             <span class="s0">* const buf3 = Buffer.from('ABCD');</span>
+             <span class="s0">*</span>
+             <span class="s0">* console.log(buf1.equals(buf2));</span>
+             <span class="s0">* // Prints: true</span>
+             <span class="s0">* console.log(buf1.equals(buf3));</span>
+             <span class="s0">* // Prints: false</span>
+             <span class="s0">* ```</span>
+             <span class="s0">* </span><span class="s4">@since </span><span class="s0">v0.11.13</span>
+             <span class="s0">* </span><span class="s4">@param </span><span class="s0">otherBuffer A `Buffer` or {</span><span class="s4">@link </span><span class="s0">Uint8Array} with which to compare `buf`.</span>
+             <span class="s0">*/</span>
+            <span class="s1">equals(otherBuffer: Uint8Array): boolean;</span>
+            <span class="s0">/**</span>
+             <span class="s0">* Compares `buf` with `target` and returns a number indicating whether `buf`comes before, after, or is the same as `target` in sort order.</span>
+             <span class="s0">* Comparison is based on the actual sequence of bytes in each `Buffer`.</span>
+             <span class="s0">*</span>
+             <span class="s0">* * `0` is returned if `target` is the same as `buf`</span>
+             <span class="s0">* * `1` is returned if `target` should come _before_`buf` when sorted.</span>
+             <span class="s0">* * `-1` is returned if `target` should come _after_`buf` when sorted.</span>
+             <span class="s0">*</span>
+             <span class="s0">* ```js</span>
+             <span class="s0">* import { Buffer } from 'node:buffer';</span>
+             <span class="s0">*</span>
+             <span class="s0">* const buf1 = Buffer.from('ABC');</span>
+             <span class="s0">* const buf2 = Buffer.from('BCD');</span>
+             <span class="s0">* const buf3 = Buffer.from('ABCD');</span>
+             <span class="s0">*</span>
+             <span class="s0">* console.log(buf1.compare(buf1));</span>
+             <span class="s0">* // Prints: 0</span>
+             <span class="s0">* console.log(buf1.compare(buf2));</span>
+             <span class="s0">* // Prints: -1</span>
+             <span class="s0">* console.log(buf1.compare(buf3));</span>
+             <span class="s0">* // Prints: -1</span>
+             <span class="s0">* console.log(buf2.compare(buf1));</span>
+             <span class="s0">* // Prints: 1</span>
+             <span class="s0">* console.log(buf2.compare(buf3));</span>
+             <span class="s0">* // Prints: 1</span>
+             <span class="s0">* console.log([buf1, buf2, buf3].sort(Buffer.compare));</span>
+             <span class="s0">* // Prints: [ &lt;Buffer 41 42 43&gt;, &lt;Buffer 41 42 43 44&gt;, &lt;Buffer 42 43 44&gt; ]</span>
+             <span class="s0">* // (This result is equal to: [buf1, buf3, buf2].)</span>
+             <span class="s0">* ```</span>
+             <span class="s0">*</span>
+             <span class="s0">* The optional `targetStart`, `targetEnd`, `sourceStart`, and `sourceEnd` arguments can be used to limit the comparison to specific ranges within `target` and `buf` respectively.</span>
+             <span class="s0">*</span>
+             <span class="s0">* ```js</span>
+             <span class="s0">* import { Buffer } from 'node:buffer';</span>
+             <span class="s0">*</span>
+             <span class="s0">* const buf1 = Buffer.from([1, 2, 3, 4, 5, 6, 7, 8, 9]);</span>
+             <span class="s0">* const buf2 = Buffer.from([5, 6, 7, 8, 9, 1, 2, 3, 4]);</span>
+             <span class="s0">*</span>
+             <span class="s0">* console.log(buf1.compare(buf2, 5, 9, 0, 4));</span>
+             <span class="s0">* // Prints: 0</span>
+             <span class="s0">* console.log(buf1.compare(buf2, 0, 6, 4));</span>
+             <span class="s0">* // Prints: -1</span>
+             <span class="s0">* console.log(buf1.compare(buf2, 5, 6, 5));</span>
+             <span class="s0">* // Prints: 1</span>
+             <span class="s0">* ```</span>
+             <span class="s0">*</span>
+             <span class="s0">* `ERR_OUT_OF_RANGE` is thrown if `targetStart &lt; 0`, `sourceStart &lt; 0`, `targetEnd &gt; target.byteLength`, or `sourceEnd &gt; source.byteLength`.</span>
+             <span class="s0">* </span><span class="s4">@since </span><span class="s0">v0.11.13</span>
+             <span class="s0">* </span><span class="s4">@param </span><span class="s0">target A `Buffer` or {</span><span class="s4">@link </span><span class="s0">Uint8Array} with which to compare `buf`.</span>
+             <span class="s0">* </span><span class="s4">@param </span><span class="s0">[targetStart=0] The offset within `target` at which to begin comparison.</span>
+             <span class="s0">* </span><span class="s4">@param </span><span class="s0">[targetEnd=target.length] The offset within `target` at which to end comparison (not inclusive).</span>
+             <span class="s0">* </span><span class="s4">@param </span><span class="s0">[sourceStart=0] The offset within `buf` at which to begin comparison.</span>
+             <span class="s0">* </span><span class="s4">@param </span><span class="s0">[sourceEnd=buf.length] The offset within `buf` at which to end comparison (not inclusive).</span>
+             <span class="s0">*/</span>
+            <span class="s1">compare(</span>
+                <span class="s1">target: Uint8Array,</span>
+                <span class="s1">targetStart?: number,</span>
+                <span class="s1">targetEnd?: number,</span>
+                <span class="s1">sourceStart?: number,</span>
+                <span class="s1">sourceEnd?: number,</span>
+            <span class="s1">): -</span><span class="s5">1 </span><span class="s1">| </span><span class="s5">0 </span><span class="s1">| </span><span class="s5">1</span><span class="s1">;</span>
+            <span class="s0">/**</span>
+             <span class="s0">* Copies data from a region of `buf` to a region in `target`, even if the `target`memory region overlaps with `buf`.</span>
+             <span class="s0">*</span>
+             <span class="s0">* [`TypedArray.prototype.set()`](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/TypedArray/set) performs the same operation, and is available</span>
+             <span class="s0">* for all TypedArrays, including Node.js `Buffer`s, although it takes</span>
+             <span class="s0">* different function arguments.</span>
+             <span class="s0">*</span>
+             <span class="s0">* ```js</span>
+             <span class="s0">* import { Buffer } from 'node:buffer';</span>
+             <span class="s0">*</span>
+             <span class="s0">* // Create two `Buffer` instances.</span>
+             <span class="s0">* const buf1 = Buffer.allocUnsafe(26);</span>
+             <span class="s0">* const buf2 = Buffer.allocUnsafe(26).fill('!');</span>
+             <span class="s0">*</span>
+             <span class="s0">* for (let i = 0; i &lt; 26; i++) {</span>
+             <span class="s0">*   // 97 is the decimal ASCII value for 'a'.</span>
+             <span class="s0">*   buf1[i] = i + 97;</span>
+             <span class="s0">* }</span>
+             <span class="s0">*</span>
+             <span class="s0">* // Copy `buf1` bytes 16 through 19 into `buf2` starting at byte 8 of `buf2`.</span>
+             <span class="s0">* buf1.copy(buf2, 8, 16, 20);</span>
+             <span class="s0">* // This is equivalent to:</span>
+             <span class="s0">* // buf2.set(buf1.subarray(16, 20), 8);</span>
+             <span class="s0">*</span>
+             <span class="s0">* console.log(buf2.toString('ascii', 0, 25));</span>
+             <span class="s0">* // Prints: !!!!!!!!qrst!!!!!!!!!!!!!</span>
+             <span class="s0">* ```</span>
+             <span class="s0">*</span>
+             <span class="s0">* ```js</span>
+             <span class="s0">* import { Buffer } from 'node:buffer';</span>
+             <span class="s0">*</span>
+             <span class="s0">* // Create a `Buffer` and copy data from one region to an overlapping region</span>
+             <span class="s0">* // within the same `Buffer`.</span>
+             <span class="s0">*</span>
+             <span class="s0">* const buf = Buffer.allocUnsafe(26);</span>
+             <span class="s0">*</span>
+             <span class="s0">* for (let i = 0; i &lt; 26; i++) {</span>
+             <span class="s0">*   // 97 is the decimal ASCII value for 'a'.</span>
+             <span class="s0">*   buf[i] = i + 97;</span>
+             <span class="s0">* }</span>
+             <span class="s0">*</span>
+             <span class="s0">* buf.copy(buf, 0, 4, 10);</span>
+             <span class="s0">*</span>
+             <span class="s0">* console.log(buf.toString());</span>
+             <span class="s0">* // Prints: efghijghijklmnopqrstuvwxyz</span>
+             <span class="s0">* ```</span>
+             <span class="s0">* </span><span class="s4">@since </span><span class="s0">v0.1.90</span>
+             <span class="s0">* </span><span class="s4">@param </span><span class="s0">target A `Buffer` or {</span><span class="s4">@link </span><span class="s0">Uint8Array} to copy into.</span>
+             <span class="s0">* </span><span class="s4">@param </span><span class="s0">[targetStart=0] The offset within `target` at which to begin writing.</span>
+             <span class="s0">* </span><span class="s4">@param </span><span class="s0">[sourceStart=0] The offset within `buf` from which to begin copying.</span>
+             <span class="s0">* </span><span class="s4">@param </span><span class="s0">[sourceEnd=buf.length] The offset within `buf` at which to stop copying (not inclusive).</span>
+             <span class="s0">* </span><span class="s4">@return </span><span class="s0">The number of bytes copied.</span>
+             <span class="s0">*/</span>
+            <span class="s1">copy(target: Uint8Array, targetStart?: number, sourceStart?: number, sourceEnd?: number): number;</span>
+            <span class="s0">/**</span>
+             <span class="s0">* Writes `value` to `buf` at the specified `offset` as big-endian.</span>
+             <span class="s0">*</span>
+             <span class="s0">* `value` is interpreted and written as a two's complement signed integer.</span>
+             <span class="s0">*</span>
+             <span class="s0">* ```js</span>
+             <span class="s0">* import { Buffer } from 'node:buffer';</span>
+             <span class="s0">*</span>
+             <span class="s0">* const buf = Buffer.allocUnsafe(8);</span>
+             <span class="s0">*</span>
+             <span class="s0">* buf.writeBigInt64BE(0x0102030405060708n, 0);</span>
+             <span class="s0">*</span>
+             <span class="s0">* console.log(buf);</span>
+             <span class="s0">* // Prints: &lt;Buffer 01 02 03 04 05 06 07 08&gt;</span>
+             <span class="s0">* ```</span>
+             <span class="s0">* </span><span class="s4">@since </span><span class="s0">v12.0.0, v10.20.0</span>
+             <span class="s0">* </span><span class="s4">@param </span><span class="s0">value Number to be written to `buf`.</span>
+             <span class="s0">* </span><span class="s4">@param </span><span class="s0">[offset=0] Number of bytes to skip before starting to write. Must satisfy: `0 &lt;= offset &lt;= buf.length - 8`.</span>
+             <span class="s0">* </span><span class="s4">@return </span><span class="s0">`offset` plus the number of bytes written.</span>
+             <span class="s0">*/</span>
+            <span class="s1">writeBigInt64BE(value: bigint, offset?: number): number;</span>
+            <span class="s0">/**</span>
+             <span class="s0">* Writes `value` to `buf` at the specified `offset` as little-endian.</span>
+             <span class="s0">*</span>
+             <span class="s0">* `value` is interpreted and written as a two's complement signed integer.</span>
+             <span class="s0">*</span>
+             <span class="s0">* ```js</span>
+             <span class="s0">* import { Buffer } from 'node:buffer';</span>
+             <span class="s0">*</span>
+             <span class="s0">* const buf = Buffer.allocUnsafe(8);</span>
+             <span class="s0">*</span>
+             <span class="s0">* buf.writeBigInt64LE(0x0102030405060708n, 0);</span>
+             <span class="s0">*</span>
+             <span class="s0">* console.log(buf);</span>
+             <span class="s0">* // Prints: &lt;Buffer 08 07 06 05 04 03 02 01&gt;</span>
+             <span class="s0">* ```</span>
+             <span class="s0">* </span><span class="s4">@since </span><span class="s0">v12.0.0, v10.20.0</span>
+             <span class="s0">* </span><span class="s4">@param </span><span class="s0">value Number to be written to `buf`.</span>
+             <span class="s0">* </span><span class="s4">@param </span><span class="s0">[offset=0] Number of bytes to skip before starting to write. Must satisfy: `0 &lt;= offset &lt;= buf.length - 8`.</span>
+             <span class="s0">* </span><span class="s4">@return </span><span class="s0">`offset` plus the number of bytes written.</span>
+             <span class="s0">*/</span>
+            <span class="s1">writeBigInt64LE(value: bigint, offset?: number): number;</span>
+            <span class="s0">/**</span>
+             <span class="s0">* Writes `value` to `buf` at the specified `offset` as big-endian.</span>
+             <span class="s0">*</span>
+             <span class="s0">* This function is also available under the `writeBigUint64BE` alias.</span>
+             <span class="s0">*</span>
+             <span class="s0">* ```js</span>
+             <span class="s0">* import { Buffer } from 'node:buffer';</span>
+             <span class="s0">*</span>
+             <span class="s0">* const buf = Buffer.allocUnsafe(8);</span>
+             <span class="s0">*</span>
+             <span class="s0">* buf.writeBigUInt64BE(0xdecafafecacefaden, 0);</span>
+             <span class="s0">*</span>
+             <span class="s0">* console.log(buf);</span>
+             <span class="s0">* // Prints: &lt;Buffer de ca fa fe ca ce fa de&gt;</span>
+             <span class="s0">* ```</span>
+             <span class="s0">* </span><span class="s4">@since </span><span class="s0">v12.0.0, v10.20.0</span>
+             <span class="s0">* </span><span class="s4">@param </span><span class="s0">value Number to be written to `buf`.</span>
+             <span class="s0">* </span><span class="s4">@param </span><span class="s0">[offset=0] Number of bytes to skip before starting to write. Must satisfy: `0 &lt;= offset &lt;= buf.length - 8`.</span>
+             <span class="s0">* </span><span class="s4">@return </span><span class="s0">`offset` plus the number of bytes written.</span>
+             <span class="s0">*/</span>
+            <span class="s1">writeBigUInt64BE(value: bigint, offset?: number): number;</span>
+            <span class="s0">/**</span>
+             <span class="s0">* </span><span class="s4">@alias </span><span class="s0">Buffer.writeBigUInt64BE</span>
+             <span class="s0">* </span><span class="s4">@since </span><span class="s0">v14.10.0, v12.19.0</span>
+             <span class="s0">*/</span>
+            <span class="s1">writeBigUint64BE(value: bigint, offset?: number): number;</span>
+            <span class="s0">/**</span>
+             <span class="s0">* Writes `value` to `buf` at the specified `offset` as little-endian</span>
+             <span class="s0">*</span>
+             <span class="s0">* ```js</span>
+             <span class="s0">* import { Buffer } from 'node:buffer';</span>
+             <span class="s0">*</span>
+             <span class="s0">* const buf = Buffer.allocUnsafe(8);</span>
+             <span class="s0">*</span>
+             <span class="s0">* buf.writeBigUInt64LE(0xdecafafecacefaden, 0);</span>
+             <span class="s0">*</span>
+             <span class="s0">* console.log(buf);</span>
+             <span class="s0">* // Prints: &lt;Buffer de fa ce ca fe fa ca de&gt;</span>
+             <span class="s0">* ```</span>
+             <span class="s0">*</span>
+             <span class="s0">* This function is also available under the `writeBigUint64LE` alias.</span>
+             <span class="s0">* </span><span class="s4">@since </span><span class="s0">v12.0.0, v10.20.0</span>
+             <span class="s0">* </span><span class="s4">@param </span><span class="s0">value Number to be written to `buf`.</span>
+             <span class="s0">* </span><span class="s4">@param </span><span class="s0">[offset=0] Number of bytes to skip before starting to write. Must satisfy: `0 &lt;= offset &lt;= buf.length - 8`.</span>
+             <span class="s0">* </span><span class="s4">@return </span><span class="s0">`offset` plus the number of bytes written.</span>
+             <span class="s0">*/</span>
+            <span class="s1">writeBigUInt64LE(value: bigint, offset?: number): number;</span>
+            <span class="s0">/**</span>
+             <span class="s0">* </span><span class="s4">@alias </span><span class="s0">Buffer.writeBigUInt64LE</span>
+             <span class="s0">* </span><span class="s4">@since </span><span class="s0">v14.10.0, v12.19.0</span>
+             <span class="s0">*/</span>
+            <span class="s1">writeBigUint64LE(value: bigint, offset?: number): number;</span>
+            <span class="s0">/**</span>
+             <span class="s0">* Writes `byteLength` bytes of `value` to `buf` at the specified `offset`as little-endian. Supports up to 48 bits of accuracy. Behavior is undefined</span>
+             <span class="s0">* when `value` is anything other than an unsigned integer.</span>
+             <span class="s0">*</span>
+             <span class="s0">* This function is also available under the `writeUintLE` alias.</span>
+             <span class="s0">*</span>
+             <span class="s0">* ```js</span>
+             <span class="s0">* import { Buffer } from 'node:buffer';</span>
+             <span class="s0">*</span>
+             <span class="s0">* const buf = Buffer.allocUnsafe(6);</span>
+             <span class="s0">*</span>
+             <span class="s0">* buf.writeUIntLE(0x1234567890ab, 0, 6);</span>
+             <span class="s0">*</span>
+             <span class="s0">* console.log(buf);</span>
+             <span class="s0">* // Prints: &lt;Buffer ab 90 78 56 34 12&gt;</span>
+             <span class="s0">* ```</span>
+             <span class="s0">* </span><span class="s4">@since </span><span class="s0">v0.5.5</span>
+             <span class="s0">* </span><span class="s4">@param </span><span class="s0">value Number to be written to `buf`.</span>
+             <span class="s0">* </span><span class="s4">@param </span><span class="s0">offset Number of bytes to skip before starting to write. Must satisfy `0 &lt;= offset &lt;= buf.length - byteLength`.</span>
+             <span class="s0">* </span><span class="s4">@param </span><span class="s0">byteLength Number of bytes to write. Must satisfy `0 &lt; byteLength &lt;= 6`.</span>
+             <span class="s0">* </span><span class="s4">@return </span><span class="s0">`offset` plus the number of bytes written.</span>
+             <span class="s0">*/</span>
+            <span class="s1">writeUIntLE(value: number, offset: number, byteLength: number): number;</span>
+            <span class="s0">/**</span>
+             <span class="s0">* </span><span class="s4">@alias </span><span class="s0">Buffer.writeUIntLE</span>
+             <span class="s0">* </span><span class="s4">@since </span><span class="s0">v14.9.0, v12.19.0</span>
+             <span class="s0">*/</span>
+            <span class="s1">writeUintLE(value: number, offset: number, byteLength: number): number;</span>
+            <span class="s0">/**</span>
+             <span class="s0">* Writes `byteLength` bytes of `value` to `buf` at the specified `offset`as big-endian. Supports up to 48 bits of accuracy. Behavior is undefined</span>
+             <span class="s0">* when `value` is anything other than an unsigned integer.</span>
+             <span class="s0">*</span>
+             <span class="s0">* This function is also available under the `writeUintBE` alias.</span>
+             <span class="s0">*</span>
+             <span class="s0">* ```js</span>
+             <span class="s0">* import { Buffer } from 'node:buffer';</span>
+             <span class="s0">*</span>
+             <span class="s0">* const buf = Buffer.allocUnsafe(6);</span>
+             <span class="s0">*</span>
+             <span class="s0">* buf.writeUIntBE(0x1234567890ab, 0, 6);</span>
+             <span class="s0">*</span>
+             <span class="s0">* console.log(buf);</span>
+             <span class="s0">* // Prints: &lt;Buffer 12 34 56 78 90 ab&gt;</span>
+             <span class="s0">* ```</span>
+             <span class="s0">* </span><span class="s4">@since </span><span class="s0">v0.5.5</span>
+             <span class="s0">* </span><span class="s4">@param </span><span class="s0">value Number to be written to `buf`.</span>
+             <span class="s0">* </span><span class="s4">@param </span><span class="s0">offset Number of bytes to skip before starting to write. Must satisfy `0 &lt;= offset &lt;= buf.length - byteLength`.</span>
+             <span class="s0">* </span><span class="s4">@param </span><span class="s0">byteLength Number of bytes to write. Must satisfy `0 &lt; byteLength &lt;= 6`.</span>
+             <span class="s0">* </span><span class="s4">@return </span><span class="s0">`offset` plus the number of bytes written.</span>
+             <span class="s0">*/</span>
+            <span class="s1">writeUIntBE(value: number, offset: number, byteLength: number): number;</span>
+            <span class="s0">/**</span>
+             <span class="s0">* </span><span class="s4">@alias </span><span class="s0">Buffer.writeUIntBE</span>
+             <span class="s0">* </span><span class="s4">@since </span><span class="s0">v14.9.0, v12.19.0</span>
+             <span class="s0">*/</span>
+            <span class="s1">writeUintBE(value: number, offset: number, byteLength: number): number;</span>
+            <span class="s0">/**</span>
+             <span class="s0">* Writes `byteLength` bytes of `value` to `buf` at the specified `offset`as little-endian. Supports up to 48 bits of accuracy. Behavior is undefined</span>
+             <span class="s0">* when `value` is anything other than a signed integer.</span>
+             <span class="s0">*</span>
+             <span class="s0">* ```js</span>
+             <span class="s0">* import { Buffer } from 'node:buffer';</span>
+             <span class="s0">*</span>
+             <span class="s0">* const buf = Buffer.allocUnsafe(6);</span>
+             <span class="s0">*</span>
+             <span class="s0">* buf.writeIntLE(0x1234567890ab, 0, 6);</span>
+             <span class="s0">*</span>
+             <span class="s0">* console.log(buf);</span>
+             <span class="s0">* // Prints: &lt;Buffer ab 90 78 56 34 12&gt;</span>
+             <span class="s0">* ```</span>
+             <span class="s0">* </span><span class="s4">@since </span><span class="s0">v0.11.15</span>
+             <span class="s0">* </span><span class="s4">@param </span><span class="s0">value Number to be written to `buf`.</span>
+             <span class="s0">* </span><span class="s4">@param </span><span class="s0">offset Number of bytes to skip before starting to write. Must satisfy `0 &lt;= offset &lt;= buf.length - byteLength`.</span>
+             <span class="s0">* </span><span class="s4">@param </span><span class="s0">byteLength Number of bytes to write. Must satisfy `0 &lt; byteLength &lt;= 6`.</span>
+             <span class="s0">* </span><span class="s4">@return </span><span class="s0">`offset` plus the number of bytes written.</span>
+             <span class="s0">*/</span>
+            <span class="s1">writeIntLE(value: number, offset: number, byteLength: number): number;</span>
+            <span class="s0">/**</span>
+             <span class="s0">* Writes `byteLength` bytes of `value` to `buf` at the specified `offset`as big-endian. Supports up to 48 bits of accuracy. Behavior is undefined when`value` is anything other than a</span>
+             <span class="s0">* signed integer.</span>
+             <span class="s0">*</span>
+             <span class="s0">* ```js</span>
+             <span class="s0">* import { Buffer } from 'node:buffer';</span>
+             <span class="s0">*</span>
+             <span class="s0">* const buf = Buffer.allocUnsafe(6);</span>
+             <span class="s0">*</span>
+             <span class="s0">* buf.writeIntBE(0x1234567890ab, 0, 6);</span>
+             <span class="s0">*</span>
+             <span class="s0">* console.log(buf);</span>
+             <span class="s0">* // Prints: &lt;Buffer 12 34 56 78 90 ab&gt;</span>
+             <span class="s0">* ```</span>
+             <span class="s0">* </span><span class="s4">@since </span><span class="s0">v0.11.15</span>
+             <span class="s0">* </span><span class="s4">@param </span><span class="s0">value Number to be written to `buf`.</span>
+             <span class="s0">* </span><span class="s4">@param </span><span class="s0">offset Number of bytes to skip before starting to write. Must satisfy `0 &lt;= offset &lt;= buf.length - byteLength`.</span>
+             <span class="s0">* </span><span class="s4">@param </span><span class="s0">byteLength Number of bytes to write. Must satisfy `0 &lt; byteLength &lt;= 6`.</span>
+             <span class="s0">* </span><span class="s4">@return </span><span class="s0">`offset` plus the number of bytes written.</span>
+             <span class="s0">*/</span>
+            <span class="s1">writeIntBE(value: number, offset: number, byteLength: number): number;</span>
+            <span class="s0">/**</span>
+             <span class="s0">* Reads an unsigned, big-endian 64-bit integer from `buf` at the specified`offset`.</span>
+             <span class="s0">*</span>
+             <span class="s0">* This function is also available under the `readBigUint64BE` alias.</span>
+             <span class="s0">*</span>
+             <span class="s0">* ```js</span>
+             <span class="s0">* import { Buffer } from 'node:buffer';</span>
+             <span class="s0">*</span>
+             <span class="s0">* const buf = Buffer.from([0x00, 0x00, 0x00, 0x00, 0xff, 0xff, 0xff, 0xff]);</span>
+             <span class="s0">*</span>
+             <span class="s0">* console.log(buf.readBigUInt64BE(0));</span>
+             <span class="s0">* // Prints: 4294967295n</span>
+             <span class="s0">* ```</span>
+             <span class="s0">* </span><span class="s4">@since </span><span class="s0">v12.0.0, v10.20.0</span>
+             <span class="s0">* </span><span class="s4">@param </span><span class="s0">[offset=0] Number of bytes to skip before starting to read. Must satisfy: `0 &lt;= offset &lt;= buf.length - 8`.</span>
+             <span class="s0">*/</span>
+            <span class="s1">readBigUInt64BE(offset?: number): bigint;</span>
+            <span class="s0">/**</span>
+             <span class="s0">* </span><span class="s4">@alias </span><span class="s0">Buffer.readBigUInt64BE</span>
+             <span class="s0">* </span><span class="s4">@since </span><span class="s0">v14.10.0, v12.19.0</span>
+             <span class="s0">*/</span>
+            <span class="s1">readBigUint64BE(offset?: number): bigint;</span>
+            <span class="s0">/**</span>
+             <span class="s0">* Reads an unsigned, little-endian 64-bit integer from `buf` at the specified`offset`.</span>
+             <span class="s0">*</span>
+             <span class="s0">* This function is also available under the `readBigUint64LE` alias.</span>
+             <span class="s0">*</span>
+             <span class="s0">* ```js</span>
+             <span class="s0">* import { Buffer } from 'node:buffer';</span>
+             <span class="s0">*</span>
+             <span class="s0">* const buf = Buffer.from([0x00, 0x00, 0x00, 0x00, 0xff, 0xff, 0xff, 0xff]);</span>
+             <span class="s0">*</span>
+             <span class="s0">* console.log(buf.readBigUInt64LE(0));</span>
+             <span class="s0">* // Prints: 18446744069414584320n</span>
+             <span class="s0">* ```</span>
+             <span class="s0">* </span><span class="s4">@since </span><span class="s0">v12.0.0, v10.20.0</span>
+             <span class="s0">* </span><span class="s4">@param </span><span class="s0">[offset=0] Number of bytes to skip before starting to read. Must satisfy: `0 &lt;= offset &lt;= buf.length - 8`.</span>
+             <span class="s0">*/</span>
+            <span class="s1">readBigUInt64LE(offset?: number): bigint;</span>
+            <span class="s0">/**</span>
+             <span class="s0">* </span><span class="s4">@alias </span><span class="s0">Buffer.readBigUInt64LE</span>
+             <span class="s0">* </span><span class="s4">@since </span><span class="s0">v14.10.0, v12.19.0</span>
+             <span class="s0">*/</span>
+            <span class="s1">readBigUint64LE(offset?: number): bigint;</span>
+            <span class="s0">/**</span>
+             <span class="s0">* Reads a signed, big-endian 64-bit integer from `buf` at the specified `offset`.</span>
+             <span class="s0">*</span>
+             <span class="s0">* Integers read from a `Buffer` are interpreted as two's complement signed</span>
+             <span class="s0">* values.</span>
+             <span class="s0">* </span><span class="s4">@since </span><span class="s0">v12.0.0, v10.20.0</span>
+             <span class="s0">* </span><span class="s4">@param </span><span class="s0">[offset=0] Number of bytes to skip before starting to read. Must satisfy: `0 &lt;= offset &lt;= buf.length - 8`.</span>
+             <span class="s0">*/</span>
+            <span class="s1">readBigInt64BE(offset?: number): bigint;</span>
+            <span class="s0">/**</span>
+             <span class="s0">* Reads a signed, little-endian 64-bit integer from `buf` at the specified`offset`.</span>
+             <span class="s0">*</span>
+             <span class="s0">* Integers read from a `Buffer` are interpreted as two's complement signed</span>
+             <span class="s0">* values.</span>
+             <span class="s0">* </span><span class="s4">@since </span><span class="s0">v12.0.0, v10.20.0</span>
+             <span class="s0">* </span><span class="s4">@param </span><span class="s0">[offset=0] Number of bytes to skip before starting to read. Must satisfy: `0 &lt;= offset &lt;= buf.length - 8`.</span>
+             <span class="s0">*/</span>
+            <span class="s1">readBigInt64LE(offset?: number): bigint;</span>
+            <span class="s0">/**</span>
+             <span class="s0">* Reads `byteLength` number of bytes from `buf` at the specified `offset` and interprets the result as an unsigned, little-endian integer supporting</span>
+             <span class="s0">* up to 48 bits of accuracy.</span>
+             <span class="s0">*</span>
+             <span class="s0">* This function is also available under the `readUintLE` alias.</span>
+             <span class="s0">*</span>
+             <span class="s0">* ```js</span>
+             <span class="s0">* import { Buffer } from 'node:buffer';</span>
+             <span class="s0">*</span>
+             <span class="s0">* const buf = Buffer.from([0x12, 0x34, 0x56, 0x78, 0x90, 0xab]);</span>
+             <span class="s0">*</span>
+             <span class="s0">* console.log(buf.readUIntLE(0, 6).toString(16));</span>
+             <span class="s0">* // Prints: ab9078563412</span>
+             <span class="s0">* ```</span>
+             <span class="s0">* </span><span class="s4">@since </span><span class="s0">v0.11.15</span>
+             <span class="s0">* </span><span class="s4">@param </span><span class="s0">offset Number of bytes to skip before starting to read. Must satisfy `0 &lt;= offset &lt;= buf.length - byteLength`.</span>
+             <span class="s0">* </span><span class="s4">@param </span><span class="s0">byteLength Number of bytes to read. Must satisfy `0 &lt; byteLength &lt;= 6`.</span>
+             <span class="s0">*/</span>
+            <span class="s1">readUIntLE(offset: number, byteLength: number): number;</span>
+            <span class="s0">/**</span>
+             <span class="s0">* </span><span class="s4">@alias </span><span class="s0">Buffer.readUIntLE</span>
+             <span class="s0">* </span><span class="s4">@since </span><span class="s0">v14.9.0, v12.19.0</span>
+             <span class="s0">*/</span>
+            <span class="s1">readUintLE(offset: number, byteLength: number): number;</span>
+            <span class="s0">/**</span>
+             <span class="s0">* Reads `byteLength` number of bytes from `buf` at the specified `offset` and interprets the result as an unsigned big-endian integer supporting</span>
+             <span class="s0">* up to 48 bits of accuracy.</span>
+             <span class="s0">*</span>
+             <span class="s0">* This function is also available under the `readUintBE` alias.</span>
+             <span class="s0">*</span>
+             <span class="s0">* ```js</span>
+             <span class="s0">* import { Buffer } from 'node:buffer';</span>
+             <span class="s0">*</span>
+             <span class="s0">* const buf = Buffer.from([0x12, 0x34, 0x56, 0x78, 0x90, 0xab]);</span>
+             <span class="s0">*</span>
+             <span class="s0">* console.log(buf.readUIntBE(0, 6).toString(16));</span>
+             <span class="s0">* // Prints: 1234567890ab</span>
+             <span class="s0">* console.log(buf.readUIntBE(1, 6).toString(16));</span>
+             <span class="s0">* // Throws ERR_OUT_OF_RANGE.</span>
+             <span class="s0">* ```</span>
+             <span class="s0">* </span><span class="s4">@since </span><span class="s0">v0.11.15</span>
+             <span class="s0">* </span><span class="s4">@param </span><span class="s0">offset Number of bytes to skip before starting to read. Must satisfy `0 &lt;= offset &lt;= buf.length - byteLength`.</span>
+             <span class="s0">* </span><span class="s4">@param </span><span class="s0">byteLength Number of bytes to read. Must satisfy `0 &lt; byteLength &lt;= 6`.</span>
+             <span class="s0">*/</span>
+            <span class="s1">readUIntBE(offset: number, byteLength: number): number;</span>
+            <span class="s0">/**</span>
+             <span class="s0">* </span><span class="s4">@alias </span><span class="s0">Buffer.readUIntBE</span>
+             <span class="s0">* </span><span class="s4">@since </span><span class="s0">v14.9.0, v12.19.0</span>
+             <span class="s0">*/</span>
+            <span class="s1">readUintBE(offset: number, byteLength: number): number;</span>
+            <span class="s0">/**</span>
+             <span class="s0">* Reads `byteLength` number of bytes from `buf` at the specified `offset` and interprets the result as a little-endian, two's complement signed value</span>
+             <span class="s0">* supporting up to 48 bits of accuracy.</span>
+             <span class="s0">*</span>
+             <span class="s0">* ```js</span>
+             <span class="s0">* import { Buffer } from 'node:buffer';</span>
+             <span class="s0">*</span>
+             <span class="s0">* const buf = Buffer.from([0x12, 0x34, 0x56, 0x78, 0x90, 0xab]);</span>
+             <span class="s0">*</span>
+             <span class="s0">* console.log(buf.readIntLE(0, 6).toString(16));</span>
+             <span class="s0">* // Prints: -546f87a9cbee</span>
+             <span class="s0">* ```</span>
+             <span class="s0">* </span><span class="s4">@since </span><span class="s0">v0.11.15</span>
+             <span class="s0">* </span><span class="s4">@param </span><span class="s0">offset Number of bytes to skip before starting to read. Must satisfy `0 &lt;= offset &lt;= buf.length - byteLength`.</span>
+             <span class="s0">* </span><span class="s4">@param </span><span class="s0">byteLength Number of bytes to read. Must satisfy `0 &lt; byteLength &lt;= 6`.</span>
+             <span class="s0">*/</span>
+            <span class="s1">readIntLE(offset: number, byteLength: number): number;</span>
+            <span class="s0">/**</span>
+             <span class="s0">* Reads `byteLength` number of bytes from `buf` at the specified `offset` and interprets the result as a big-endian, two's complement signed value</span>
+             <span class="s0">* supporting up to 48 bits of accuracy.</span>
+             <span class="s0">*</span>
+             <span class="s0">* ```js</span>
+             <span class="s0">* import { Buffer } from 'node:buffer';</span>
+             <span class="s0">*</span>
+             <span class="s0">* const buf = Buffer.from([0x12, 0x34, 0x56, 0x78, 0x90, 0xab]);</span>
+             <span class="s0">*</span>
+             <span class="s0">* console.log(buf.readIntBE(0, 6).toString(16));</span>
+             <span class="s0">* // Prints: 1234567890ab</span>
+             <span class="s0">* console.log(buf.readIntBE(1, 6).toString(16));</span>
+             <span class="s0">* // Throws ERR_OUT_OF_RANGE.</span>
+             <span class="s0">* console.log(buf.readIntBE(1, 0).toString(16));</span>
+             <span class="s0">* // Throws ERR_OUT_OF_RANGE.</span>
+             <span class="s0">* ```</span>
+             <span class="s0">* </span><span class="s4">@since </span><span class="s0">v0.11.15</span>
+             <span class="s0">* </span><span class="s4">@param </span><span class="s0">offset Number of bytes to skip before starting to read. Must satisfy `0 &lt;= offset &lt;= buf.length - byteLength`.</span>
+             <span class="s0">* </span><span class="s4">@param </span><span class="s0">byteLength Number of bytes to read. Must satisfy `0 &lt; byteLength &lt;= 6`.</span>
+             <span class="s0">*/</span>
+            <span class="s1">readIntBE(offset: number, byteLength: number): number;</span>
+            <span class="s0">/**</span>
+             <span class="s0">* Reads an unsigned 8-bit integer from `buf` at the specified `offset`.</span>
+             <span class="s0">*</span>
+             <span class="s0">* This function is also available under the `readUint8` alias.</span>
+             <span class="s0">*</span>
+             <span class="s0">* ```js</span>
+             <span class="s0">* import { Buffer } from 'node:buffer';</span>
+             <span class="s0">*</span>
+             <span class="s0">* const buf = Buffer.from([1, -2]);</span>
+             <span class="s0">*</span>
+             <span class="s0">* console.log(buf.readUInt8(0));</span>
+             <span class="s0">* // Prints: 1</span>
+             <span class="s0">* console.log(buf.readUInt8(1));</span>
+             <span class="s0">* // Prints: 254</span>
+             <span class="s0">* console.log(buf.readUInt8(2));</span>
+             <span class="s0">* // Throws ERR_OUT_OF_RANGE.</span>
+             <span class="s0">* ```</span>
+             <span class="s0">* </span><span class="s4">@since </span><span class="s0">v0.5.0</span>
+             <span class="s0">* </span><span class="s4">@param </span><span class="s0">[offset=0] Number of bytes to skip before starting to read. Must satisfy `0 &lt;= offset &lt;= buf.length - 1`.</span>
+             <span class="s0">*/</span>
+            <span class="s1">readUInt8(offset?: number): number;</span>
+            <span class="s0">/**</span>
+             <span class="s0">* </span><span class="s4">@alias </span><span class="s0">Buffer.readUInt8</span>
+             <span class="s0">* </span><span class="s4">@since </span><span class="s0">v14.9.0, v12.19.0</span>
+             <span class="s0">*/</span>
+            <span class="s1">readUint8(offset?: number): number;</span>
+            <span class="s0">/**</span>
+             <span class="s0">* Reads an unsigned, little-endian 16-bit integer from `buf` at the specified `offset`.</span>
+             <span class="s0">*</span>
+             <span class="s0">* This function is also available under the `readUint16LE` alias.</span>
+             <span class="s0">*</span>
+             <span class="s0">* ```js</span>
+             <span class="s0">* import { Buffer } from 'node:buffer';</span>
+             <span class="s0">*</span>
+             <span class="s0">* const buf = Buffer.from([0x12, 0x34, 0x56]);</span>
+             <span class="s0">*</span>
+             <span class="s0">* console.log(buf.readUInt16LE(0).toString(16));</span>
+             <span class="s0">* // Prints: 3412</span>
+             <span class="s0">* console.log(buf.readUInt16LE(1).toString(16));</span>
+             <span class="s0">* // Prints: 5634</span>
+             <span class="s0">* console.log(buf.readUInt16LE(2).toString(16));</span>
+             <span class="s0">* // Throws ERR_OUT_OF_RANGE.</span>
+             <span class="s0">* ```</span>
+             <span class="s0">* </span><span class="s4">@since </span><span class="s0">v0.5.5</span>
+             <span class="s0">* </span><span class="s4">@param </span><span class="s0">[offset=0] Number of bytes to skip before starting to read. Must satisfy `0 &lt;= offset &lt;= buf.length - 2`.</span>
+             <span class="s0">*/</span>
+            <span class="s1">readUInt16LE(offset?: number): number;</span>
+            <span class="s0">/**</span>
+             <span class="s0">* </span><span class="s4">@alias </span><span class="s0">Buffer.readUInt16LE</span>
+             <span class="s0">* </span><span class="s4">@since </span><span class="s0">v14.9.0, v12.19.0</span>
+             <span class="s0">*/</span>
+            <span class="s1">readUint16LE(offset?: number): number;</span>
+            <span class="s0">/**</span>
+             <span class="s0">* Reads an unsigned, big-endian 16-bit integer from `buf` at the specified`offset`.</span>
+             <span class="s0">*</span>
+             <span class="s0">* This function is also available under the `readUint16BE` alias.</span>
+             <span class="s0">*</span>
+             <span class="s0">* ```js</span>
+             <span class="s0">* import { Buffer } from 'node:buffer';</span>
+             <span class="s0">*</span>
+             <span class="s0">* const buf = Buffer.from([0x12, 0x34, 0x56]);</span>
+             <span class="s0">*</span>
+             <span class="s0">* console.log(buf.readUInt16BE(0).toString(16));</span>
+             <span class="s0">* // Prints: 1234</span>
+             <span class="s0">* console.log(buf.readUInt16BE(1).toString(16));</span>
+             <span class="s0">* // Prints: 3456</span>
+             <span class="s0">* ```</span>
+             <span class="s0">* </span><span class="s4">@since </span><span class="s0">v0.5.5</span>
+             <span class="s0">* </span><span class="s4">@param </span><span class="s0">[offset=0] Number of bytes to skip before starting to read. Must satisfy `0 &lt;= offset &lt;= buf.length - 2`.</span>
+             <span class="s0">*/</span>
+            <span class="s1">readUInt16BE(offset?: number): number;</span>
+            <span class="s0">/**</span>
+             <span class="s0">* </span><span class="s4">@alias </span><span class="s0">Buffer.readUInt16BE</span>
+             <span class="s0">* </span><span class="s4">@since </span><span class="s0">v14.9.0, v12.19.0</span>
+             <span class="s0">*/</span>
+            <span class="s1">readUint16BE(offset?: number): number;</span>
+            <span class="s0">/**</span>
+             <span class="s0">* Reads an unsigned, little-endian 32-bit integer from `buf` at the specified`offset`.</span>
+             <span class="s0">*</span>
+             <span class="s0">* This function is also available under the `readUint32LE` alias.</span>
+             <span class="s0">*</span>
+             <span class="s0">* ```js</span>
+             <span class="s0">* import { Buffer } from 'node:buffer';</span>
+             <span class="s0">*</span>
+             <span class="s0">* const buf = Buffer.from([0x12, 0x34, 0x56, 0x78]);</span>
+             <span class="s0">*</span>
+             <span class="s0">* console.log(buf.readUInt32LE(0).toString(16));</span>
+             <span class="s0">* // Prints: 78563412</span>
+             <span class="s0">* console.log(buf.readUInt32LE(1).toString(16));</span>
+             <span class="s0">* // Throws ERR_OUT_OF_RANGE.</span>
+             <span class="s0">* ```</span>
+             <span class="s0">* </span><span class="s4">@since </span><span class="s0">v0.5.5</span>
+             <span class="s0">* </span><span class="s4">@param </span><span class="s0">[offset=0] Number of bytes to skip before starting to read. Must satisfy `0 &lt;= offset &lt;= buf.length - 4`.</span>
+             <span class="s0">*/</span>
+            <span class="s1">readUInt32LE(offset?: number): number;</span>
+            <span class="s0">/**</span>
+             <span class="s0">* </span><span class="s4">@alias </span><span class="s0">Buffer.readUInt32LE</span>
+             <span class="s0">* </span><span class="s4">@since </span><span class="s0">v14.9.0, v12.19.0</span>
+             <span class="s0">*/</span>
+            <span class="s1">readUint32LE(offset?: number): number;</span>
+            <span class="s0">/**</span>
+             <span class="s0">* Reads an unsigned, big-endian 32-bit integer from `buf` at the specified`offset`.</span>
+             <span class="s0">*</span>
+             <span class="s0">* This function is also available under the `readUint32BE` alias.</span>
+             <span class="s0">*</span>
+             <span class="s0">* ```js</span>
+             <span class="s0">* import { Buffer } from 'node:buffer';</span>
+             <span class="s0">*</span>
+             <span class="s0">* const buf = Buffer.from([0x12, 0x34, 0x56, 0x78]);</span>
+             <span class="s0">*</span>
+             <span class="s0">* console.log(buf.readUInt32BE(0).toString(16));</span>
+             <span class="s0">* // Prints: 12345678</span>
+             <span class="s0">* ```</span>
+             <span class="s0">* </span><span class="s4">@since </span><span class="s0">v0.5.5</span>
+             <span class="s0">* </span><span class="s4">@param </span><span class="s0">[offset=0] Number of bytes to skip before starting to read. Must satisfy `0 &lt;= offset &lt;= buf.length - 4`.</span>
+             <span class="s0">*/</span>
+            <span class="s1">readUInt32BE(offset?: number): number;</span>
+            <span class="s0">/**</span>
+             <span class="s0">* </span><span class="s4">@alias </span><span class="s0">Buffer.readUInt32BE</span>
+             <span class="s0">* </span><span class="s4">@since </span><span class="s0">v14.9.0, v12.19.0</span>
+             <span class="s0">*/</span>
+            <span class="s1">readUint32BE(offset?: number): number;</span>
+            <span class="s0">/**</span>
+             <span class="s0">* Reads a signed 8-bit integer from `buf` at the specified `offset`.</span>
+             <span class="s0">*</span>
+             <span class="s0">* Integers read from a `Buffer` are interpreted as two's complement signed values.</span>
+             <span class="s0">*</span>
+             <span class="s0">* ```js</span>
+             <span class="s0">* import { Buffer } from 'node:buffer';</span>
+             <span class="s0">*</span>
+             <span class="s0">* const buf = Buffer.from([-1, 5]);</span>
+             <span class="s0">*</span>
+             <span class="s0">* console.log(buf.readInt8(0));</span>
+             <span class="s0">* // Prints: -1</span>
+             <span class="s0">* console.log(buf.readInt8(1));</span>
+             <span class="s0">* // Prints: 5</span>
+             <span class="s0">* console.log(buf.readInt8(2));</span>
+             <span class="s0">* // Throws ERR_OUT_OF_RANGE.</span>
+             <span class="s0">* ```</span>
+             <span class="s0">* </span><span class="s4">@since </span><span class="s0">v0.5.0</span>
+             <span class="s0">* </span><span class="s4">@param </span><span class="s0">[offset=0] Number of bytes to skip before starting to read. Must satisfy `0 &lt;= offset &lt;= buf.length - 1`.</span>
+             <span class="s0">*/</span>
+            <span class="s1">readInt8(offset?: number): number;</span>
+            <span class="s0">/**</span>
+             <span class="s0">* Reads a signed, little-endian 16-bit integer from `buf` at the specified`offset`.</span>
+             <span class="s0">*</span>
+             <span class="s0">* Integers read from a `Buffer` are interpreted as two's complement signed values.</span>
+             <span class="s0">*</span>
+             <span class="s0">* ```js</span>
+             <span class="s0">* import { Buffer } from 'node:buffer';</span>
+             <span class="s0">*</span>
+             <span class="s0">* const buf = Buffer.from([0, 5]);</span>
+             <span class="s0">*</span>
+             <span class="s0">* console.log(buf.readInt16LE(0));</span>
+             <span class="s0">* // Prints: 1280</span>
+             <span class="s0">* console.log(buf.readInt16LE(1));</span>
+             <span class="s0">* // Throws ERR_OUT_OF_RANGE.</span>
+             <span class="s0">* ```</span>
+             <span class="s0">* </span><span class="s4">@since </span><span class="s0">v0.5.5</span>
+             <span class="s0">* </span><span class="s4">@param </span><span class="s0">[offset=0] Number of bytes to skip before starting to read. Must satisfy `0 &lt;= offset &lt;= buf.length - 2`.</span>
+             <span class="s0">*/</span>
+            <span class="s1">readInt16LE(offset?: number): number;</span>
+            <span class="s0">/**</span>
+             <span class="s0">* Reads a signed, big-endian 16-bit integer from `buf` at the specified `offset`.</span>
+             <span class="s0">*</span>
+             <span class="s0">* Integers read from a `Buffer` are interpreted as two's complement signed values.</span>
+             <span class="s0">*</span>
+             <span class="s0">* ```js</span>
+             <span class="s0">* import { Buffer } from 'node:buffer';</span>
+             <span class="s0">*</span>
+             <span class="s0">* const buf = Buffer.from([0, 5]);</span>
+             <span class="s0">*</span>
+             <span class="s0">* console.log(buf.readInt16BE(0));</span>
+             <span class="s0">* // Prints: 5</span>
+             <span class="s0">* ```</span>
+             <span class="s0">* </span><span class="s4">@since </span><span class="s0">v0.5.5</span>
+             <span class="s0">* </span><span class="s4">@param </span><span class="s0">[offset=0] Number of bytes to skip before starting to read. Must satisfy `0 &lt;= offset &lt;= buf.length - 2`.</span>
+             <span class="s0">*/</span>
+            <span class="s1">readInt16BE(offset?: number): number;</span>
+            <span class="s0">/**</span>
+             <span class="s0">* Reads a signed, little-endian 32-bit integer from `buf` at the specified`offset`.</span>
+             <span class="s0">*</span>
+             <span class="s0">* Integers read from a `Buffer` are interpreted as two's complement signed values.</span>
+             <span class="s0">*</span>
+             <span class="s0">* ```js</span>
+             <span class="s0">* import { Buffer } from 'node:buffer';</span>
+             <span class="s0">*</span>
+             <span class="s0">* const buf = Buffer.from([0, 0, 0, 5]);</span>
+             <span class="s0">*</span>
+             <span class="s0">* console.log(buf.readInt32LE(0));</span>
+             <span class="s0">* // Prints: 83886080</span>
+             <span class="s0">* console.log(buf.readInt32LE(1));</span>
+             <span class="s0">* // Throws ERR_OUT_OF_RANGE.</span>
+             <span class="s0">* ```</span>
+             <span class="s0">* </span><span class="s4">@since </span><span class="s0">v0.5.5</span>
+             <span class="s0">* </span><span class="s4">@param </span><span class="s0">[offset=0] Number of bytes to skip before starting to read. Must satisfy `0 &lt;= offset &lt;= buf.length - 4`.</span>
+             <span class="s0">*/</span>
+            <span class="s1">readInt32LE(offset?: number): number;</span>
+            <span class="s0">/**</span>
+             <span class="s0">* Reads a signed, big-endian 32-bit integer from `buf` at the specified `offset`.</span>
+             <span class="s0">*</span>
+             <span class="s0">* Integers read from a `Buffer` are interpreted as two's complement signed values.</span>
+             <span class="s0">*</span>
+             <span class="s0">* ```js</span>
+             <span class="s0">* import { Buffer } from 'node:buffer';</span>
+             <span class="s0">*</span>
+             <span class="s0">* const buf = Buffer.from([0, 0, 0, 5]);</span>
+             <span class="s0">*</span>
+             <span class="s0">* console.log(buf.readInt32BE(0));</span>
+             <span class="s0">* // Prints: 5</span>
+             <span class="s0">* ```</span>
+             <span class="s0">* </span><span class="s4">@since </span><span class="s0">v0.5.5</span>
+             <span class="s0">* </span><span class="s4">@param </span><span class="s0">[offset=0] Number of bytes to skip before starting to read. Must satisfy `0 &lt;= offset &lt;= buf.length - 4`.</span>
+             <span class="s0">*/</span>
+            <span class="s1">readInt32BE(offset?: number): number;</span>
+            <span class="s0">/**</span>
+             <span class="s0">* Reads a 32-bit, little-endian float from `buf` at the specified `offset`.</span>
+             <span class="s0">*</span>
+             <span class="s0">* ```js</span>
+             <span class="s0">* import { Buffer } from 'node:buffer';</span>
+             <span class="s0">*</span>
+             <span class="s0">* const buf = Buffer.from([1, 2, 3, 4]);</span>
+             <span class="s0">*</span>
+             <span class="s0">* console.log(buf.readFloatLE(0));</span>
+             <span class="s0">* // Prints: 1.539989614439558e-36</span>
+             <span class="s0">* console.log(buf.readFloatLE(1));</span>
+             <span class="s0">* // Throws ERR_OUT_OF_RANGE.</span>
+             <span class="s0">* ```</span>
+             <span class="s0">* </span><span class="s4">@since </span><span class="s0">v0.11.15</span>
+             <span class="s0">* </span><span class="s4">@param </span><span class="s0">[offset=0] Number of bytes to skip before starting to read. Must satisfy `0 &lt;= offset &lt;= buf.length - 4`.</span>
+             <span class="s0">*/</span>
+            <span class="s1">readFloatLE(offset?: number): number;</span>
+            <span class="s0">/**</span>
+             <span class="s0">* Reads a 32-bit, big-endian float from `buf` at the specified `offset`.</span>
+             <span class="s0">*</span>
+             <span class="s0">* ```js</span>
+             <span class="s0">* import { Buffer } from 'node:buffer';</span>
+             <span class="s0">*</span>
+             <span class="s0">* const buf = Buffer.from([1, 2, 3, 4]);</span>
+             <span class="s0">*</span>
+             <span class="s0">* console.log(buf.readFloatBE(0));</span>
+             <span class="s0">* // Prints: 2.387939260590663e-38</span>
+             <span class="s0">* ```</span>
+             <span class="s0">* </span><span class="s4">@since </span><span class="s0">v0.11.15</span>
+             <span class="s0">* </span><span class="s4">@param </span><span class="s0">[offset=0] Number of bytes to skip before starting to read. Must satisfy `0 &lt;= offset &lt;= buf.length - 4`.</span>
+             <span class="s0">*/</span>
+            <span class="s1">readFloatBE(offset?: number): number;</span>
+            <span class="s0">/**</span>
+             <span class="s0">* Reads a 64-bit, little-endian double from `buf` at the specified `offset`.</span>
+             <span class="s0">*</span>
+             <span class="s0">* ```js</span>
+             <span class="s0">* import { Buffer } from 'node:buffer';</span>
+             <span class="s0">*</span>
+             <span class="s0">* const buf = Buffer.from([1, 2, 3, 4, 5, 6, 7, 8]);</span>
+             <span class="s0">*</span>
+             <span class="s0">* console.log(buf.readDoubleLE(0));</span>
+             <span class="s0">* // Prints: 5.447603722011605e-270</span>
+             <span class="s0">* console.log(buf.readDoubleLE(1));</span>
+             <span class="s0">* // Throws ERR_OUT_OF_RANGE.</span>
+             <span class="s0">* ```</span>
+             <span class="s0">* </span><span class="s4">@since </span><span class="s0">v0.11.15</span>
+             <span class="s0">* </span><span class="s4">@param </span><span class="s0">[offset=0] Number of bytes to skip before starting to read. Must satisfy `0 &lt;= offset &lt;= buf.length - 8`.</span>
+             <span class="s0">*/</span>
+            <span class="s1">readDoubleLE(offset?: number): number;</span>
+            <span class="s0">/**</span>
+             <span class="s0">* Reads a 64-bit, big-endian double from `buf` at the specified `offset`.</span>
+             <span class="s0">*</span>
+             <span class="s0">* ```js</span>
+             <span class="s0">* import { Buffer } from 'node:buffer';</span>
+             <span class="s0">*</span>
+             <span class="s0">* const buf = Buffer.from([1, 2, 3, 4, 5, 6, 7, 8]);</span>
+             <span class="s0">*</span>
+             <span class="s0">* console.log(buf.readDoubleBE(0));</span>
+             <span class="s0">* // Prints: 8.20788039913184e-304</span>
+             <span class="s0">* ```</span>
+             <span class="s0">* </span><span class="s4">@since </span><span class="s0">v0.11.15</span>
+             <span class="s0">* </span><span class="s4">@param </span><span class="s0">[offset=0] Number of bytes to skip before starting to read. Must satisfy `0 &lt;= offset &lt;= buf.length - 8`.</span>
+             <span class="s0">*/</span>
+            <span class="s1">readDoubleBE(offset?: number): number;</span>
+            <span class="s1">reverse(): </span><span class="s2">this</span><span class="s1">;</span>
+            <span class="s0">/**</span>
+             <span class="s0">* Interprets `buf` as an array of unsigned 16-bit integers and swaps the</span>
+             <span class="s0">* byte order _in-place_. Throws `ERR_INVALID_BUFFER_SIZE` if `buf.length` is not a multiple of 2.</span>
+             <span class="s0">*</span>
+             <span class="s0">* ```js</span>
+             <span class="s0">* import { Buffer } from 'node:buffer';</span>
+             <span class="s0">*</span>
+             <span class="s0">* const buf1 = Buffer.from([0x1, 0x2, 0x3, 0x4, 0x5, 0x6, 0x7, 0x8]);</span>
+             <span class="s0">*</span>
+             <span class="s0">* console.log(buf1);</span>
+             <span class="s0">* // Prints: &lt;Buffer 01 02 03 04 05 06 07 08&gt;</span>
+             <span class="s0">*</span>
+             <span class="s0">* buf1.swap16();</span>
+             <span class="s0">*</span>
+             <span class="s0">* console.log(buf1);</span>
+             <span class="s0">* // Prints: &lt;Buffer 02 01 04 03 06 05 08 07&gt;</span>
+             <span class="s0">*</span>
+             <span class="s0">* const buf2 = Buffer.from([0x1, 0x2, 0x3]);</span>
+             <span class="s0">*</span>
+             <span class="s0">* buf2.swap16();</span>
+             <span class="s0">* // Throws ERR_INVALID_BUFFER_SIZE.</span>
+             <span class="s0">* ```</span>
+             <span class="s0">*</span>
+             <span class="s0">* One convenient use of `buf.swap16()` is to perform a fast in-place conversion</span>
+             <span class="s0">* between UTF-16 little-endian and UTF-16 big-endian:</span>
+             <span class="s0">*</span>
+             <span class="s0">* ```js</span>
+             <span class="s0">* import { Buffer } from 'node:buffer';</span>
+             <span class="s0">*</span>
+             <span class="s0">* const buf = Buffer.from('This is little-endian UTF-16', 'utf16le');</span>
+             <span class="s0">* buf.swap16(); // Convert to big-endian UTF-16 text.</span>
+             <span class="s0">* ```</span>
+             <span class="s0">* </span><span class="s4">@since </span><span class="s0">v5.10.0</span>
+             <span class="s0">* </span><span class="s4">@return </span><span class="s0">A reference to `buf`.</span>
+             <span class="s0">*/</span>
+            <span class="s1">swap16(): </span><span class="s2">this</span><span class="s1">;</span>
+            <span class="s0">/**</span>
+             <span class="s0">* Interprets `buf` as an array of unsigned 32-bit integers and swaps the</span>
+             <span class="s0">* byte order _in-place_. Throws `ERR_INVALID_BUFFER_SIZE` if `buf.length` is not a multiple of 4.</span>
+             <span class="s0">*</span>
+             <span class="s0">* ```js</span>
+             <span class="s0">* import { Buffer } from 'node:buffer';</span>
+             <span class="s0">*</span>
+             <span class="s0">* const buf1 = Buffer.from([0x1, 0x2, 0x3, 0x4, 0x5, 0x6, 0x7, 0x8]);</span>
+             <span class="s0">*</span>
+             <span class="s0">* console.log(buf1);</span>
+             <span class="s0">* // Prints: &lt;Buffer 01 02 03 04 05 06 07 08&gt;</span>
+             <span class="s0">*</span>
+             <span class="s0">* buf1.swap32();</span>
+             <span class="s0">*</span>
+             <span class="s0">* console.log(buf1);</span>
+             <span class="s0">* // Prints: &lt;Buffer 04 03 02 01 08 07 06 05&gt;</span>
+             <span class="s0">*</span>
+             <span class="s0">* const buf2 = Buffer.from([0x1, 0x2, 0x3]);</span>
+             <span class="s0">*</span>
+             <span class="s0">* buf2.swap32();</span>
+             <span class="s0">* // Throws ERR_INVALID_BUFFER_SIZE.</span>
+             <span class="s0">* ```</span>
+             <span class="s0">* </span><span class="s4">@since </span><span class="s0">v5.10.0</span>
+             <span class="s0">* </span><span class="s4">@return </span><span class="s0">A reference to `buf`.</span>
+             <span class="s0">*/</span>
+            <span class="s1">swap32(): </span><span class="s2">this</span><span class="s1">;</span>
+            <span class="s0">/**</span>
+             <span class="s0">* Interprets `buf` as an array of 64-bit numbers and swaps byte order _in-place_.</span>
+             <span class="s0">* Throws `ERR_INVALID_BUFFER_SIZE` if `buf.length` is not a multiple of 8.</span>
+             <span class="s0">*</span>
+             <span class="s0">* ```js</span>
+             <span class="s0">* import { Buffer } from 'node:buffer';</span>
+             <span class="s0">*</span>
+             <span class="s0">* const buf1 = Buffer.from([0x1, 0x2, 0x3, 0x4, 0x5, 0x6, 0x7, 0x8]);</span>
+             <span class="s0">*</span>
+             <span class="s0">* console.log(buf1);</span>
+             <span class="s0">* // Prints: &lt;Buffer 01 02 03 04 05 06 07 08&gt;</span>
+             <span class="s0">*</span>
+             <span class="s0">* buf1.swap64();</span>
+             <span class="s0">*</span>
+             <span class="s0">* console.log(buf1);</span>
+             <span class="s0">* // Prints: &lt;Buffer 08 07 06 05 04 03 02 01&gt;</span>
+             <span class="s0">*</span>
+             <span class="s0">* const buf2 = Buffer.from([0x1, 0x2, 0x3]);</span>
+             <span class="s0">*</span>
+             <span class="s0">* buf2.swap64();</span>
+             <span class="s0">* // Throws ERR_INVALID_BUFFER_SIZE.</span>
+             <span class="s0">* ```</span>
+             <span class="s0">* </span><span class="s4">@since </span><span class="s0">v6.3.0</span>
+             <span class="s0">* </span><span class="s4">@return </span><span class="s0">A reference to `buf`.</span>
+             <span class="s0">*/</span>
+            <span class="s1">swap64(): </span><span class="s2">this</span><span class="s1">;</span>
+            <span class="s0">/**</span>
+             <span class="s0">* Writes `value` to `buf` at the specified `offset`. `value` must be a</span>
+             <span class="s0">* valid unsigned 8-bit integer. Behavior is undefined when `value` is anything</span>
+             <span class="s0">* other than an unsigned 8-bit integer.</span>
+             <span class="s0">*</span>
+             <span class="s0">* This function is also available under the `writeUint8` alias.</span>
+             <span class="s0">*</span>
+             <span class="s0">* ```js</span>
+             <span class="s0">* import { Buffer } from 'node:buffer';</span>
+             <span class="s0">*</span>
+             <span class="s0">* const buf = Buffer.allocUnsafe(4);</span>
+             <span class="s0">*</span>
+             <span class="s0">* buf.writeUInt8(0x3, 0);</span>
+             <span class="s0">* buf.writeUInt8(0x4, 1);</span>
+             <span class="s0">* buf.writeUInt8(0x23, 2);</span>
+             <span class="s0">* buf.writeUInt8(0x42, 3);</span>
+             <span class="s0">*</span>
+             <span class="s0">* console.log(buf);</span>
+             <span class="s0">* // Prints: &lt;Buffer 03 04 23 42&gt;</span>
+             <span class="s0">* ```</span>
+             <span class="s0">* </span><span class="s4">@since </span><span class="s0">v0.5.0</span>
+             <span class="s0">* </span><span class="s4">@param </span><span class="s0">value Number to be written to `buf`.</span>
+             <span class="s0">* </span><span class="s4">@param </span><span class="s0">[offset=0] Number of bytes to skip before starting to write. Must satisfy `0 &lt;= offset &lt;= buf.length - 1`.</span>
+             <span class="s0">* </span><span class="s4">@return </span><span class="s0">`offset` plus the number of bytes written.</span>
+             <span class="s0">*/</span>
+            <span class="s1">writeUInt8(value: number, offset?: number): number;</span>
+            <span class="s0">/**</span>
+             <span class="s0">* </span><span class="s4">@alias </span><span class="s0">Buffer.writeUInt8</span>
+             <span class="s0">* </span><span class="s4">@since </span><span class="s0">v14.9.0, v12.19.0</span>
+             <span class="s0">*/</span>
+            <span class="s1">writeUint8(value: number, offset?: number): number;</span>
+            <span class="s0">/**</span>
+             <span class="s0">* Writes `value` to `buf` at the specified `offset` as little-endian. The `value` must be a valid unsigned 16-bit integer. Behavior is undefined when `value` is</span>
+             <span class="s0">* anything other than an unsigned 16-bit integer.</span>
+             <span class="s0">*</span>
+             <span class="s0">* This function is also available under the `writeUint16LE` alias.</span>
+             <span class="s0">*</span>
+             <span class="s0">* ```js</span>
+             <span class="s0">* import { Buffer } from 'node:buffer';</span>
+             <span class="s0">*</span>
+             <span class="s0">* const buf = Buffer.allocUnsafe(4);</span>
+             <span class="s0">*</span>
+             <span class="s0">* buf.writeUInt16LE(0xdead, 0);</span>
+             <span class="s0">* buf.writeUInt16LE(0xbeef, 2);</span>
+             <span class="s0">*</span>
+             <span class="s0">* console.log(buf);</span>
+             <span class="s0">* // Prints: &lt;Buffer ad de ef be&gt;</span>
+             <span class="s0">* ```</span>
+             <span class="s0">* </span><span class="s4">@since </span><span class="s0">v0.5.5</span>
+             <span class="s0">* </span><span class="s4">@param </span><span class="s0">value Number to be written to `buf`.</span>
+             <span class="s0">* </span><span class="s4">@param </span><span class="s0">[offset=0] Number of bytes to skip before starting to write. Must satisfy `0 &lt;= offset &lt;= buf.length - 2`.</span>
+             <span class="s0">* </span><span class="s4">@return </span><span class="s0">`offset` plus the number of bytes written.</span>
+             <span class="s0">*/</span>
+            <span class="s1">writeUInt16LE(value: number, offset?: number): number;</span>
+            <span class="s0">/**</span>
+             <span class="s0">* </span><span class="s4">@alias </span><span class="s0">Buffer.writeUInt16LE</span>
+             <span class="s0">* </span><span class="s4">@since </span><span class="s0">v14.9.0, v12.19.0</span>
+             <span class="s0">*/</span>
+            <span class="s1">writeUint16LE(value: number, offset?: number): number;</span>
+            <span class="s0">/**</span>
+             <span class="s0">* Writes `value` to `buf` at the specified `offset` as big-endian. The `value` must be a valid unsigned 16-bit integer. Behavior is undefined when `value`is anything other than an</span>
+             <span class="s0">* unsigned 16-bit integer.</span>
+             <span class="s0">*</span>
+             <span class="s0">* This function is also available under the `writeUint16BE` alias.</span>
+             <span class="s0">*</span>
+             <span class="s0">* ```js</span>
+             <span class="s0">* import { Buffer } from 'node:buffer';</span>
+             <span class="s0">*</span>
+             <span class="s0">* const buf = Buffer.allocUnsafe(4);</span>
+             <span class="s0">*</span>
+             <span class="s0">* buf.writeUInt16BE(0xdead, 0);</span>
+             <span class="s0">* buf.writeUInt16BE(0xbeef, 2);</span>
+             <span class="s0">*</span>
+             <span class="s0">* console.log(buf);</span>
+             <span class="s0">* // Prints: &lt;Buffer de ad be ef&gt;</span>
+             <span class="s0">* ```</span>
+             <span class="s0">* </span><span class="s4">@since </span><span class="s0">v0.5.5</span>
+             <span class="s0">* </span><span class="s4">@param </span><span class="s0">value Number to be written to `buf`.</span>
+             <span class="s0">* </span><span class="s4">@param </span><span class="s0">[offset=0] Number of bytes to skip before starting to write. Must satisfy `0 &lt;= offset &lt;= buf.length - 2`.</span>
+             <span class="s0">* </span><span class="s4">@return </span><span class="s0">`offset` plus the number of bytes written.</span>
+             <span class="s0">*/</span>
+            <span class="s1">writeUInt16BE(value: number, offset?: number): number;</span>
+            <span class="s0">/**</span>
+             <span class="s0">* </span><span class="s4">@alias </span><span class="s0">Buffer.writeUInt16BE</span>
+             <span class="s0">* </span><span class="s4">@since </span><span class="s0">v14.9.0, v12.19.0</span>
+             <span class="s0">*/</span>
+            <span class="s1">writeUint16BE(value: number, offset?: number): number;</span>
+            <span class="s0">/**</span>
+             <span class="s0">* Writes `value` to `buf` at the specified `offset` as little-endian. The `value` must be a valid unsigned 32-bit integer. Behavior is undefined when `value` is</span>
+             <span class="s0">* anything other than an unsigned 32-bit integer.</span>
+             <span class="s0">*</span>
+             <span class="s0">* This function is also available under the `writeUint32LE` alias.</span>
+             <span class="s0">*</span>
+             <span class="s0">* ```js</span>
+             <span class="s0">* import { Buffer } from 'node:buffer';</span>
+             <span class="s0">*</span>
+             <span class="s0">* const buf = Buffer.allocUnsafe(4);</span>
+             <span class="s0">*</span>
+             <span class="s0">* buf.writeUInt32LE(0xfeedface, 0);</span>
+             <span class="s0">*</span>
+             <span class="s0">* console.log(buf);</span>
+             <span class="s0">* // Prints: &lt;Buffer ce fa ed fe&gt;</span>
+             <span class="s0">* ```</span>
+             <span class="s0">* </span><span class="s4">@since </span><span class="s0">v0.5.5</span>
+             <span class="s0">* </span><span class="s4">@param </span><span class="s0">value Number to be written to `buf`.</span>
+             <span class="s0">* </span><span class="s4">@param </span><span class="s0">[offset=0] Number of bytes to skip before starting to write. Must satisfy `0 &lt;= offset &lt;= buf.length - 4`.</span>
+             <span class="s0">* </span><span class="s4">@return </span><span class="s0">`offset` plus the number of bytes written.</span>
+             <span class="s0">*/</span>
+            <span class="s1">writeUInt32LE(value: number, offset?: number): number;</span>
+            <span class="s0">/**</span>
+             <span class="s0">* </span><span class="s4">@alias </span><span class="s0">Buffer.writeUInt32LE</span>
+             <span class="s0">* </span><span class="s4">@since </span><span class="s0">v14.9.0, v12.19.0</span>
+             <span class="s0">*/</span>
+            <span class="s1">writeUint32LE(value: number, offset?: number): number;</span>
+            <span class="s0">/**</span>
+             <span class="s0">* Writes `value` to `buf` at the specified `offset` as big-endian. The `value` must be a valid unsigned 32-bit integer. Behavior is undefined when `value`is anything other than an</span>
+             <span class="s0">* unsigned 32-bit integer.</span>
+             <span class="s0">*</span>
+             <span class="s0">* This function is also available under the `writeUint32BE` alias.</span>
+             <span class="s0">*</span>
+             <span class="s0">* ```js</span>
+             <span class="s0">* import { Buffer } from 'node:buffer';</span>
+             <span class="s0">*</span>
+             <span class="s0">* const buf = Buffer.allocUnsafe(4);</span>
+             <span class="s0">*</span>
+             <span class="s0">* buf.writeUInt32BE(0xfeedface, 0);</span>
+             <span class="s0">*</span>
+             <span class="s0">* console.log(buf);</span>
+             <span class="s0">* // Prints: &lt;Buffer fe ed fa ce&gt;</span>
+             <span class="s0">* ```</span>
+             <span class="s0">* </span><span class="s4">@since </span><span class="s0">v0.5.5</span>
+             <span class="s0">* </span><span class="s4">@param </span><span class="s0">value Number to be written to `buf`.</span>
+             <span class="s0">* </span><span class="s4">@param </span><span class="s0">[offset=0] Number of bytes to skip before starting to write. Must satisfy `0 &lt;= offset &lt;= buf.length - 4`.</span>
+             <span class="s0">* </span><span class="s4">@return </span><span class="s0">`offset` plus the number of bytes written.</span>
+             <span class="s0">*/</span>
+            <span class="s1">writeUInt32BE(value: number, offset?: number): number;</span>
+            <span class="s0">/**</span>
+             <span class="s0">* </span><span class="s4">@alias </span><span class="s0">Buffer.writeUInt32BE</span>
+             <span class="s0">* </span><span class="s4">@since </span><span class="s0">v14.9.0, v12.19.0</span>
+             <span class="s0">*/</span>
+            <span class="s1">writeUint32BE(value: number, offset?: number): number;</span>
+            <span class="s0">/**</span>
+             <span class="s0">* Writes `value` to `buf` at the specified `offset`. `value` must be a valid</span>
+             <span class="s0">* signed 8-bit integer. Behavior is undefined when `value` is anything other than</span>
+             <span class="s0">* a signed 8-bit integer.</span>
+             <span class="s0">*</span>
+             <span class="s0">* `value` is interpreted and written as a two's complement signed integer.</span>
+             <span class="s0">*</span>
+             <span class="s0">* ```js</span>
+             <span class="s0">* import { Buffer } from 'node:buffer';</span>
+             <span class="s0">*</span>
+             <span class="s0">* const buf = Buffer.allocUnsafe(2);</span>
+             <span class="s0">*</span>
+             <span class="s0">* buf.writeInt8(2, 0);</span>
+             <span class="s0">* buf.writeInt8(-2, 1);</span>
+             <span class="s0">*</span>
+             <span class="s0">* console.log(buf);</span>
+             <span class="s0">* // Prints: &lt;Buffer 02 fe&gt;</span>
+             <span class="s0">* ```</span>
+             <span class="s0">* </span><span class="s4">@since </span><span class="s0">v0.5.0</span>
+             <span class="s0">* </span><span class="s4">@param </span><span class="s0">value Number to be written to `buf`.</span>
+             <span class="s0">* </span><span class="s4">@param </span><span class="s0">[offset=0] Number of bytes to skip before starting to write. Must satisfy `0 &lt;= offset &lt;= buf.length - 1`.</span>
+             <span class="s0">* </span><span class="s4">@return </span><span class="s0">`offset` plus the number of bytes written.</span>
+             <span class="s0">*/</span>
+            <span class="s1">writeInt8(value: number, offset?: number): number;</span>
+            <span class="s0">/**</span>
+             <span class="s0">* Writes `value` to `buf` at the specified `offset` as little-endian.  The `value` must be a valid signed 16-bit integer. Behavior is undefined when `value` is</span>
+             <span class="s0">* anything other than a signed 16-bit integer.</span>
+             <span class="s0">*</span>
+             <span class="s0">* The `value` is interpreted and written as a two's complement signed integer.</span>
+             <span class="s0">*</span>
+             <span class="s0">* ```js</span>
+             <span class="s0">* import { Buffer } from 'node:buffer';</span>
+             <span class="s0">*</span>
+             <span class="s0">* const buf = Buffer.allocUnsafe(2);</span>
+             <span class="s0">*</span>
+             <span class="s0">* buf.writeInt16LE(0x0304, 0);</span>
+             <span class="s0">*</span>
+             <span class="s0">* console.log(buf);</span>
+             <span class="s0">* // Prints: &lt;Buffer 04 03&gt;</span>
+             <span class="s0">* ```</span>
+             <span class="s0">* </span><span class="s4">@since </span><span class="s0">v0.5.5</span>
+             <span class="s0">* </span><span class="s4">@param </span><span class="s0">value Number to be written to `buf`.</span>
+             <span class="s0">* </span><span class="s4">@param </span><span class="s0">[offset=0] Number of bytes to skip before starting to write. Must satisfy `0 &lt;= offset &lt;= buf.length - 2`.</span>
+             <span class="s0">* </span><span class="s4">@return </span><span class="s0">`offset` plus the number of bytes written.</span>
+             <span class="s0">*/</span>
+            <span class="s1">writeInt16LE(value: number, offset?: number): number;</span>
+            <span class="s0">/**</span>
+             <span class="s0">* Writes `value` to `buf` at the specified `offset` as big-endian.  The `value` must be a valid signed 16-bit integer. Behavior is undefined when `value` is</span>
+             <span class="s0">* anything other than a signed 16-bit integer.</span>
+             <span class="s0">*</span>
+             <span class="s0">* The `value` is interpreted and written as a two's complement signed integer.</span>
+             <span class="s0">*</span>
+             <span class="s0">* ```js</span>
+             <span class="s0">* import { Buffer } from 'node:buffer';</span>
+             <span class="s0">*</span>
+             <span class="s0">* const buf = Buffer.allocUnsafe(2);</span>
+             <span class="s0">*</span>
+             <span class="s0">* buf.writeInt16BE(0x0102, 0);</span>
+             <span class="s0">*</span>
+             <span class="s0">* console.log(buf);</span>
+             <span class="s0">* // Prints: &lt;Buffer 01 02&gt;</span>
+             <span class="s0">* ```</span>
+             <span class="s0">* </span><span class="s4">@since </span><span class="s0">v0.5.5</span>
+             <span class="s0">* </span><span class="s4">@param </span><span class="s0">value Number to be written to `buf`.</span>
+             <span class="s0">* </span><span class="s4">@param </span><span class="s0">[offset=0] Number of bytes to skip before starting to write. Must satisfy `0 &lt;= offset &lt;= buf.length - 2`.</span>
+             <span class="s0">* </span><span class="s4">@return </span><span class="s0">`offset` plus the number of bytes written.</span>
+             <span class="s0">*/</span>
+            <span class="s1">writeInt16BE(value: number, offset?: number): number;</span>
+            <span class="s0">/**</span>
+             <span class="s0">* Writes `value` to `buf` at the specified `offset` as little-endian. The `value` must be a valid signed 32-bit integer. Behavior is undefined when `value` is</span>
+             <span class="s0">* anything other than a signed 32-bit integer.</span>
+             <span class="s0">*</span>
+             <span class="s0">* The `value` is interpreted and written as a two's complement signed integer.</span>
+             <span class="s0">*</span>
+             <span class="s0">* ```js</span>
+             <span class="s0">* import { Buffer } from 'node:buffer';</span>
+             <span class="s0">*</span>
+             <span class="s0">* const buf = Buffer.allocUnsafe(4);</span>
+             <span class="s0">*</span>
+             <span class="s0">* buf.writeInt32LE(0x05060708, 0);</span>
+             <span class="s0">*</span>
+             <span class="s0">* console.log(buf);</span>
+             <span class="s0">* // Prints: &lt;Buffer 08 07 06 05&gt;</span>
+             <span class="s0">* ```</span>
+             <span class="s0">* </span><span class="s4">@since </span><span class="s0">v0.5.5</span>
+             <span class="s0">* </span><span class="s4">@param </span><span class="s0">value Number to be written to `buf`.</span>
+             <span class="s0">* </span><span class="s4">@param </span><span class="s0">[offset=0] Number of bytes to skip before starting to write. Must satisfy `0 &lt;= offset &lt;= buf.length - 4`.</span>
+             <span class="s0">* </span><span class="s4">@return </span><span class="s0">`offset` plus the number of bytes written.</span>
+             <span class="s0">*/</span>
+            <span class="s1">writeInt32LE(value: number, offset?: number): number;</span>
+            <span class="s0">/**</span>
+             <span class="s0">* Writes `value` to `buf` at the specified `offset` as big-endian. The `value` must be a valid signed 32-bit integer. Behavior is undefined when `value` is</span>
+             <span class="s0">* anything other than a signed 32-bit integer.</span>
+             <span class="s0">*</span>
+             <span class="s0">* The `value` is interpreted and written as a two's complement signed integer.</span>
+             <span class="s0">*</span>
+             <span class="s0">* ```js</span>
+             <span class="s0">* import { Buffer } from 'node:buffer';</span>
+             <span class="s0">*</span>
+             <span class="s0">* const buf = Buffer.allocUnsafe(4);</span>
+             <span class="s0">*</span>
+             <span class="s0">* buf.writeInt32BE(0x01020304, 0);</span>
+             <span class="s0">*</span>
+             <span class="s0">* console.log(buf);</span>
+             <span class="s0">* // Prints: &lt;Buffer 01 02 03 04&gt;</span>
+             <span class="s0">* ```</span>
+             <span class="s0">* </span><span class="s4">@since </span><span class="s0">v0.5.5</span>
+             <span class="s0">* </span><span class="s4">@param </span><span class="s0">value Number to be written to `buf`.</span>
+             <span class="s0">* </span><span class="s4">@param </span><span class="s0">[offset=0] Number of bytes to skip before starting to write. Must satisfy `0 &lt;= offset &lt;= buf.length - 4`.</span>
+             <span class="s0">* </span><span class="s4">@return </span><span class="s0">`offset` plus the number of bytes written.</span>
+             <span class="s0">*/</span>
+            <span class="s1">writeInt32BE(value: number, offset?: number): number;</span>
+            <span class="s0">/**</span>
+             <span class="s0">* Writes `value` to `buf` at the specified `offset` as little-endian. Behavior is</span>
+             <span class="s0">* undefined when `value` is anything other than a JavaScript number.</span>
+             <span class="s0">*</span>
+             <span class="s0">* ```js</span>
+             <span class="s0">* import { Buffer } from 'node:buffer';</span>
+             <span class="s0">*</span>
+             <span class="s0">* const buf = Buffer.allocUnsafe(4);</span>
+             <span class="s0">*</span>
+             <span class="s0">* buf.writeFloatLE(0xcafebabe, 0);</span>
+             <span class="s0">*</span>
+             <span class="s0">* console.log(buf);</span>
+             <span class="s0">* // Prints: &lt;Buffer bb fe 4a 4f&gt;</span>
+             <span class="s0">* ```</span>
+             <span class="s0">* </span><span class="s4">@since </span><span class="s0">v0.11.15</span>
+             <span class="s0">* </span><span class="s4">@param </span><span class="s0">value Number to be written to `buf`.</span>
+             <span class="s0">* </span><span class="s4">@param </span><span class="s0">[offset=0] Number of bytes to skip before starting to write. Must satisfy `0 &lt;= offset &lt;= buf.length - 4`.</span>
+             <span class="s0">* </span><span class="s4">@return </span><span class="s0">`offset` plus the number of bytes written.</span>
+             <span class="s0">*/</span>
+            <span class="s1">writeFloatLE(value: number, offset?: number): number;</span>
+            <span class="s0">/**</span>
+             <span class="s0">* Writes `value` to `buf` at the specified `offset` as big-endian. Behavior is</span>
+             <span class="s0">* undefined when `value` is anything other than a JavaScript number.</span>
+             <span class="s0">*</span>
+             <span class="s0">* ```js</span>
+             <span class="s0">* import { Buffer } from 'node:buffer';</span>
+             <span class="s0">*</span>
+             <span class="s0">* const buf = Buffer.allocUnsafe(4);</span>
+             <span class="s0">*</span>
+             <span class="s0">* buf.writeFloatBE(0xcafebabe, 0);</span>
+             <span class="s0">*</span>
+             <span class="s0">* console.log(buf);</span>
+             <span class="s0">* // Prints: &lt;Buffer 4f 4a fe bb&gt;</span>
+             <span class="s0">* ```</span>
+             <span class="s0">* </span><span class="s4">@since </span><span class="s0">v0.11.15</span>
+             <span class="s0">* </span><span class="s4">@param </span><span class="s0">value Number to be written to `buf`.</span>
+             <span class="s0">* </span><span class="s4">@param </span><span class="s0">[offset=0] Number of bytes to skip before starting to write. Must satisfy `0 &lt;= offset &lt;= buf.length - 4`.</span>
+             <span class="s0">* </span><span class="s4">@return </span><span class="s0">`offset` plus the number of bytes written.</span>
+             <span class="s0">*/</span>
+            <span class="s1">writeFloatBE(value: number, offset?: number): number;</span>
+            <span class="s0">/**</span>
+             <span class="s0">* Writes `value` to `buf` at the specified `offset` as little-endian. The `value` must be a JavaScript number. Behavior is undefined when `value` is anything</span>
+             <span class="s0">* other than a JavaScript number.</span>
+             <span class="s0">*</span>
+             <span class="s0">* ```js</span>
+             <span class="s0">* import { Buffer } from 'node:buffer';</span>
+             <span class="s0">*</span>
+             <span class="s0">* const buf = Buffer.allocUnsafe(8);</span>
+             <span class="s0">*</span>
+             <span class="s0">* buf.writeDoubleLE(123.456, 0);</span>
+             <span class="s0">*</span>
+             <span class="s0">* console.log(buf);</span>
+             <span class="s0">* // Prints: &lt;Buffer 77 be 9f 1a 2f dd 5e 40&gt;</span>
+             <span class="s0">* ```</span>
+             <span class="s0">* </span><span class="s4">@since </span><span class="s0">v0.11.15</span>
+             <span class="s0">* </span><span class="s4">@param </span><span class="s0">value Number to be written to `buf`.</span>
+             <span class="s0">* </span><span class="s4">@param </span><span class="s0">[offset=0] Number of bytes to skip before starting to write. Must satisfy `0 &lt;= offset &lt;= buf.length - 8`.</span>
+             <span class="s0">* </span><span class="s4">@return </span><span class="s0">`offset` plus the number of bytes written.</span>
+             <span class="s0">*/</span>
+            <span class="s1">writeDoubleLE(value: number, offset?: number): number;</span>
+            <span class="s0">/**</span>
+             <span class="s0">* Writes `value` to `buf` at the specified `offset` as big-endian. The `value` must be a JavaScript number. Behavior is undefined when `value` is anything</span>
+             <span class="s0">* other than a JavaScript number.</span>
+             <span class="s0">*</span>
+             <span class="s0">* ```js</span>
+             <span class="s0">* import { Buffer } from 'node:buffer';</span>
+             <span class="s0">*</span>
+             <span class="s0">* const buf = Buffer.allocUnsafe(8);</span>
+             <span class="s0">*</span>
+             <span class="s0">* buf.writeDoubleBE(123.456, 0);</span>
+             <span class="s0">*</span>
+             <span class="s0">* console.log(buf);</span>
+             <span class="s0">* // Prints: &lt;Buffer 40 5e dd 2f 1a 9f be 77&gt;</span>
+             <span class="s0">* ```</span>
+             <span class="s0">* </span><span class="s4">@since </span><span class="s0">v0.11.15</span>
+             <span class="s0">* </span><span class="s4">@param </span><span class="s0">value Number to be written to `buf`.</span>
+             <span class="s0">* </span><span class="s4">@param </span><span class="s0">[offset=0] Number of bytes to skip before starting to write. Must satisfy `0 &lt;= offset &lt;= buf.length - 8`.</span>
+             <span class="s0">* </span><span class="s4">@return </span><span class="s0">`offset` plus the number of bytes written.</span>
+             <span class="s0">*/</span>
+            <span class="s1">writeDoubleBE(value: number, offset?: number): number;</span>
+            <span class="s0">/**</span>
+             <span class="s0">* Fills `buf` with the specified `value`. If the `offset` and `end` are not given,</span>
+             <span class="s0">* the entire `buf` will be filled:</span>
+             <span class="s0">*</span>
+             <span class="s0">* ```js</span>
+             <span class="s0">* import { Buffer } from 'node:buffer';</span>
+             <span class="s0">*</span>
+             <span class="s0">* // Fill a `Buffer` with the ASCII character 'h'.</span>
+             <span class="s0">*</span>
+             <span class="s0">* const b = Buffer.allocUnsafe(50).fill('h');</span>
+             <span class="s0">*</span>
+             <span class="s0">* console.log(b.toString());</span>
+             <span class="s0">* // Prints: hhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhh</span>
+             <span class="s0">*</span>
+             <span class="s0">* // Fill a buffer with empty string</span>
+             <span class="s0">* const c = Buffer.allocUnsafe(5).fill('');</span>
+             <span class="s0">*</span>
+             <span class="s0">* console.log(c.fill(''));</span>
+             <span class="s0">* // Prints: &lt;Buffer 00 00 00 00 00&gt;</span>
+             <span class="s0">* ```</span>
+             <span class="s0">*</span>
+             <span class="s0">* `value` is coerced to a `uint32` value if it is not a string, `Buffer`, or</span>
+             <span class="s0">* integer. If the resulting integer is greater than `255` (decimal), `buf` will be</span>
+             <span class="s0">* filled with `value &amp;#x26; 255`.</span>
+             <span class="s0">*</span>
+             <span class="s0">* If the final write of a `fill()` operation falls on a multi-byte character,</span>
+             <span class="s0">* then only the bytes of that character that fit into `buf` are written:</span>
+             <span class="s0">*</span>
+             <span class="s0">* ```js</span>
+             <span class="s0">* import { Buffer } from 'node:buffer';</span>
+             <span class="s0">*</span>
+             <span class="s0">* // Fill a `Buffer` with character that takes up two bytes in UTF-8.</span>
+             <span class="s0">*</span>
+             <span class="s0">* console.log(Buffer.allocUnsafe(5).fill('\u0222'));</span>
+             <span class="s0">* // Prints: &lt;Buffer c8 a2 c8 a2 c8&gt;</span>
+             <span class="s0">* ```</span>
+             <span class="s0">*</span>
+             <span class="s0">* If `value` contains invalid characters, it is truncated; if no valid</span>
+             <span class="s0">* fill data remains, an exception is thrown:</span>
+             <span class="s0">*</span>
+             <span class="s0">* ```js</span>
+             <span class="s0">* import { Buffer } from 'node:buffer';</span>
+             <span class="s0">*</span>
+             <span class="s0">* const buf = Buffer.allocUnsafe(5);</span>
+             <span class="s0">*</span>
+             <span class="s0">* console.log(buf.fill('a'));</span>
+             <span class="s0">* // Prints: &lt;Buffer 61 61 61 61 61&gt;</span>
+             <span class="s0">* console.log(buf.fill('aazz', 'hex'));</span>
+             <span class="s0">* // Prints: &lt;Buffer aa aa aa aa aa&gt;</span>
+             <span class="s0">* console.log(buf.fill('zz', 'hex'));</span>
+             <span class="s0">* // Throws an exception.</span>
+             <span class="s0">* ```</span>
+             <span class="s0">* </span><span class="s4">@since </span><span class="s0">v0.5.0</span>
+             <span class="s0">* </span><span class="s4">@param </span><span class="s0">value The value with which to fill `buf`. Empty value (string, Uint8Array, Buffer) is coerced to `0`.</span>
+             <span class="s0">* </span><span class="s4">@param </span><span class="s0">[offset=0] Number of bytes to skip before starting to fill `buf`.</span>
+             <span class="s0">* </span><span class="s4">@param </span><span class="s0">[end=buf.length] Where to stop filling `buf` (not inclusive).</span>
+             <span class="s0">* </span><span class="s4">@param </span><span class="s0">[encoding='utf8'] The encoding for `value` if `value` is a string.</span>
+             <span class="s0">* </span><span class="s4">@return </span><span class="s0">A reference to `buf`.</span>
+             <span class="s0">*/</span>
+            <span class="s1">fill(value: string | Uint8Array | number, offset?: number, end?: number, encoding?: BufferEncoding): </span><span class="s2">this</span><span class="s1">;</span>
+            <span class="s1">fill(value: string | Uint8Array | number, offset: number, encoding: BufferEncoding): </span><span class="s2">this</span><span class="s1">;</span>
+            <span class="s1">fill(value: string | Uint8Array | number, encoding: BufferEncoding): </span><span class="s2">this</span><span class="s1">;</span>
+            <span class="s0">/**</span>
+             <span class="s0">* If `value` is:</span>
+             <span class="s0">*</span>
+             <span class="s0">* * a string, `value` is interpreted according to the character encoding in `encoding`.</span>
+             <span class="s0">* * a `Buffer` or [`Uint8Array`](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Uint8Array), `value` will be used in its entirety.</span>
+             <span class="s0">* To compare a partial `Buffer`, use `buf.subarray`.</span>
+             <span class="s0">* * a number, `value` will be interpreted as an unsigned 8-bit integer</span>
+             <span class="s0">* value between `0` and `255`.</span>
+             <span class="s0">*</span>
+             <span class="s0">* ```js</span>
+             <span class="s0">* import { Buffer } from 'node:buffer';</span>
+             <span class="s0">*</span>
+             <span class="s0">* const buf = Buffer.from('this is a buffer');</span>
+             <span class="s0">*</span>
+             <span class="s0">* console.log(buf.indexOf('this'));</span>
+             <span class="s0">* // Prints: 0</span>
+             <span class="s0">* console.log(buf.indexOf('is'));</span>
+             <span class="s0">* // Prints: 2</span>
+             <span class="s0">* console.log(buf.indexOf(Buffer.from('a buffer')));</span>
+             <span class="s0">* // Prints: 8</span>
+             <span class="s0">* console.log(buf.indexOf(97));</span>
+             <span class="s0">* // Prints: 8 (97 is the decimal ASCII value for 'a')</span>
+             <span class="s0">* console.log(buf.indexOf(Buffer.from('a buffer example')));</span>
+             <span class="s0">* // Prints: -1</span>
+             <span class="s0">* console.log(buf.indexOf(Buffer.from('a buffer example').slice(0, 8)));</span>
+             <span class="s0">* // Prints: 8</span>
+             <span class="s0">*</span>
+             <span class="s0">* const utf16Buffer = Buffer.from('\u039a\u0391\u03a3\u03a3\u0395', 'utf16le');</span>
+             <span class="s0">*</span>
+             <span class="s0">* console.log(utf16Buffer.indexOf('\u03a3', 0, 'utf16le'));</span>
+             <span class="s0">* // Prints: 4</span>
+             <span class="s0">* console.log(utf16Buffer.indexOf('\u03a3', -4, 'utf16le'));</span>
+             <span class="s0">* // Prints: 6</span>
+             <span class="s0">* ```</span>
+             <span class="s0">*</span>
+             <span class="s0">* If `value` is not a string, number, or `Buffer`, this method will throw a `TypeError`. If `value` is a number, it will be coerced to a valid byte value,</span>
+             <span class="s0">* an integer between 0 and 255.</span>
+             <span class="s0">*</span>
+             <span class="s0">* If `byteOffset` is not a number, it will be coerced to a number. If the result</span>
+             <span class="s0">* of coercion is `NaN` or `0`, then the entire buffer will be searched. This</span>
+             <span class="s0">* behavior matches [`String.prototype.indexOf()`](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/String/indexOf).</span>
+             <span class="s0">*</span>
+             <span class="s0">* ```js</span>
+             <span class="s0">* import { Buffer } from 'node:buffer';</span>
+             <span class="s0">*</span>
+             <span class="s0">* const b = Buffer.from('abcdef');</span>
+             <span class="s0">*</span>
+             <span class="s0">* // Passing a value that's a number, but not a valid byte.</span>
+             <span class="s0">* // Prints: 2, equivalent to searching for 99 or 'c'.</span>
+             <span class="s0">* console.log(b.indexOf(99.9));</span>
+             <span class="s0">* console.log(b.indexOf(256 + 99));</span>
+             <span class="s0">*</span>
+             <span class="s0">* // Passing a byteOffset that coerces to NaN or 0.</span>
+             <span class="s0">* // Prints: 1, searching the whole buffer.</span>
+             <span class="s0">* console.log(b.indexOf('b', undefined));</span>
+             <span class="s0">* console.log(b.indexOf('b', {}));</span>
+             <span class="s0">* console.log(b.indexOf('b', null));</span>
+             <span class="s0">* console.log(b.indexOf('b', []));</span>
+             <span class="s0">* ```</span>
+             <span class="s0">*</span>
+             <span class="s0">* If `value` is an empty string or empty `Buffer` and `byteOffset` is less</span>
+             <span class="s0">* than `buf.length`, `byteOffset` will be returned. If `value` is empty and`byteOffset` is at least `buf.length`, `buf.length` will be returned.</span>
+             <span class="s0">* </span><span class="s4">@since </span><span class="s0">v1.5.0</span>
+             <span class="s0">* </span><span class="s4">@param </span><span class="s0">value What to search for.</span>
+             <span class="s0">* </span><span class="s4">@param </span><span class="s0">[byteOffset=0] Where to begin searching in `buf`. If negative, then offset is calculated from the end of `buf`.</span>
+             <span class="s0">* </span><span class="s4">@param </span><span class="s0">[encoding='utf8'] If `value` is a string, this is the encoding used to determine the binary representation of the string that will be searched for in `buf`.</span>
+             <span class="s0">* </span><span class="s4">@return </span><span class="s0">The index of the first occurrence of `value` in `buf`, or `-1` if `buf` does not contain `value`.</span>
+             <span class="s0">*/</span>
+            <span class="s1">indexOf(value: string | number | Uint8Array, byteOffset?: number, encoding?: BufferEncoding): number;</span>
+            <span class="s1">indexOf(value: string | number | Uint8Array, encoding: BufferEncoding): number;</span>
+            <span class="s0">/**</span>
+             <span class="s0">* Identical to `buf.indexOf()`, except the last occurrence of `value` is found</span>
+             <span class="s0">* rather than the first occurrence.</span>
+             <span class="s0">*</span>
+             <span class="s0">* ```js</span>
+             <span class="s0">* import { Buffer } from 'node:buffer';</span>
+             <span class="s0">*</span>
+             <span class="s0">* const buf = Buffer.from('this buffer is a buffer');</span>
+             <span class="s0">*</span>
+             <span class="s0">* console.log(buf.lastIndexOf('this'));</span>
+             <span class="s0">* // Prints: 0</span>
+             <span class="s0">* console.log(buf.lastIndexOf('buffer'));</span>
+             <span class="s0">* // Prints: 17</span>
+             <span class="s0">* console.log(buf.lastIndexOf(Buffer.from('buffer')));</span>
+             <span class="s0">* // Prints: 17</span>
+             <span class="s0">* console.log(buf.lastIndexOf(97));</span>
+             <span class="s0">* // Prints: 15 (97 is the decimal ASCII value for 'a')</span>
+             <span class="s0">* console.log(buf.lastIndexOf(Buffer.from('yolo')));</span>
+             <span class="s0">* // Prints: -1</span>
+             <span class="s0">* console.log(buf.lastIndexOf('buffer', 5));</span>
+             <span class="s0">* // Prints: 5</span>
+             <span class="s0">* console.log(buf.lastIndexOf('buffer', 4));</span>
+             <span class="s0">* // Prints: -1</span>
+             <span class="s0">*</span>
+             <span class="s0">* const utf16Buffer = Buffer.from('\u039a\u0391\u03a3\u03a3\u0395', 'utf16le');</span>
+             <span class="s0">*</span>
+             <span class="s0">* console.log(utf16Buffer.lastIndexOf('\u03a3', undefined, 'utf16le'));</span>
+             <span class="s0">* // Prints: 6</span>
+             <span class="s0">* console.log(utf16Buffer.lastIndexOf('\u03a3', -5, 'utf16le'));</span>
+             <span class="s0">* // Prints: 4</span>
+             <span class="s0">* ```</span>
+             <span class="s0">*</span>
+             <span class="s0">* If `value` is not a string, number, or `Buffer`, this method will throw a `TypeError`. If `value` is a number, it will be coerced to a valid byte value,</span>
+             <span class="s0">* an integer between 0 and 255.</span>
+             <span class="s0">*</span>
+             <span class="s0">* If `byteOffset` is not a number, it will be coerced to a number. Any arguments</span>
+             <span class="s0">* that coerce to `NaN`, like `{}` or `undefined`, will search the whole buffer.</span>
+             <span class="s0">* This behavior matches [`String.prototype.lastIndexOf()`](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/String/lastIndexOf).</span>
+             <span class="s0">*</span>
+             <span class="s0">* ```js</span>
+             <span class="s0">* import { Buffer } from 'node:buffer';</span>
+             <span class="s0">*</span>
+             <span class="s0">* const b = Buffer.from('abcdef');</span>
+             <span class="s0">*</span>
+             <span class="s0">* // Passing a value that's a number, but not a valid byte.</span>
+             <span class="s0">* // Prints: 2, equivalent to searching for 99 or 'c'.</span>
+             <span class="s0">* console.log(b.lastIndexOf(99.9));</span>
+             <span class="s0">* console.log(b.lastIndexOf(256 + 99));</span>
+             <span class="s0">*</span>
+             <span class="s0">* // Passing a byteOffset that coerces to NaN.</span>
+             <span class="s0">* // Prints: 1, searching the whole buffer.</span>
+             <span class="s0">* console.log(b.lastIndexOf('b', undefined));</span>
+             <span class="s0">* console.log(b.lastIndexOf('b', {}));</span>
+             <span class="s0">*</span>
+             <span class="s0">* // Passing a byteOffset that coerces to 0.</span>
+             <span class="s0">* // Prints: -1, equivalent to passing 0.</span>
+             <span class="s0">* console.log(b.lastIndexOf('b', null));</span>
+             <span class="s0">* console.log(b.lastIndexOf('b', []));</span>
+             <span class="s0">* ```</span>
+             <span class="s0">*</span>
+             <span class="s0">* If `value` is an empty string or empty `Buffer`, `byteOffset` will be returned.</span>
+             <span class="s0">* </span><span class="s4">@since </span><span class="s0">v6.0.0</span>
+             <span class="s0">* </span><span class="s4">@param </span><span class="s0">value What to search for.</span>
+             <span class="s0">* </span><span class="s4">@param </span><span class="s0">[byteOffset=buf.length - 1] Where to begin searching in `buf`. If negative, then offset is calculated from the end of `buf`.</span>
+             <span class="s0">* </span><span class="s4">@param </span><span class="s0">[encoding='utf8'] If `value` is a string, this is the encoding used to determine the binary representation of the string that will be searched for in `buf`.</span>
+             <span class="s0">* </span><span class="s4">@return </span><span class="s0">The index of the last occurrence of `value` in `buf`, or `-1` if `buf` does not contain `value`.</span>
+             <span class="s0">*/</span>
+            <span class="s1">lastIndexOf(value: string | number | Uint8Array, byteOffset?: number, encoding?: BufferEncoding): number;</span>
+            <span class="s1">lastIndexOf(value: string | number | Uint8Array, encoding: BufferEncoding): number;</span>
+            <span class="s0">/**</span>
+             <span class="s0">* Equivalent to `buf.indexOf() !== -1`.</span>
+             <span class="s0">*</span>
+             <span class="s0">* ```js</span>
+             <span class="s0">* import { Buffer } from 'node:buffer';</span>
+             <span class="s0">*</span>
+             <span class="s0">* const buf = Buffer.from('this is a buffer');</span>
+             <span class="s0">*</span>
+             <span class="s0">* console.log(buf.includes('this'));</span>
+             <span class="s0">* // Prints: true</span>
+             <span class="s0">* console.log(buf.includes('is'));</span>
+             <span class="s0">* // Prints: true</span>
+             <span class="s0">* console.log(buf.includes(Buffer.from('a buffer')));</span>
+             <span class="s0">* // Prints: true</span>
+             <span class="s0">* console.log(buf.includes(97));</span>
+             <span class="s0">* // Prints: true (97 is the decimal ASCII value for 'a')</span>
+             <span class="s0">* console.log(buf.includes(Buffer.from('a buffer example')));</span>
+             <span class="s0">* // Prints: false</span>
+             <span class="s0">* console.log(buf.includes(Buffer.from('a buffer example').slice(0, 8)));</span>
+             <span class="s0">* // Prints: true</span>
+             <span class="s0">* console.log(buf.includes('this', 4));</span>
+             <span class="s0">* // Prints: false</span>
+             <span class="s0">* ```</span>
+             <span class="s0">* </span><span class="s4">@since </span><span class="s0">v5.3.0</span>
+             <span class="s0">* </span><span class="s4">@param </span><span class="s0">value What to search for.</span>
+             <span class="s0">* </span><span class="s4">@param </span><span class="s0">[byteOffset=0] Where to begin searching in `buf`. If negative, then offset is calculated from the end of `buf`.</span>
+             <span class="s0">* </span><span class="s4">@param </span><span class="s0">[encoding='utf8'] If `value` is a string, this is its encoding.</span>
+             <span class="s0">* </span><span class="s4">@return </span><span class="s0">`true` if `value` was found in `buf`, `false` otherwise.</span>
+             <span class="s0">*/</span>
+            <span class="s1">includes(value: string | number | Buffer, byteOffset?: number, encoding?: BufferEncoding): boolean;</span>
+            <span class="s1">includes(value: string | number | Buffer, encoding: BufferEncoding): boolean;</span>
+        <span class="s1">}</span>
+        <span class="s2">var </span><span class="s1">Buffer: BufferConstructor;</span>
+        <span class="s0">/**</span>
+         <span class="s0">* Decodes a string of Base64-encoded data into bytes, and encodes those bytes</span>
+         <span class="s0">* into a string using Latin-1 (ISO-8859-1).</span>
+         <span class="s0">*</span>
+         <span class="s0">* The `data` may be any JavaScript-value that can be coerced into a string.</span>
+         <span class="s0">*</span>
+         <span class="s0">* **This function is only provided for compatibility with legacy web platform APIs**</span>
+         <span class="s0">* **and should never be used in new code, because they use strings to represent**</span>
+         <span class="s0">* **binary data and predate the introduction of typed arrays in JavaScript.**</span>
+         <span class="s0">* **For code running using Node.js APIs, converting between base64-encoded strings**</span>
+         <span class="s0">* **and binary data should be performed using `Buffer.from(str, 'base64')` and `buf.toString('base64')`.**</span>
+         <span class="s0">* </span><span class="s4">@since </span><span class="s0">v15.13.0, v14.17.0</span>
+         <span class="s0">* </span><span class="s4">@legacy </span><span class="s0">Use `Buffer.from(data, 'base64')` instead.</span>
+         <span class="s0">* </span><span class="s4">@param </span><span class="s0">data The Base64-encoded input string.</span>
+         <span class="s0">*/</span>
+        <span class="s2">function </span><span class="s1">atob(data: string): string;</span>
+        <span class="s0">/**</span>
+         <span class="s0">* Decodes a string into bytes using Latin-1 (ISO-8859), and encodes those bytes</span>
+         <span class="s0">* into a string using Base64.</span>
+         <span class="s0">*</span>
+         <span class="s0">* The `data` may be any JavaScript-value that can be coerced into a string.</span>
+         <span class="s0">*</span>
+         <span class="s0">* **This function is only provided for compatibility with legacy web platform APIs**</span>
+         <span class="s0">* **and should never be used in new code, because they use strings to represent**</span>
+         <span class="s0">* **binary data and predate the introduction of typed arrays in JavaScript.**</span>
+         <span class="s0">* **For code running using Node.js APIs, converting between base64-encoded strings**</span>
+         <span class="s0">* **and binary data should be performed using `Buffer.from(str, 'base64')` and `buf.toString('base64')`.**</span>
+         <span class="s0">* </span><span class="s4">@since </span><span class="s0">v15.13.0, v14.17.0</span>
+         <span class="s0">* </span><span class="s4">@legacy </span><span class="s0">Use `buf.toString('base64')` instead.</span>
+         <span class="s0">* </span><span class="s4">@param </span><span class="s0">data An ASCII (Latin1) string.</span>
+         <span class="s0">*/</span>
+        <span class="s2">function </span><span class="s1">btoa(data: string): string;</span>
+        <span class="s2">interface </span><span class="s1">Blob </span><span class="s2">extends </span><span class="s1">_Blob {}</span>
+        <span class="s0">/**</span>
+         <span class="s0">* `Blob` class is a global reference for `import { Blob } from 'node:node:buffer'`</span>
+         <span class="s0">* https://nodejs.org/api/buffer.html#class-blob</span>
+         <span class="s0">* </span><span class="s4">@since </span><span class="s0">v18.0.0</span>
+         <span class="s0">*/</span>
+        <span class="s2">var </span><span class="s1">Blob: </span><span class="s2">typeof </span><span class="s1">globalThis </span><span class="s2">extends </span><span class="s1">{ onmessage: any; Blob: infer T } ? T</span>
+            <span class="s1">: </span><span class="s2">typeof import</span><span class="s1">(</span><span class="s3">&quot;buffer&quot;</span><span class="s1">).Blob;</span>
+        <span class="s2">interface </span><span class="s1">File </span><span class="s2">extends </span><span class="s1">_File {}</span>
+        <span class="s0">/**</span>
+         <span class="s0">* `File` class is a global reference for `import { File } from 'node:node:buffer'`</span>
+         <span class="s0">* https://nodejs.org/api/buffer.html#class-file</span>
+         <span class="s0">* </span><span class="s4">@since </span><span class="s0">v20.0.0</span>
+         <span class="s0">*/</span>
+        <span class="s2">var </span><span class="s1">File: </span><span class="s2">typeof </span><span class="s1">globalThis </span><span class="s2">extends </span><span class="s1">{ onmessage: any; File: infer T } ? T</span>
+            <span class="s1">: </span><span class="s2">typeof import</span><span class="s1">(</span><span class="s3">&quot;buffer&quot;</span><span class="s1">).File;</span>
+    <span class="s1">}</span>
+<span class="s1">}</span>
+<span class="s1">declare module </span><span class="s3">&quot;node:buffer&quot; </span><span class="s1">{</span>
+    <span class="s2">export </span><span class="s1">* from </span><span class="s3">&quot;buffer&quot;</span><span class="s1">;</span>
+<span class="s1">}</span>
+</pre>
+</body>
+</html>

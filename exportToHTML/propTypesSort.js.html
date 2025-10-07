@@ -1,0 +1,256 @@
+<html>
+<head>
+<title>propTypesSort.js</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #8c8c8c; font-style: italic;}
+.s1 { color: #8c8c8c; font-style: italic;}
+.s2 { color: #080808;}
+.s3 { color: #067d17;}
+.s4 { color: #0033b3;}
+.s5 { color: #264eff;}
+.s6 { color: #1750eb;}
+</style>
+</head>
+<body bgcolor="#ffffff">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#c0c0c0" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+propTypesSort.js</font>
+</center></td></tr></table>
+<pre><span class="s0">/**</span>
+ <span class="s0">* </span><span class="s1">@fileoverview </span><span class="s0">Common propTypes sorting functionality.</span>
+ <span class="s0">*/</span>
+
+<span class="s3">'use strict'</span><span class="s2">;</span>
+
+<span class="s4">const </span><span class="s2">toSorted = require(</span><span class="s3">'array.prototype.tosorted'</span><span class="s2">);</span>
+
+<span class="s4">const </span><span class="s2">astUtil = require(</span><span class="s3">'./ast'</span><span class="s2">);</span>
+<span class="s4">const </span><span class="s2">eslintUtil = require(</span><span class="s3">'./eslint'</span><span class="s2">);</span>
+
+<span class="s4">const </span><span class="s2">getSourceCode = eslintUtil.getSourceCode;</span>
+<span class="s4">const </span><span class="s2">getText = eslintUtil.getText;</span>
+
+<span class="s0">/**</span>
+ <span class="s0">* Returns the value name of a node.</span>
+ <span class="s0">*</span>
+ <span class="s0">* </span><span class="s1">@param </span><span class="s0">{ASTNode} node the node to check.</span>
+ <span class="s0">* </span><span class="s1">@returns </span><span class="s0">{string} The name of the node.</span>
+ <span class="s0">*/</span>
+<span class="s4">function </span><span class="s2">getValueName(node) {</span>
+  <span class="s4">return </span><span class="s2">node.type === </span><span class="s3">'Property'</span>
+    <span class="s2">&amp;&amp; node.value.property</span>
+    <span class="s2">&amp;&amp; node.value.property.name;</span>
+<span class="s2">}</span>
+
+<span class="s0">/**</span>
+ <span class="s0">* Checks if the prop is required or not.</span>
+ <span class="s0">*</span>
+ <span class="s0">* </span><span class="s1">@param </span><span class="s0">{ASTNode} node the prop to check.</span>
+ <span class="s0">* </span><span class="s1">@returns </span><span class="s0">{boolean} true if the prop is required.</span>
+ <span class="s0">*/</span>
+<span class="s4">function </span><span class="s2">isRequiredProp(node) {</span>
+  <span class="s4">return </span><span class="s2">getValueName(node) === </span><span class="s3">'isRequired'</span><span class="s2">;</span>
+<span class="s2">}</span>
+
+<span class="s0">/**</span>
+ <span class="s0">* Checks if the proptype is a callback by checking if it starts with 'on'.</span>
+ <span class="s0">*</span>
+ <span class="s0">* </span><span class="s1">@param </span><span class="s0">{string} propName the name of the proptype to check.</span>
+ <span class="s0">* </span><span class="s1">@returns </span><span class="s0">{boolean} true if the proptype is a callback.</span>
+ <span class="s0">*/</span>
+<span class="s4">function </span><span class="s2">isCallbackPropName(propName) {</span>
+  <span class="s4">return </span><span class="s5">/^on[A-Z]/</span><span class="s2">.test(propName);</span>
+<span class="s2">}</span>
+
+<span class="s0">/**</span>
+ <span class="s0">* Checks if the prop is PropTypes.shape.</span>
+ <span class="s0">*</span>
+ <span class="s0">* </span><span class="s1">@param </span><span class="s0">{ASTNode} node the prop to check.</span>
+ <span class="s0">* </span><span class="s1">@returns </span><span class="s0">{boolean} true if the prop is PropTypes.shape.</span>
+ <span class="s0">*/</span>
+<span class="s4">function </span><span class="s2">isShapeProp(node) {</span>
+  <span class="s4">return </span><span class="s2">!!(</span>
+    <span class="s2">node</span>
+    <span class="s2">&amp;&amp; node.callee</span>
+    <span class="s2">&amp;&amp; node.callee.property</span>
+    <span class="s2">&amp;&amp; node.callee.property.name === </span><span class="s3">'shape'</span>
+  <span class="s2">);</span>
+<span class="s2">}</span>
+
+<span class="s0">/**</span>
+ <span class="s0">* Returns the properties of a PropTypes.shape.</span>
+ <span class="s0">*</span>
+ <span class="s0">* </span><span class="s1">@param </span><span class="s0">{ASTNode} node the prop to check.</span>
+ <span class="s0">* </span><span class="s1">@returns </span><span class="s0">{Array} the properties of the PropTypes.shape node.</span>
+ <span class="s0">*/</span>
+<span class="s4">function </span><span class="s2">getShapeProperties(node) {</span>
+  <span class="s4">return </span><span class="s2">node.arguments</span>
+    <span class="s2">&amp;&amp; node.arguments[</span><span class="s6">0</span><span class="s2">]</span>
+    <span class="s2">&amp;&amp; node.arguments[</span><span class="s6">0</span><span class="s2">].properties;</span>
+<span class="s2">}</span>
+
+<span class="s0">/**</span>
+ <span class="s0">* Compares two elements.</span>
+ <span class="s0">*</span>
+ <span class="s0">* </span><span class="s1">@param </span><span class="s0">{ASTNode} a the first element to compare.</span>
+ <span class="s0">* </span><span class="s1">@param </span><span class="s0">{ASTNode} b the second element to compare.</span>
+ <span class="s0">* </span><span class="s1">@param </span><span class="s0">{Context} context The context of the two nodes.</span>
+ <span class="s0">* </span><span class="s1">@param </span><span class="s0">{boolean=} ignoreCase whether or not to ignore case when comparing the two elements.</span>
+ <span class="s0">* </span><span class="s1">@param </span><span class="s0">{boolean=} requiredFirst whether or not to sort required elements first.</span>
+ <span class="s0">* </span><span class="s1">@param </span><span class="s0">{boolean=} callbacksLast whether or not to sort callbacks after everything else.</span>
+ <span class="s0">* </span><span class="s1">@param </span><span class="s0">{boolean=} noSortAlphabetically whether or not to disable alphabetical sorting of the elements.</span>
+ <span class="s0">* </span><span class="s1">@returns </span><span class="s0">{number} the sort order of the two elements.</span>
+ <span class="s0">*/</span>
+<span class="s4">function </span><span class="s2">sorter(a, b, context, ignoreCase, requiredFirst, callbacksLast, noSortAlphabetically) {</span>
+  <span class="s4">const </span><span class="s2">aKey = String(astUtil.getKeyValue(context, a));</span>
+  <span class="s4">const </span><span class="s2">bKey = String(astUtil.getKeyValue(context, b));</span>
+
+  <span class="s4">if </span><span class="s2">(requiredFirst) {</span>
+    <span class="s4">if </span><span class="s2">(isRequiredProp(a) &amp;&amp; !isRequiredProp(b)) {</span>
+      <span class="s4">return </span><span class="s2">-</span><span class="s6">1</span><span class="s2">;</span>
+    <span class="s2">}</span>
+    <span class="s4">if </span><span class="s2">(!isRequiredProp(a) &amp;&amp; isRequiredProp(b)) {</span>
+      <span class="s4">return </span><span class="s6">1</span><span class="s2">;</span>
+    <span class="s2">}</span>
+  <span class="s2">}</span>
+
+  <span class="s4">if </span><span class="s2">(callbacksLast) {</span>
+    <span class="s4">if </span><span class="s2">(isCallbackPropName(aKey) &amp;&amp; !isCallbackPropName(bKey)) {</span>
+      <span class="s4">return </span><span class="s6">1</span><span class="s2">;</span>
+    <span class="s2">}</span>
+    <span class="s4">if </span><span class="s2">(!isCallbackPropName(aKey) &amp;&amp; isCallbackPropName(bKey)) {</span>
+      <span class="s4">return </span><span class="s2">-</span><span class="s6">1</span><span class="s2">;</span>
+    <span class="s2">}</span>
+  <span class="s2">}</span>
+
+  <span class="s4">if </span><span class="s2">(!noSortAlphabetically) {</span>
+    <span class="s4">if </span><span class="s2">(ignoreCase) {</span>
+      <span class="s4">return </span><span class="s2">aKey.localeCompare(bKey);</span>
+    <span class="s2">}</span>
+
+    <span class="s4">if </span><span class="s2">(aKey &lt; bKey) {</span>
+      <span class="s4">return </span><span class="s2">-</span><span class="s6">1</span><span class="s2">;</span>
+    <span class="s2">}</span>
+    <span class="s4">if </span><span class="s2">(aKey &gt; bKey) {</span>
+      <span class="s4">return </span><span class="s6">1</span><span class="s2">;</span>
+    <span class="s2">}</span>
+  <span class="s2">}</span>
+  <span class="s4">return </span><span class="s6">0</span><span class="s2">;</span>
+<span class="s2">}</span>
+
+<span class="s4">const </span><span class="s2">commentnodeMap = </span><span class="s4">new </span><span class="s2">WeakMap(); </span><span class="s0">// all nodes reference WeakMap for start and end range</span>
+
+<span class="s0">/**</span>
+ <span class="s0">* Fixes sort order of prop types.</span>
+ <span class="s0">*</span>
+ <span class="s0">* </span><span class="s1">@param </span><span class="s0">{Context} context the second element to compare.</span>
+ <span class="s0">* </span><span class="s1">@param </span><span class="s0">{Fixer} fixer the first element to compare.</span>
+ <span class="s0">* </span><span class="s1">@param </span><span class="s0">{Array} declarations The context of the two nodes.</span>
+ <span class="s0">* </span><span class="s1">@param </span><span class="s0">{boolean=} ignoreCase whether or not to ignore case when comparing the two elements.</span>
+ <span class="s0">* </span><span class="s1">@param </span><span class="s0">{boolean=} requiredFirst whether or not to sort required elements first.</span>
+ <span class="s0">* </span><span class="s1">@param </span><span class="s0">{boolean=} callbacksLast whether or not to sort callbacks after everything else.</span>
+ <span class="s0">* </span><span class="s1">@param </span><span class="s0">{boolean=} noSortAlphabetically whether or not to disable alphabetical sorting of the elements.</span>
+ <span class="s0">* </span><span class="s1">@param </span><span class="s0">{boolean=} sortShapeProp whether or not to sort propTypes defined in PropTypes.shape.</span>
+ <span class="s0">* </span><span class="s1">@param </span><span class="s0">{boolean=} checkTypes whether or not sorting of prop type definitions are checked.</span>
+ <span class="s0">* </span><span class="s1">@returns </span><span class="s0">{Object|*|{range, text}} the sort order of the two elements.</span>
+ <span class="s0">*/</span>
+<span class="s4">function </span><span class="s2">fixPropTypesSort(</span>
+  <span class="s2">context,</span>
+  <span class="s2">fixer,</span>
+  <span class="s2">declarations,</span>
+  <span class="s2">ignoreCase,</span>
+  <span class="s2">requiredFirst,</span>
+  <span class="s2">callbacksLast,</span>
+  <span class="s2">noSortAlphabetically,</span>
+  <span class="s2">sortShapeProp,</span>
+  <span class="s2">checkTypes</span>
+<span class="s2">) {</span>
+  <span class="s4">function </span><span class="s2">sortInSource(allNodes, source) {</span>
+    <span class="s4">const </span><span class="s2">originalSource = source;</span>
+    <span class="s4">const </span><span class="s2">sourceCode = getSourceCode(context);</span>
+    <span class="s4">for </span><span class="s2">(</span><span class="s4">let </span><span class="s2">i = </span><span class="s6">0</span><span class="s2">; i &lt; allNodes.length; i++) {</span>
+      <span class="s4">const </span><span class="s2">node = allNodes[i];</span>
+      <span class="s4">let </span><span class="s2">commentAfter = [];</span>
+      <span class="s4">let </span><span class="s2">commentBefore = [];</span>
+      <span class="s4">let </span><span class="s2">newStart = </span><span class="s6">0</span><span class="s2">;</span>
+      <span class="s4">let </span><span class="s2">newEnd = </span><span class="s6">0</span><span class="s2">;</span>
+      <span class="s4">try </span><span class="s2">{</span>
+        <span class="s2">commentBefore = sourceCode.getCommentsBefore(node);</span>
+        <span class="s2">commentAfter = sourceCode.getCommentsAfter(node);</span>
+      <span class="s2">} </span><span class="s4">catch </span><span class="s2">(e) { </span><span class="s0">/**/ </span><span class="s2">}</span>
+
+      <span class="s4">if </span><span class="s2">(commentAfter.length === </span><span class="s6">0 </span><span class="s2">|| commentBefore.length === </span><span class="s6">0</span><span class="s2">) {</span>
+        <span class="s2">newStart = node.range[</span><span class="s6">0</span><span class="s2">];</span>
+        <span class="s2">newEnd = node.range[</span><span class="s6">1</span><span class="s2">];</span>
+      <span class="s2">}</span>
+
+      <span class="s4">const </span><span class="s2">firstCommentBefore = commentBefore[</span><span class="s6">0</span><span class="s2">];</span>
+      <span class="s4">if </span><span class="s2">(commentBefore.length &gt;= </span><span class="s6">1</span><span class="s2">) {</span>
+        <span class="s2">newStart = firstCommentBefore.range[</span><span class="s6">0</span><span class="s2">];</span>
+      <span class="s2">}</span>
+      <span class="s4">const </span><span class="s2">lastCommentAfter = commentAfter[commentAfter.length - </span><span class="s6">1</span><span class="s2">];</span>
+      <span class="s4">if </span><span class="s2">(commentAfter.length &gt;= </span><span class="s6">1</span><span class="s2">) {</span>
+        <span class="s2">newEnd = lastCommentAfter.range[</span><span class="s6">1</span><span class="s2">];</span>
+      <span class="s2">}</span>
+      <span class="s2">commentnodeMap.set(node, { start: newStart, end: newEnd, hasComment: </span><span class="s4">true </span><span class="s2">});</span>
+    <span class="s2">}</span>
+    <span class="s4">const </span><span class="s2">nodeGroups = allNodes.reduce((acc, curr) =&gt; {</span>
+      <span class="s4">if </span><span class="s2">(curr.type === </span><span class="s3">'ExperimentalSpreadProperty' </span><span class="s2">|| curr.type === </span><span class="s3">'SpreadElement'</span><span class="s2">) {</span>
+        <span class="s2">acc.push([]);</span>
+      <span class="s2">} </span><span class="s4">else </span><span class="s2">{</span>
+        <span class="s2">acc[acc.length - </span><span class="s6">1</span><span class="s2">].push(curr);</span>
+      <span class="s2">}</span>
+      <span class="s4">return </span><span class="s2">acc;</span>
+    <span class="s2">}, [[]]);</span>
+
+    <span class="s2">nodeGroups.forEach((nodes) =&gt; {</span>
+      <span class="s4">const </span><span class="s2">sortedAttributes = toSorted(</span>
+        <span class="s2">nodes,</span>
+        <span class="s2">(a, b) =&gt; sorter(a, b, context, ignoreCase, requiredFirst, callbacksLast, noSortAlphabetically)</span>
+      <span class="s2">);</span>
+
+      <span class="s4">const </span><span class="s2">sourceCodeText = getText(context);</span>
+      <span class="s4">let </span><span class="s2">separator = </span><span class="s3">''</span><span class="s2">;</span>
+      <span class="s2">source = nodes.reduceRight((acc, attr, index) =&gt; {</span>
+        <span class="s4">const </span><span class="s2">sortedAttr = sortedAttributes[index];</span>
+        <span class="s4">const </span><span class="s2">commentNode = commentnodeMap.get(sortedAttr);</span>
+        <span class="s4">let </span><span class="s2">sortedAttrText = sourceCodeText.slice(commentNode.start, commentNode.end);</span>
+        <span class="s4">const </span><span class="s2">sortedAttrTextLastChar = sortedAttrText[sortedAttrText.length - </span><span class="s6">1</span><span class="s2">];</span>
+        <span class="s4">if </span><span class="s2">(!separator &amp;&amp; [</span><span class="s3">';'</span><span class="s2">, </span><span class="s3">','</span><span class="s2">].some((allowedSep) =&gt; sortedAttrTextLastChar === allowedSep)) {</span>
+          <span class="s2">separator = sortedAttrTextLastChar;</span>
+        <span class="s2">}</span>
+        <span class="s4">if </span><span class="s2">(sortShapeProp &amp;&amp; isShapeProp(sortedAttr.value)) {</span>
+          <span class="s4">const </span><span class="s2">shape = getShapeProperties(sortedAttr.value);</span>
+          <span class="s4">if </span><span class="s2">(shape) {</span>
+            <span class="s4">const </span><span class="s2">attrSource = sortInSource(</span>
+              <span class="s2">shape,</span>
+              <span class="s2">originalSource</span>
+            <span class="s2">);</span>
+            <span class="s2">sortedAttrText = attrSource.slice(sortedAttr.range[</span><span class="s6">0</span><span class="s2">], sortedAttr.range[</span><span class="s6">1</span><span class="s2">]);</span>
+          <span class="s2">}</span>
+        <span class="s2">}</span>
+        <span class="s4">const </span><span class="s2">sortedAttrTextVal = checkTypes &amp;&amp; !sortedAttrText.endsWith(separator) ? </span><span class="s3">`</span><span class="s2">${sortedAttrText}${separator}</span><span class="s3">` </span><span class="s2">: sortedAttrText;</span>
+        <span class="s4">return </span><span class="s3">`</span><span class="s2">${acc.slice(</span><span class="s6">0</span><span class="s2">, commentnodeMap.get(attr).start)}${sortedAttrTextVal}${acc.slice(commentnodeMap.get(attr).end)}</span><span class="s3">`</span><span class="s2">;</span>
+      <span class="s2">}, source);</span>
+    <span class="s2">});</span>
+    <span class="s4">return </span><span class="s2">source;</span>
+  <span class="s2">}</span>
+
+  <span class="s4">const </span><span class="s2">source = sortInSource(declarations, getText(context));</span>
+
+  <span class="s4">const </span><span class="s2">rangeStart = commentnodeMap.get(declarations[</span><span class="s6">0</span><span class="s2">]).start;</span>
+  <span class="s4">const </span><span class="s2">rangeEnd = commentnodeMap.get(declarations[declarations.length - </span><span class="s6">1</span><span class="s2">]).end;</span>
+  <span class="s4">return </span><span class="s2">fixer.replaceTextRange([rangeStart, rangeEnd], source.slice(rangeStart, rangeEnd));</span>
+<span class="s2">}</span>
+
+<span class="s2">module.exports = {</span>
+  <span class="s2">fixPropTypesSort,</span>
+  <span class="s2">isCallbackPropName,</span>
+  <span class="s2">isRequiredProp,</span>
+  <span class="s2">isShapeProp,</span>
+<span class="s2">};</span>
+</pre>
+</body>
+</html>

@@ -1,0 +1,553 @@
+<html>
+<head>
+<title>jsx-sort-props.js</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #8c8c8c; font-style: italic;}
+.s1 { color: #8c8c8c; font-style: italic;}
+.s2 { color: #080808;}
+.s3 { color: #067d17;}
+.s4 { color: #0033b3;}
+.s5 { color: #1750eb;}
+</style>
+</head>
+<body bgcolor="#ffffff">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#c0c0c0" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+jsx-sort-props.js</font>
+</center></td></tr></table>
+<pre><span class="s0">/**</span>
+ <span class="s0">* </span><span class="s1">@fileoverview </span><span class="s0">Enforce props alphabetical sorting</span>
+ <span class="s0">* </span><span class="s1">@author </span><span class="s0">Ilya Volodin, Yannick Croissant</span>
+ <span class="s0">*/</span>
+
+<span class="s3">'use strict'</span><span class="s2">;</span>
+
+<span class="s4">const </span><span class="s2">propName = require(</span><span class="s3">'jsx-ast-utils/propName'</span><span class="s2">);</span>
+<span class="s4">const </span><span class="s2">includes = require(</span><span class="s3">'array-includes'</span><span class="s2">);</span>
+<span class="s4">const </span><span class="s2">toSorted = require(</span><span class="s3">'array.prototype.tosorted'</span><span class="s2">);</span>
+
+<span class="s4">const </span><span class="s2">docsUrl = require(</span><span class="s3">'../util/docsUrl'</span><span class="s2">);</span>
+<span class="s4">const </span><span class="s2">jsxUtil = require(</span><span class="s3">'../util/jsx'</span><span class="s2">);</span>
+<span class="s4">const </span><span class="s2">report = require(</span><span class="s3">'../util/report'</span><span class="s2">);</span>
+<span class="s4">const </span><span class="s2">propTypesSortUtil = require(</span><span class="s3">'../util/propTypesSort'</span><span class="s2">);</span>
+<span class="s4">const </span><span class="s2">eslintUtil = require(</span><span class="s3">'../util/eslint'</span><span class="s2">);</span>
+
+<span class="s4">const </span><span class="s2">getText = eslintUtil.getText;</span>
+<span class="s4">const </span><span class="s2">getSourceCode = eslintUtil.getSourceCode;</span>
+
+<span class="s0">// ------------------------------------------------------------------------------</span>
+<span class="s0">// Rule Definition</span>
+<span class="s0">// ------------------------------------------------------------------------------</span>
+
+<span class="s4">function </span><span class="s2">isMultilineProp(node) {</span>
+  <span class="s4">return </span><span class="s2">node.loc.start.line !== node.loc.end.line;</span>
+<span class="s2">}</span>
+
+<span class="s4">const </span><span class="s2">messages = {</span>
+  <span class="s2">noUnreservedProps: </span><span class="s3">'A customized reserved first list must only contain a subset of React reserved props. Remove: {{unreservedWords}}'</span><span class="s2">,</span>
+  <span class="s2">listIsEmpty: </span><span class="s3">'A customized reserved first list must not be empty'</span><span class="s2">,</span>
+  <span class="s2">listReservedPropsFirst: </span><span class="s3">'Reserved props must be listed before all other props'</span><span class="s2">,</span>
+  <span class="s2">listCallbacksLast: </span><span class="s3">'Callbacks must be listed after all other props'</span><span class="s2">,</span>
+  <span class="s2">listShorthandFirst: </span><span class="s3">'Shorthand props must be listed before all other props'</span><span class="s2">,</span>
+  <span class="s2">listShorthandLast: </span><span class="s3">'Shorthand props must be listed after all other props'</span><span class="s2">,</span>
+  <span class="s2">listMultilineFirst: </span><span class="s3">'Multiline props must be listed before all other props'</span><span class="s2">,</span>
+  <span class="s2">listMultilineLast: </span><span class="s3">'Multiline props must be listed after all other props'</span><span class="s2">,</span>
+  <span class="s2">sortPropsByAlpha: </span><span class="s3">'Props should be sorted alphabetically'</span><span class="s2">,</span>
+<span class="s2">};</span>
+
+<span class="s4">const </span><span class="s2">RESERVED_PROPS_LIST = [</span>
+  <span class="s3">'children'</span><span class="s2">,</span>
+  <span class="s3">'dangerouslySetInnerHTML'</span><span class="s2">,</span>
+  <span class="s3">'key'</span><span class="s2">,</span>
+  <span class="s3">'ref'</span><span class="s2">,</span>
+<span class="s2">];</span>
+
+<span class="s4">function </span><span class="s2">isReservedPropName(name, list) {</span>
+  <span class="s4">return </span><span class="s2">list.indexOf(name) &gt;= </span><span class="s5">0</span><span class="s2">;</span>
+<span class="s2">}</span>
+
+<span class="s4">let </span><span class="s2">attributeMap;</span>
+<span class="s0">// attributeMap = { end: endrange, hasComment: true||false if comment in between nodes exists, it needs to be sorted to end }</span>
+
+<span class="s4">function </span><span class="s2">shouldSortToEnd(node) {</span>
+  <span class="s4">const </span><span class="s2">attr = attributeMap.get(node);</span>
+  <span class="s4">return </span><span class="s2">!!attr &amp;&amp; !!attr.hasComment;</span>
+<span class="s2">}</span>
+
+<span class="s4">function </span><span class="s2">contextCompare(a, b, options) {</span>
+  <span class="s4">let </span><span class="s2">aProp = propName(a);</span>
+  <span class="s4">let </span><span class="s2">bProp = propName(b);</span>
+
+  <span class="s4">const </span><span class="s2">aSortToEnd = shouldSortToEnd(a);</span>
+  <span class="s4">const </span><span class="s2">bSortToEnd = shouldSortToEnd(b);</span>
+  <span class="s4">if </span><span class="s2">(aSortToEnd &amp;&amp; !bSortToEnd) {</span>
+    <span class="s4">return </span><span class="s5">1</span><span class="s2">;</span>
+  <span class="s2">}</span>
+  <span class="s4">if </span><span class="s2">(!aSortToEnd &amp;&amp; bSortToEnd) {</span>
+    <span class="s4">return </span><span class="s2">-</span><span class="s5">1</span><span class="s2">;</span>
+  <span class="s2">}</span>
+
+  <span class="s4">if </span><span class="s2">(options.reservedFirst) {</span>
+    <span class="s4">const </span><span class="s2">aIsReserved = isReservedPropName(aProp, options.reservedList);</span>
+    <span class="s4">const </span><span class="s2">bIsReserved = isReservedPropName(bProp, options.reservedList);</span>
+    <span class="s4">if </span><span class="s2">(aIsReserved &amp;&amp; !bIsReserved) {</span>
+      <span class="s4">return </span><span class="s2">-</span><span class="s5">1</span><span class="s2">;</span>
+    <span class="s2">}</span>
+    <span class="s4">if </span><span class="s2">(!aIsReserved &amp;&amp; bIsReserved) {</span>
+      <span class="s4">return </span><span class="s5">1</span><span class="s2">;</span>
+    <span class="s2">}</span>
+  <span class="s2">}</span>
+
+  <span class="s4">if </span><span class="s2">(options.callbacksLast) {</span>
+    <span class="s4">const </span><span class="s2">aIsCallback = propTypesSortUtil.isCallbackPropName(aProp);</span>
+    <span class="s4">const </span><span class="s2">bIsCallback = propTypesSortUtil.isCallbackPropName(bProp);</span>
+    <span class="s4">if </span><span class="s2">(aIsCallback &amp;&amp; !bIsCallback) {</span>
+      <span class="s4">return </span><span class="s5">1</span><span class="s2">;</span>
+    <span class="s2">}</span>
+    <span class="s4">if </span><span class="s2">(!aIsCallback &amp;&amp; bIsCallback) {</span>
+      <span class="s4">return </span><span class="s2">-</span><span class="s5">1</span><span class="s2">;</span>
+    <span class="s2">}</span>
+  <span class="s2">}</span>
+
+  <span class="s4">if </span><span class="s2">(options.shorthandFirst || options.shorthandLast) {</span>
+    <span class="s4">const </span><span class="s2">shorthandSign = options.shorthandFirst ? -</span><span class="s5">1 </span><span class="s2">: </span><span class="s5">1</span><span class="s2">;</span>
+    <span class="s4">if </span><span class="s2">(!a.value &amp;&amp; b.value) {</span>
+      <span class="s4">return </span><span class="s2">shorthandSign;</span>
+    <span class="s2">}</span>
+    <span class="s4">if </span><span class="s2">(a.value &amp;&amp; !b.value) {</span>
+      <span class="s4">return </span><span class="s2">-shorthandSign;</span>
+    <span class="s2">}</span>
+  <span class="s2">}</span>
+
+  <span class="s4">if </span><span class="s2">(options.multiline !== </span><span class="s3">'ignore'</span><span class="s2">) {</span>
+    <span class="s4">const </span><span class="s2">multilineSign = options.multiline === </span><span class="s3">'first' </span><span class="s2">? -</span><span class="s5">1 </span><span class="s2">: </span><span class="s5">1</span><span class="s2">;</span>
+    <span class="s4">const </span><span class="s2">aIsMultiline = isMultilineProp(a);</span>
+    <span class="s4">const </span><span class="s2">bIsMultiline = isMultilineProp(b);</span>
+    <span class="s4">if </span><span class="s2">(aIsMultiline &amp;&amp; !bIsMultiline) {</span>
+      <span class="s4">return </span><span class="s2">multilineSign;</span>
+    <span class="s2">}</span>
+    <span class="s4">if </span><span class="s2">(!aIsMultiline &amp;&amp; bIsMultiline) {</span>
+      <span class="s4">return </span><span class="s2">-multilineSign;</span>
+    <span class="s2">}</span>
+  <span class="s2">}</span>
+
+  <span class="s4">if </span><span class="s2">(options.noSortAlphabetically) {</span>
+    <span class="s4">return </span><span class="s5">0</span><span class="s2">;</span>
+  <span class="s2">}</span>
+
+  <span class="s4">const </span><span class="s2">actualLocale = options.locale === </span><span class="s3">'auto' </span><span class="s2">? undefined : options.locale;</span>
+
+  <span class="s4">if </span><span class="s2">(options.ignoreCase) {</span>
+    <span class="s2">aProp = aProp.toLowerCase();</span>
+    <span class="s2">bProp = bProp.toLowerCase();</span>
+    <span class="s4">return </span><span class="s2">aProp.localeCompare(bProp, actualLocale);</span>
+  <span class="s2">}</span>
+  <span class="s4">if </span><span class="s2">(aProp === bProp) {</span>
+    <span class="s4">return </span><span class="s5">0</span><span class="s2">;</span>
+  <span class="s2">}</span>
+  <span class="s4">if </span><span class="s2">(options.locale === </span><span class="s3">'auto'</span><span class="s2">) {</span>
+    <span class="s4">return </span><span class="s2">aProp &lt; bProp ? -</span><span class="s5">1 </span><span class="s2">: </span><span class="s5">1</span><span class="s2">;</span>
+  <span class="s2">}</span>
+  <span class="s4">return </span><span class="s2">aProp.localeCompare(bProp, actualLocale);</span>
+<span class="s2">}</span>
+
+<span class="s0">/**</span>
+ <span class="s0">* Create an array of arrays where each subarray is composed of attributes</span>
+ <span class="s0">* that are considered sortable.</span>
+ <span class="s0">* </span><span class="s1">@param </span><span class="s0">{Array&lt;JSXSpreadAttribute|JSXAttribute&gt;} attributes</span>
+ <span class="s0">* </span><span class="s1">@param </span><span class="s0">{Object} context The context of the rule</span>
+ <span class="s0">* </span><span class="s1">@return </span><span class="s0">{Array&lt;Array&lt;JSXAttribute&gt;&gt;}</span>
+ <span class="s0">*/</span>
+<span class="s4">function </span><span class="s2">getGroupsOfSortableAttributes(attributes, context) {</span>
+  <span class="s4">const </span><span class="s2">sourceCode = getSourceCode(context);</span>
+
+  <span class="s4">const </span><span class="s2">sortableAttributeGroups = [];</span>
+  <span class="s4">let </span><span class="s2">groupCount = </span><span class="s5">0</span><span class="s2">;</span>
+  <span class="s4">function </span><span class="s2">addtoSortableAttributeGroups(attribute) {</span>
+    <span class="s2">sortableAttributeGroups[groupCount - </span><span class="s5">1</span><span class="s2">].push(attribute);</span>
+  <span class="s2">}</span>
+
+  <span class="s4">for </span><span class="s2">(</span><span class="s4">let </span><span class="s2">i = </span><span class="s5">0</span><span class="s2">; i &lt; attributes.length; i++) {</span>
+    <span class="s4">const </span><span class="s2">attribute = attributes[i];</span>
+    <span class="s4">const </span><span class="s2">nextAttribute = attributes[i + </span><span class="s5">1</span><span class="s2">];</span>
+    <span class="s4">const </span><span class="s2">attributeline = attribute.loc.start.line;</span>
+    <span class="s4">let </span><span class="s2">comment = [];</span>
+    <span class="s4">try </span><span class="s2">{</span>
+      <span class="s2">comment = sourceCode.getCommentsAfter(attribute);</span>
+    <span class="s2">} </span><span class="s4">catch </span><span class="s2">(e) { </span><span class="s0">/**/ </span><span class="s2">}</span>
+    <span class="s4">const </span><span class="s2">lastAttr = attributes[i - </span><span class="s5">1</span><span class="s2">];</span>
+    <span class="s4">const </span><span class="s2">attrIsSpread = attribute.type === </span><span class="s3">'JSXSpreadAttribute'</span><span class="s2">;</span>
+
+    <span class="s0">// If we have no groups or if the last attribute was JSXSpreadAttribute</span>
+    <span class="s0">// then we start a new group. Append attributes to the group until we</span>
+    <span class="s0">// come across another JSXSpreadAttribute or exhaust the array.</span>
+    <span class="s4">if </span><span class="s2">(</span>
+      <span class="s2">!lastAttr</span>
+      <span class="s2">|| (lastAttr.type === </span><span class="s3">'JSXSpreadAttribute' </span><span class="s2">&amp;&amp; !attrIsSpread)</span>
+    <span class="s2">) {</span>
+      <span class="s2">groupCount += </span><span class="s5">1</span><span class="s2">;</span>
+      <span class="s2">sortableAttributeGroups[groupCount - </span><span class="s5">1</span><span class="s2">] = [];</span>
+    <span class="s2">}</span>
+    <span class="s4">if </span><span class="s2">(!attrIsSpread) {</span>
+      <span class="s4">if </span><span class="s2">(comment.length === </span><span class="s5">0</span><span class="s2">) {</span>
+        <span class="s2">attributeMap.set(attribute, { end: attribute.range[</span><span class="s5">1</span><span class="s2">], hasComment: </span><span class="s4">false </span><span class="s2">});</span>
+        <span class="s2">addtoSortableAttributeGroups(attribute);</span>
+      <span class="s2">} </span><span class="s4">else </span><span class="s2">{</span>
+        <span class="s4">const </span><span class="s2">firstComment = comment[</span><span class="s5">0</span><span class="s2">];</span>
+        <span class="s4">const </span><span class="s2">commentline = firstComment.loc.start.line;</span>
+        <span class="s4">if </span><span class="s2">(comment.length === </span><span class="s5">1</span><span class="s2">) {</span>
+          <span class="s4">if </span><span class="s2">(attributeline + </span><span class="s5">1 </span><span class="s2">=== commentline &amp;&amp; nextAttribute) {</span>
+            <span class="s2">attributeMap.set(attribute, { end: nextAttribute.range[</span><span class="s5">1</span><span class="s2">], hasComment: </span><span class="s4">true </span><span class="s2">});</span>
+            <span class="s2">addtoSortableAttributeGroups(attribute);</span>
+            <span class="s2">i += </span><span class="s5">1</span><span class="s2">;</span>
+          <span class="s2">} </span><span class="s4">else if </span><span class="s2">(attributeline === commentline) {</span>
+            <span class="s4">if </span><span class="s2">(firstComment.type === </span><span class="s3">'Block' </span><span class="s2">&amp;&amp; nextAttribute) {</span>
+              <span class="s2">attributeMap.set(attribute, { end: nextAttribute.range[</span><span class="s5">1</span><span class="s2">], hasComment: </span><span class="s4">true </span><span class="s2">});</span>
+              <span class="s2">i += </span><span class="s5">1</span><span class="s2">;</span>
+            <span class="s2">} </span><span class="s4">else if </span><span class="s2">(firstComment.type === </span><span class="s3">'Block'</span><span class="s2">) {</span>
+              <span class="s2">attributeMap.set(attribute, { end: firstComment.range[</span><span class="s5">1</span><span class="s2">], hasComment: </span><span class="s4">true </span><span class="s2">});</span>
+            <span class="s2">} </span><span class="s4">else </span><span class="s2">{</span>
+              <span class="s2">attributeMap.set(attribute, { end: firstComment.range[</span><span class="s5">1</span><span class="s2">], hasComment: </span><span class="s4">false </span><span class="s2">});</span>
+            <span class="s2">}</span>
+            <span class="s2">addtoSortableAttributeGroups(attribute);</span>
+          <span class="s2">}</span>
+        <span class="s2">} </span><span class="s4">else if </span><span class="s2">(comment.length &gt; </span><span class="s5">1 </span><span class="s2">&amp;&amp; attributeline + </span><span class="s5">1 </span><span class="s2">=== comment[</span><span class="s5">1</span><span class="s2">].loc.start.line &amp;&amp; nextAttribute) {</span>
+          <span class="s4">const </span><span class="s2">commentNextAttribute = sourceCode.getCommentsAfter(nextAttribute);</span>
+          <span class="s2">attributeMap.set(attribute, { end: nextAttribute.range[</span><span class="s5">1</span><span class="s2">], hasComment: </span><span class="s4">true </span><span class="s2">});</span>
+          <span class="s4">if </span><span class="s2">(</span>
+            <span class="s2">commentNextAttribute.length === </span><span class="s5">1</span>
+            <span class="s2">&amp;&amp; nextAttribute.loc.start.line === commentNextAttribute[</span><span class="s5">0</span><span class="s2">].loc.start.line</span>
+          <span class="s2">) {</span>
+            <span class="s2">attributeMap.set(attribute, { end: commentNextAttribute[</span><span class="s5">0</span><span class="s2">].range[</span><span class="s5">1</span><span class="s2">], hasComment: </span><span class="s4">true </span><span class="s2">});</span>
+          <span class="s2">}</span>
+          <span class="s2">addtoSortableAttributeGroups(attribute);</span>
+          <span class="s2">i += </span><span class="s5">1</span><span class="s2">;</span>
+        <span class="s2">}</span>
+      <span class="s2">}</span>
+    <span class="s2">}</span>
+  <span class="s2">}</span>
+  <span class="s4">return </span><span class="s2">sortableAttributeGroups;</span>
+<span class="s2">}</span>
+
+<span class="s4">function </span><span class="s2">generateFixerFunction(node, context, reservedList) {</span>
+  <span class="s4">const </span><span class="s2">attributes = node.attributes.slice(</span><span class="s5">0</span><span class="s2">);</span>
+  <span class="s4">const </span><span class="s2">configuration = context.options[</span><span class="s5">0</span><span class="s2">] || {};</span>
+  <span class="s4">const </span><span class="s2">ignoreCase = configuration.ignoreCase || </span><span class="s4">false</span><span class="s2">;</span>
+  <span class="s4">const </span><span class="s2">callbacksLast = configuration.callbacksLast || </span><span class="s4">false</span><span class="s2">;</span>
+  <span class="s4">const </span><span class="s2">shorthandFirst = configuration.shorthandFirst || </span><span class="s4">false</span><span class="s2">;</span>
+  <span class="s4">const </span><span class="s2">shorthandLast = configuration.shorthandLast || </span><span class="s4">false</span><span class="s2">;</span>
+  <span class="s4">const </span><span class="s2">multiline = configuration.multiline || </span><span class="s3">'ignore'</span><span class="s2">;</span>
+  <span class="s4">const </span><span class="s2">noSortAlphabetically = configuration.noSortAlphabetically || </span><span class="s4">false</span><span class="s2">;</span>
+  <span class="s4">const </span><span class="s2">reservedFirst = configuration.reservedFirst || </span><span class="s4">false</span><span class="s2">;</span>
+  <span class="s4">const </span><span class="s2">locale = configuration.locale || </span><span class="s3">'auto'</span><span class="s2">;</span>
+
+  <span class="s0">// Sort props according to the context. Only supports ignoreCase.</span>
+  <span class="s0">// Since we cannot safely move JSXSpreadAttribute (due to potential variable overrides),</span>
+  <span class="s0">// we only consider groups of sortable attributes.</span>
+  <span class="s4">const </span><span class="s2">options = {</span>
+    <span class="s2">ignoreCase,</span>
+    <span class="s2">callbacksLast,</span>
+    <span class="s2">shorthandFirst,</span>
+    <span class="s2">shorthandLast,</span>
+    <span class="s2">multiline,</span>
+    <span class="s2">noSortAlphabetically,</span>
+    <span class="s2">reservedFirst,</span>
+    <span class="s2">reservedList,</span>
+    <span class="s2">locale,</span>
+  <span class="s2">};</span>
+  <span class="s4">const </span><span class="s2">sortableAttributeGroups = getGroupsOfSortableAttributes(attributes, context);</span>
+  <span class="s4">const </span><span class="s2">sortedAttributeGroups = sortableAttributeGroups</span>
+    <span class="s2">.slice(</span><span class="s5">0</span><span class="s2">)</span>
+    <span class="s2">.map((group) =&gt; toSorted(group, (a, b) =&gt; contextCompare(a, b, options)));</span>
+
+  <span class="s4">return function </span><span class="s2">fixFunction(fixer) {</span>
+    <span class="s4">const </span><span class="s2">fixers = [];</span>
+    <span class="s4">let </span><span class="s2">source = getText(context);</span>
+
+    <span class="s2">sortableAttributeGroups.forEach((sortableGroup, ii) =&gt; {</span>
+      <span class="s2">sortableGroup.forEach((attr, jj) =&gt; {</span>
+        <span class="s4">const </span><span class="s2">sortedAttr = sortedAttributeGroups[ii][jj];</span>
+        <span class="s4">const </span><span class="s2">sortedAttrText = source.slice(sortedAttr.range[</span><span class="s5">0</span><span class="s2">], attributeMap.get(sortedAttr).end);</span>
+        <span class="s2">fixers.push({</span>
+          <span class="s2">range: [attr.range[</span><span class="s5">0</span><span class="s2">], attributeMap.get(attr).end],</span>
+          <span class="s2">text: sortedAttrText,</span>
+        <span class="s2">});</span>
+      <span class="s2">});</span>
+    <span class="s2">});</span>
+
+    <span class="s2">fixers.sort((a, b) =&gt; b.range[</span><span class="s5">0</span><span class="s2">] - a.range[</span><span class="s5">0</span><span class="s2">]);</span>
+
+    <span class="s4">const </span><span class="s2">firstFixer = fixers[</span><span class="s5">0</span><span class="s2">];</span>
+    <span class="s4">const </span><span class="s2">lastFixer = fixers[fixers.length - </span><span class="s5">1</span><span class="s2">];</span>
+    <span class="s4">const </span><span class="s2">rangeStart = lastFixer ? lastFixer.range[</span><span class="s5">0</span><span class="s2">] : </span><span class="s5">0</span><span class="s2">;</span>
+    <span class="s4">const </span><span class="s2">rangeEnd = firstFixer ? firstFixer.range[</span><span class="s5">1</span><span class="s2">] : -</span><span class="s5">0</span><span class="s2">;</span>
+
+    <span class="s2">fixers.forEach((fix) =&gt; {</span>
+      <span class="s2">source = </span><span class="s3">`</span><span class="s2">${source.slice(</span><span class="s5">0</span><span class="s2">, fix.range[</span><span class="s5">0</span><span class="s2">])}${fix.text}${source.slice(fix.range[</span><span class="s5">1</span><span class="s2">])}</span><span class="s3">`</span><span class="s2">;</span>
+    <span class="s2">});</span>
+
+    <span class="s4">return </span><span class="s2">fixer.replaceTextRange([rangeStart, rangeEnd], source.slice(rangeStart, rangeEnd));</span>
+  <span class="s2">};</span>
+<span class="s2">}</span>
+
+<span class="s0">/**</span>
+ <span class="s0">* Checks if the `reservedFirst` option is valid</span>
+ <span class="s0">* </span><span class="s1">@param </span><span class="s0">{Object} context The context of the rule</span>
+ <span class="s0">* </span><span class="s1">@param </span><span class="s0">{boolean | string[]} reservedFirst The `reservedFirst` option</span>
+ <span class="s0">* </span><span class="s1">@return </span><span class="s0">{Function | undefined} If an error is detected, a function to generate the error message, otherwise, `undefined`</span>
+ <span class="s0">*/</span>
+<span class="s0">// eslint-disable-next-line consistent-return</span>
+<span class="s4">function </span><span class="s2">validateReservedFirstConfig(context, reservedFirst) {</span>
+  <span class="s4">if </span><span class="s2">(reservedFirst) {</span>
+    <span class="s4">if </span><span class="s2">(Array.isArray(reservedFirst)) {</span>
+      <span class="s0">// Only allow a subset of reserved words in customized lists</span>
+      <span class="s4">const </span><span class="s2">nonReservedWords = reservedFirst.filter((word) =&gt; !isReservedPropName(</span>
+        <span class="s2">word,</span>
+        <span class="s2">RESERVED_PROPS_LIST</span>
+      <span class="s2">));</span>
+
+      <span class="s4">if </span><span class="s2">(reservedFirst.length === </span><span class="s5">0</span><span class="s2">) {</span>
+        <span class="s4">return function </span><span class="s2">Report(decl) {</span>
+          <span class="s2">report(context, messages.listIsEmpty, </span><span class="s3">'listIsEmpty'</span><span class="s2">, {</span>
+            <span class="s2">node: decl,</span>
+          <span class="s2">});</span>
+        <span class="s2">};</span>
+      <span class="s2">}</span>
+      <span class="s4">if </span><span class="s2">(nonReservedWords.length &gt; </span><span class="s5">0</span><span class="s2">) {</span>
+        <span class="s4">return function </span><span class="s2">Report(decl) {</span>
+          <span class="s2">report(context, messages.noUnreservedProps, </span><span class="s3">'noUnreservedProps'</span><span class="s2">, {</span>
+            <span class="s2">node: decl,</span>
+            <span class="s2">data: {</span>
+              <span class="s2">unreservedWords: nonReservedWords.toString(),</span>
+            <span class="s2">},</span>
+          <span class="s2">});</span>
+        <span class="s2">};</span>
+      <span class="s2">}</span>
+    <span class="s2">}</span>
+  <span class="s2">}</span>
+<span class="s2">}</span>
+
+<span class="s4">const </span><span class="s2">reportedNodeAttributes = </span><span class="s4">new </span><span class="s2">WeakMap();</span>
+<span class="s0">/**</span>
+ <span class="s0">* Check if the current node attribute has already been reported with the same error type</span>
+ <span class="s0">* if that's the case then we don't report a new error</span>
+ <span class="s0">* otherwise we report the error</span>
+ <span class="s0">* </span><span class="s1">@param </span><span class="s0">{Object} nodeAttribute The node attribute to be reported</span>
+ <span class="s0">* </span><span class="s1">@param </span><span class="s0">{string} errorType The error type to be reported</span>
+ <span class="s0">* </span><span class="s1">@param </span><span class="s0">{Object} node The parent node for the node attribute</span>
+ <span class="s0">* </span><span class="s1">@param </span><span class="s0">{Object} context The context of the rule</span>
+ <span class="s0">* </span><span class="s1">@param </span><span class="s0">{Array&lt;String&gt;} reservedList The list of reserved props</span>
+ <span class="s0">*/</span>
+<span class="s4">function </span><span class="s2">reportNodeAttribute(nodeAttribute, errorType, node, context, reservedList) {</span>
+  <span class="s4">const </span><span class="s2">errors = reportedNodeAttributes.get(nodeAttribute) || [];</span>
+
+  <span class="s4">if </span><span class="s2">(includes(errors, errorType)) {</span>
+    <span class="s4">return</span><span class="s2">;</span>
+  <span class="s2">}</span>
+
+  <span class="s2">errors.push(errorType);</span>
+
+  <span class="s2">reportedNodeAttributes.set(nodeAttribute, errors);</span>
+
+  <span class="s2">report(context, messages[errorType], errorType, {</span>
+    <span class="s2">node: nodeAttribute.name,</span>
+    <span class="s2">fix: generateFixerFunction(node, context, reservedList),</span>
+  <span class="s2">});</span>
+<span class="s2">}</span>
+
+<span class="s0">/** </span><span class="s1">@type </span><span class="s0">{import('eslint').Rule.RuleModule} */</span>
+<span class="s2">module.exports = {</span>
+  <span class="s2">meta: {</span>
+    <span class="s2">docs: {</span>
+      <span class="s2">description: </span><span class="s3">'Enforce props alphabetical sorting'</span><span class="s2">,</span>
+      <span class="s2">category: </span><span class="s3">'Stylistic Issues'</span><span class="s2">,</span>
+      <span class="s2">recommended: </span><span class="s4">false</span><span class="s2">,</span>
+      <span class="s2">url: docsUrl(</span><span class="s3">'jsx-sort-props'</span><span class="s2">),</span>
+    <span class="s2">},</span>
+    <span class="s2">fixable: </span><span class="s3">'code'</span><span class="s2">,</span>
+
+    <span class="s2">messages,</span>
+
+    <span class="s2">schema: [{</span>
+      <span class="s2">type: </span><span class="s3">'object'</span><span class="s2">,</span>
+      <span class="s2">properties: {</span>
+        <span class="s0">// Whether callbacks (prefixed with &quot;on&quot;) should be listed at the very end,</span>
+        <span class="s0">// after all other props. Supersedes shorthandLast.</span>
+        <span class="s2">callbacksLast: {</span>
+          <span class="s2">type: </span><span class="s3">'boolean'</span><span class="s2">,</span>
+        <span class="s2">},</span>
+        <span class="s0">// Whether shorthand properties (without a value) should be listed first</span>
+        <span class="s2">shorthandFirst: {</span>
+          <span class="s2">type: </span><span class="s3">'boolean'</span><span class="s2">,</span>
+        <span class="s2">},</span>
+        <span class="s0">// Whether shorthand properties (without a value) should be listed last</span>
+        <span class="s2">shorthandLast: {</span>
+          <span class="s2">type: </span><span class="s3">'boolean'</span><span class="s2">,</span>
+        <span class="s2">},</span>
+        <span class="s0">// Whether multiline properties should be listed first or last</span>
+        <span class="s2">multiline: {</span>
+          <span class="s4">enum</span><span class="s2">: [</span><span class="s3">'ignore'</span><span class="s2">, </span><span class="s3">'first'</span><span class="s2">, </span><span class="s3">'last'</span><span class="s2">],</span>
+          <span class="s4">default</span><span class="s2">: </span><span class="s3">'ignore'</span><span class="s2">,</span>
+        <span class="s2">},</span>
+        <span class="s2">ignoreCase: {</span>
+          <span class="s2">type: </span><span class="s3">'boolean'</span><span class="s2">,</span>
+        <span class="s2">},</span>
+        <span class="s0">// Whether alphabetical sorting should be enforced</span>
+        <span class="s2">noSortAlphabetically: {</span>
+          <span class="s2">type: </span><span class="s3">'boolean'</span><span class="s2">,</span>
+        <span class="s2">},</span>
+        <span class="s2">reservedFirst: {</span>
+          <span class="s2">type: [</span><span class="s3">'array'</span><span class="s2">, </span><span class="s3">'boolean'</span><span class="s2">],</span>
+        <span class="s2">},</span>
+        <span class="s2">locale: {</span>
+          <span class="s2">type: </span><span class="s3">'string'</span><span class="s2">,</span>
+          <span class="s4">default</span><span class="s2">: </span><span class="s3">'auto'</span><span class="s2">,</span>
+        <span class="s2">},</span>
+      <span class="s2">},</span>
+      <span class="s2">additionalProperties: </span><span class="s4">false</span><span class="s2">,</span>
+    <span class="s2">}],</span>
+  <span class="s2">},</span>
+
+  <span class="s2">create(context) {</span>
+    <span class="s4">const </span><span class="s2">configuration = context.options[</span><span class="s5">0</span><span class="s2">] || {};</span>
+    <span class="s4">const </span><span class="s2">ignoreCase = configuration.ignoreCase || </span><span class="s4">false</span><span class="s2">;</span>
+    <span class="s4">const </span><span class="s2">callbacksLast = configuration.callbacksLast || </span><span class="s4">false</span><span class="s2">;</span>
+    <span class="s4">const </span><span class="s2">shorthandFirst = configuration.shorthandFirst || </span><span class="s4">false</span><span class="s2">;</span>
+    <span class="s4">const </span><span class="s2">shorthandLast = configuration.shorthandLast || </span><span class="s4">false</span><span class="s2">;</span>
+    <span class="s4">const </span><span class="s2">multiline = configuration.multiline || </span><span class="s3">'ignore'</span><span class="s2">;</span>
+    <span class="s4">const </span><span class="s2">noSortAlphabetically = configuration.noSortAlphabetically || </span><span class="s4">false</span><span class="s2">;</span>
+    <span class="s4">const </span><span class="s2">reservedFirst = configuration.reservedFirst || </span><span class="s4">false</span><span class="s2">;</span>
+    <span class="s4">const </span><span class="s2">reservedFirstError = validateReservedFirstConfig(context, reservedFirst);</span>
+    <span class="s4">const </span><span class="s2">reservedList = Array.isArray(reservedFirst) ? reservedFirst : RESERVED_PROPS_LIST;</span>
+    <span class="s4">const </span><span class="s2">locale = configuration.locale || </span><span class="s3">'auto'</span><span class="s2">;</span>
+
+    <span class="s4">return </span><span class="s2">{</span>
+      <span class="s2">Program() {</span>
+        <span class="s2">attributeMap = </span><span class="s4">new </span><span class="s2">WeakMap();</span>
+      <span class="s2">},</span>
+
+      <span class="s2">JSXOpeningElement(node) {</span>
+        <span class="s0">// `dangerouslySetInnerHTML` is only &quot;reserved&quot; on DOM components</span>
+        <span class="s4">const </span><span class="s2">nodeReservedList = reservedFirst &amp;&amp; !jsxUtil.isDOMComponent(node) ? reservedList.filter((prop) =&gt; prop !== </span><span class="s3">'dangerouslySetInnerHTML'</span><span class="s2">) : reservedList;</span>
+
+        <span class="s2">node.attributes.reduce((memo, decl, idx, attrs) =&gt; {</span>
+          <span class="s4">if </span><span class="s2">(decl.type === </span><span class="s3">'JSXSpreadAttribute'</span><span class="s2">) {</span>
+            <span class="s4">return </span><span class="s2">attrs[idx + </span><span class="s5">1</span><span class="s2">];</span>
+          <span class="s2">}</span>
+
+          <span class="s4">let </span><span class="s2">previousPropName = propName(memo);</span>
+          <span class="s4">let </span><span class="s2">currentPropName = propName(decl);</span>
+          <span class="s4">const </span><span class="s2">previousValue = memo.value;</span>
+          <span class="s4">const </span><span class="s2">currentValue = decl.value;</span>
+          <span class="s4">const </span><span class="s2">previousIsCallback = propTypesSortUtil.isCallbackPropName(previousPropName);</span>
+          <span class="s4">const </span><span class="s2">currentIsCallback = propTypesSortUtil.isCallbackPropName(currentPropName);</span>
+
+          <span class="s4">if </span><span class="s2">(ignoreCase) {</span>
+            <span class="s2">previousPropName = previousPropName.toLowerCase();</span>
+            <span class="s2">currentPropName = currentPropName.toLowerCase();</span>
+          <span class="s2">}</span>
+
+          <span class="s4">if </span><span class="s2">(reservedFirst) {</span>
+            <span class="s4">if </span><span class="s2">(reservedFirstError) {</span>
+              <span class="s2">reservedFirstError(decl);</span>
+              <span class="s4">return </span><span class="s2">memo;</span>
+            <span class="s2">}</span>
+
+            <span class="s4">const </span><span class="s2">previousIsReserved = isReservedPropName(previousPropName, nodeReservedList);</span>
+            <span class="s4">const </span><span class="s2">currentIsReserved = isReservedPropName(currentPropName, nodeReservedList);</span>
+
+            <span class="s4">if </span><span class="s2">(previousIsReserved &amp;&amp; !currentIsReserved) {</span>
+              <span class="s4">return </span><span class="s2">decl;</span>
+            <span class="s2">}</span>
+            <span class="s4">if </span><span class="s2">(!previousIsReserved &amp;&amp; currentIsReserved) {</span>
+              <span class="s2">reportNodeAttribute(decl, </span><span class="s3">'listReservedPropsFirst'</span><span class="s2">, node, context, nodeReservedList);</span>
+
+              <span class="s4">return </span><span class="s2">memo;</span>
+            <span class="s2">}</span>
+          <span class="s2">}</span>
+
+          <span class="s4">if </span><span class="s2">(callbacksLast) {</span>
+            <span class="s4">if </span><span class="s2">(!previousIsCallback &amp;&amp; currentIsCallback) {</span>
+              <span class="s0">// Entering the callback prop section</span>
+              <span class="s4">return </span><span class="s2">decl;</span>
+            <span class="s2">}</span>
+            <span class="s4">if </span><span class="s2">(previousIsCallback &amp;&amp; !currentIsCallback) {</span>
+              <span class="s0">// Encountered a non-callback prop after a callback prop</span>
+              <span class="s2">reportNodeAttribute(memo, </span><span class="s3">'listCallbacksLast'</span><span class="s2">, node, context, nodeReservedList);</span>
+
+              <span class="s4">return </span><span class="s2">memo;</span>
+            <span class="s2">}</span>
+          <span class="s2">}</span>
+
+          <span class="s4">if </span><span class="s2">(shorthandFirst) {</span>
+            <span class="s4">if </span><span class="s2">(currentValue &amp;&amp; !previousValue) {</span>
+              <span class="s4">return </span><span class="s2">decl;</span>
+            <span class="s2">}</span>
+            <span class="s4">if </span><span class="s2">(!currentValue &amp;&amp; previousValue) {</span>
+              <span class="s2">reportNodeAttribute(decl, </span><span class="s3">'listShorthandFirst'</span><span class="s2">, node, context, nodeReservedList);</span>
+
+              <span class="s4">return </span><span class="s2">memo;</span>
+            <span class="s2">}</span>
+          <span class="s2">}</span>
+
+          <span class="s4">if </span><span class="s2">(shorthandLast) {</span>
+            <span class="s4">if </span><span class="s2">(!currentValue &amp;&amp; previousValue) {</span>
+              <span class="s4">return </span><span class="s2">decl;</span>
+            <span class="s2">}</span>
+            <span class="s4">if </span><span class="s2">(currentValue &amp;&amp; !previousValue) {</span>
+              <span class="s2">reportNodeAttribute(memo, </span><span class="s3">'listShorthandLast'</span><span class="s2">, node, context, nodeReservedList);</span>
+
+              <span class="s4">return </span><span class="s2">memo;</span>
+            <span class="s2">}</span>
+          <span class="s2">}</span>
+
+          <span class="s4">const </span><span class="s2">previousIsMultiline = isMultilineProp(memo);</span>
+          <span class="s4">const </span><span class="s2">currentIsMultiline = isMultilineProp(decl);</span>
+          <span class="s4">if </span><span class="s2">(multiline === </span><span class="s3">'first'</span><span class="s2">) {</span>
+            <span class="s4">if </span><span class="s2">(previousIsMultiline &amp;&amp; !currentIsMultiline) {</span>
+              <span class="s0">// Exiting the multiline prop section</span>
+              <span class="s4">return </span><span class="s2">decl;</span>
+            <span class="s2">}</span>
+            <span class="s4">if </span><span class="s2">(!previousIsMultiline &amp;&amp; currentIsMultiline) {</span>
+              <span class="s0">// Encountered a non-multiline prop before a multiline prop</span>
+              <span class="s2">reportNodeAttribute(decl, </span><span class="s3">'listMultilineFirst'</span><span class="s2">, node, context, nodeReservedList);</span>
+
+              <span class="s4">return </span><span class="s2">memo;</span>
+            <span class="s2">}</span>
+          <span class="s2">} </span><span class="s4">else if </span><span class="s2">(multiline === </span><span class="s3">'last'</span><span class="s2">) {</span>
+            <span class="s4">if </span><span class="s2">(!previousIsMultiline &amp;&amp; currentIsMultiline) {</span>
+              <span class="s0">// Entering the multiline prop section</span>
+              <span class="s4">return </span><span class="s2">decl;</span>
+            <span class="s2">}</span>
+            <span class="s4">if </span><span class="s2">(previousIsMultiline &amp;&amp; !currentIsMultiline) {</span>
+              <span class="s0">// Encountered a non-multiline prop after a multiline prop</span>
+              <span class="s2">reportNodeAttribute(memo, </span><span class="s3">'listMultilineLast'</span><span class="s2">, node, context, nodeReservedList);</span>
+
+              <span class="s4">return </span><span class="s2">memo;</span>
+            <span class="s2">}</span>
+          <span class="s2">}</span>
+
+          <span class="s4">if </span><span class="s2">(</span>
+            <span class="s2">!noSortAlphabetically</span>
+            <span class="s2">&amp;&amp; (</span>
+              <span class="s2">(ignoreCase || locale !== </span><span class="s3">'auto'</span><span class="s2">)</span>
+                <span class="s2">? previousPropName.localeCompare(currentPropName, locale === </span><span class="s3">'auto' </span><span class="s2">? undefined : locale) &gt; </span><span class="s5">0</span>
+                <span class="s2">: previousPropName &gt; currentPropName</span>
+            <span class="s2">)</span>
+          <span class="s2">) {</span>
+            <span class="s2">reportNodeAttribute(decl, </span><span class="s3">'sortPropsByAlpha'</span><span class="s2">, node, context, nodeReservedList);</span>
+
+            <span class="s4">return </span><span class="s2">memo;</span>
+          <span class="s2">}</span>
+
+          <span class="s4">return </span><span class="s2">decl;</span>
+        <span class="s2">}, node.attributes[</span><span class="s5">0</span><span class="s2">]);</span>
+      <span class="s2">},</span>
+    <span class="s2">};</span>
+  <span class="s2">},</span>
+<span class="s2">};</span>
+</pre>
+</body>
+</html>

@@ -1,0 +1,77 @@
+<html>
+<head>
+<title>nextjs-require-cache-hot-reloader.js</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #067d17;}
+.s1 { color: #080808;}
+.s2 { color: #0033b3;}
+.s3 { color: #8c8c8c; font-style: italic;}
+.s4 { color: #1750eb;}
+</style>
+</head>
+<body bgcolor="#ffffff">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#c0c0c0" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+nextjs-require-cache-hot-reloader.js</font>
+</center></td></tr></table>
+<pre><span class="s0">&quot;use strict&quot;</span><span class="s1">;</span>
+<span class="s1">Object.defineProperty(exports, </span><span class="s0">&quot;__esModule&quot;</span><span class="s1">, {</span>
+    <span class="s1">value: </span><span class="s2">true</span>
+<span class="s1">});</span>
+<span class="s1">Object.defineProperty(exports, </span><span class="s0">&quot;NextJsRequireCacheHotReloader&quot;</span><span class="s1">, {</span>
+    <span class="s1">enumerable: </span><span class="s2">true</span><span class="s1">,</span>
+    <span class="s1">get: </span><span class="s2">function</span><span class="s1">() {</span>
+        <span class="s2">return </span><span class="s1">NextJsRequireCacheHotReloader;</span>
+    <span class="s1">}</span>
+<span class="s1">});</span>
+<span class="s2">const </span><span class="s1">_requirecache = require(</span><span class="s0">&quot;../../../server/dev/require-cache&quot;</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">_sandbox = require(</span><span class="s0">&quot;../../../server/web/sandbox&quot;</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">_path = </span><span class="s3">/*#__PURE__*/ </span><span class="s1">_interop_require_default(require(</span><span class="s0">&quot;path&quot;</span><span class="s1">));</span>
+<span class="s2">function </span><span class="s1">_interop_require_default(obj) {</span>
+    <span class="s2">return </span><span class="s1">obj &amp;&amp; obj.__esModule ? obj : {</span>
+        <span class="s2">default</span><span class="s1">: obj</span>
+    <span class="s1">};</span>
+<span class="s1">}</span>
+<span class="s2">const </span><span class="s1">RUNTIME_NAMES = [</span>
+    <span class="s0">'webpack-runtime'</span><span class="s1">,</span>
+    <span class="s0">'webpack-api-runtime'</span>
+<span class="s1">];</span>
+<span class="s2">const </span><span class="s1">PLUGIN_NAME = </span><span class="s0">'NextJsRequireCacheHotReloader'</span><span class="s1">;</span>
+<span class="s2">class </span><span class="s1">NextJsRequireCacheHotReloader {</span>
+    <span class="s1">constructor(opts){</span>
+        <span class="s2">this</span><span class="s1">.prevAssets = </span><span class="s2">null</span><span class="s1">;</span>
+        <span class="s2">this</span><span class="s1">.serverComponents = opts.serverComponents;</span>
+    <span class="s1">}</span>
+    <span class="s1">apply(compiler) {</span>
+        <span class="s1">compiler.hooks.assetEmitted.tap(PLUGIN_NAME, (_file, { targetPath })=&gt;{</span>
+            <span class="s3">// Clear module context in this process</span>
+            <span class="s1">(</span><span class="s4">0</span><span class="s1">, _sandbox.clearModuleContext)(targetPath);</span>
+            <span class="s1">(</span><span class="s4">0</span><span class="s1">, _requirecache.deleteCache)(targetPath);</span>
+        <span class="s1">});</span>
+        <span class="s1">compiler.hooks.afterEmit.tapPromise(PLUGIN_NAME, async (compilation)=&gt;{</span>
+            <span class="s2">for </span><span class="s1">(</span><span class="s2">const </span><span class="s1">name of RUNTIME_NAMES){</span>
+                <span class="s2">const </span><span class="s1">runtimeChunkPath = _path.default.join(compilation.outputOptions.path, </span><span class="s0">`</span><span class="s1">${name}</span><span class="s0">.js`</span><span class="s1">);</span>
+                <span class="s1">(</span><span class="s4">0</span><span class="s1">, _requirecache.deleteCache)(runtimeChunkPath);</span>
+            <span class="s1">}</span>
+            <span class="s3">// we need to make sure to clear all server entries from cache</span>
+            <span class="s3">// since they can have a stale webpack-runtime cache</span>
+            <span class="s3">// which needs to always be in-sync</span>
+            <span class="s2">const </span><span class="s1">entries = [</span>
+                <span class="s1">...compilation.entrypoints.keys()</span>
+            <span class="s1">].filter((entry)=&gt;{</span>
+                <span class="s2">const </span><span class="s1">isAppPath = entry.toString().startsWith(</span><span class="s0">'app/'</span><span class="s1">);</span>
+                <span class="s2">return </span><span class="s1">entry.toString().startsWith(</span><span class="s0">'pages/'</span><span class="s1">) || isAppPath;</span>
+            <span class="s1">});</span>
+            <span class="s2">for </span><span class="s1">(</span><span class="s2">const </span><span class="s1">page of entries){</span>
+                <span class="s2">const </span><span class="s1">outputPath = _path.default.join(compilation.outputOptions.path, page + </span><span class="s0">'.js'</span><span class="s1">);</span>
+                <span class="s1">(</span><span class="s4">0</span><span class="s1">, _requirecache.deleteCache)(outputPath);</span>
+            <span class="s1">}</span>
+        <span class="s1">});</span>
+    <span class="s1">}</span>
+<span class="s1">}</span>
+
+<span class="s3">//# sourceMappingURL=nextjs-require-cache-hot-reloader.js.map</span></pre>
+</body>
+</html>

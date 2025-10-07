@@ -1,0 +1,126 @@
+<html>
+<head>
+<title>init-declarations.js</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #067d17;}
+.s1 { color: #080808;}
+.s2 { color: #0033b3;}
+.s3 { color: #1750eb;}
+.s4 { color: #8c8c8c; font-style: italic;}
+</style>
+</head>
+<body bgcolor="#ffffff">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#c0c0c0" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+init-declarations.js</font>
+</center></td></tr></table>
+<pre><span class="s0">&quot;use strict&quot;</span><span class="s1">;</span>
+<span class="s1">Object.defineProperty(exports, </span><span class="s0">&quot;__esModule&quot;</span><span class="s1">, { value: </span><span class="s2">true </span><span class="s1">});</span>
+<span class="s2">const </span><span class="s1">utils_1 = require(</span><span class="s0">&quot;@typescript-eslint/utils&quot;</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">util_1 = require(</span><span class="s0">&quot;../util&quot;</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">getESLintCoreRule_1 = require(</span><span class="s0">&quot;../util/getESLintCoreRule&quot;</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">baseRule = (</span><span class="s3">0</span><span class="s1">, getESLintCoreRule_1.getESLintCoreRule)(</span><span class="s0">'init-declarations'</span><span class="s1">);</span>
+<span class="s1">exports.default = (</span><span class="s3">0</span><span class="s1">, util_1.createRule)({</span>
+    <span class="s1">name: </span><span class="s0">'init-declarations'</span><span class="s1">,</span>
+    <span class="s1">meta: {</span>
+        <span class="s1">type: </span><span class="s0">'suggestion'</span><span class="s1">,</span>
+        <span class="s4">// defaultOptions, -- base rule does not use defaultOptions</span>
+        <span class="s1">docs: {</span>
+            <span class="s1">description: </span><span class="s0">'Require or disallow initialization in variable declarations'</span><span class="s1">,</span>
+            <span class="s1">extendsBaseRule: </span><span class="s2">true</span><span class="s1">,</span>
+            <span class="s1">frozen: </span><span class="s2">true</span><span class="s1">,</span>
+        <span class="s1">},</span>
+        <span class="s1">hasSuggestions: baseRule.meta.hasSuggestions,</span>
+        <span class="s1">messages: baseRule.meta.messages,</span>
+        <span class="s1">schema: baseRule.meta.schema,</span>
+    <span class="s1">},</span>
+    <span class="s1">defaultOptions: [</span><span class="s0">'always'</span><span class="s1">],</span>
+    <span class="s1">create(context, [mode]) {</span>
+        <span class="s4">// Make a custom context to adjust the loc of reports where the base</span>
+        <span class="s4">// rule's behavior is a bit too aggressive with TS-specific syntax (namely,</span>
+        <span class="s4">// type annotations).</span>
+        <span class="s2">function </span><span class="s1">getBaseContextOverride() {</span>
+            <span class="s2">const </span><span class="s1">reportOverride = descriptor =&gt; {</span>
+                <span class="s2">if </span><span class="s1">(</span><span class="s0">'node' </span><span class="s2">in </span><span class="s1">descriptor &amp;&amp; descriptor.loc == </span><span class="s2">null</span><span class="s1">) {</span>
+                    <span class="s2">const </span><span class="s1">{ node, ...rest } = descriptor;</span>
+                    <span class="s4">// We only want to special case the report loc when reporting on</span>
+                    <span class="s4">// variables declarations that are not initialized. Declarations that</span>
+                    <span class="s4">// _are_ initialized get reported by the base rule due to a setting to</span>
+                    <span class="s4">// prohibit initializing variables entirely, in which case underlining</span>
+                    <span class="s4">// the whole node including the type annotation and initializer is</span>
+                    <span class="s4">// appropriate.</span>
+                    <span class="s2">if </span><span class="s1">(node.type === utils_1.AST_NODE_TYPES.VariableDeclarator &amp;&amp;</span>
+                        <span class="s1">node.init == </span><span class="s2">null</span><span class="s1">) {</span>
+                        <span class="s1">context.report({</span>
+                            <span class="s1">...rest,</span>
+                            <span class="s1">loc: getReportLoc(node),</span>
+                        <span class="s1">});</span>
+                        <span class="s2">return</span><span class="s1">;</span>
+                    <span class="s1">}</span>
+                <span class="s1">}</span>
+                <span class="s1">context.report(descriptor);</span>
+            <span class="s1">};</span>
+            <span class="s4">// `return { ...context, report: reportOverride }` isn't safe because the</span>
+            <span class="s4">// `context` object has some getters that need to be preserved.</span>
+            <span class="s4">//</span>
+            <span class="s4">// `return new Proxy(context, ...)` doesn't work because `context` has</span>
+            <span class="s4">// non-configurable properties that throw when constructing a Proxy.</span>
+            <span class="s4">//</span>
+            <span class="s4">// So, we'll just use Proxy on a dummy object and use the `get` trap to</span>
+            <span class="s4">// proxy `context`'s properties.</span>
+            <span class="s2">return new </span><span class="s1">Proxy({}, {</span>
+                <span class="s1">get: (target, prop, receiver) =&gt; prop === </span><span class="s0">'report'</span>
+                    <span class="s1">? reportOverride</span>
+                    <span class="s1">: Reflect.get(context, prop, receiver),</span>
+            <span class="s1">});</span>
+        <span class="s1">}</span>
+        <span class="s2">const </span><span class="s1">rules = baseRule.create(getBaseContextOverride());</span>
+        <span class="s2">return </span><span class="s1">{</span>
+            <span class="s0">'VariableDeclaration:exit'</span><span class="s1">(node) {</span>
+                <span class="s2">if </span><span class="s1">(mode === </span><span class="s0">'always'</span><span class="s1">) {</span>
+                    <span class="s2">if </span><span class="s1">(node.declare) {</span>
+                        <span class="s2">return</span><span class="s1">;</span>
+                    <span class="s1">}</span>
+                    <span class="s2">if </span><span class="s1">(isAncestorNamespaceDeclared(node)) {</span>
+                        <span class="s2">return</span><span class="s1">;</span>
+                    <span class="s1">}</span>
+                <span class="s1">}</span>
+                <span class="s1">rules[</span><span class="s0">'VariableDeclaration:exit'</span><span class="s1">](node);</span>
+            <span class="s1">},</span>
+        <span class="s1">};</span>
+        <span class="s2">function </span><span class="s1">isAncestorNamespaceDeclared(node) {</span>
+            <span class="s2">let </span><span class="s1">ancestor = node.parent;</span>
+            <span class="s2">while </span><span class="s1">(ancestor) {</span>
+                <span class="s2">if </span><span class="s1">(ancestor.type === utils_1.AST_NODE_TYPES.TSModuleDeclaration &amp;&amp;</span>
+                    <span class="s1">ancestor.declare) {</span>
+                    <span class="s2">return true</span><span class="s1">;</span>
+                <span class="s1">}</span>
+                <span class="s1">ancestor = ancestor.parent;</span>
+            <span class="s1">}</span>
+            <span class="s2">return false</span><span class="s1">;</span>
+        <span class="s1">}</span>
+    <span class="s1">},</span>
+<span class="s1">});</span>
+<span class="s4">/**</span>
+ <span class="s4">* When reporting an uninitialized variable declarator, get the loc excluding</span>
+ <span class="s4">* the type annotation.</span>
+ <span class="s4">*/</span>
+<span class="s2">function </span><span class="s1">getReportLoc(node) {</span>
+    <span class="s2">const </span><span class="s1">start = structuredClone(node.loc.start);</span>
+    <span class="s2">const </span><span class="s1">end = {</span>
+        <span class="s1">line: node.loc.start.line,</span>
+        <span class="s4">// `if (id.type === AST_NODE_TYPES.Identifier)` is a condition for</span>
+        <span class="s4">// reporting in the base rule (as opposed to things like destructuring</span>
+        <span class="s4">// assignment), so the type assertion should always be valid.</span>
+        <span class="s1">column: node.loc.start.column + node.id.name.length,</span>
+    <span class="s1">};</span>
+    <span class="s2">return </span><span class="s1">{</span>
+        <span class="s1">start,</span>
+        <span class="s1">end,</span>
+    <span class="s1">};</span>
+<span class="s1">}</span>
+</pre>
+</body>
+</html>

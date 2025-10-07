@@ -1,0 +1,103 @@
+<html>
+<head>
+<title>post-telemetry-payload.test.js</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #067d17;}
+.s1 { color: #080808;}
+.s2 { color: #0033b3;}
+.s3 { color: #1750eb;}
+.s4 { color: #8c8c8c; font-style: italic;}
+</style>
+</head>
+<body bgcolor="#ffffff">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#c0c0c0" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+post-telemetry-payload.test.js</font>
+</center></td></tr></table>
+<pre><span class="s0">&quot;use strict&quot;</span><span class="s1">;</span>
+<span class="s1">Object.defineProperty(exports, </span><span class="s0">&quot;__esModule&quot;</span><span class="s1">, {</span>
+    <span class="s1">value: </span><span class="s2">true</span>
+<span class="s1">});</span>
+<span class="s2">const </span><span class="s1">_posttelemetrypayload = require(</span><span class="s0">&quot;./post-telemetry-payload&quot;</span><span class="s1">);</span>
+<span class="s1">describe(</span><span class="s0">'postNextTelemetryPayload'</span><span class="s1">, ()=&gt;{</span>
+    <span class="s2">let </span><span class="s1">originalFetch;</span>
+    <span class="s1">beforeEach(()=&gt;{</span>
+        <span class="s1">originalFetch = global.fetch;</span>
+    <span class="s1">});</span>
+    <span class="s1">afterEach(()=&gt;{</span>
+        <span class="s1">global.fetch = originalFetch;</span>
+    <span class="s1">});</span>
+    <span class="s1">it(</span><span class="s0">'sends telemetry payload successfully'</span><span class="s1">, async ()=&gt;{</span>
+        <span class="s2">const </span><span class="s1">mockFetch = jest.fn().mockResolvedValue({</span>
+            <span class="s1">ok: </span><span class="s2">true</span>
+        <span class="s1">});</span>
+        <span class="s1">global.fetch = mockFetch;</span>
+        <span class="s2">const </span><span class="s1">payload = {</span>
+            <span class="s1">meta: {</span>
+                <span class="s1">version: </span><span class="s0">'1.0'</span>
+            <span class="s1">},</span>
+            <span class="s1">context: {</span>
+                <span class="s1">anonymousId: </span><span class="s0">'test-id'</span><span class="s1">,</span>
+                <span class="s1">projectId: </span><span class="s0">'test-project'</span><span class="s1">,</span>
+                <span class="s1">sessionId: </span><span class="s0">'test-session'</span>
+            <span class="s1">},</span>
+            <span class="s1">events: [</span>
+                <span class="s1">{</span>
+                    <span class="s1">eventName: </span><span class="s0">'test-event'</span><span class="s1">,</span>
+                    <span class="s1">fields: {</span>
+                        <span class="s1">foo: </span><span class="s0">'bar'</span>
+                    <span class="s1">}</span>
+                <span class="s1">}</span>
+            <span class="s1">]</span>
+        <span class="s1">};</span>
+        <span class="s2">await </span><span class="s1">(</span><span class="s3">0</span><span class="s1">, _posttelemetrypayload.postNextTelemetryPayload)(payload);</span>
+        <span class="s1">expect(mockFetch).toHaveBeenCalledWith(</span><span class="s0">'https://telemetry.nextjs.org/api/v1/record'</span><span class="s1">, {</span>
+            <span class="s1">method: </span><span class="s0">'POST'</span><span class="s1">,</span>
+            <span class="s1">body: JSON.stringify(payload),</span>
+            <span class="s1">headers: {</span>
+                <span class="s0">'content-type'</span><span class="s1">: </span><span class="s0">'application/json'</span>
+            <span class="s1">},</span>
+            <span class="s1">signal: expect.any(AbortSignal)</span>
+        <span class="s1">});</span>
+    <span class="s1">});</span>
+    <span class="s1">it(</span><span class="s0">'retries on failure'</span><span class="s1">, async ()=&gt;{</span>
+        <span class="s2">const </span><span class="s1">mockFetch = jest.fn().mockRejectedValueOnce(</span><span class="s2">new </span><span class="s1">Error(</span><span class="s0">'Network error'</span><span class="s1">)).mockResolvedValueOnce({</span>
+            <span class="s1">ok: </span><span class="s2">true</span>
+        <span class="s1">});</span>
+        <span class="s1">global.fetch = mockFetch;</span>
+        <span class="s2">const </span><span class="s1">payload = {</span>
+            <span class="s1">meta: {},</span>
+            <span class="s1">context: {</span>
+                <span class="s1">anonymousId: </span><span class="s0">'test-id'</span><span class="s1">,</span>
+                <span class="s1">projectId: </span><span class="s0">'test-project'</span><span class="s1">,</span>
+                <span class="s1">sessionId: </span><span class="s0">'test-session'</span>
+            <span class="s1">},</span>
+            <span class="s1">events: []</span>
+        <span class="s1">};</span>
+        <span class="s2">await </span><span class="s1">(</span><span class="s3">0</span><span class="s1">, _posttelemetrypayload.postNextTelemetryPayload)(payload);</span>
+        <span class="s1">expect(mockFetch).toHaveBeenCalledTimes(</span><span class="s3">2</span><span class="s1">);</span>
+    <span class="s1">});</span>
+    <span class="s1">it(</span><span class="s0">'swallows errors after retries exhausted'</span><span class="s1">, async ()=&gt;{</span>
+        <span class="s2">const </span><span class="s1">mockFetch = jest.fn().mockRejectedValue(</span><span class="s2">new </span><span class="s1">Error(</span><span class="s0">'Network error'</span><span class="s1">));</span>
+        <span class="s1">global.fetch = mockFetch;</span>
+        <span class="s2">const </span><span class="s1">payload = {</span>
+            <span class="s1">meta: {},</span>
+            <span class="s1">context: {</span>
+                <span class="s1">anonymousId: </span><span class="s0">'test-id'</span><span class="s1">,</span>
+                <span class="s1">projectId: </span><span class="s0">'test-project'</span><span class="s1">,</span>
+                <span class="s1">sessionId: </span><span class="s0">'test-session'</span>
+            <span class="s1">},</span>
+            <span class="s1">events: []</span>
+        <span class="s1">};</span>
+        <span class="s4">// Should not throw</span>
+        <span class="s2">await </span><span class="s1">(</span><span class="s3">0</span><span class="s1">, _posttelemetrypayload.postNextTelemetryPayload)(payload);</span>
+        <span class="s1">expect(mockFetch).toHaveBeenCalledTimes(</span><span class="s3">2</span><span class="s1">) </span><span class="s4">// Initial try + 1 retry</span>
+        <span class="s1">;</span>
+    <span class="s1">});</span>
+<span class="s1">});</span>
+
+<span class="s4">//# sourceMappingURL=post-telemetry-payload.test.js.map</span></pre>
+</body>
+</html>

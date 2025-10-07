@@ -1,0 +1,190 @@
+<html>
+<head>
+<title>path-reservations.js</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #067d17;}
+.s1 { color: #080808;}
+.s2 { color: #8c8c8c; font-style: italic;}
+.s3 { color: #0033b3;}
+.s4 { color: #1750eb;}
+</style>
+</head>
+<body bgcolor="#ffffff">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#c0c0c0" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+path-reservations.js</font>
+</center></td></tr></table>
+<pre><span class="s0">&quot;use strict&quot;</span><span class="s1">;</span>
+<span class="s2">// A path exclusive reservation system</span>
+<span class="s2">// reserve([list, of, paths], fn)</span>
+<span class="s2">// When the fn is first in line for all its paths, it</span>
+<span class="s2">// is called with a cb that clears the reservation.</span>
+<span class="s2">//</span>
+<span class="s2">// Used by async unpack to avoid clobbering paths in use,</span>
+<span class="s2">// while still allowing maximal safe parallelization.</span>
+<span class="s1">Object.defineProperty(exports, </span><span class="s0">&quot;__esModule&quot;</span><span class="s1">, { value: </span><span class="s3">true </span><span class="s1">});</span>
+<span class="s1">exports.PathReservations = </span><span class="s3">void </span><span class="s4">0</span><span class="s1">;</span>
+<span class="s3">const </span><span class="s1">node_path_1 = require(</span><span class="s0">&quot;node:path&quot;</span><span class="s1">);</span>
+<span class="s3">const </span><span class="s1">normalize_unicode_js_1 = require(</span><span class="s0">&quot;./normalize-unicode.js&quot;</span><span class="s1">);</span>
+<span class="s3">const </span><span class="s1">strip_trailing_slashes_js_1 = require(</span><span class="s0">&quot;./strip-trailing-slashes.js&quot;</span><span class="s1">);</span>
+<span class="s3">const </span><span class="s1">platform = process.env.TESTING_TAR_FAKE_PLATFORM || process.platform;</span>
+<span class="s3">const </span><span class="s1">isWindows = platform === </span><span class="s0">'win32'</span><span class="s1">;</span>
+<span class="s2">// return a set of parent dirs for a given path</span>
+<span class="s2">// '/a/b/c/d' -&gt; ['/', '/a', '/a/b', '/a/b/c', '/a/b/c/d']</span>
+<span class="s3">const </span><span class="s1">getDirs = (path) =&gt; {</span>
+    <span class="s3">const </span><span class="s1">dirs = path</span>
+        <span class="s1">.split(</span><span class="s0">'/'</span><span class="s1">)</span>
+        <span class="s1">.slice(</span><span class="s4">0</span><span class="s1">, -</span><span class="s4">1</span><span class="s1">)</span>
+        <span class="s1">.reduce((set, path) =&gt; {</span>
+        <span class="s3">const </span><span class="s1">s = set[set.length - </span><span class="s4">1</span><span class="s1">];</span>
+        <span class="s3">if </span><span class="s1">(s !== undefined) {</span>
+            <span class="s1">path = (</span><span class="s4">0</span><span class="s1">, node_path_1.join)(s, path);</span>
+        <span class="s1">}</span>
+        <span class="s1">set.push(path || </span><span class="s0">'/'</span><span class="s1">);</span>
+        <span class="s3">return </span><span class="s1">set;</span>
+    <span class="s1">}, []);</span>
+    <span class="s3">return </span><span class="s1">dirs;</span>
+<span class="s1">};</span>
+<span class="s3">class </span><span class="s1">PathReservations {</span>
+    <span class="s2">// path =&gt; [function or Set]</span>
+    <span class="s2">// A Set object means a directory reservation</span>
+    <span class="s2">// A fn is a direct reservation on that path</span>
+    <span class="s1">#queues = </span><span class="s3">new </span><span class="s1">Map();</span>
+    <span class="s2">// fn =&gt; {paths:[path,...], dirs:[path, ...]}</span>
+    <span class="s1">#reservations = </span><span class="s3">new </span><span class="s1">Map();</span>
+    <span class="s2">// functions currently running</span>
+    <span class="s1">#running = </span><span class="s3">new </span><span class="s1">Set();</span>
+    <span class="s1">reserve(paths, fn) {</span>
+        <span class="s1">paths =</span>
+            <span class="s1">isWindows ?</span>
+                <span class="s1">[</span><span class="s0">'win32 parallelization disabled'</span><span class="s1">]</span>
+                <span class="s1">: paths.map(p =&gt; {</span>
+                    <span class="s2">// don't need normPath, because we skip this entirely for windows</span>
+                    <span class="s3">return </span><span class="s1">(</span><span class="s4">0</span><span class="s1">, strip_trailing_slashes_js_1.stripTrailingSlashes)((</span><span class="s4">0</span><span class="s1">, node_path_1.join)((</span><span class="s4">0</span><span class="s1">, normalize_unicode_js_1.normalizeUnicode)(p))).toLowerCase();</span>
+                <span class="s1">});</span>
+        <span class="s3">const </span><span class="s1">dirs = </span><span class="s3">new </span><span class="s1">Set(paths.map(path =&gt; getDirs(path)).reduce((a, b) =&gt; a.concat(b)));</span>
+        <span class="s3">this</span><span class="s1">.#reservations.set(fn, { dirs, paths });</span>
+        <span class="s3">for </span><span class="s1">(</span><span class="s3">const </span><span class="s1">p of paths) {</span>
+            <span class="s3">const </span><span class="s1">q = </span><span class="s3">this</span><span class="s1">.#queues.get(p);</span>
+            <span class="s3">if </span><span class="s1">(!q) {</span>
+                <span class="s3">this</span><span class="s1">.#queues.set(p, [fn]);</span>
+            <span class="s1">}</span>
+            <span class="s3">else </span><span class="s1">{</span>
+                <span class="s1">q.push(fn);</span>
+            <span class="s1">}</span>
+        <span class="s1">}</span>
+        <span class="s3">for </span><span class="s1">(</span><span class="s3">const </span><span class="s1">dir of dirs) {</span>
+            <span class="s3">const </span><span class="s1">q = </span><span class="s3">this</span><span class="s1">.#queues.get(dir);</span>
+            <span class="s3">if </span><span class="s1">(!q) {</span>
+                <span class="s3">this</span><span class="s1">.#queues.set(dir, [</span><span class="s3">new </span><span class="s1">Set([fn])]);</span>
+            <span class="s1">}</span>
+            <span class="s3">else </span><span class="s1">{</span>
+                <span class="s3">const </span><span class="s1">l = q[q.length - </span><span class="s4">1</span><span class="s1">];</span>
+                <span class="s3">if </span><span class="s1">(l </span><span class="s3">instanceof </span><span class="s1">Set) {</span>
+                    <span class="s1">l.add(fn);</span>
+                <span class="s1">}</span>
+                <span class="s3">else </span><span class="s1">{</span>
+                    <span class="s1">q.push(</span><span class="s3">new </span><span class="s1">Set([fn]));</span>
+                <span class="s1">}</span>
+            <span class="s1">}</span>
+        <span class="s1">}</span>
+        <span class="s3">return this</span><span class="s1">.#run(fn);</span>
+    <span class="s1">}</span>
+    <span class="s2">// return the queues for each path the function cares about</span>
+    <span class="s2">// fn =&gt; {paths, dirs}</span>
+    <span class="s1">#getQueues(fn) {</span>
+        <span class="s3">const </span><span class="s1">res = </span><span class="s3">this</span><span class="s1">.#reservations.get(fn);</span>
+        <span class="s2">/* c8 ignore start */</span>
+        <span class="s3">if </span><span class="s1">(!res) {</span>
+            <span class="s3">throw new </span><span class="s1">Error(</span><span class="s0">'function does not have any path reservations'</span><span class="s1">);</span>
+        <span class="s1">}</span>
+        <span class="s2">/* c8 ignore stop */</span>
+        <span class="s3">return </span><span class="s1">{</span>
+            <span class="s1">paths: res.paths.map((path) =&gt; </span><span class="s3">this</span><span class="s1">.#queues.get(path)),</span>
+            <span class="s1">dirs: [...res.dirs].map(path =&gt; </span><span class="s3">this</span><span class="s1">.#queues.get(path)),</span>
+        <span class="s1">};</span>
+    <span class="s1">}</span>
+    <span class="s2">// check if fn is first in line for all its paths, and is</span>
+    <span class="s2">// included in the first set for all its dir queues</span>
+    <span class="s1">check(fn) {</span>
+        <span class="s3">const </span><span class="s1">{ paths, dirs } = </span><span class="s3">this</span><span class="s1">.#getQueues(fn);</span>
+        <span class="s3">return </span><span class="s1">(paths.every(q =&gt; q &amp;&amp; q[</span><span class="s4">0</span><span class="s1">] === fn) &amp;&amp;</span>
+            <span class="s1">dirs.every(q =&gt; q &amp;&amp; q[</span><span class="s4">0</span><span class="s1">] </span><span class="s3">instanceof </span><span class="s1">Set &amp;&amp; q[</span><span class="s4">0</span><span class="s1">].has(fn)));</span>
+    <span class="s1">}</span>
+    <span class="s2">// run the function if it's first in line and not already running</span>
+    <span class="s1">#run(fn) {</span>
+        <span class="s3">if </span><span class="s1">(</span><span class="s3">this</span><span class="s1">.#running.has(fn) || !</span><span class="s3">this</span><span class="s1">.check(fn)) {</span>
+            <span class="s3">return false</span><span class="s1">;</span>
+        <span class="s1">}</span>
+        <span class="s3">this</span><span class="s1">.#running.add(fn);</span>
+        <span class="s1">fn(() =&gt; </span><span class="s3">this</span><span class="s1">.#clear(fn));</span>
+        <span class="s3">return true</span><span class="s1">;</span>
+    <span class="s1">}</span>
+    <span class="s1">#clear(fn) {</span>
+        <span class="s3">if </span><span class="s1">(!</span><span class="s3">this</span><span class="s1">.#running.has(fn)) {</span>
+            <span class="s3">return false</span><span class="s1">;</span>
+        <span class="s1">}</span>
+        <span class="s3">const </span><span class="s1">res = </span><span class="s3">this</span><span class="s1">.#reservations.get(fn);</span>
+        <span class="s2">/* c8 ignore start */</span>
+        <span class="s3">if </span><span class="s1">(!res) {</span>
+            <span class="s3">throw new </span><span class="s1">Error(</span><span class="s0">'invalid reservation'</span><span class="s1">);</span>
+        <span class="s1">}</span>
+        <span class="s2">/* c8 ignore stop */</span>
+        <span class="s3">const </span><span class="s1">{ paths, dirs } = res;</span>
+        <span class="s3">const </span><span class="s1">next = </span><span class="s3">new </span><span class="s1">Set();</span>
+        <span class="s3">for </span><span class="s1">(</span><span class="s3">const </span><span class="s1">path of paths) {</span>
+            <span class="s3">const </span><span class="s1">q = </span><span class="s3">this</span><span class="s1">.#queues.get(path);</span>
+            <span class="s2">/* c8 ignore start */</span>
+            <span class="s3">if </span><span class="s1">(!q || q?.[</span><span class="s4">0</span><span class="s1">] !== fn) {</span>
+                <span class="s3">continue</span><span class="s1">;</span>
+            <span class="s1">}</span>
+            <span class="s2">/* c8 ignore stop */</span>
+            <span class="s3">const </span><span class="s1">q0 = q[</span><span class="s4">1</span><span class="s1">];</span>
+            <span class="s3">if </span><span class="s1">(!q0) {</span>
+                <span class="s3">this</span><span class="s1">.#queues.delete(path);</span>
+                <span class="s3">continue</span><span class="s1">;</span>
+            <span class="s1">}</span>
+            <span class="s1">q.shift();</span>
+            <span class="s3">if </span><span class="s1">(</span><span class="s3">typeof </span><span class="s1">q0 === </span><span class="s0">'function'</span><span class="s1">) {</span>
+                <span class="s1">next.add(q0);</span>
+            <span class="s1">}</span>
+            <span class="s3">else </span><span class="s1">{</span>
+                <span class="s3">for </span><span class="s1">(</span><span class="s3">const </span><span class="s1">f of q0) {</span>
+                    <span class="s1">next.add(f);</span>
+                <span class="s1">}</span>
+            <span class="s1">}</span>
+        <span class="s1">}</span>
+        <span class="s3">for </span><span class="s1">(</span><span class="s3">const </span><span class="s1">dir of dirs) {</span>
+            <span class="s3">const </span><span class="s1">q = </span><span class="s3">this</span><span class="s1">.#queues.get(dir);</span>
+            <span class="s3">const </span><span class="s1">q0 = q?.[</span><span class="s4">0</span><span class="s1">];</span>
+            <span class="s2">/* c8 ignore next - type safety only */</span>
+            <span class="s3">if </span><span class="s1">(!q || !(q0 </span><span class="s3">instanceof </span><span class="s1">Set))</span>
+                <span class="s3">continue</span><span class="s1">;</span>
+            <span class="s3">if </span><span class="s1">(q0.size === </span><span class="s4">1 </span><span class="s1">&amp;&amp; q.length === </span><span class="s4">1</span><span class="s1">) {</span>
+                <span class="s3">this</span><span class="s1">.#queues.delete(dir);</span>
+                <span class="s3">continue</span><span class="s1">;</span>
+            <span class="s1">}</span>
+            <span class="s3">else if </span><span class="s1">(q0.size === </span><span class="s4">1</span><span class="s1">) {</span>
+                <span class="s1">q.shift();</span>
+                <span class="s2">// next one must be a function,</span>
+                <span class="s2">// or else the Set would've been reused</span>
+                <span class="s3">const </span><span class="s1">n = q[</span><span class="s4">0</span><span class="s1">];</span>
+                <span class="s3">if </span><span class="s1">(</span><span class="s3">typeof </span><span class="s1">n === </span><span class="s0">'function'</span><span class="s1">) {</span>
+                    <span class="s1">next.add(n);</span>
+                <span class="s1">}</span>
+            <span class="s1">}</span>
+            <span class="s3">else </span><span class="s1">{</span>
+                <span class="s1">q0.delete(fn);</span>
+            <span class="s1">}</span>
+        <span class="s1">}</span>
+        <span class="s3">this</span><span class="s1">.#running.delete(fn);</span>
+        <span class="s1">next.forEach(fn =&gt; </span><span class="s3">this</span><span class="s1">.#run(fn));</span>
+        <span class="s3">return true</span><span class="s1">;</span>
+    <span class="s1">}</span>
+<span class="s1">}</span>
+<span class="s1">exports.PathReservations = PathReservations;</span>
+<span class="s2">//# sourceMappingURL=path-reservations.js.map</span></pre>
+</body>
+</html>

@@ -1,0 +1,142 @@
+<html>
+<head>
+<title>jiti-native.mjs</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #8c8c8c; font-style: italic;}
+.s1 { color: #8c8c8c; font-style: italic;}
+.s2 { color: #080808;}
+.s3 { color: #0033b3;}
+.s4 { color: #067d17;}
+</style>
+</head>
+<body bgcolor="#ffffff">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#c0c0c0" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+jiti-native.mjs</font>
+</center></td></tr></table>
+<pre><span class="s0">/**</span>
+ <span class="s0">* </span><span class="s1">@typedef </span><span class="s0">{import('./types').Jiti} Jiti</span>
+ <span class="s0">* </span><span class="s1">@typedef </span><span class="s0">{import('./types').JitiOptions} JitiOptions</span>
+ <span class="s0">*/</span>
+
+<span class="s3">const </span><span class="s2">isDeno = </span><span class="s4">&quot;Deno&quot; </span><span class="s3">in </span><span class="s2">globalThis;</span>
+
+<span class="s0">/**</span>
+ <span class="s0">* </span><span class="s1">@param </span><span class="s0">{string|URL} [parentURL]</span>
+ <span class="s0">* </span><span class="s1">@param </span><span class="s0">{JitiOptions} [jitiOptions]</span>
+ <span class="s0">* </span><span class="s1">@returns </span><span class="s0">{Jiti}</span>
+ <span class="s0">*/</span>
+<span class="s3">export function </span><span class="s2">createJiti(parentURL, jitiOptions) {</span>
+  <span class="s2">parentURL = normalizeParentURL(parentURL);</span>
+
+  <span class="s0">/** </span><span class="s1">@type </span><span class="s0">{Jiti} */</span>
+  <span class="s3">function </span><span class="s2">jiti() {</span>
+    <span class="s3">throw </span><span class="s2">unsupportedError(</span>
+      <span class="s4">&quot;`jiti()` is not supported in native mode, use `jiti.import()` instead.&quot;</span><span class="s2">,</span>
+    <span class="s2">);</span>
+  <span class="s2">}</span>
+
+  <span class="s2">jiti.resolve = () =&gt; {</span>
+    <span class="s3">throw </span><span class="s2">unsupportedError(</span><span class="s4">&quot;`jiti.resolve()` is not supported in native mode.&quot;</span><span class="s2">);</span>
+  <span class="s2">};</span>
+
+  <span class="s2">jiti.esmResolve = (id, opts) =&gt; {</span>
+    <span class="s3">try </span><span class="s2">{</span>
+      <span class="s3">const </span><span class="s2">importMeta = jitiOptions?.importMeta || </span><span class="s3">import</span><span class="s2">.meta;</span>
+      <span class="s3">if </span><span class="s2">(isDeno) {</span>
+        <span class="s0">// Deno throws TypeError: Invalid arguments when passing parentURL</span>
+        <span class="s3">return </span><span class="s2">importMeta.resolve(id);</span>
+      <span class="s2">}</span>
+      <span class="s3">const </span><span class="s2">parent = normalizeParentURL(opts?.parentURL || parentURL);</span>
+      <span class="s3">return </span><span class="s2">importMeta.resolve(id, parent);</span>
+    <span class="s2">} </span><span class="s3">catch </span><span class="s2">(error) {</span>
+      <span class="s3">if </span><span class="s2">(opts?.try) {</span>
+        <span class="s3">return </span><span class="s2">undefined;</span>
+      <span class="s2">} </span><span class="s3">else </span><span class="s2">{</span>
+        <span class="s3">throw </span><span class="s2">error;</span>
+      <span class="s2">}</span>
+    <span class="s2">}</span>
+  <span class="s2">};</span>
+
+  <span class="s2">jiti.import = async </span><span class="s3">function </span><span class="s2">(id, opts) {</span>
+    <span class="s3">for </span><span class="s2">(</span><span class="s3">const </span><span class="s2">suffix of [</span><span class="s4">&quot;&quot;</span><span class="s2">, </span><span class="s4">&quot;/index&quot;</span><span class="s2">]) {</span>
+      <span class="s0">// prettier-ignore</span>
+      <span class="s3">for </span><span class="s2">(</span><span class="s3">const </span><span class="s2">ext of [</span><span class="s4">&quot;&quot;</span><span class="s2">, </span><span class="s4">&quot;.js&quot;</span><span class="s2">, </span><span class="s4">&quot;.mjs&quot;</span><span class="s2">, </span><span class="s4">&quot;.cjs&quot;</span><span class="s2">, </span><span class="s4">&quot;.ts&quot;</span><span class="s2">, </span><span class="s4">&quot;.tsx&quot;</span><span class="s2">, </span><span class="s4">&quot;.mts&quot;</span><span class="s2">, </span><span class="s4">&quot;.cts&quot;</span><span class="s2">]) {</span>
+        <span class="s3">try </span><span class="s2">{</span>
+          <span class="s3">const </span><span class="s2">resolved = </span><span class="s3">this</span><span class="s2">.esmResolve(id + suffix + ext, opts);</span>
+          <span class="s3">if </span><span class="s2">(!resolved) {</span>
+            <span class="s3">continue</span><span class="s2">;</span>
+          <span class="s2">}</span>
+          <span class="s3">let </span><span class="s2">importAttrs = undefined</span>
+          <span class="s3">if </span><span class="s2">(resolved.endsWith(</span><span class="s4">'.json'</span><span class="s2">)) {</span>
+            <span class="s2">importAttrs = { </span><span class="s3">with</span><span class="s2">: { type: </span><span class="s4">'json'</span><span class="s2">}}</span>
+          <span class="s2">}</span>
+          <span class="s3">return await import</span><span class="s2">(resolved, importAttrs);</span>
+        <span class="s2">} </span><span class="s3">catch </span><span class="s2">(error) {</span>
+          <span class="s3">if </span><span class="s2">(error.code === </span><span class="s4">'ERR_MODULE_NOT_FOUND' </span><span class="s2">|| error.code === </span><span class="s4">'ERR_UNSUPPORTED_DIR_IMPORT'</span><span class="s2">) {</span>
+            <span class="s3">continue</span>
+          <span class="s2">}</span>
+          <span class="s3">if </span><span class="s2">(opts?.try) {</span>
+            <span class="s3">return </span><span class="s2">undefined;</span>
+          <span class="s2">}</span>
+          <span class="s3">throw </span><span class="s2">error;</span>
+        <span class="s2">}</span>
+      <span class="s2">}</span>
+    <span class="s2">}</span>
+    <span class="s3">if </span><span class="s2">(!opts?.try) {</span>
+      <span class="s3">const </span><span class="s2">parent = normalizeParentURL(opts?.parentURL || parentURL);</span>
+      <span class="s3">const </span><span class="s2">error = </span><span class="s3">new </span><span class="s2">Error(</span>
+        <span class="s4">`[jiti] [ERR_MODULE_NOT_FOUND] Cannot import '</span><span class="s2">${id}</span><span class="s4">' from '</span><span class="s2">${parent}</span><span class="s4">'.`</span><span class="s2">,</span>
+      <span class="s2">);</span>
+      <span class="s2">error.code = </span><span class="s4">&quot;ERR_MODULE_NOT_FOUND&quot;</span><span class="s2">;</span>
+      <span class="s3">throw </span><span class="s2">error;</span>
+    <span class="s2">}</span>
+  <span class="s2">};</span>
+
+  <span class="s2">jiti.transform = () =&gt; {</span>
+    <span class="s3">throw </span><span class="s2">unsupportedError(</span>
+      <span class="s4">&quot;`jiti.transform()` is not supported in native mode.&quot;</span><span class="s2">,</span>
+    <span class="s2">);</span>
+  <span class="s2">};</span>
+
+  <span class="s2">jiti.evalModule = () =&gt; {</span>
+    <span class="s3">throw </span><span class="s2">unsupportedError(</span>
+      <span class="s4">&quot;`jiti.evalModule()` is not supported in native mode.&quot;</span><span class="s2">,</span>
+    <span class="s2">);</span>
+  <span class="s2">};</span>
+
+  <span class="s2">jiti.main = undefined;</span>
+  <span class="s2">jiti.extensions = Object.create(</span><span class="s3">null</span><span class="s2">);</span>
+  <span class="s2">jiti.cache = Object.create(</span><span class="s3">null</span><span class="s2">);</span>
+
+  <span class="s3">return </span><span class="s2">jiti;</span>
+<span class="s2">}</span>
+
+<span class="s3">export default </span><span class="s2">createJiti;</span>
+
+<span class="s0">/**</span>
+ <span class="s0">* </span><span class="s1">@param </span><span class="s0">{string} message</span>
+ <span class="s0">*/</span>
+<span class="s3">function </span><span class="s2">unsupportedError(message) {</span>
+  <span class="s3">throw new </span><span class="s2">Error(</span>
+    <span class="s4">`[jiti] </span><span class="s2">${message} </span><span class="s4">(import or require 'jiti' instead of 'jiti/native' for more features).`</span><span class="s2">,</span>
+  <span class="s2">);</span>
+<span class="s2">}</span>
+
+<span class="s3">function </span><span class="s2">normalizeParentURL(input) {</span>
+  <span class="s3">if </span><span class="s2">(!input) {</span>
+    <span class="s3">return </span><span class="s4">&quot;file:///&quot;</span><span class="s2">;</span>
+  <span class="s2">}</span>
+  <span class="s3">if </span><span class="s2">(</span><span class="s3">typeof </span><span class="s2">filename !== </span><span class="s4">&quot;string&quot; </span><span class="s2">|| input.startsWith(</span><span class="s4">&quot;file://&quot;</span><span class="s2">)) {</span>
+    <span class="s3">return </span><span class="s2">input;</span>
+  <span class="s2">}</span>
+  <span class="s3">if </span><span class="s2">(input.endsWith(</span><span class="s4">&quot;/&quot;</span><span class="s2">)) {</span>
+    <span class="s2">input += </span><span class="s4">&quot;_&quot;</span><span class="s2">; </span><span class="s0">// append a dummy filename</span>
+  <span class="s2">}</span>
+  <span class="s3">return </span><span class="s4">`file://</span><span class="s2">${input}</span><span class="s4">`</span><span class="s2">;</span>
+<span class="s2">}</span>
+</pre>
+</body>
+</html>

@@ -1,0 +1,262 @@
+<html>
+<head>
+<title>require-optimization.js</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #8c8c8c; font-style: italic;}
+.s1 { color: #8c8c8c; font-style: italic;}
+.s2 { color: #080808;}
+.s3 { color: #067d17;}
+.s4 { color: #0033b3;}
+.s5 { color: #1750eb;}
+</style>
+</head>
+<body bgcolor="#ffffff">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#c0c0c0" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+require-optimization.js</font>
+</center></td></tr></table>
+<pre><span class="s0">/**</span>
+ <span class="s0">* </span><span class="s1">@fileoverview </span><span class="s0">Enforce React components to have a shouldComponentUpdate method</span>
+ <span class="s0">* </span><span class="s1">@author </span><span class="s0">Evgueni Naverniouk</span>
+ <span class="s0">*/</span>
+
+<span class="s3">'use strict'</span><span class="s2">;</span>
+
+<span class="s4">const </span><span class="s2">values = require(</span><span class="s3">'object.values'</span><span class="s2">);</span>
+
+<span class="s4">const </span><span class="s2">Components = require(</span><span class="s3">'../util/Components'</span><span class="s2">);</span>
+<span class="s4">const </span><span class="s2">componentUtil = require(</span><span class="s3">'../util/componentUtil'</span><span class="s2">);</span>
+<span class="s4">const </span><span class="s2">docsUrl = require(</span><span class="s3">'../util/docsUrl'</span><span class="s2">);</span>
+<span class="s4">const </span><span class="s2">report = require(</span><span class="s3">'../util/report'</span><span class="s2">);</span>
+<span class="s4">const </span><span class="s2">getScope = require(</span><span class="s3">'../util/eslint'</span><span class="s2">).getScope;</span>
+
+<span class="s4">const </span><span class="s2">messages = {</span>
+  <span class="s2">noShouldComponentUpdate: </span><span class="s3">'Component is not optimized. Please add a shouldComponentUpdate method.'</span><span class="s2">,</span>
+<span class="s2">};</span>
+
+<span class="s0">/** </span><span class="s1">@type </span><span class="s0">{import('eslint').Rule.RuleModule} */</span>
+<span class="s2">module.exports = {</span>
+  <span class="s2">meta: {</span>
+    <span class="s2">docs: {</span>
+      <span class="s2">description: </span><span class="s3">'Enforce React components to have a shouldComponentUpdate method'</span><span class="s2">,</span>
+      <span class="s2">category: </span><span class="s3">'Best Practices'</span><span class="s2">,</span>
+      <span class="s2">recommended: </span><span class="s4">false</span><span class="s2">,</span>
+      <span class="s2">url: docsUrl(</span><span class="s3">'require-optimization'</span><span class="s2">),</span>
+    <span class="s2">},</span>
+
+    <span class="s2">messages,</span>
+
+    <span class="s2">schema: [{</span>
+      <span class="s2">type: </span><span class="s3">'object'</span><span class="s2">,</span>
+      <span class="s2">properties: {</span>
+        <span class="s2">allowDecorators: {</span>
+          <span class="s2">type: </span><span class="s3">'array'</span><span class="s2">,</span>
+          <span class="s2">items: {</span>
+            <span class="s2">type: </span><span class="s3">'string'</span><span class="s2">,</span>
+          <span class="s2">},</span>
+        <span class="s2">},</span>
+      <span class="s2">},</span>
+      <span class="s2">additionalProperties: </span><span class="s4">false</span><span class="s2">,</span>
+    <span class="s2">}],</span>
+  <span class="s2">},</span>
+
+  <span class="s2">create: Components.detect((context, components) =&gt; {</span>
+    <span class="s4">const </span><span class="s2">configuration = context.options[</span><span class="s5">0</span><span class="s2">] || {};</span>
+    <span class="s4">const </span><span class="s2">allowDecorators = configuration.allowDecorators || [];</span>
+
+    <span class="s0">/**</span>
+     <span class="s0">* Checks to see if our component is decorated by PureRenderMixin via reactMixin</span>
+     <span class="s0">* </span><span class="s1">@param </span><span class="s0">{ASTNode} node The AST node being checked.</span>
+     <span class="s0">* </span><span class="s1">@returns </span><span class="s0">{boolean} True if node is decorated with a PureRenderMixin, false if not.</span>
+     <span class="s0">*/</span>
+    <span class="s4">function </span><span class="s2">hasPureRenderDecorator(node) {</span>
+      <span class="s4">if </span><span class="s2">(node.decorators &amp;&amp; node.decorators.length) {</span>
+        <span class="s4">for </span><span class="s2">(</span><span class="s4">let </span><span class="s2">i = </span><span class="s5">0</span><span class="s2">, l = node.decorators.length; i &lt; l; i++) {</span>
+          <span class="s4">if </span><span class="s2">(</span>
+            <span class="s2">node.decorators[i].expression</span>
+            <span class="s2">&amp;&amp; node.decorators[i].expression.callee</span>
+            <span class="s2">&amp;&amp; node.decorators[i].expression.callee.object</span>
+            <span class="s2">&amp;&amp; node.decorators[i].expression.callee.object.name === </span><span class="s3">'reactMixin'</span>
+            <span class="s2">&amp;&amp; node.decorators[i].expression.callee.property</span>
+            <span class="s2">&amp;&amp; node.decorators[i].expression.callee.property.name === </span><span class="s3">'decorate'</span>
+            <span class="s2">&amp;&amp; node.decorators[i].expression.arguments</span>
+            <span class="s2">&amp;&amp; node.decorators[i].expression.arguments.length</span>
+            <span class="s2">&amp;&amp; node.decorators[i].expression.arguments[</span><span class="s5">0</span><span class="s2">].name === </span><span class="s3">'PureRenderMixin'</span>
+          <span class="s2">) {</span>
+            <span class="s4">return true</span><span class="s2">;</span>
+          <span class="s2">}</span>
+        <span class="s2">}</span>
+      <span class="s2">}</span>
+
+      <span class="s4">return false</span><span class="s2">;</span>
+    <span class="s2">}</span>
+
+    <span class="s0">/**</span>
+     <span class="s0">* Checks to see if our component is custom decorated</span>
+     <span class="s0">* </span><span class="s1">@param </span><span class="s0">{ASTNode} node The AST node being checked.</span>
+     <span class="s0">* </span><span class="s1">@returns </span><span class="s0">{boolean} True if node is decorated name with a custom decorated, false if not.</span>
+     <span class="s0">*/</span>
+    <span class="s4">function </span><span class="s2">hasCustomDecorator(node) {</span>
+      <span class="s4">const </span><span class="s2">allowLength = allowDecorators.length;</span>
+
+      <span class="s4">if </span><span class="s2">(allowLength &amp;&amp; node.decorators &amp;&amp; node.decorators.length) {</span>
+        <span class="s4">for </span><span class="s2">(</span><span class="s4">let </span><span class="s2">i = </span><span class="s5">0</span><span class="s2">; i &lt; allowLength; i++) {</span>
+          <span class="s4">for </span><span class="s2">(</span><span class="s4">let </span><span class="s2">j = </span><span class="s5">0</span><span class="s2">, l = node.decorators.length; j &lt; l; j++) {</span>
+            <span class="s4">const </span><span class="s2">expression = node.decorators[j].expression;</span>
+            <span class="s4">if </span><span class="s2">(</span>
+              <span class="s2">expression</span>
+              <span class="s2">&amp;&amp; expression.name === allowDecorators[i]</span>
+            <span class="s2">) {</span>
+              <span class="s4">return true</span><span class="s2">;</span>
+            <span class="s2">}</span>
+          <span class="s2">}</span>
+        <span class="s2">}</span>
+      <span class="s2">}</span>
+
+      <span class="s4">return false</span><span class="s2">;</span>
+    <span class="s2">}</span>
+
+    <span class="s0">/**</span>
+     <span class="s0">* Checks if we are declaring a shouldComponentUpdate method</span>
+     <span class="s0">* </span><span class="s1">@param </span><span class="s0">{ASTNode} node The AST node being checked.</span>
+     <span class="s0">* </span><span class="s1">@returns </span><span class="s0">{boolean} True if we are declaring a shouldComponentUpdate method, false if not.</span>
+     <span class="s0">*/</span>
+    <span class="s4">function </span><span class="s2">isSCUDeclared(node) {</span>
+      <span class="s4">return </span><span class="s2">!!node &amp;&amp; node.name === </span><span class="s3">'shouldComponentUpdate'</span><span class="s2">;</span>
+    <span class="s2">}</span>
+
+    <span class="s0">/**</span>
+     <span class="s0">* Checks if we are declaring a PureRenderMixin mixin</span>
+     <span class="s0">* </span><span class="s1">@param </span><span class="s0">{ASTNode} node The AST node being checked.</span>
+     <span class="s0">* </span><span class="s1">@returns </span><span class="s0">{boolean} True if we are declaring a PureRenderMixin method, false if not.</span>
+     <span class="s0">*/</span>
+    <span class="s4">function </span><span class="s2">isPureRenderDeclared(node) {</span>
+      <span class="s4">let </span><span class="s2">hasPR = </span><span class="s4">false</span><span class="s2">;</span>
+      <span class="s4">if </span><span class="s2">(node.value &amp;&amp; node.value.elements) {</span>
+        <span class="s4">for </span><span class="s2">(</span><span class="s4">let </span><span class="s2">i = </span><span class="s5">0</span><span class="s2">, l = node.value.elements.length; i &lt; l; i++) {</span>
+          <span class="s4">if </span><span class="s2">(node.value.elements[i] &amp;&amp; node.value.elements[i].name === </span><span class="s3">'PureRenderMixin'</span><span class="s2">) {</span>
+            <span class="s2">hasPR = </span><span class="s4">true</span><span class="s2">;</span>
+            <span class="s4">break</span><span class="s2">;</span>
+          <span class="s2">}</span>
+        <span class="s2">}</span>
+      <span class="s2">}</span>
+
+      <span class="s4">return </span><span class="s2">(</span>
+        <span class="s2">!!node</span>
+        <span class="s2">&amp;&amp; node.key.name === </span><span class="s3">'mixins'</span>
+        <span class="s2">&amp;&amp; hasPR</span>
+      <span class="s2">);</span>
+    <span class="s2">}</span>
+
+    <span class="s0">/**</span>
+     <span class="s0">* Mark shouldComponentUpdate as declared</span>
+     <span class="s0">* </span><span class="s1">@param </span><span class="s0">{ASTNode} node The AST node being checked.</span>
+     <span class="s0">*/</span>
+    <span class="s4">function </span><span class="s2">markSCUAsDeclared(node) {</span>
+      <span class="s2">components.set(node, {</span>
+        <span class="s2">hasSCU: </span><span class="s4">true</span><span class="s2">,</span>
+      <span class="s2">});</span>
+    <span class="s2">}</span>
+
+    <span class="s0">/**</span>
+     <span class="s0">* Reports missing optimization for a given component</span>
+     <span class="s0">* </span><span class="s1">@param </span><span class="s0">{Object} component The component to process</span>
+     <span class="s0">*/</span>
+    <span class="s4">function </span><span class="s2">reportMissingOptimization(component) {</span>
+      <span class="s2">report(context, messages.noShouldComponentUpdate, </span><span class="s3">'noShouldComponentUpdate'</span><span class="s2">, {</span>
+        <span class="s2">node: component.node,</span>
+      <span class="s2">});</span>
+    <span class="s2">}</span>
+
+    <span class="s0">/**</span>
+     <span class="s0">* Checks if we are declaring function in class</span>
+     <span class="s0">* </span><span class="s1">@param </span><span class="s0">{ASTNode} node</span>
+     <span class="s0">* </span><span class="s1">@returns </span><span class="s0">{boolean} True if we are declaring function in class, false if not.</span>
+     <span class="s0">*/</span>
+    <span class="s4">function </span><span class="s2">isFunctionInClass(node) {</span>
+      <span class="s4">let </span><span class="s2">blockNode;</span>
+      <span class="s4">let </span><span class="s2">scope = getScope(context, node);</span>
+      <span class="s4">while </span><span class="s2">(scope) {</span>
+        <span class="s2">blockNode = scope.block;</span>
+        <span class="s4">if </span><span class="s2">(blockNode &amp;&amp; blockNode.type === </span><span class="s3">'ClassDeclaration'</span><span class="s2">) {</span>
+          <span class="s4">return true</span><span class="s2">;</span>
+        <span class="s2">}</span>
+        <span class="s2">scope = scope.upper;</span>
+      <span class="s2">}</span>
+
+      <span class="s4">return false</span><span class="s2">;</span>
+    <span class="s2">}</span>
+
+    <span class="s4">return </span><span class="s2">{</span>
+      <span class="s2">ArrowFunctionExpression(node) {</span>
+        <span class="s0">// Skip if the function is declared in the class</span>
+        <span class="s4">if </span><span class="s2">(isFunctionInClass(node)) {</span>
+          <span class="s4">return</span><span class="s2">;</span>
+        <span class="s2">}</span>
+        <span class="s0">// Stateless Functional Components cannot be optimized (yet)</span>
+        <span class="s2">markSCUAsDeclared(node);</span>
+      <span class="s2">},</span>
+
+      <span class="s2">ClassDeclaration(node) {</span>
+        <span class="s4">if </span><span class="s2">(!(</span>
+          <span class="s2">hasPureRenderDecorator(node)</span>
+          <span class="s2">|| hasCustomDecorator(node)</span>
+          <span class="s2">|| componentUtil.isPureComponent(node, context)</span>
+        <span class="s2">)) {</span>
+          <span class="s4">return</span><span class="s2">;</span>
+        <span class="s2">}</span>
+        <span class="s2">markSCUAsDeclared(node);</span>
+      <span class="s2">},</span>
+
+      <span class="s2">FunctionDeclaration(node) {</span>
+        <span class="s0">// Skip if the function is declared in the class</span>
+        <span class="s4">if </span><span class="s2">(isFunctionInClass(node)) {</span>
+          <span class="s4">return</span><span class="s2">;</span>
+        <span class="s2">}</span>
+        <span class="s0">// Stateless Functional Components cannot be optimized (yet)</span>
+        <span class="s2">markSCUAsDeclared(node);</span>
+      <span class="s2">},</span>
+
+      <span class="s2">FunctionExpression(node) {</span>
+        <span class="s0">// Skip if the function is declared in the class</span>
+        <span class="s4">if </span><span class="s2">(isFunctionInClass(node)) {</span>
+          <span class="s4">return</span><span class="s2">;</span>
+        <span class="s2">}</span>
+        <span class="s0">// Stateless Functional Components cannot be optimized (yet)</span>
+        <span class="s2">markSCUAsDeclared(node);</span>
+      <span class="s2">},</span>
+
+      <span class="s2">MethodDefinition(node) {</span>
+        <span class="s4">if </span><span class="s2">(!isSCUDeclared(node.key)) {</span>
+          <span class="s4">return</span><span class="s2">;</span>
+        <span class="s2">}</span>
+        <span class="s2">markSCUAsDeclared(node);</span>
+      <span class="s2">},</span>
+
+      <span class="s2">ObjectExpression(node) {</span>
+        <span class="s0">// Search for the shouldComponentUpdate declaration</span>
+        <span class="s4">const </span><span class="s2">found = node.properties.some((property) =&gt; (</span>
+          <span class="s2">property.key</span>
+          <span class="s2">&amp;&amp; (isSCUDeclared(property.key) || isPureRenderDeclared(property))</span>
+        <span class="s2">));</span>
+        <span class="s4">if </span><span class="s2">(found) {</span>
+          <span class="s2">markSCUAsDeclared(node);</span>
+        <span class="s2">}</span>
+      <span class="s2">},</span>
+
+      <span class="s3">'Program:exit'</span><span class="s2">() {</span>
+        <span class="s0">// Report missing shouldComponentUpdate for all components</span>
+        <span class="s2">values(components.list())</span>
+          <span class="s2">.filter((component) =&gt; !component.hasSCU)</span>
+          <span class="s2">.forEach((component) =&gt; {</span>
+            <span class="s2">reportMissingOptimization(component);</span>
+          <span class="s2">});</span>
+      <span class="s2">},</span>
+    <span class="s2">};</span>
+  <span class="s2">}),</span>
+<span class="s2">};</span>
+</pre>
+</body>
+</html>

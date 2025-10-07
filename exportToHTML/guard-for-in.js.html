@@ -1,0 +1,107 @@
+<html>
+<head>
+<title>guard-for-in.js</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #8c8c8c; font-style: italic;}
+.s1 { color: #8c8c8c; font-style: italic;}
+.s2 { color: #080808;}
+.s3 { color: #067d17;}
+.s4 { color: #0033b3;}
+.s5 { color: #1750eb;}
+</style>
+</head>
+<body bgcolor="#ffffff">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#c0c0c0" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+guard-for-in.js</font>
+</center></td></tr></table>
+<pre><span class="s0">/**</span>
+ <span class="s0">* </span><span class="s1">@fileoverview </span><span class="s0">Rule to flag for-in loops without if statements inside</span>
+ <span class="s0">* </span><span class="s1">@author </span><span class="s0">Nicholas C. Zakas</span>
+ <span class="s0">*/</span>
+
+<span class="s3">&quot;use strict&quot;</span><span class="s2">;</span>
+
+<span class="s0">//------------------------------------------------------------------------------</span>
+<span class="s0">// Rule Definition</span>
+<span class="s0">//------------------------------------------------------------------------------</span>
+
+<span class="s0">/** </span><span class="s1">@type </span><span class="s0">{import('../types').Rule.RuleModule} */</span>
+<span class="s2">module.exports = {</span>
+	<span class="s2">meta: {</span>
+		<span class="s2">type: </span><span class="s3">&quot;suggestion&quot;</span><span class="s2">,</span>
+
+		<span class="s2">docs: {</span>
+			<span class="s2">description: </span><span class="s3">&quot;Require `for-in` loops to include an `if` statement&quot;</span><span class="s2">,</span>
+			<span class="s2">recommended: </span><span class="s4">false</span><span class="s2">,</span>
+			<span class="s2">url: </span><span class="s3">&quot;https://eslint.org/docs/latest/rules/guard-for-in&quot;</span><span class="s2">,</span>
+		<span class="s2">},</span>
+
+		<span class="s2">schema: [],</span>
+		<span class="s2">messages: {</span>
+			<span class="s2">wrap: </span><span class="s3">&quot;The body of a for-in should be wrapped in an if statement to filter unwanted properties from the prototype.&quot;</span><span class="s2">,</span>
+		<span class="s2">},</span>
+	<span class="s2">},</span>
+
+	<span class="s2">create(context) {</span>
+		<span class="s4">return </span><span class="s2">{</span>
+			<span class="s2">ForInStatement(node) {</span>
+				<span class="s4">const </span><span class="s2">body = node.body;</span>
+
+				<span class="s0">// empty statement</span>
+				<span class="s4">if </span><span class="s2">(body.type === </span><span class="s3">&quot;EmptyStatement&quot;</span><span class="s2">) {</span>
+					<span class="s4">return</span><span class="s2">;</span>
+				<span class="s2">}</span>
+
+				<span class="s0">// if statement</span>
+				<span class="s4">if </span><span class="s2">(body.type === </span><span class="s3">&quot;IfStatement&quot;</span><span class="s2">) {</span>
+					<span class="s4">return</span><span class="s2">;</span>
+				<span class="s2">}</span>
+
+				<span class="s0">// empty block</span>
+				<span class="s4">if </span><span class="s2">(body.type === </span><span class="s3">&quot;BlockStatement&quot; </span><span class="s2">&amp;&amp; body.body.length === </span><span class="s5">0</span><span class="s2">) {</span>
+					<span class="s4">return</span><span class="s2">;</span>
+				<span class="s2">}</span>
+
+				<span class="s0">// block with just if statement</span>
+				<span class="s4">if </span><span class="s2">(</span>
+					<span class="s2">body.type === </span><span class="s3">&quot;BlockStatement&quot; </span><span class="s2">&amp;&amp;</span>
+					<span class="s2">body.body.length === </span><span class="s5">1 </span><span class="s2">&amp;&amp;</span>
+					<span class="s2">body.body[</span><span class="s5">0</span><span class="s2">].type === </span><span class="s3">&quot;IfStatement&quot;</span>
+				<span class="s2">) {</span>
+					<span class="s4">return</span><span class="s2">;</span>
+				<span class="s2">}</span>
+
+				<span class="s0">// block that starts with if statement</span>
+				<span class="s4">if </span><span class="s2">(</span>
+					<span class="s2">body.type === </span><span class="s3">&quot;BlockStatement&quot; </span><span class="s2">&amp;&amp;</span>
+					<span class="s2">body.body.length &gt;= </span><span class="s5">1 </span><span class="s2">&amp;&amp;</span>
+					<span class="s2">body.body[</span><span class="s5">0</span><span class="s2">].type === </span><span class="s3">&quot;IfStatement&quot;</span>
+				<span class="s2">) {</span>
+					<span class="s4">const </span><span class="s2">i = body.body[</span><span class="s5">0</span><span class="s2">];</span>
+
+					<span class="s0">// ... whose consequent is a continue</span>
+					<span class="s4">if </span><span class="s2">(i.consequent.type === </span><span class="s3">&quot;ContinueStatement&quot;</span><span class="s2">) {</span>
+						<span class="s4">return</span><span class="s2">;</span>
+					<span class="s2">}</span>
+
+					<span class="s0">// ... whose consequent is a block that contains only a continue</span>
+					<span class="s4">if </span><span class="s2">(</span>
+						<span class="s2">i.consequent.type === </span><span class="s3">&quot;BlockStatement&quot; </span><span class="s2">&amp;&amp;</span>
+						<span class="s2">i.consequent.body.length === </span><span class="s5">1 </span><span class="s2">&amp;&amp;</span>
+						<span class="s2">i.consequent.body[</span><span class="s5">0</span><span class="s2">].type === </span><span class="s3">&quot;ContinueStatement&quot;</span>
+					<span class="s2">) {</span>
+						<span class="s4">return</span><span class="s2">;</span>
+					<span class="s2">}</span>
+				<span class="s2">}</span>
+
+				<span class="s2">context.report({ node, messageId: </span><span class="s3">&quot;wrap&quot; </span><span class="s2">});</span>
+			<span class="s2">},</span>
+		<span class="s2">};</span>
+	<span class="s2">},</span>
+<span class="s2">};</span>
+</pre>
+</body>
+</html>

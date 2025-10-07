@@ -1,0 +1,841 @@
+<html>
+<head>
+<title>ppr-navigations.js</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #067d17;}
+.s1 { color: #080808;}
+.s2 { color: #0033b3;}
+.s3 { color: #1750eb;}
+.s4 { color: #8c8c8c; font-style: italic;}
+</style>
+</head>
+<body bgcolor="#ffffff">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#c0c0c0" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+ppr-navigations.js</font>
+</center></td></tr></table>
+<pre><span class="s0">&quot;use strict&quot;</span><span class="s1">;</span>
+<span class="s1">Object.defineProperty(exports, </span><span class="s0">&quot;__esModule&quot;</span><span class="s1">, {</span>
+    <span class="s1">value: </span><span class="s2">true</span>
+<span class="s1">});</span>
+<span class="s3">0 </span><span class="s1">&amp;&amp; (module.exports = {</span>
+    <span class="s1">abortTask: </span><span class="s2">null</span><span class="s1">,</span>
+    <span class="s1">listenForDynamicRequest: </span><span class="s2">null</span><span class="s1">,</span>
+    <span class="s1">startPPRNavigation: </span><span class="s2">null</span><span class="s1">,</span>
+    <span class="s1">updateCacheNodeOnPopstateRestoration: </span><span class="s2">null</span>
+<span class="s1">});</span>
+<span class="s2">function </span><span class="s1">_export(target, all) {</span>
+    <span class="s2">for</span><span class="s1">(</span><span class="s2">var </span><span class="s1">name </span><span class="s2">in </span><span class="s1">all)Object.defineProperty(target, name, {</span>
+        <span class="s1">enumerable: </span><span class="s2">true</span><span class="s1">,</span>
+        <span class="s1">get: all[name]</span>
+    <span class="s1">});</span>
+<span class="s1">}</span>
+<span class="s1">_export(exports, {</span>
+    <span class="s1">abortTask: </span><span class="s2">function</span><span class="s1">() {</span>
+        <span class="s2">return </span><span class="s1">abortTask;</span>
+    <span class="s1">},</span>
+    <span class="s1">listenForDynamicRequest: </span><span class="s2">function</span><span class="s1">() {</span>
+        <span class="s2">return </span><span class="s1">listenForDynamicRequest;</span>
+    <span class="s1">},</span>
+    <span class="s1">startPPRNavigation: </span><span class="s2">function</span><span class="s1">() {</span>
+        <span class="s2">return </span><span class="s1">startPPRNavigation;</span>
+    <span class="s1">},</span>
+    <span class="s1">updateCacheNodeOnPopstateRestoration: </span><span class="s2">function</span><span class="s1">() {</span>
+        <span class="s2">return </span><span class="s1">updateCacheNodeOnPopstateRestoration;</span>
+    <span class="s1">}</span>
+<span class="s1">});</span>
+<span class="s2">const </span><span class="s1">_segment = require(</span><span class="s0">&quot;../../../shared/lib/segment&quot;</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">_matchsegments = require(</span><span class="s0">&quot;../match-segments&quot;</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">_createroutercachekey = require(</span><span class="s0">&quot;./create-router-cache-key&quot;</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">_isnavigatingtonewrootlayout = require(</span><span class="s0">&quot;./is-navigating-to-new-root-layout&quot;</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">_prefetchcacheutils = require(</span><span class="s0">&quot;./prefetch-cache-utils&quot;</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">MPA_NAVIGATION_TASK = {</span>
+    <span class="s1">route: </span><span class="s2">null</span><span class="s1">,</span>
+    <span class="s1">node: </span><span class="s2">null</span><span class="s1">,</span>
+    <span class="s1">dynamicRequestTree: </span><span class="s2">null</span><span class="s1">,</span>
+    <span class="s1">children: </span><span class="s2">null</span>
+<span class="s1">};</span>
+<span class="s2">function </span><span class="s1">startPPRNavigation(navigatedAt, oldCacheNode, oldRouterState, newRouterState, prefetchData, prefetchHead, isPrefetchHeadPartial, isSamePageNavigation, scrollableSegmentsResult) {</span>
+    <span class="s2">const </span><span class="s1">segmentPath = [];</span>
+    <span class="s2">return </span><span class="s1">updateCacheNodeOnNavigation(navigatedAt, oldCacheNode, oldRouterState, newRouterState, </span><span class="s2">false</span><span class="s1">, prefetchData, prefetchHead, isPrefetchHeadPartial, isSamePageNavigation, segmentPath, scrollableSegmentsResult);</span>
+<span class="s1">}</span>
+<span class="s2">function </span><span class="s1">updateCacheNodeOnNavigation(navigatedAt, oldCacheNode, oldRouterState, newRouterState, didFindRootLayout, prefetchData, prefetchHead, isPrefetchHeadPartial, isSamePageNavigation, segmentPath, scrollableSegmentsResult) {</span>
+    <span class="s4">// Diff the old and new trees to reuse the shared layouts.</span>
+    <span class="s2">const </span><span class="s1">oldRouterStateChildren = oldRouterState[</span><span class="s3">1</span><span class="s1">];</span>
+    <span class="s2">const </span><span class="s1">newRouterStateChildren = newRouterState[</span><span class="s3">1</span><span class="s1">];</span>
+    <span class="s2">const </span><span class="s1">prefetchDataChildren = prefetchData !== </span><span class="s2">null </span><span class="s1">? prefetchData[</span><span class="s3">2</span><span class="s1">] : </span><span class="s2">null</span><span class="s1">;</span>
+    <span class="s2">if </span><span class="s1">(!didFindRootLayout) {</span>
+        <span class="s4">// We're currently traversing the part of the tree that was also part of</span>
+        <span class="s4">// the previous route. If we discover a root layout, then we don't need to</span>
+        <span class="s4">// trigger an MPA navigation. See beginRenderingNewRouteTree for context.</span>
+        <span class="s2">const </span><span class="s1">isRootLayout = newRouterState[</span><span class="s3">4</span><span class="s1">] === </span><span class="s2">true</span><span class="s1">;</span>
+        <span class="s2">if </span><span class="s1">(isRootLayout) {</span>
+            <span class="s4">// Found a matching root layout.</span>
+            <span class="s1">didFindRootLayout = </span><span class="s2">true</span><span class="s1">;</span>
+        <span class="s1">}</span>
+    <span class="s1">}</span>
+    <span class="s2">const </span><span class="s1">oldParallelRoutes = oldCacheNode.parallelRoutes;</span>
+    <span class="s4">// Clone the current set of segment children, even if they aren't active in</span>
+    <span class="s4">// the new tree.</span>
+    <span class="s4">// TODO: We currently retain all the inactive segments indefinitely, until</span>
+    <span class="s4">// there's an explicit refresh, or a parent layout is lazily refreshed. We</span>
+    <span class="s4">// rely on this for popstate navigations, which update the Router State Tree</span>
+    <span class="s4">// but do not eagerly perform a data fetch, because they expect the segment</span>
+    <span class="s4">// data to already be in the Cache Node tree. For highly static sites that</span>
+    <span class="s4">// are mostly read-only, this may happen only rarely, causing memory to</span>
+    <span class="s4">// leak. We should figure out a better model for the lifetime of inactive</span>
+    <span class="s4">// segments, so we can maintain instant back/forward navigations without</span>
+    <span class="s4">// leaking memory indefinitely.</span>
+    <span class="s2">const </span><span class="s1">prefetchParallelRoutes = </span><span class="s2">new </span><span class="s1">Map(oldParallelRoutes);</span>
+    <span class="s4">// As we diff the trees, we may sometimes modify (copy-on-write, not mutate)</span>
+    <span class="s4">// the Route Tree that was returned by the server — for example, in the case</span>
+    <span class="s4">// of default parallel routes, we preserve the currently active segment. To</span>
+    <span class="s4">// avoid mutating the original tree, we clone the router state children along</span>
+    <span class="s4">// the return path.</span>
+    <span class="s2">let </span><span class="s1">patchedRouterStateChildren = {};</span>
+    <span class="s2">let </span><span class="s1">taskChildren = </span><span class="s2">null</span><span class="s1">;</span>
+    <span class="s4">// Most navigations require a request to fetch additional data from the</span>
+    <span class="s4">// server, either because the data was not already prefetched, or because the</span>
+    <span class="s4">// target route contains dynamic data that cannot be prefetched.</span>
+    <span class="s4">//</span>
+    <span class="s4">// However, if the target route is fully static, and it's already completely</span>
+    <span class="s4">// loaded into the segment cache, then we can skip the server request.</span>
+    <span class="s4">//</span>
+    <span class="s4">// This starts off as `false`, and is set to `true` if any of the child</span>
+    <span class="s4">// routes requires a dynamic request.</span>
+    <span class="s2">let </span><span class="s1">needsDynamicRequest = </span><span class="s2">false</span><span class="s1">;</span>
+    <span class="s4">// As we traverse the children, we'll construct a FlightRouterState that can</span>
+    <span class="s4">// be sent to the server to request the dynamic data. If it turns out that</span>
+    <span class="s4">// nothing in the subtree is dynamic (i.e. needsDynamicRequest is false at the</span>
+    <span class="s4">// end), then this will be discarded.</span>
+    <span class="s4">// TODO: We can probably optimize the format of this data structure to only</span>
+    <span class="s4">// include paths that are dynamic. Instead of reusing the</span>
+    <span class="s4">// FlightRouterState type.</span>
+    <span class="s2">let </span><span class="s1">dynamicRequestTreeChildren = {};</span>
+    <span class="s2">for</span><span class="s1">(</span><span class="s2">let </span><span class="s1">parallelRouteKey </span><span class="s2">in </span><span class="s1">newRouterStateChildren){</span>
+        <span class="s2">const </span><span class="s1">newRouterStateChild = newRouterStateChildren[parallelRouteKey];</span>
+        <span class="s2">const </span><span class="s1">oldRouterStateChild = oldRouterStateChildren[parallelRouteKey];</span>
+        <span class="s2">const </span><span class="s1">oldSegmentMapChild = oldParallelRoutes.get(parallelRouteKey);</span>
+        <span class="s2">const </span><span class="s1">prefetchDataChild = prefetchDataChildren !== </span><span class="s2">null </span><span class="s1">? prefetchDataChildren[parallelRouteKey] : </span><span class="s2">null</span><span class="s1">;</span>
+        <span class="s2">const </span><span class="s1">newSegmentChild = newRouterStateChild[</span><span class="s3">0</span><span class="s1">];</span>
+        <span class="s2">const </span><span class="s1">newSegmentPathChild = segmentPath.concat([</span>
+            <span class="s1">parallelRouteKey,</span>
+            <span class="s1">newSegmentChild</span>
+        <span class="s1">]);</span>
+        <span class="s2">const </span><span class="s1">newSegmentKeyChild = (</span><span class="s3">0</span><span class="s1">, _createroutercachekey.createRouterCacheKey)(newSegmentChild);</span>
+        <span class="s2">const </span><span class="s1">oldSegmentChild = oldRouterStateChild !== undefined ? oldRouterStateChild[</span><span class="s3">0</span><span class="s1">] : undefined;</span>
+        <span class="s2">const </span><span class="s1">oldCacheNodeChild = oldSegmentMapChild !== undefined ? oldSegmentMapChild.get(newSegmentKeyChild) : undefined;</span>
+        <span class="s2">let </span><span class="s1">taskChild;</span>
+        <span class="s2">if </span><span class="s1">(newSegmentChild === _segment.DEFAULT_SEGMENT_KEY) {</span>
+            <span class="s4">// This is another kind of leaf segment — a default route.</span>
+            <span class="s4">//</span>
+            <span class="s4">// Default routes have special behavior. When there's no matching segment</span>
+            <span class="s4">// for a parallel route, Next.js preserves the currently active segment</span>
+            <span class="s4">// during a client navigation — but not for initial render. The server</span>
+            <span class="s4">// leaves it to the client to account for this. So we need to handle</span>
+            <span class="s4">// it here.</span>
+            <span class="s2">if </span><span class="s1">(oldRouterStateChild !== undefined) {</span>
+                <span class="s4">// Reuse the existing Router State for this segment. We spawn a &quot;task&quot;</span>
+                <span class="s4">// just to keep track of the updated router state; unlike most, it's</span>
+                <span class="s4">// already fulfilled and won't be affected by the dynamic response.</span>
+                <span class="s1">taskChild = spawnReusedTask(oldRouterStateChild);</span>
+            <span class="s1">} </span><span class="s2">else </span><span class="s1">{</span>
+                <span class="s4">// There's no currently active segment. Switch to the &quot;create&quot; path.</span>
+                <span class="s1">taskChild = beginRenderingNewRouteTree(navigatedAt, oldRouterStateChild, newRouterStateChild, oldCacheNodeChild, didFindRootLayout, prefetchDataChild !== undefined ? prefetchDataChild : </span><span class="s2">null</span><span class="s1">, prefetchHead, isPrefetchHeadPartial, newSegmentPathChild, scrollableSegmentsResult);</span>
+            <span class="s1">}</span>
+        <span class="s1">} </span><span class="s2">else if </span><span class="s1">(isSamePageNavigation &amp;&amp; </span><span class="s4">// Check if this is a page segment.</span>
+        <span class="s4">// TODO: We're not consistent about how we do this check. Some places</span>
+        <span class="s4">// check if the segment starts with PAGE_SEGMENT_KEY, but most seem to</span>
+        <span class="s4">// check if there any any children, which is why I'm doing it here. We</span>
+        <span class="s4">// should probably encode an empty children set as `null` though. Either</span>
+        <span class="s4">// way, we should update all the checks to be consistent.</span>
+        <span class="s1">Object.keys(newRouterStateChild[</span><span class="s3">1</span><span class="s1">]).length === </span><span class="s3">0</span><span class="s1">) {</span>
+            <span class="s4">// We special case navigations to the exact same URL as the current</span>
+            <span class="s4">// location. It's a common UI pattern for apps to refresh when you click a</span>
+            <span class="s4">// link to the current page. So when this happens, we refresh the dynamic</span>
+            <span class="s4">// data in the page segments.</span>
+            <span class="s4">//</span>
+            <span class="s4">// Note that this does not apply if the any part of the hash or search</span>
+            <span class="s4">// query has changed. This might feel a bit weird but it makes more sense</span>
+            <span class="s4">// when you consider that the way to trigger this behavior is to click</span>
+            <span class="s4">// the same link multiple times.</span>
+            <span class="s4">//</span>
+            <span class="s4">// TODO: We should probably refresh the *entire* route when this case</span>
+            <span class="s4">// occurs, not just the page segments. Essentially treating it the same as</span>
+            <span class="s4">// a refresh() triggered by an action, which is the more explicit way of</span>
+            <span class="s4">// modeling the UI pattern described above.</span>
+            <span class="s4">//</span>
+            <span class="s4">// Also note that this only refreshes the dynamic data, not static/</span>
+            <span class="s4">// cached data. If the page segment is fully static and prefetched, the</span>
+            <span class="s4">// request is skipped. (This is also how refresh() works.)</span>
+            <span class="s1">taskChild = beginRenderingNewRouteTree(navigatedAt, oldRouterStateChild, newRouterStateChild, oldCacheNodeChild, didFindRootLayout, prefetchDataChild !== undefined ? prefetchDataChild : </span><span class="s2">null</span><span class="s1">, prefetchHead, isPrefetchHeadPartial, newSegmentPathChild, scrollableSegmentsResult);</span>
+        <span class="s1">} </span><span class="s2">else if </span><span class="s1">(oldRouterStateChild !== undefined &amp;&amp; oldSegmentChild !== undefined &amp;&amp; (</span><span class="s3">0</span><span class="s1">, _matchsegments.matchSegment)(newSegmentChild, oldSegmentChild)) {</span>
+            <span class="s2">if </span><span class="s1">(oldCacheNodeChild !== undefined &amp;&amp; oldRouterStateChild !== undefined) {</span>
+                <span class="s4">// This segment exists in both the old and new trees. Recursively update</span>
+                <span class="s4">// the children.</span>
+                <span class="s1">taskChild = updateCacheNodeOnNavigation(navigatedAt, oldCacheNodeChild, oldRouterStateChild, newRouterStateChild, didFindRootLayout, prefetchDataChild, prefetchHead, isPrefetchHeadPartial, isSamePageNavigation, newSegmentPathChild, scrollableSegmentsResult);</span>
+            <span class="s1">} </span><span class="s2">else </span><span class="s1">{</span>
+                <span class="s4">// There's no existing Cache Node for this segment. Switch to the</span>
+                <span class="s4">// &quot;create&quot; path.</span>
+                <span class="s1">taskChild = beginRenderingNewRouteTree(navigatedAt, oldRouterStateChild, newRouterStateChild, oldCacheNodeChild, didFindRootLayout, prefetchDataChild !== undefined ? prefetchDataChild : </span><span class="s2">null</span><span class="s1">, prefetchHead, isPrefetchHeadPartial, newSegmentPathChild, scrollableSegmentsResult);</span>
+            <span class="s1">}</span>
+        <span class="s1">} </span><span class="s2">else </span><span class="s1">{</span>
+            <span class="s4">// This is a new tree. Switch to the &quot;create&quot; path.</span>
+            <span class="s1">taskChild = beginRenderingNewRouteTree(navigatedAt, oldRouterStateChild, newRouterStateChild, oldCacheNodeChild, didFindRootLayout, prefetchDataChild !== undefined ? prefetchDataChild : </span><span class="s2">null</span><span class="s1">, prefetchHead, isPrefetchHeadPartial, newSegmentPathChild, scrollableSegmentsResult);</span>
+        <span class="s1">}</span>
+        <span class="s2">if </span><span class="s1">(taskChild !== </span><span class="s2">null</span><span class="s1">) {</span>
+            <span class="s4">// Recursively propagate up the child tasks.</span>
+            <span class="s2">if </span><span class="s1">(taskChild.route === </span><span class="s2">null</span><span class="s1">) {</span>
+                <span class="s4">// One of the child tasks discovered a change to the root layout.</span>
+                <span class="s4">// Immediately unwind from this recursive traversal.</span>
+                <span class="s2">return </span><span class="s1">MPA_NAVIGATION_TASK;</span>
+            <span class="s1">}</span>
+            <span class="s2">if </span><span class="s1">(taskChildren === </span><span class="s2">null</span><span class="s1">) {</span>
+                <span class="s1">taskChildren = </span><span class="s2">new </span><span class="s1">Map();</span>
+            <span class="s1">}</span>
+            <span class="s1">taskChildren.set(parallelRouteKey, taskChild);</span>
+            <span class="s2">const </span><span class="s1">newCacheNodeChild = taskChild.node;</span>
+            <span class="s2">if </span><span class="s1">(newCacheNodeChild !== </span><span class="s2">null</span><span class="s1">) {</span>
+                <span class="s2">const </span><span class="s1">newSegmentMapChild = </span><span class="s2">new </span><span class="s1">Map(oldSegmentMapChild);</span>
+                <span class="s1">newSegmentMapChild.set(newSegmentKeyChild, newCacheNodeChild);</span>
+                <span class="s1">prefetchParallelRoutes.set(parallelRouteKey, newSegmentMapChild);</span>
+            <span class="s1">}</span>
+            <span class="s4">// The child tree's route state may be different from the prefetched</span>
+            <span class="s4">// route sent by the server. We need to clone it as we traverse back up</span>
+            <span class="s4">// the tree.</span>
+            <span class="s2">const </span><span class="s1">taskChildRoute = taskChild.route;</span>
+            <span class="s1">patchedRouterStateChildren[parallelRouteKey] = taskChildRoute;</span>
+            <span class="s2">const </span><span class="s1">dynamicRequestTreeChild = taskChild.dynamicRequestTree;</span>
+            <span class="s2">if </span><span class="s1">(dynamicRequestTreeChild !== </span><span class="s2">null</span><span class="s1">) {</span>
+                <span class="s4">// Something in the child tree is dynamic.</span>
+                <span class="s1">needsDynamicRequest = </span><span class="s2">true</span><span class="s1">;</span>
+                <span class="s1">dynamicRequestTreeChildren[parallelRouteKey] = dynamicRequestTreeChild;</span>
+            <span class="s1">} </span><span class="s2">else </span><span class="s1">{</span>
+                <span class="s1">dynamicRequestTreeChildren[parallelRouteKey] = taskChildRoute;</span>
+            <span class="s1">}</span>
+        <span class="s1">} </span><span class="s2">else </span><span class="s1">{</span>
+            <span class="s4">// The child didn't change. We can use the prefetched router state.</span>
+            <span class="s1">patchedRouterStateChildren[parallelRouteKey] = newRouterStateChild;</span>
+            <span class="s1">dynamicRequestTreeChildren[parallelRouteKey] = newRouterStateChild;</span>
+        <span class="s1">}</span>
+    <span class="s1">}</span>
+    <span class="s2">if </span><span class="s1">(taskChildren === </span><span class="s2">null</span><span class="s1">) {</span>
+        <span class="s4">// No new tasks were spawned.</span>
+        <span class="s2">return null</span><span class="s1">;</span>
+    <span class="s1">}</span>
+    <span class="s2">const </span><span class="s1">newCacheNode = {</span>
+        <span class="s1">lazyData: </span><span class="s2">null</span><span class="s1">,</span>
+        <span class="s1">rsc: oldCacheNode.rsc,</span>
+        <span class="s4">// We intentionally aren't updating the prefetchRsc field, since this node</span>
+        <span class="s4">// is already part of the current tree, because it would be weird for</span>
+        <span class="s4">// prefetch data to be newer than the final data. It probably won't ever be</span>
+        <span class="s4">// observable anyway, but it could happen if the segment is unmounted then</span>
+        <span class="s4">// mounted again, because LayoutRouter will momentarily switch to rendering</span>
+        <span class="s4">// prefetchRsc, via useDeferredValue.</span>
+        <span class="s1">prefetchRsc: oldCacheNode.prefetchRsc,</span>
+        <span class="s1">head: oldCacheNode.head,</span>
+        <span class="s1">prefetchHead: oldCacheNode.prefetchHead,</span>
+        <span class="s1">loading: oldCacheNode.loading,</span>
+        <span class="s4">// Everything is cloned except for the children, which we computed above.</span>
+        <span class="s1">parallelRoutes: prefetchParallelRoutes,</span>
+        <span class="s1">navigatedAt</span>
+    <span class="s1">};</span>
+    <span class="s2">return </span><span class="s1">{</span>
+        <span class="s4">// Return a cloned copy of the router state with updated children.</span>
+        <span class="s1">route: patchRouterStateWithNewChildren(newRouterState, patchedRouterStateChildren),</span>
+        <span class="s1">node: newCacheNode,</span>
+        <span class="s1">dynamicRequestTree: needsDynamicRequest ? patchRouterStateWithNewChildren(newRouterState, dynamicRequestTreeChildren) : </span><span class="s2">null</span><span class="s1">,</span>
+        <span class="s1">children: taskChildren</span>
+    <span class="s1">};</span>
+<span class="s1">}</span>
+<span class="s2">function </span><span class="s1">beginRenderingNewRouteTree(navigatedAt, oldRouterState, newRouterState, existingCacheNode, didFindRootLayout, prefetchData, possiblyPartialPrefetchHead, isPrefetchHeadPartial, segmentPath, scrollableSegmentsResult) {</span>
+    <span class="s2">if </span><span class="s1">(!didFindRootLayout) {</span>
+        <span class="s4">// The route tree changed before we reached a layout. (The highest-level</span>
+        <span class="s4">// layout in a route tree is referred to as the &quot;root&quot; layout.) This could</span>
+        <span class="s4">// mean that we're navigating between two different root layouts. When this</span>
+        <span class="s4">// happens, we perform a full-page (MPA-style) navigation.</span>
+        <span class="s4">//</span>
+        <span class="s4">// However, the algorithm for deciding where to start rendering a route</span>
+        <span class="s4">// (i.e. the one performed in order to reach this function) is stricter</span>
+        <span class="s4">// than the one used to detect a change in the root layout. So just because</span>
+        <span class="s4">// we're re-rendering a segment outside of the root layout does not mean we</span>
+        <span class="s4">// should trigger a full-page navigation.</span>
+        <span class="s4">//</span>
+        <span class="s4">// Specifically, we handle dynamic parameters differently: two segments are</span>
+        <span class="s4">// considered the same even if their parameter values are different.</span>
+        <span class="s4">//</span>
+        <span class="s4">// Refer to isNavigatingToNewRootLayout for details.</span>
+        <span class="s4">//</span>
+        <span class="s4">// Note that we only have to perform this extra traversal if we didn't</span>
+        <span class="s4">// already discover a root layout in the part of the tree that is unchanged.</span>
+        <span class="s4">// In the common case, this branch is skipped completely.</span>
+        <span class="s2">if </span><span class="s1">(oldRouterState === undefined || (</span><span class="s3">0</span><span class="s1">, _isnavigatingtonewrootlayout.isNavigatingToNewRootLayout)(oldRouterState, newRouterState)) {</span>
+            <span class="s4">// The root layout changed. Perform a full-page navigation.</span>
+            <span class="s2">return </span><span class="s1">MPA_NAVIGATION_TASK;</span>
+        <span class="s1">}</span>
+    <span class="s1">}</span>
+    <span class="s2">return </span><span class="s1">createCacheNodeOnNavigation(navigatedAt, newRouterState, existingCacheNode, prefetchData, possiblyPartialPrefetchHead, isPrefetchHeadPartial, segmentPath, scrollableSegmentsResult);</span>
+<span class="s1">}</span>
+<span class="s2">function </span><span class="s1">createCacheNodeOnNavigation(navigatedAt, routerState, existingCacheNode, prefetchData, possiblyPartialPrefetchHead, isPrefetchHeadPartial, segmentPath, scrollableSegmentsResult) {</span>
+    <span class="s4">// Same traversal as updateCacheNodeNavigation, but we switch to this path</span>
+    <span class="s4">// once we reach the part of the tree that was not in the previous route. We</span>
+    <span class="s4">// don't need to diff against the old tree, we just need to create a new one.</span>
+    <span class="s4">// The head is assigned to every leaf segment delivered by the server. Based</span>
+    <span class="s4">// on corresponding logic in fill-lazy-items-till-leaf-with-head.ts</span>
+    <span class="s2">const </span><span class="s1">routerStateChildren = routerState[</span><span class="s3">1</span><span class="s1">];</span>
+    <span class="s2">const </span><span class="s1">isLeafSegment = Object.keys(routerStateChildren).length === </span><span class="s3">0</span><span class="s1">;</span>
+    <span class="s4">// Even we're rendering inside the &quot;new&quot; part of the target tree, we may have</span>
+    <span class="s4">// a locally cached segment that we can reuse. This may come from either 1)</span>
+    <span class="s4">// the CacheNode tree, which lives in React state and is populated by previous</span>
+    <span class="s4">// navigations; or 2) the prefetch cache, which is a separate cache that is</span>
+    <span class="s4">// populated by prefetches.</span>
+    <span class="s2">let </span><span class="s1">rsc;</span>
+    <span class="s2">let </span><span class="s1">loading;</span>
+    <span class="s2">let </span><span class="s1">head;</span>
+    <span class="s2">let </span><span class="s1">cacheNodeNavigatedAt;</span>
+    <span class="s2">if </span><span class="s1">(existingCacheNode !== undefined &amp;&amp; </span><span class="s4">// DYNAMIC_STALETIME_MS defaults to 0, but it can be increased using</span>
+    <span class="s4">// the experimental.staleTimes.dynamic config. When set, we'll avoid</span>
+    <span class="s4">// refetching dynamic data if it was fetched within the given threshold.</span>
+    <span class="s1">existingCacheNode.navigatedAt + _prefetchcacheutils.DYNAMIC_STALETIME_MS &gt; navigatedAt) {</span>
+        <span class="s4">// We have an existing CacheNode for this segment, and it's not stale. We</span>
+        <span class="s4">// should reuse it rather than request a new one.</span>
+        <span class="s1">rsc = existingCacheNode.rsc;</span>
+        <span class="s1">loading = existingCacheNode.loading;</span>
+        <span class="s1">head = existingCacheNode.head;</span>
+        <span class="s4">// Don't update the navigatedAt timestamp, since we're reusing stale data.</span>
+        <span class="s1">cacheNodeNavigatedAt = existingCacheNode.navigatedAt;</span>
+    <span class="s1">} </span><span class="s2">else if </span><span class="s1">(prefetchData !== </span><span class="s2">null</span><span class="s1">) {</span>
+        <span class="s4">// There's no existing CacheNode for this segment, but we do have prefetch</span>
+        <span class="s4">// data. If the prefetch data is fully static (i.e. does not contain any</span>
+        <span class="s4">// dynamic holes), we don't need to request it from the server.</span>
+        <span class="s1">rsc = prefetchData[</span><span class="s3">1</span><span class="s1">];</span>
+        <span class="s1">loading = prefetchData[</span><span class="s3">3</span><span class="s1">];</span>
+        <span class="s1">head = isLeafSegment ? possiblyPartialPrefetchHead : </span><span class="s2">null</span><span class="s1">;</span>
+        <span class="s4">// Even though we're accessing the data from the prefetch cache, this is</span>
+        <span class="s4">// conceptually a new segment, not a reused one. So we should update the</span>
+        <span class="s4">// navigatedAt timestamp.</span>
+        <span class="s1">cacheNodeNavigatedAt = navigatedAt;</span>
+        <span class="s2">const </span><span class="s1">isPrefetchRscPartial = prefetchData[</span><span class="s3">4</span><span class="s1">];</span>
+        <span class="s2">if </span><span class="s1">(</span><span class="s4">// Check if the segment data is partial</span>
+        <span class="s1">isPrefetchRscPartial || </span><span class="s4">// Check if the head is partial (only relevant if this is a leaf segment)</span>
+        <span class="s1">isPrefetchHeadPartial &amp;&amp; isLeafSegment) {</span>
+            <span class="s4">// We only have partial data from this segment. Like missing segments, we</span>
+            <span class="s4">// must request the full data from the server.</span>
+            <span class="s2">return </span><span class="s1">spawnPendingTask(navigatedAt, routerState, prefetchData, possiblyPartialPrefetchHead, isPrefetchHeadPartial, segmentPath, scrollableSegmentsResult);</span>
+        <span class="s1">} </span><span class="s2">else </span><span class="s1">{</span>
+        <span class="s4">// The prefetch data is fully static, so we can omit it from the</span>
+        <span class="s4">// navigation request.</span>
+        <span class="s1">}</span>
+    <span class="s1">} </span><span class="s2">else </span><span class="s1">{</span>
+        <span class="s4">// There's no prefetch for this segment. Everything from this point will be</span>
+        <span class="s4">// requested from the server, even if there are static children below it.</span>
+        <span class="s4">// Create a terminal task node that will later be fulfilled by</span>
+        <span class="s4">// server response.</span>
+        <span class="s2">return </span><span class="s1">spawnPendingTask(navigatedAt, routerState, </span><span class="s2">null</span><span class="s1">, possiblyPartialPrefetchHead, isPrefetchHeadPartial, segmentPath, scrollableSegmentsResult);</span>
+    <span class="s1">}</span>
+    <span class="s4">// We already have a full segment we can render, so we don't need to request a</span>
+    <span class="s4">// new one from the server. Keep traversing down the tree until we reach</span>
+    <span class="s4">// something that requires a dynamic request.</span>
+    <span class="s2">const </span><span class="s1">prefetchDataChildren = prefetchData !== </span><span class="s2">null </span><span class="s1">? prefetchData[</span><span class="s3">2</span><span class="s1">] : </span><span class="s2">null</span><span class="s1">;</span>
+    <span class="s2">const </span><span class="s1">taskChildren = </span><span class="s2">new </span><span class="s1">Map();</span>
+    <span class="s2">const </span><span class="s1">existingCacheNodeChildren = existingCacheNode !== undefined ? existingCacheNode.parallelRoutes : </span><span class="s2">null</span><span class="s1">;</span>
+    <span class="s2">const </span><span class="s1">cacheNodeChildren = </span><span class="s2">new </span><span class="s1">Map(existingCacheNodeChildren);</span>
+    <span class="s2">let </span><span class="s1">dynamicRequestTreeChildren = {};</span>
+    <span class="s2">let </span><span class="s1">needsDynamicRequest = </span><span class="s2">false</span><span class="s1">;</span>
+    <span class="s2">if </span><span class="s1">(isLeafSegment) {</span>
+        <span class="s4">// The segment path of every leaf segment (i.e. page) is collected into</span>
+        <span class="s4">// a result array. This is used by the LayoutRouter to scroll to ensure that</span>
+        <span class="s4">// new pages are visible after a navigation.</span>
+        <span class="s4">// TODO: We should use a string to represent the segment path instead of</span>
+        <span class="s4">// an array. We already use a string representation for the path when</span>
+        <span class="s4">// accessing the Segment Cache, so we can use the same one.</span>
+        <span class="s1">scrollableSegmentsResult.push(segmentPath);</span>
+    <span class="s1">} </span><span class="s2">else </span><span class="s1">{</span>
+        <span class="s2">for</span><span class="s1">(</span><span class="s2">let </span><span class="s1">parallelRouteKey </span><span class="s2">in </span><span class="s1">routerStateChildren){</span>
+            <span class="s2">const </span><span class="s1">routerStateChild = routerStateChildren[parallelRouteKey];</span>
+            <span class="s2">const </span><span class="s1">prefetchDataChild = prefetchDataChildren !== </span><span class="s2">null </span><span class="s1">? prefetchDataChildren[parallelRouteKey] : </span><span class="s2">null</span><span class="s1">;</span>
+            <span class="s2">const </span><span class="s1">existingSegmentMapChild = existingCacheNodeChildren !== </span><span class="s2">null </span><span class="s1">? existingCacheNodeChildren.get(parallelRouteKey) : undefined;</span>
+            <span class="s2">const </span><span class="s1">segmentChild = routerStateChild[</span><span class="s3">0</span><span class="s1">];</span>
+            <span class="s2">const </span><span class="s1">segmentPathChild = segmentPath.concat([</span>
+                <span class="s1">parallelRouteKey,</span>
+                <span class="s1">segmentChild</span>
+            <span class="s1">]);</span>
+            <span class="s2">const </span><span class="s1">segmentKeyChild = (</span><span class="s3">0</span><span class="s1">, _createroutercachekey.createRouterCacheKey)(segmentChild);</span>
+            <span class="s2">const </span><span class="s1">existingCacheNodeChild = existingSegmentMapChild !== undefined ? existingSegmentMapChild.get(segmentKeyChild) : undefined;</span>
+            <span class="s2">const </span><span class="s1">taskChild = createCacheNodeOnNavigation(navigatedAt, routerStateChild, existingCacheNodeChild, prefetchDataChild, possiblyPartialPrefetchHead, isPrefetchHeadPartial, segmentPathChild, scrollableSegmentsResult);</span>
+            <span class="s1">taskChildren.set(parallelRouteKey, taskChild);</span>
+            <span class="s2">const </span><span class="s1">dynamicRequestTreeChild = taskChild.dynamicRequestTree;</span>
+            <span class="s2">if </span><span class="s1">(dynamicRequestTreeChild !== </span><span class="s2">null</span><span class="s1">) {</span>
+                <span class="s4">// Something in the child tree is dynamic.</span>
+                <span class="s1">needsDynamicRequest = </span><span class="s2">true</span><span class="s1">;</span>
+                <span class="s1">dynamicRequestTreeChildren[parallelRouteKey] = dynamicRequestTreeChild;</span>
+            <span class="s1">} </span><span class="s2">else </span><span class="s1">{</span>
+                <span class="s1">dynamicRequestTreeChildren[parallelRouteKey] = routerStateChild;</span>
+            <span class="s1">}</span>
+            <span class="s2">const </span><span class="s1">newCacheNodeChild = taskChild.node;</span>
+            <span class="s2">if </span><span class="s1">(newCacheNodeChild !== </span><span class="s2">null</span><span class="s1">) {</span>
+                <span class="s2">const </span><span class="s1">newSegmentMapChild = </span><span class="s2">new </span><span class="s1">Map();</span>
+                <span class="s1">newSegmentMapChild.set(segmentKeyChild, newCacheNodeChild);</span>
+                <span class="s1">cacheNodeChildren.set(parallelRouteKey, newSegmentMapChild);</span>
+            <span class="s1">}</span>
+        <span class="s1">}</span>
+    <span class="s1">}</span>
+    <span class="s2">return </span><span class="s1">{</span>
+        <span class="s4">// Since we're inside a new route tree, unlike the</span>
+        <span class="s4">// `updateCacheNodeOnNavigation` path, the router state on the children</span>
+        <span class="s4">// tasks is always the same as the router state we pass in. So we don't need</span>
+        <span class="s4">// to clone/modify it.</span>
+        <span class="s1">route: routerState,</span>
+        <span class="s1">node: {</span>
+            <span class="s1">lazyData: </span><span class="s2">null</span><span class="s1">,</span>
+            <span class="s4">// Since this segment is already full, we don't need to use the</span>
+            <span class="s4">// `prefetchRsc` field.</span>
+            <span class="s1">rsc,</span>
+            <span class="s1">prefetchRsc: </span><span class="s2">null</span><span class="s1">,</span>
+            <span class="s1">head,</span>
+            <span class="s1">prefetchHead: </span><span class="s2">null</span><span class="s1">,</span>
+            <span class="s1">loading,</span>
+            <span class="s1">parallelRoutes: cacheNodeChildren,</span>
+            <span class="s1">navigatedAt: cacheNodeNavigatedAt</span>
+        <span class="s1">},</span>
+        <span class="s1">dynamicRequestTree: needsDynamicRequest ? patchRouterStateWithNewChildren(routerState, dynamicRequestTreeChildren) : </span><span class="s2">null</span><span class="s1">,</span>
+        <span class="s1">children: taskChildren</span>
+    <span class="s1">};</span>
+<span class="s1">}</span>
+<span class="s2">function </span><span class="s1">patchRouterStateWithNewChildren(baseRouterState, newChildren) {</span>
+    <span class="s2">const </span><span class="s1">clone = [</span>
+        <span class="s1">baseRouterState[</span><span class="s3">0</span><span class="s1">],</span>
+        <span class="s1">newChildren</span>
+    <span class="s1">];</span>
+    <span class="s4">// Based on equivalent logic in apply-router-state-patch-to-tree, but should</span>
+    <span class="s4">// confirm whether we need to copy all of these fields. Not sure the server</span>
+    <span class="s4">// ever sends, e.g. the refetch marker.</span>
+    <span class="s2">if </span><span class="s1">(</span><span class="s3">2 </span><span class="s2">in </span><span class="s1">baseRouterState) {</span>
+        <span class="s1">clone[</span><span class="s3">2</span><span class="s1">] = baseRouterState[</span><span class="s3">2</span><span class="s1">];</span>
+    <span class="s1">}</span>
+    <span class="s2">if </span><span class="s1">(</span><span class="s3">3 </span><span class="s2">in </span><span class="s1">baseRouterState) {</span>
+        <span class="s1">clone[</span><span class="s3">3</span><span class="s1">] = baseRouterState[</span><span class="s3">3</span><span class="s1">];</span>
+    <span class="s1">}</span>
+    <span class="s2">if </span><span class="s1">(</span><span class="s3">4 </span><span class="s2">in </span><span class="s1">baseRouterState) {</span>
+        <span class="s1">clone[</span><span class="s3">4</span><span class="s1">] = baseRouterState[</span><span class="s3">4</span><span class="s1">];</span>
+    <span class="s1">}</span>
+    <span class="s2">return </span><span class="s1">clone;</span>
+<span class="s1">}</span>
+<span class="s2">function </span><span class="s1">spawnPendingTask(navigatedAt, routerState, prefetchData, prefetchHead, isPrefetchHeadPartial, segmentPath, scrollableSegmentsResult) {</span>
+    <span class="s4">// Create a task that will later be fulfilled by data from the server.</span>
+    <span class="s4">// Clone the prefetched route tree and the `refetch` marker to it. We'll send</span>
+    <span class="s4">// this to the server so it knows where to start rendering.</span>
+    <span class="s2">const </span><span class="s1">dynamicRequestTree = patchRouterStateWithNewChildren(routerState, routerState[</span><span class="s3">1</span><span class="s1">]);</span>
+    <span class="s1">dynamicRequestTree[</span><span class="s3">3</span><span class="s1">] = </span><span class="s0">'refetch'</span><span class="s1">;</span>
+    <span class="s2">const </span><span class="s1">newTask = {</span>
+        <span class="s1">route: routerState,</span>
+        <span class="s4">// Corresponds to the part of the route that will be rendered on the server.</span>
+        <span class="s1">node: createPendingCacheNode(navigatedAt, routerState, prefetchData, prefetchHead, isPrefetchHeadPartial, segmentPath, scrollableSegmentsResult),</span>
+        <span class="s4">// Because this is non-null, and it gets propagated up through the parent</span>
+        <span class="s4">// tasks, the root task will know that it needs to perform a server request.</span>
+        <span class="s1">dynamicRequestTree,</span>
+        <span class="s1">children: </span><span class="s2">null</span>
+    <span class="s1">};</span>
+    <span class="s2">return </span><span class="s1">newTask;</span>
+<span class="s1">}</span>
+<span class="s2">function </span><span class="s1">spawnReusedTask(reusedRouterState) {</span>
+    <span class="s4">// Create a task that reuses an existing segment, e.g. when reusing</span>
+    <span class="s4">// the current active segment in place of a default route.</span>
+    <span class="s2">return </span><span class="s1">{</span>
+        <span class="s1">route: reusedRouterState,</span>
+        <span class="s1">node: </span><span class="s2">null</span><span class="s1">,</span>
+        <span class="s1">dynamicRequestTree: </span><span class="s2">null</span><span class="s1">,</span>
+        <span class="s1">children: </span><span class="s2">null</span>
+    <span class="s1">};</span>
+<span class="s1">}</span>
+<span class="s2">function </span><span class="s1">listenForDynamicRequest(task, responsePromise) {</span>
+    <span class="s1">responsePromise.then((param)=&gt;{</span>
+        <span class="s2">let </span><span class="s1">{ flightData } = param;</span>
+        <span class="s2">if </span><span class="s1">(</span><span class="s2">typeof </span><span class="s1">flightData === </span><span class="s0">'string'</span><span class="s1">) {</span>
+            <span class="s4">// Happens when navigating to page in `pages` from `app`. We shouldn't</span>
+            <span class="s4">// get here because should have already handled this during</span>
+            <span class="s4">// the prefetch.</span>
+            <span class="s2">return</span><span class="s1">;</span>
+        <span class="s1">}</span>
+        <span class="s2">for </span><span class="s1">(</span><span class="s2">const </span><span class="s1">normalizedFlightData of flightData){</span>
+            <span class="s2">const </span><span class="s1">{ segmentPath, tree: serverRouterState, seedData: dynamicData, head: dynamicHead } = normalizedFlightData;</span>
+            <span class="s2">if </span><span class="s1">(!dynamicData) {</span>
+                <span class="s2">continue</span><span class="s1">;</span>
+            <span class="s1">}</span>
+            <span class="s1">writeDynamicDataIntoPendingTask(task, segmentPath, serverRouterState, dynamicData, dynamicHead);</span>
+        <span class="s1">}</span>
+        <span class="s4">// Now that we've exhausted all the data we received from the server, if</span>
+        <span class="s4">// there are any remaining pending tasks in the tree, abort them now.</span>
+        <span class="s4">// If there's any missing data, it will trigger a lazy fetch.</span>
+        <span class="s1">abortTask(task, </span><span class="s2">null</span><span class="s1">);</span>
+    <span class="s1">}, (error)=&gt;{</span>
+        <span class="s4">// This will trigger an error during render</span>
+        <span class="s1">abortTask(task, error);</span>
+    <span class="s1">});</span>
+<span class="s1">}</span>
+<span class="s2">function </span><span class="s1">writeDynamicDataIntoPendingTask(rootTask, segmentPath, serverRouterState, dynamicData, dynamicHead) {</span>
+    <span class="s4">// The data sent by the server represents only a subtree of the app. We need</span>
+    <span class="s4">// to find the part of the task tree that matches the server response, and</span>
+    <span class="s4">// fulfill it using the dynamic data.</span>
+    <span class="s4">//</span>
+    <span class="s4">// segmentPath represents the parent path of subtree. It's a repeating pattern</span>
+    <span class="s4">// of parallel route key and segment:</span>
+    <span class="s4">//</span>
+    <span class="s4">//   [string, Segment, string, Segment, string, Segment, ...]</span>
+    <span class="s4">//</span>
+    <span class="s4">// Iterate through the path and finish any tasks that match this payload.</span>
+    <span class="s2">let </span><span class="s1">task = rootTask;</span>
+    <span class="s2">for</span><span class="s1">(</span><span class="s2">let </span><span class="s1">i = </span><span class="s3">0</span><span class="s1">; i &lt; segmentPath.length; i += </span><span class="s3">2</span><span class="s1">){</span>
+        <span class="s2">const </span><span class="s1">parallelRouteKey = segmentPath[i];</span>
+        <span class="s2">const </span><span class="s1">segment = segmentPath[i + </span><span class="s3">1</span><span class="s1">];</span>
+        <span class="s2">const </span><span class="s1">taskChildren = task.children;</span>
+        <span class="s2">if </span><span class="s1">(taskChildren !== </span><span class="s2">null</span><span class="s1">) {</span>
+            <span class="s2">const </span><span class="s1">taskChild = taskChildren.get(parallelRouteKey);</span>
+            <span class="s2">if </span><span class="s1">(taskChild !== undefined) {</span>
+                <span class="s2">const </span><span class="s1">taskSegment = taskChild.route[</span><span class="s3">0</span><span class="s1">];</span>
+                <span class="s2">if </span><span class="s1">((</span><span class="s3">0</span><span class="s1">, _matchsegments.matchSegment)(segment, taskSegment)) {</span>
+                    <span class="s4">// Found a match for this task. Keep traversing down the task tree.</span>
+                    <span class="s1">task = taskChild;</span>
+                    <span class="s2">continue</span><span class="s1">;</span>
+                <span class="s1">}</span>
+            <span class="s1">}</span>
+        <span class="s1">}</span>
+        <span class="s4">// We didn't find a child task that matches the server data. Exit. We won't</span>
+        <span class="s4">// abort the task, though, because a different FlightDataPath may be able to</span>
+        <span class="s4">// fulfill it (see loop in listenForDynamicRequest). We only abort tasks</span>
+        <span class="s4">// once we've run out of data.</span>
+        <span class="s2">return</span><span class="s1">;</span>
+    <span class="s1">}</span>
+    <span class="s1">finishTaskUsingDynamicDataPayload(task, serverRouterState, dynamicData, dynamicHead);</span>
+<span class="s1">}</span>
+<span class="s2">function </span><span class="s1">finishTaskUsingDynamicDataPayload(task, serverRouterState, dynamicData, dynamicHead) {</span>
+    <span class="s2">if </span><span class="s1">(task.dynamicRequestTree === </span><span class="s2">null</span><span class="s1">) {</span>
+        <span class="s4">// Everything in this subtree is already complete. Bail out.</span>
+        <span class="s2">return</span><span class="s1">;</span>
+    <span class="s1">}</span>
+    <span class="s4">// dynamicData may represent a larger subtree than the task. Before we can</span>
+    <span class="s4">// finish the task, we need to line them up.</span>
+    <span class="s2">const </span><span class="s1">taskChildren = task.children;</span>
+    <span class="s2">const </span><span class="s1">taskNode = task.node;</span>
+    <span class="s2">if </span><span class="s1">(taskChildren === </span><span class="s2">null</span><span class="s1">) {</span>
+        <span class="s4">// We've reached the leaf node of the pending task. The server data tree</span>
+        <span class="s4">// lines up the pending Cache Node tree. We can now switch to the</span>
+        <span class="s4">// normal algorithm.</span>
+        <span class="s2">if </span><span class="s1">(taskNode !== </span><span class="s2">null</span><span class="s1">) {</span>
+            <span class="s1">finishPendingCacheNode(taskNode, task.route, serverRouterState, dynamicData, dynamicHead);</span>
+            <span class="s4">// Set this to null to indicate that this task is now complete.</span>
+            <span class="s1">task.dynamicRequestTree = </span><span class="s2">null</span><span class="s1">;</span>
+        <span class="s1">}</span>
+        <span class="s2">return</span><span class="s1">;</span>
+    <span class="s1">}</span>
+    <span class="s4">// The server returned more data than we need to finish the task. Skip over</span>
+    <span class="s4">// the extra segments until we reach the leaf task node.</span>
+    <span class="s2">const </span><span class="s1">serverChildren = serverRouterState[</span><span class="s3">1</span><span class="s1">];</span>
+    <span class="s2">const </span><span class="s1">dynamicDataChildren = dynamicData[</span><span class="s3">2</span><span class="s1">];</span>
+    <span class="s2">for</span><span class="s1">(</span><span class="s2">const </span><span class="s1">parallelRouteKey </span><span class="s2">in </span><span class="s1">serverRouterState){</span>
+        <span class="s2">const </span><span class="s1">serverRouterStateChild = serverChildren[parallelRouteKey];</span>
+        <span class="s2">const </span><span class="s1">dynamicDataChild = dynamicDataChildren[parallelRouteKey];</span>
+        <span class="s2">const </span><span class="s1">taskChild = taskChildren.get(parallelRouteKey);</span>
+        <span class="s2">if </span><span class="s1">(taskChild !== undefined) {</span>
+            <span class="s2">const </span><span class="s1">taskSegment = taskChild.route[</span><span class="s3">0</span><span class="s1">];</span>
+            <span class="s2">if </span><span class="s1">((</span><span class="s3">0</span><span class="s1">, _matchsegments.matchSegment)(serverRouterStateChild[</span><span class="s3">0</span><span class="s1">], taskSegment) &amp;&amp; dynamicDataChild !== </span><span class="s2">null </span><span class="s1">&amp;&amp; dynamicDataChild !== undefined) {</span>
+                <span class="s4">// Found a match for this task. Keep traversing down the task tree.</span>
+                <span class="s2">return </span><span class="s1">finishTaskUsingDynamicDataPayload(taskChild, serverRouterStateChild, dynamicDataChild, dynamicHead);</span>
+            <span class="s1">}</span>
+        <span class="s1">}</span>
+    <span class="s4">// We didn't find a child task that matches the server data. We won't abort</span>
+    <span class="s4">// the task, though, because a different FlightDataPath may be able to</span>
+    <span class="s4">// fulfill it (see loop in listenForDynamicRequest). We only abort tasks</span>
+    <span class="s4">// once we've run out of data.</span>
+    <span class="s1">}</span>
+<span class="s1">}</span>
+<span class="s2">function </span><span class="s1">createPendingCacheNode(navigatedAt, routerState, prefetchData, prefetchHead, isPrefetchHeadPartial, segmentPath, scrollableSegmentsResult) {</span>
+    <span class="s2">const </span><span class="s1">routerStateChildren = routerState[</span><span class="s3">1</span><span class="s1">];</span>
+    <span class="s2">const </span><span class="s1">prefetchDataChildren = prefetchData !== </span><span class="s2">null </span><span class="s1">? prefetchData[</span><span class="s3">2</span><span class="s1">] : </span><span class="s2">null</span><span class="s1">;</span>
+    <span class="s2">const </span><span class="s1">parallelRoutes = </span><span class="s2">new </span><span class="s1">Map();</span>
+    <span class="s2">for</span><span class="s1">(</span><span class="s2">let </span><span class="s1">parallelRouteKey </span><span class="s2">in </span><span class="s1">routerStateChildren){</span>
+        <span class="s2">const </span><span class="s1">routerStateChild = routerStateChildren[parallelRouteKey];</span>
+        <span class="s2">const </span><span class="s1">prefetchDataChild = prefetchDataChildren !== </span><span class="s2">null </span><span class="s1">? prefetchDataChildren[parallelRouteKey] : </span><span class="s2">null</span><span class="s1">;</span>
+        <span class="s2">const </span><span class="s1">segmentChild = routerStateChild[</span><span class="s3">0</span><span class="s1">];</span>
+        <span class="s2">const </span><span class="s1">segmentPathChild = segmentPath.concat([</span>
+            <span class="s1">parallelRouteKey,</span>
+            <span class="s1">segmentChild</span>
+        <span class="s1">]);</span>
+        <span class="s2">const </span><span class="s1">segmentKeyChild = (</span><span class="s3">0</span><span class="s1">, _createroutercachekey.createRouterCacheKey)(segmentChild);</span>
+        <span class="s2">const </span><span class="s1">newCacheNodeChild = createPendingCacheNode(navigatedAt, routerStateChild, prefetchDataChild === undefined ? </span><span class="s2">null </span><span class="s1">: prefetchDataChild, prefetchHead, isPrefetchHeadPartial, segmentPathChild, scrollableSegmentsResult);</span>
+        <span class="s2">const </span><span class="s1">newSegmentMapChild = </span><span class="s2">new </span><span class="s1">Map();</span>
+        <span class="s1">newSegmentMapChild.set(segmentKeyChild, newCacheNodeChild);</span>
+        <span class="s1">parallelRoutes.set(parallelRouteKey, newSegmentMapChild);</span>
+    <span class="s1">}</span>
+    <span class="s4">// The head is assigned to every leaf segment delivered by the server. Based</span>
+    <span class="s4">// on corresponding logic in fill-lazy-items-till-leaf-with-head.ts</span>
+    <span class="s2">const </span><span class="s1">isLeafSegment = parallelRoutes.size === </span><span class="s3">0</span><span class="s1">;</span>
+    <span class="s2">if </span><span class="s1">(isLeafSegment) {</span>
+        <span class="s4">// The segment path of every leaf segment (i.e. page) is collected into</span>
+        <span class="s4">// a result array. This is used by the LayoutRouter to scroll to ensure that</span>
+        <span class="s4">// new pages are visible after a navigation.</span>
+        <span class="s4">// TODO: We should use a string to represent the segment path instead of</span>
+        <span class="s4">// an array. We already use a string representation for the path when</span>
+        <span class="s4">// accessing the Segment Cache, so we can use the same one.</span>
+        <span class="s1">scrollableSegmentsResult.push(segmentPath);</span>
+    <span class="s1">}</span>
+    <span class="s2">const </span><span class="s1">maybePrefetchRsc = prefetchData !== </span><span class="s2">null </span><span class="s1">? prefetchData[</span><span class="s3">1</span><span class="s1">] : </span><span class="s2">null</span><span class="s1">;</span>
+    <span class="s2">const </span><span class="s1">maybePrefetchLoading = prefetchData !== </span><span class="s2">null </span><span class="s1">? prefetchData[</span><span class="s3">3</span><span class="s1">] : </span><span class="s2">null</span><span class="s1">;</span>
+    <span class="s2">return </span><span class="s1">{</span>
+        <span class="s1">lazyData: </span><span class="s2">null</span><span class="s1">,</span>
+        <span class="s1">parallelRoutes: parallelRoutes,</span>
+        <span class="s1">prefetchRsc: maybePrefetchRsc !== undefined ? maybePrefetchRsc : </span><span class="s2">null</span><span class="s1">,</span>
+        <span class="s1">prefetchHead: isLeafSegment ? prefetchHead : [</span>
+            <span class="s2">null</span><span class="s1">,</span>
+            <span class="s2">null</span>
+        <span class="s1">],</span>
+        <span class="s4">// TODO: Technically, a loading boundary could contain dynamic data. We must</span>
+        <span class="s4">// have separate `loading` and `prefetchLoading` fields to handle this, like</span>
+        <span class="s4">// we do for the segment data and head.</span>
+        <span class="s1">loading: maybePrefetchLoading !== undefined ? maybePrefetchLoading : </span><span class="s2">null</span><span class="s1">,</span>
+        <span class="s4">// Create a deferred promise. This will be fulfilled once the dynamic</span>
+        <span class="s4">// response is received from the server.</span>
+        <span class="s1">rsc: createDeferredRsc(),</span>
+        <span class="s1">head: isLeafSegment ? createDeferredRsc() : </span><span class="s2">null</span><span class="s1">,</span>
+        <span class="s1">navigatedAt</span>
+    <span class="s1">};</span>
+<span class="s1">}</span>
+<span class="s2">function </span><span class="s1">finishPendingCacheNode(cacheNode, taskState, serverState, dynamicData, dynamicHead) {</span>
+    <span class="s4">// Writes a dynamic response into an existing Cache Node tree. This does _not_</span>
+    <span class="s4">// create a new tree, it updates the existing tree in-place. So it must follow</span>
+    <span class="s4">// the Suspense rules of cache safety — it can resolve pending promises, but</span>
+    <span class="s4">// it cannot overwrite existing data. It can add segments to the tree (because</span>
+    <span class="s4">// a missing segment will cause the layout router to suspend).</span>
+    <span class="s4">// but it cannot delete them.</span>
+    <span class="s4">//</span>
+    <span class="s4">// We must resolve every promise in the tree, or else it will suspend</span>
+    <span class="s4">// indefinitely. If we did not receive data for a segment, we will resolve its</span>
+    <span class="s4">// data promise to `null` to trigger a lazy fetch during render.</span>
+    <span class="s2">const </span><span class="s1">taskStateChildren = taskState[</span><span class="s3">1</span><span class="s1">];</span>
+    <span class="s2">const </span><span class="s1">serverStateChildren = serverState[</span><span class="s3">1</span><span class="s1">];</span>
+    <span class="s2">const </span><span class="s1">dataChildren = dynamicData[</span><span class="s3">2</span><span class="s1">];</span>
+    <span class="s4">// The router state that we traverse the tree with (taskState) is the same one</span>
+    <span class="s4">// that we used to construct the pending Cache Node tree. That way we're sure</span>
+    <span class="s4">// to resolve all the pending promises.</span>
+    <span class="s2">const </span><span class="s1">parallelRoutes = cacheNode.parallelRoutes;</span>
+    <span class="s2">for</span><span class="s1">(</span><span class="s2">let </span><span class="s1">parallelRouteKey </span><span class="s2">in </span><span class="s1">taskStateChildren){</span>
+        <span class="s2">const </span><span class="s1">taskStateChild = taskStateChildren[parallelRouteKey];</span>
+        <span class="s2">const </span><span class="s1">serverStateChild = serverStateChildren[parallelRouteKey];</span>
+        <span class="s2">const </span><span class="s1">dataChild = dataChildren[parallelRouteKey];</span>
+        <span class="s2">const </span><span class="s1">segmentMapChild = parallelRoutes.get(parallelRouteKey);</span>
+        <span class="s2">const </span><span class="s1">taskSegmentChild = taskStateChild[</span><span class="s3">0</span><span class="s1">];</span>
+        <span class="s2">const </span><span class="s1">taskSegmentKeyChild = (</span><span class="s3">0</span><span class="s1">, _createroutercachekey.createRouterCacheKey)(taskSegmentChild);</span>
+        <span class="s2">const </span><span class="s1">cacheNodeChild = segmentMapChild !== undefined ? segmentMapChild.get(taskSegmentKeyChild) : undefined;</span>
+        <span class="s2">if </span><span class="s1">(cacheNodeChild !== undefined) {</span>
+            <span class="s2">if </span><span class="s1">(serverStateChild !== undefined &amp;&amp; (</span><span class="s3">0</span><span class="s1">, _matchsegments.matchSegment)(taskSegmentChild, serverStateChild[</span><span class="s3">0</span><span class="s1">])) {</span>
+                <span class="s2">if </span><span class="s1">(dataChild !== undefined &amp;&amp; dataChild !== </span><span class="s2">null</span><span class="s1">) {</span>
+                    <span class="s4">// This is the happy path. Recursively update all the children.</span>
+                    <span class="s1">finishPendingCacheNode(cacheNodeChild, taskStateChild, serverStateChild, dataChild, dynamicHead);</span>
+                <span class="s1">} </span><span class="s2">else </span><span class="s1">{</span>
+                    <span class="s4">// The server never returned data for this segment. Trigger a lazy</span>
+                    <span class="s4">// fetch during render. This shouldn't happen because the Route Tree</span>
+                    <span class="s4">// and the Seed Data tree sent by the server should always be the same</span>
+                    <span class="s4">// shape when part of the same server response.</span>
+                    <span class="s1">abortPendingCacheNode(taskStateChild, cacheNodeChild, </span><span class="s2">null</span><span class="s1">);</span>
+                <span class="s1">}</span>
+            <span class="s1">} </span><span class="s2">else </span><span class="s1">{</span>
+                <span class="s4">// The server never returned data for this segment. Trigger a lazy</span>
+                <span class="s4">// fetch during render.</span>
+                <span class="s1">abortPendingCacheNode(taskStateChild, cacheNodeChild, </span><span class="s2">null</span><span class="s1">);</span>
+            <span class="s1">}</span>
+        <span class="s1">} </span><span class="s2">else </span><span class="s1">{</span>
+        <span class="s4">// The server response matches what was expected to receive, but there's</span>
+        <span class="s4">// no matching Cache Node in the task tree. This is a bug in the</span>
+        <span class="s4">// implementation because we should have created a node for every</span>
+        <span class="s4">// segment in the tree that's associated with this task.</span>
+        <span class="s1">}</span>
+    <span class="s1">}</span>
+    <span class="s4">// Use the dynamic data from the server to fulfill the deferred RSC promise</span>
+    <span class="s4">// on the Cache Node.</span>
+    <span class="s2">const </span><span class="s1">rsc = cacheNode.rsc;</span>
+    <span class="s2">const </span><span class="s1">dynamicSegmentData = dynamicData[</span><span class="s3">1</span><span class="s1">];</span>
+    <span class="s2">if </span><span class="s1">(rsc === </span><span class="s2">null</span><span class="s1">) {</span>
+        <span class="s4">// This is a lazy cache node. We can overwrite it. This is only safe</span>
+        <span class="s4">// because we know that the LayoutRouter suspends if `rsc` is `null`.</span>
+        <span class="s1">cacheNode.rsc = dynamicSegmentData;</span>
+    <span class="s1">} </span><span class="s2">else if </span><span class="s1">(isDeferredRsc(rsc)) {</span>
+        <span class="s4">// This is a deferred RSC promise. We can fulfill it with the data we just</span>
+        <span class="s4">// received from the server. If it was already resolved by a different</span>
+        <span class="s4">// navigation, then this does nothing because we can't overwrite data.</span>
+        <span class="s1">rsc.resolve(dynamicSegmentData);</span>
+    <span class="s1">} </span><span class="s2">else </span><span class="s1">{</span>
+    <span class="s4">// This is not a deferred RSC promise, nor is it empty, so it must have</span>
+    <span class="s4">// been populated by a different navigation. We must not overwrite it.</span>
+    <span class="s1">}</span>
+    <span class="s4">// Check if this is a leaf segment. If so, it will have a `head` property with</span>
+    <span class="s4">// a pending promise that needs to be resolved with the dynamic head from</span>
+    <span class="s4">// the server.</span>
+    <span class="s2">const </span><span class="s1">head = cacheNode.head;</span>
+    <span class="s2">if </span><span class="s1">(isDeferredRsc(head)) {</span>
+        <span class="s1">head.resolve(dynamicHead);</span>
+    <span class="s1">}</span>
+<span class="s1">}</span>
+<span class="s2">function </span><span class="s1">abortTask(task, error) {</span>
+    <span class="s2">const </span><span class="s1">cacheNode = task.node;</span>
+    <span class="s2">if </span><span class="s1">(cacheNode === </span><span class="s2">null</span><span class="s1">) {</span>
+        <span class="s4">// This indicates the task is already complete.</span>
+        <span class="s2">return</span><span class="s1">;</span>
+    <span class="s1">}</span>
+    <span class="s2">const </span><span class="s1">taskChildren = task.children;</span>
+    <span class="s2">if </span><span class="s1">(taskChildren === </span><span class="s2">null</span><span class="s1">) {</span>
+        <span class="s4">// Reached the leaf task node. This is the root of a pending cache</span>
+        <span class="s4">// node tree.</span>
+        <span class="s1">abortPendingCacheNode(task.route, cacheNode, error);</span>
+    <span class="s1">} </span><span class="s2">else </span><span class="s1">{</span>
+        <span class="s4">// This is an intermediate task node. Keep traversing until we reach a</span>
+        <span class="s4">// task node with no children. That will be the root of the cache node tree</span>
+        <span class="s4">// that needs to be resolved.</span>
+        <span class="s2">for </span><span class="s1">(</span><span class="s2">const </span><span class="s1">taskChild of taskChildren.values()){</span>
+            <span class="s1">abortTask(taskChild, error);</span>
+        <span class="s1">}</span>
+    <span class="s1">}</span>
+    <span class="s4">// Set this to null to indicate that this task is now complete.</span>
+    <span class="s1">task.dynamicRequestTree = </span><span class="s2">null</span><span class="s1">;</span>
+<span class="s1">}</span>
+<span class="s2">function </span><span class="s1">abortPendingCacheNode(routerState, cacheNode, error) {</span>
+    <span class="s4">// For every pending segment in the tree, resolve its `rsc` promise to `null`</span>
+    <span class="s4">// to trigger a lazy fetch during render.</span>
+    <span class="s4">//</span>
+    <span class="s4">// Or, if an error object is provided, it will error instead.</span>
+    <span class="s2">const </span><span class="s1">routerStateChildren = routerState[</span><span class="s3">1</span><span class="s1">];</span>
+    <span class="s2">const </span><span class="s1">parallelRoutes = cacheNode.parallelRoutes;</span>
+    <span class="s2">for</span><span class="s1">(</span><span class="s2">let </span><span class="s1">parallelRouteKey </span><span class="s2">in </span><span class="s1">routerStateChildren){</span>
+        <span class="s2">const </span><span class="s1">routerStateChild = routerStateChildren[parallelRouteKey];</span>
+        <span class="s2">const </span><span class="s1">segmentMapChild = parallelRoutes.get(parallelRouteKey);</span>
+        <span class="s2">if </span><span class="s1">(segmentMapChild === undefined) {</span>
+            <span class="s2">continue</span><span class="s1">;</span>
+        <span class="s1">}</span>
+        <span class="s2">const </span><span class="s1">segmentChild = routerStateChild[</span><span class="s3">0</span><span class="s1">];</span>
+        <span class="s2">const </span><span class="s1">segmentKeyChild = (</span><span class="s3">0</span><span class="s1">, _createroutercachekey.createRouterCacheKey)(segmentChild);</span>
+        <span class="s2">const </span><span class="s1">cacheNodeChild = segmentMapChild.get(segmentKeyChild);</span>
+        <span class="s2">if </span><span class="s1">(cacheNodeChild !== undefined) {</span>
+            <span class="s1">abortPendingCacheNode(routerStateChild, cacheNodeChild, error);</span>
+        <span class="s1">} </span><span class="s2">else </span><span class="s1">{</span>
+        <span class="s4">// This shouldn't happen because we're traversing the same tree that was</span>
+        <span class="s4">// used to construct the cache nodes in the first place.</span>
+        <span class="s1">}</span>
+    <span class="s1">}</span>
+    <span class="s2">const </span><span class="s1">rsc = cacheNode.rsc;</span>
+    <span class="s2">if </span><span class="s1">(isDeferredRsc(rsc)) {</span>
+        <span class="s2">if </span><span class="s1">(error === </span><span class="s2">null</span><span class="s1">) {</span>
+            <span class="s4">// This will trigger a lazy fetch during render.</span>
+            <span class="s1">rsc.resolve(</span><span class="s2">null</span><span class="s1">);</span>
+        <span class="s1">} </span><span class="s2">else </span><span class="s1">{</span>
+            <span class="s4">// This will trigger an error during rendering.</span>
+            <span class="s1">rsc.reject(error);</span>
+        <span class="s1">}</span>
+    <span class="s1">}</span>
+    <span class="s4">// Check if this is a leaf segment. If so, it will have a `head` property with</span>
+    <span class="s4">// a pending promise that needs to be resolved. If an error was provided, we</span>
+    <span class="s4">// will not resolve it with an error, since this is rendered at the root of</span>
+    <span class="s4">// the app. We want the segment to error, not the entire app.</span>
+    <span class="s2">const </span><span class="s1">head = cacheNode.head;</span>
+    <span class="s2">if </span><span class="s1">(isDeferredRsc(head)) {</span>
+        <span class="s1">head.resolve(</span><span class="s2">null</span><span class="s1">);</span>
+    <span class="s1">}</span>
+<span class="s1">}</span>
+<span class="s2">function </span><span class="s1">updateCacheNodeOnPopstateRestoration(oldCacheNode, routerState) {</span>
+    <span class="s4">// A popstate navigation reads data from the local cache. It does not issue</span>
+    <span class="s4">// new network requests (unless the cache entries have been evicted). So, we</span>
+    <span class="s4">// update the cache to drop the prefetch data for any segment whose dynamic</span>
+    <span class="s4">// data was already received. This prevents an unnecessary flash back to PPR</span>
+    <span class="s4">// state during a back/forward navigation.</span>
+    <span class="s4">//</span>
+    <span class="s4">// This function clones the entire cache node tree and sets the `prefetchRsc`</span>
+    <span class="s4">// field to `null` to prevent it from being rendered. We can't mutate the node</span>
+    <span class="s4">// in place because this is a concurrent data structure.</span>
+    <span class="s2">const </span><span class="s1">routerStateChildren = routerState[</span><span class="s3">1</span><span class="s1">];</span>
+    <span class="s2">const </span><span class="s1">oldParallelRoutes = oldCacheNode.parallelRoutes;</span>
+    <span class="s2">const </span><span class="s1">newParallelRoutes = </span><span class="s2">new </span><span class="s1">Map(oldParallelRoutes);</span>
+    <span class="s2">for</span><span class="s1">(</span><span class="s2">let </span><span class="s1">parallelRouteKey </span><span class="s2">in </span><span class="s1">routerStateChildren){</span>
+        <span class="s2">const </span><span class="s1">routerStateChild = routerStateChildren[parallelRouteKey];</span>
+        <span class="s2">const </span><span class="s1">segmentChild = routerStateChild[</span><span class="s3">0</span><span class="s1">];</span>
+        <span class="s2">const </span><span class="s1">segmentKeyChild = (</span><span class="s3">0</span><span class="s1">, _createroutercachekey.createRouterCacheKey)(segmentChild);</span>
+        <span class="s2">const </span><span class="s1">oldSegmentMapChild = oldParallelRoutes.get(parallelRouteKey);</span>
+        <span class="s2">if </span><span class="s1">(oldSegmentMapChild !== undefined) {</span>
+            <span class="s2">const </span><span class="s1">oldCacheNodeChild = oldSegmentMapChild.get(segmentKeyChild);</span>
+            <span class="s2">if </span><span class="s1">(oldCacheNodeChild !== undefined) {</span>
+                <span class="s2">const </span><span class="s1">newCacheNodeChild = updateCacheNodeOnPopstateRestoration(oldCacheNodeChild, routerStateChild);</span>
+                <span class="s2">const </span><span class="s1">newSegmentMapChild = </span><span class="s2">new </span><span class="s1">Map(oldSegmentMapChild);</span>
+                <span class="s1">newSegmentMapChild.set(segmentKeyChild, newCacheNodeChild);</span>
+                <span class="s1">newParallelRoutes.set(parallelRouteKey, newSegmentMapChild);</span>
+            <span class="s1">}</span>
+        <span class="s1">}</span>
+    <span class="s1">}</span>
+    <span class="s4">// Only show prefetched data if the dynamic data is still pending.</span>
+    <span class="s4">//</span>
+    <span class="s4">// Tehnically, what we're actually checking is whether the dynamic network</span>
+    <span class="s4">// response was received. But since it's a streaming response, this does not</span>
+    <span class="s4">// mean that all the dynamic data has fully streamed in. It just means that</span>
+    <span class="s4">// _some_ of the dynamic data was received. But as a heuristic, we assume that</span>
+    <span class="s4">// the rest dynamic data will stream in quickly, so it's still better to skip</span>
+    <span class="s4">// the prefetch state.</span>
+    <span class="s2">const </span><span class="s1">rsc = oldCacheNode.rsc;</span>
+    <span class="s2">const </span><span class="s1">shouldUsePrefetch = isDeferredRsc(rsc) &amp;&amp; rsc.status === </span><span class="s0">'pending'</span><span class="s1">;</span>
+    <span class="s2">return </span><span class="s1">{</span>
+        <span class="s1">lazyData: </span><span class="s2">null</span><span class="s1">,</span>
+        <span class="s1">rsc,</span>
+        <span class="s1">head: oldCacheNode.head,</span>
+        <span class="s1">prefetchHead: shouldUsePrefetch ? oldCacheNode.prefetchHead : [</span>
+            <span class="s2">null</span><span class="s1">,</span>
+            <span class="s2">null</span>
+        <span class="s1">],</span>
+        <span class="s1">prefetchRsc: shouldUsePrefetch ? oldCacheNode.prefetchRsc : </span><span class="s2">null</span><span class="s1">,</span>
+        <span class="s1">loading: oldCacheNode.loading,</span>
+        <span class="s4">// These are the cloned children we computed above</span>
+        <span class="s1">parallelRoutes: newParallelRoutes,</span>
+        <span class="s1">navigatedAt: oldCacheNode.navigatedAt</span>
+    <span class="s1">};</span>
+<span class="s1">}</span>
+<span class="s2">const </span><span class="s1">DEFERRED = Symbol();</span>
+<span class="s4">// This type exists to distinguish a DeferredRsc from a Flight promise. It's a</span>
+<span class="s4">// compromise to avoid adding an extra field on every Cache Node, which would be</span>
+<span class="s4">// awkward because the pre-PPR parts of codebase would need to account for it,</span>
+<span class="s4">// too. We can remove it once type Cache Node type is more settled.</span>
+<span class="s2">function </span><span class="s1">isDeferredRsc(value) {</span>
+    <span class="s2">return </span><span class="s1">value &amp;&amp; value.tag === DEFERRED;</span>
+<span class="s1">}</span>
+<span class="s2">function </span><span class="s1">createDeferredRsc() {</span>
+    <span class="s2">let </span><span class="s1">resolve;</span>
+    <span class="s2">let </span><span class="s1">reject;</span>
+    <span class="s2">const </span><span class="s1">pendingRsc = </span><span class="s2">new </span><span class="s1">Promise((res, rej)=&gt;{</span>
+        <span class="s1">resolve = res;</span>
+        <span class="s1">reject = rej;</span>
+    <span class="s1">});</span>
+    <span class="s1">pendingRsc.status = </span><span class="s0">'pending'</span><span class="s1">;</span>
+    <span class="s1">pendingRsc.resolve = (value)=&gt;{</span>
+        <span class="s2">if </span><span class="s1">(pendingRsc.status === </span><span class="s0">'pending'</span><span class="s1">) {</span>
+            <span class="s2">const </span><span class="s1">fulfilledRsc = pendingRsc;</span>
+            <span class="s1">fulfilledRsc.status = </span><span class="s0">'fulfilled'</span><span class="s1">;</span>
+            <span class="s1">fulfilledRsc.value = value;</span>
+            <span class="s1">resolve(value);</span>
+        <span class="s1">}</span>
+    <span class="s1">};</span>
+    <span class="s1">pendingRsc.reject = (error)=&gt;{</span>
+        <span class="s2">if </span><span class="s1">(pendingRsc.status === </span><span class="s0">'pending'</span><span class="s1">) {</span>
+            <span class="s2">const </span><span class="s1">rejectedRsc = pendingRsc;</span>
+            <span class="s1">rejectedRsc.status = </span><span class="s0">'rejected'</span><span class="s1">;</span>
+            <span class="s1">rejectedRsc.reason = error;</span>
+            <span class="s1">reject(error);</span>
+        <span class="s1">}</span>
+    <span class="s1">};</span>
+    <span class="s1">pendingRsc.tag = DEFERRED;</span>
+    <span class="s2">return </span><span class="s1">pendingRsc;</span>
+<span class="s1">}</span>
+
+<span class="s2">if </span><span class="s1">((</span><span class="s2">typeof </span><span class="s1">exports.default === </span><span class="s0">'function' </span><span class="s1">|| (</span><span class="s2">typeof </span><span class="s1">exports.default === </span><span class="s0">'object' </span><span class="s1">&amp;&amp; exports.default !== </span><span class="s2">null</span><span class="s1">)) &amp;&amp; </span><span class="s2">typeof </span><span class="s1">exports.default.__esModule === </span><span class="s0">'undefined'</span><span class="s1">) {</span>
+  <span class="s1">Object.defineProperty(exports.default, </span><span class="s0">'__esModule'</span><span class="s1">, { value: </span><span class="s2">true </span><span class="s1">});</span>
+  <span class="s1">Object.assign(exports.default, exports);</span>
+  <span class="s1">module.exports = exports.default;</span>
+<span class="s1">}</span>
+
+<span class="s4">//# sourceMappingURL=ppr-navigations.js.map</span></pre>
+</body>
+</html>

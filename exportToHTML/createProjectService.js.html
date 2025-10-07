@@ -1,0 +1,159 @@
+<html>
+<head>
+<title>createProjectService.js</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #067d17;}
+.s1 { color: #080808;}
+.s2 { color: #0033b3;}
+.s3 { color: #1750eb;}
+.s4 { color: #8c8c8c; font-style: italic;}
+.s5 { color: #8c8c8c; font-style: italic;}
+</style>
+</head>
+<body bgcolor="#ffffff">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#c0c0c0" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+createProjectService.js</font>
+</center></td></tr></table>
+<pre><span class="s0">&quot;use strict&quot;</span><span class="s1">;</span>
+<span class="s2">var </span><span class="s1">__importDefault = (</span><span class="s2">this </span><span class="s1">&amp;&amp; </span><span class="s2">this</span><span class="s1">.__importDefault) || </span><span class="s2">function </span><span class="s1">(mod) {</span>
+    <span class="s2">return </span><span class="s1">(mod &amp;&amp; mod.__esModule) ? mod : { </span><span class="s0">&quot;default&quot;</span><span class="s1">: mod };</span>
+<span class="s1">};</span>
+<span class="s1">Object.defineProperty(exports, </span><span class="s0">&quot;__esModule&quot;</span><span class="s1">, { value: </span><span class="s2">true </span><span class="s1">});</span>
+<span class="s1">exports.createProjectService = createProjectService;</span>
+<span class="s2">const </span><span class="s1">debug_1 = __importDefault(require(</span><span class="s0">&quot;debug&quot;</span><span class="s1">));</span>
+<span class="s2">const </span><span class="s1">getParsedConfigFileFromTSServer_js_1 = require(</span><span class="s0">&quot;./getParsedConfigFileFromTSServer.js&quot;</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">DEFAULT_PROJECT_MATCHED_FILES_THRESHOLD = </span><span class="s3">8</span><span class="s1">;</span>
+<span class="s2">const </span><span class="s1">log = (</span><span class="s3">0</span><span class="s1">, debug_1.default)(</span><span class="s0">'typescript-eslint:project-service:createProjectService'</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">logTsserverErr = (</span><span class="s3">0</span><span class="s1">, debug_1.default)(</span><span class="s0">'typescript-eslint:project-service:tsserver:err'</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">logTsserverInfo = (</span><span class="s3">0</span><span class="s1">, debug_1.default)(</span><span class="s0">'typescript-eslint:project-service:tsserver:info'</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">logTsserverPerf = (</span><span class="s3">0</span><span class="s1">, debug_1.default)(</span><span class="s0">'typescript-eslint:project-service:tsserver:perf'</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">logTsserverEvent = (</span><span class="s3">0</span><span class="s1">, debug_1.default)(</span><span class="s0">'typescript-eslint:project-service:tsserver:event'</span><span class="s1">);</span>
+<span class="s4">// For TypeScript APIs that expect a function to be passed in</span>
+<span class="s4">// eslint-disable-next-line @typescript-eslint/no-empty-function</span>
+<span class="s2">const </span><span class="s1">doNothing = () =&gt; { };</span>
+<span class="s2">const </span><span class="s1">createStubFileWatcher = () =&gt; ({</span>
+    <span class="s1">close: doNothing,</span>
+<span class="s1">});</span>
+<span class="s4">/**</span>
+ <span class="s4">* Creates a new Project Service instance, as well as metadata on its creation.</span>
+ <span class="s4">* </span><span class="s5">@param </span><span class="s4">settings Settings to create a new Project Service instance.</span>
+ <span class="s4">* </span><span class="s5">@returns </span><span class="s4">A new Project Service instance, as well as metadata on its creation.</span>
+ <span class="s4">* </span><span class="s5">@example</span>
+ <span class="s4">* ```ts</span>
+ <span class="s4">* import { createProjectService } from '@typescript-eslint/project-service';</span>
+ <span class="s4">*</span>
+ <span class="s4">* const { service } = createProjectService();</span>
+ <span class="s4">*</span>
+ <span class="s4">* service.openClientFile('index.ts');</span>
+ <span class="s4">* ```</span>
+ <span class="s4">*/</span>
+<span class="s2">function </span><span class="s1">createProjectService({ jsDocParsingMode, options: optionsRaw = {}, tsconfigRootDir, } = {}) {</span>
+    <span class="s2">const </span><span class="s1">options = {</span>
+        <span class="s1">defaultProject: </span><span class="s0">'tsconfig.json'</span><span class="s1">,</span>
+        <span class="s1">...optionsRaw,</span>
+    <span class="s1">};</span>
+    <span class="s4">// We import this lazily to avoid its cost for users who don't use the service</span>
+    <span class="s4">// TODO: Once we drop support for TS&lt;5.3 we can import from &quot;typescript&quot; directly</span>
+    <span class="s4">// eslint-disable-next-line @typescript-eslint/no-require-imports</span>
+    <span class="s2">const </span><span class="s1">tsserver = require(</span><span class="s0">'typescript/lib/tsserverlibrary'</span><span class="s1">);</span>
+    <span class="s4">// TODO: see getWatchProgramsForProjects</span>
+    <span class="s4">// We don't watch the disk, we just refer to these when ESLint calls us</span>
+    <span class="s4">// there's a whole separate update pass in maybeInvalidateProgram at the bottom of getWatchProgramsForProjects</span>
+    <span class="s4">// (this &quot;goes nuclear on TypeScript&quot;)</span>
+    <span class="s2">const </span><span class="s1">system = {</span>
+        <span class="s1">...tsserver.sys,</span>
+        <span class="s1">clearImmediate,</span>
+        <span class="s1">clearTimeout,</span>
+        <span class="s1">setImmediate,</span>
+        <span class="s1">setTimeout,</span>
+        <span class="s1">watchDirectory: createStubFileWatcher,</span>
+        <span class="s1">watchFile: createStubFileWatcher,</span>
+        <span class="s4">// We stop loading any TypeScript plugins by default, to prevent them from attaching disk watchers</span>
+        <span class="s4">// See https://github.com/typescript-eslint/typescript-eslint/issues/9905</span>
+        <span class="s1">...(!options.loadTypeScriptPlugins &amp;&amp; {</span>
+            <span class="s1">require: () =&gt; ({</span>
+                <span class="s1">error: {</span>
+                    <span class="s1">message: </span><span class="s0">'TypeScript plugins are not required when using parserOptions.projectService.'</span><span class="s1">,</span>
+                <span class="s1">},</span>
+                <span class="s1">module: undefined,</span>
+            <span class="s1">}),</span>
+        <span class="s1">}),</span>
+    <span class="s1">};</span>
+    <span class="s2">const </span><span class="s1">logger = {</span>
+        <span class="s1">close: doNothing,</span>
+        <span class="s1">endGroup: doNothing,</span>
+        <span class="s1">getLogFileName: () =&gt; undefined,</span>
+        <span class="s4">// The debug library doesn't use levels without creating a namespace for each.</span>
+        <span class="s4">// Log levels are not passed to the writer so we wouldn't be able to forward</span>
+        <span class="s4">// to a respective namespace.  Supporting would require an additional flag for</span>
+        <span class="s4">// granular control.  Defaulting to all levels for now.</span>
+        <span class="s1">hasLevel: () =&gt; </span><span class="s2">true</span><span class="s1">,</span>
+        <span class="s1">info(s) {</span>
+            <span class="s2">this</span><span class="s1">.msg(s, tsserver.server.Msg.Info);</span>
+        <span class="s1">},</span>
+        <span class="s1">loggingEnabled: () =&gt; </span>
+        <span class="s4">// if none of the debug namespaces are enabled, then don't enable logging in tsserver</span>
+        <span class="s1">logTsserverInfo.enabled ||</span>
+            <span class="s1">logTsserverErr.enabled ||</span>
+            <span class="s1">logTsserverPerf.enabled,</span>
+        <span class="s1">msg: (s, type) =&gt; {</span>
+            <span class="s2">switch </span><span class="s1">(type) {</span>
+                <span class="s2">case </span><span class="s1">tsserver.server.Msg.Err:</span>
+                    <span class="s1">logTsserverErr(s);</span>
+                    <span class="s2">break</span><span class="s1">;</span>
+                <span class="s2">case </span><span class="s1">tsserver.server.Msg.Perf:</span>
+                    <span class="s1">logTsserverPerf(s);</span>
+                    <span class="s2">break</span><span class="s1">;</span>
+                <span class="s2">default</span><span class="s1">:</span>
+                    <span class="s1">logTsserverInfo(s);</span>
+            <span class="s1">}</span>
+        <span class="s1">},</span>
+        <span class="s1">perftrc(s) {</span>
+            <span class="s2">this</span><span class="s1">.msg(s, tsserver.server.Msg.Perf);</span>
+        <span class="s1">},</span>
+        <span class="s1">startGroup: doNothing,</span>
+    <span class="s1">};</span>
+    <span class="s1">log(</span><span class="s0">'Creating Project Service with: %o'</span><span class="s1">, options);</span>
+    <span class="s2">const </span><span class="s1">service = </span><span class="s2">new </span><span class="s1">tsserver.server.ProjectService({</span>
+        <span class="s1">cancellationToken: { isCancellationRequested: () =&gt; </span><span class="s2">false </span><span class="s1">},</span>
+        <span class="s1">eventHandler: logTsserverEvent.enabled</span>
+            <span class="s1">? (e) =&gt; {</span>
+                <span class="s1">logTsserverEvent(e);</span>
+            <span class="s1">}</span>
+            <span class="s1">: undefined,</span>
+        <span class="s1">host: system,</span>
+        <span class="s1">jsDocParsingMode,</span>
+        <span class="s1">logger,</span>
+        <span class="s1">session: undefined,</span>
+        <span class="s1">useInferredProjectPerProjectRoot: </span><span class="s2">false</span><span class="s1">,</span>
+        <span class="s1">useSingleInferredProject: </span><span class="s2">false</span><span class="s1">,</span>
+    <span class="s1">});</span>
+    <span class="s1">service.setHostConfiguration({</span>
+        <span class="s1">preferences: {</span>
+            <span class="s1">includePackageJsonAutoImports: </span><span class="s0">'off'</span><span class="s1">,</span>
+        <span class="s1">},</span>
+    <span class="s1">});</span>
+    <span class="s1">log(</span><span class="s0">'Enabling default project: %s'</span><span class="s1">, options.defaultProject);</span>
+    <span class="s2">const </span><span class="s1">configFile = (</span><span class="s3">0</span><span class="s1">, getParsedConfigFileFromTSServer_js_1.getParsedConfigFileFromTSServer)(tsserver, options.defaultProject, !!optionsRaw.defaultProject, tsconfigRootDir);</span>
+    <span class="s2">if </span><span class="s1">(configFile) {</span>
+        <span class="s1">service.setCompilerOptionsForInferredProjects(</span>
+        <span class="s4">// NOTE: The inferred projects API is not intended for source files when a tsconfig</span>
+        <span class="s4">// exists. There is no API that generates an InferredProjectCompilerOptions suggesting</span>
+        <span class="s4">// it is meant for hard coded options passed in. Hard asserting as a work around.</span>
+        <span class="s4">// See https://github.com/microsoft/TypeScript/blob/27bcd4cb5a98bce46c9cdd749752703ead021a4b/src/server/protocol.ts#L1904</span>
+        <span class="s1">configFile.options);</span>
+    <span class="s1">}</span>
+    <span class="s2">return </span><span class="s1">{</span>
+        <span class="s1">allowDefaultProject: options.allowDefaultProject,</span>
+        <span class="s1">lastReloadTimestamp: performance.now(),</span>
+        <span class="s1">maximumDefaultProjectFileMatchCount: options.maximumDefaultProjectFileMatchCount_THIS_WILL_SLOW_DOWN_LINTING ??</span>
+            <span class="s1">DEFAULT_PROJECT_MATCHED_FILES_THRESHOLD,</span>
+        <span class="s1">service,</span>
+    <span class="s1">};</span>
+<span class="s1">}</span>
+</pre>
+</body>
+</html>

@@ -1,0 +1,120 @@
+<html>
+<head>
+<title>float.js</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #067d17;}
+.s1 { color: #080808;}
+.s2 { color: #0033b3;}
+.s3 { color: #8c8c8c; font-style: italic;}
+.s4 { color: #0037a6;}
+.s5 { color: #1750eb;}
+.s6 { color: #264eff;}
+</style>
+</head>
+<body bgcolor="#ffffff">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#c0c0c0" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+float.js</font>
+</center></td></tr></table>
+<pre><span class="s0">'use strict'</span><span class="s1">;</span>
+
+<span class="s2">var </span><span class="s1">common = require(</span><span class="s0">'../common'</span><span class="s1">);</span>
+<span class="s2">var </span><span class="s1">Type   = require(</span><span class="s0">'../type'</span><span class="s1">);</span>
+
+<span class="s2">var </span><span class="s1">YAML_FLOAT_PATTERN = </span><span class="s2">new </span><span class="s1">RegExp(</span>
+  <span class="s3">// 2.5e4, 2.5 and integers</span>
+  <span class="s0">'^(?:[-+]?(?:[0-9][0-9_]*)(?:</span><span class="s4">\\</span><span class="s0">.[0-9_]*)?(?:[eE][-+]?[0-9]+)?' </span><span class="s1">+</span>
+  <span class="s3">// .2e4, .2</span>
+  <span class="s3">// special case, seems not from spec</span>
+  <span class="s0">'|</span><span class="s4">\\</span><span class="s0">.[0-9_]+(?:[eE][-+]?[0-9]+)?' </span><span class="s1">+</span>
+  <span class="s3">// .inf</span>
+  <span class="s0">'|[-+]?</span><span class="s4">\\</span><span class="s0">.(?:inf|Inf|INF)' </span><span class="s1">+</span>
+  <span class="s3">// .nan</span>
+  <span class="s0">'|</span><span class="s4">\\</span><span class="s0">.(?:nan|NaN|NAN))$'</span><span class="s1">);</span>
+
+<span class="s2">function </span><span class="s1">resolveYamlFloat(data) {</span>
+  <span class="s2">if </span><span class="s1">(data === </span><span class="s2">null</span><span class="s1">) </span><span class="s2">return false</span><span class="s1">;</span>
+
+  <span class="s2">if </span><span class="s1">(!YAML_FLOAT_PATTERN.test(data) ||</span>
+      <span class="s3">// Quick hack to not allow integers end with `_`</span>
+      <span class="s3">// Probably should update regexp &amp; check speed</span>
+      <span class="s1">data[data.length - </span><span class="s5">1</span><span class="s1">] === </span><span class="s0">'_'</span><span class="s1">) {</span>
+    <span class="s2">return false</span><span class="s1">;</span>
+  <span class="s1">}</span>
+
+  <span class="s2">return true</span><span class="s1">;</span>
+<span class="s1">}</span>
+
+<span class="s2">function </span><span class="s1">constructYamlFloat(data) {</span>
+  <span class="s2">var </span><span class="s1">value, sign;</span>
+
+  <span class="s1">value  = data.replace(</span><span class="s6">/_/g</span><span class="s1">, </span><span class="s0">''</span><span class="s1">).toLowerCase();</span>
+  <span class="s1">sign   = value[</span><span class="s5">0</span><span class="s1">] === </span><span class="s0">'-' </span><span class="s1">? -</span><span class="s5">1 </span><span class="s1">: </span><span class="s5">1</span><span class="s1">;</span>
+
+  <span class="s2">if </span><span class="s1">(</span><span class="s0">'+-'</span><span class="s1">.indexOf(value[</span><span class="s5">0</span><span class="s1">]) &gt;= </span><span class="s5">0</span><span class="s1">) {</span>
+    <span class="s1">value = value.slice(</span><span class="s5">1</span><span class="s1">);</span>
+  <span class="s1">}</span>
+
+  <span class="s2">if </span><span class="s1">(value === </span><span class="s0">'.inf'</span><span class="s1">) {</span>
+    <span class="s2">return </span><span class="s1">(sign === </span><span class="s5">1</span><span class="s1">) ? Number.POSITIVE_INFINITY : Number.NEGATIVE_INFINITY;</span>
+
+  <span class="s1">} </span><span class="s2">else if </span><span class="s1">(value === </span><span class="s0">'.nan'</span><span class="s1">) {</span>
+    <span class="s2">return </span><span class="s1">NaN;</span>
+  <span class="s1">}</span>
+  <span class="s2">return </span><span class="s1">sign * parseFloat(value, </span><span class="s5">10</span><span class="s1">);</span>
+<span class="s1">}</span>
+
+
+<span class="s2">var </span><span class="s1">SCIENTIFIC_WITHOUT_DOT = </span><span class="s6">/^[-+]?[0-9]+e/</span><span class="s1">;</span>
+
+<span class="s2">function </span><span class="s1">representYamlFloat(object, style) {</span>
+  <span class="s2">var </span><span class="s1">res;</span>
+
+  <span class="s2">if </span><span class="s1">(isNaN(object)) {</span>
+    <span class="s2">switch </span><span class="s1">(style) {</span>
+      <span class="s2">case </span><span class="s0">'lowercase'</span><span class="s1">: </span><span class="s2">return </span><span class="s0">'.nan'</span><span class="s1">;</span>
+      <span class="s2">case </span><span class="s0">'uppercase'</span><span class="s1">: </span><span class="s2">return </span><span class="s0">'.NAN'</span><span class="s1">;</span>
+      <span class="s2">case </span><span class="s0">'camelcase'</span><span class="s1">: </span><span class="s2">return </span><span class="s0">'.NaN'</span><span class="s1">;</span>
+    <span class="s1">}</span>
+  <span class="s1">} </span><span class="s2">else if </span><span class="s1">(Number.POSITIVE_INFINITY === object) {</span>
+    <span class="s2">switch </span><span class="s1">(style) {</span>
+      <span class="s2">case </span><span class="s0">'lowercase'</span><span class="s1">: </span><span class="s2">return </span><span class="s0">'.inf'</span><span class="s1">;</span>
+      <span class="s2">case </span><span class="s0">'uppercase'</span><span class="s1">: </span><span class="s2">return </span><span class="s0">'.INF'</span><span class="s1">;</span>
+      <span class="s2">case </span><span class="s0">'camelcase'</span><span class="s1">: </span><span class="s2">return </span><span class="s0">'.Inf'</span><span class="s1">;</span>
+    <span class="s1">}</span>
+  <span class="s1">} </span><span class="s2">else if </span><span class="s1">(Number.NEGATIVE_INFINITY === object) {</span>
+    <span class="s2">switch </span><span class="s1">(style) {</span>
+      <span class="s2">case </span><span class="s0">'lowercase'</span><span class="s1">: </span><span class="s2">return </span><span class="s0">'-.inf'</span><span class="s1">;</span>
+      <span class="s2">case </span><span class="s0">'uppercase'</span><span class="s1">: </span><span class="s2">return </span><span class="s0">'-.INF'</span><span class="s1">;</span>
+      <span class="s2">case </span><span class="s0">'camelcase'</span><span class="s1">: </span><span class="s2">return </span><span class="s0">'-.Inf'</span><span class="s1">;</span>
+    <span class="s1">}</span>
+  <span class="s1">} </span><span class="s2">else if </span><span class="s1">(common.isNegativeZero(object)) {</span>
+    <span class="s2">return </span><span class="s0">'-0.0'</span><span class="s1">;</span>
+  <span class="s1">}</span>
+
+  <span class="s1">res = object.toString(</span><span class="s5">10</span><span class="s1">);</span>
+
+  <span class="s3">// JS stringifier can build scientific format without dots: 5e-100,</span>
+  <span class="s3">// while YAML requres dot: 5.e-100. Fix it with simple hack</span>
+
+  <span class="s2">return </span><span class="s1">SCIENTIFIC_WITHOUT_DOT.test(res) ? res.replace(</span><span class="s0">'e'</span><span class="s1">, </span><span class="s0">'.e'</span><span class="s1">) : res;</span>
+<span class="s1">}</span>
+
+<span class="s2">function </span><span class="s1">isFloat(object) {</span>
+  <span class="s2">return </span><span class="s1">(Object.prototype.toString.call(object) === </span><span class="s0">'[object Number]'</span><span class="s1">) &amp;&amp;</span>
+         <span class="s1">(object % </span><span class="s5">1 </span><span class="s1">!== </span><span class="s5">0 </span><span class="s1">|| common.isNegativeZero(object));</span>
+<span class="s1">}</span>
+
+<span class="s1">module.exports = </span><span class="s2">new </span><span class="s1">Type(</span><span class="s0">'tag:yaml.org,2002:float'</span><span class="s1">, {</span>
+  <span class="s1">kind: </span><span class="s0">'scalar'</span><span class="s1">,</span>
+  <span class="s1">resolve: resolveYamlFloat,</span>
+  <span class="s1">construct: constructYamlFloat,</span>
+  <span class="s1">predicate: isFloat,</span>
+  <span class="s1">represent: representYamlFloat,</span>
+  <span class="s1">defaultStyle: </span><span class="s0">'lowercase'</span>
+<span class="s1">});</span>
+</pre>
+</body>
+</html>

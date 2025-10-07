@@ -1,0 +1,68 @@
+<html>
+<head>
+<title>color.mjs</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #0033b3;}
+.s1 { color: #080808;}
+.s2 { color: #067d17;}
+.s3 { color: #8c8c8c; font-style: italic;}
+.s4 { color: #1750eb;}
+</style>
+</head>
+<body bgcolor="#ffffff">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#c0c0c0" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+color.mjs</font>
+</center></td></tr></table>
+<pre><span class="s0">import </span><span class="s1">{ warning } from </span><span class="s2">'motion-utils'</span><span class="s1">;</span>
+<span class="s0">import </span><span class="s1">{ hex } from </span><span class="s2">'../../value/types/color/hex.mjs'</span><span class="s1">;</span>
+<span class="s0">import </span><span class="s1">{ hsla } from </span><span class="s2">'../../value/types/color/hsla.mjs'</span><span class="s1">;</span>
+<span class="s0">import </span><span class="s1">{ hslaToRgba } from </span><span class="s2">'../../value/types/color/hsla-to-rgba.mjs'</span><span class="s1">;</span>
+<span class="s0">import </span><span class="s1">{ rgba } from </span><span class="s2">'../../value/types/color/rgba.mjs'</span><span class="s1">;</span>
+<span class="s0">import </span><span class="s1">{ mixImmediate } from </span><span class="s2">'./immediate.mjs'</span><span class="s1">;</span>
+<span class="s0">import </span><span class="s1">{ mixNumber } from </span><span class="s2">'./number.mjs'</span><span class="s1">;</span>
+
+<span class="s3">// Linear color space blending</span>
+<span class="s3">// Explained https://www.youtube.com/watch?v=LKnqECcg6Gw</span>
+<span class="s3">// Demonstrated http://codepen.io/osublake/pen/xGVVaN</span>
+<span class="s0">const </span><span class="s1">mixLinearColor = (from, to, v) =&gt; {</span>
+    <span class="s0">const </span><span class="s1">fromExpo = from * from;</span>
+    <span class="s0">const </span><span class="s1">expo = v * (to * to - fromExpo) + fromExpo;</span>
+    <span class="s0">return </span><span class="s1">expo &lt; </span><span class="s4">0 </span><span class="s1">? </span><span class="s4">0 </span><span class="s1">: Math.sqrt(expo);</span>
+<span class="s1">};</span>
+<span class="s0">const </span><span class="s1">colorTypes = [hex, rgba, hsla];</span>
+<span class="s0">const </span><span class="s1">getColorType = (v) =&gt; colorTypes.find((type) =&gt; type.test(v));</span>
+<span class="s0">function </span><span class="s1">asRGBA(color) {</span>
+    <span class="s0">const </span><span class="s1">type = getColorType(color);</span>
+    <span class="s1">warning(Boolean(type), </span><span class="s2">`'</span><span class="s1">${color}</span><span class="s2">' is not an animatable color. Use the equivalent color code instead.`</span><span class="s1">, </span><span class="s2">&quot;color-not-animatable&quot;</span><span class="s1">);</span>
+    <span class="s0">if </span><span class="s1">(!Boolean(type))</span>
+        <span class="s0">return false</span><span class="s1">;</span>
+    <span class="s0">let </span><span class="s1">model = type.parse(color);</span>
+    <span class="s0">if </span><span class="s1">(type === hsla) {</span>
+        <span class="s3">// TODO Remove this cast - needed since Motion's stricter typing</span>
+        <span class="s1">model = hslaToRgba(model);</span>
+    <span class="s1">}</span>
+    <span class="s0">return </span><span class="s1">model;</span>
+<span class="s1">}</span>
+<span class="s0">const </span><span class="s1">mixColor = (from, to) =&gt; {</span>
+    <span class="s0">const </span><span class="s1">fromRGBA = asRGBA(from);</span>
+    <span class="s0">const </span><span class="s1">toRGBA = asRGBA(to);</span>
+    <span class="s0">if </span><span class="s1">(!fromRGBA || !toRGBA) {</span>
+        <span class="s0">return </span><span class="s1">mixImmediate(from, to);</span>
+    <span class="s1">}</span>
+    <span class="s0">const </span><span class="s1">blended = { ...fromRGBA };</span>
+    <span class="s0">return </span><span class="s1">(v) =&gt; {</span>
+        <span class="s1">blended.red = mixLinearColor(fromRGBA.red, toRGBA.red, v);</span>
+        <span class="s1">blended.green = mixLinearColor(fromRGBA.green, toRGBA.green, v);</span>
+        <span class="s1">blended.blue = mixLinearColor(fromRGBA.blue, toRGBA.blue, v);</span>
+        <span class="s1">blended.alpha = mixNumber(fromRGBA.alpha, toRGBA.alpha, v);</span>
+        <span class="s0">return </span><span class="s1">rgba.transform(blended);</span>
+    <span class="s1">};</span>
+<span class="s1">};</span>
+
+<span class="s0">export </span><span class="s1">{ mixColor, mixLinearColor };</span>
+</pre>
+</body>
+</html>

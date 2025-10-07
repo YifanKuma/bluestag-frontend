@@ -1,0 +1,150 @@
+<html>
+<head>
+<title>devtool-style-inject.js</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #8c8c8c; font-style: italic;}
+.s1 { color: #080808;}
+.s2 { color: #067d17;}
+.s3 { color: #0033b3;}
+.s4 { color: #8c8c8c; font-style: italic;}
+.s5 { color: #1750eb;}
+</style>
+</head>
+<body bgcolor="#ffffff">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#c0c0c0" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+devtool-style-inject.js</font>
+</center></td></tr></table>
+<pre><span class="s0">/* @ts-check */ /**</span>
+ <span class="s0">* Style injection mechanism for Next.js devtools with shadow DOM support</span>
+ <span class="s0">* Handles caching of style elements when the nextjs-portal shadow root is not available</span>
+ <span class="s0">*/ // Global cache for style elements when shadow root is not available</span>
+<span class="s2">&quot;use strict&quot;</span><span class="s1">;</span>
+<span class="s3">if </span><span class="s1">(</span><span class="s3">typeof </span><span class="s1">window !== </span><span class="s2">'undefined'</span><span class="s1">) {</span>
+    <span class="s1">window._nextjsDevtoolsStyleCache = window._nextjsDevtoolsStyleCache || {</span>
+        <span class="s1">pendingElements: [],</span>
+        <span class="s1">isObserving: </span><span class="s3">false</span><span class="s1">,</span>
+        <span class="s1">lastInsertedElement: </span><span class="s3">null</span><span class="s1">,</span>
+        <span class="s1">cachedShadowRoot: </span><span class="s3">null</span>
+    <span class="s1">};</span>
+<span class="s1">}</span>
+<span class="s0">/**</span>
+ <span class="s0">* </span><span class="s4">@returns </span><span class="s0">{ShadowRoot | null}</span>
+ <span class="s0">*/ </span><span class="s3">function </span><span class="s1">getShadowRoot() {</span>
+    <span class="s3">const </span><span class="s1">cache = window._nextjsDevtoolsStyleCache;</span>
+    <span class="s0">// Return cached shadow root if available</span>
+    <span class="s3">if </span><span class="s1">(cache.cachedShadowRoot) {</span>
+        <span class="s3">return </span><span class="s1">cache.cachedShadowRoot;</span>
+    <span class="s1">}</span>
+    <span class="s0">// Query the DOM and cache the result if found</span>
+    <span class="s3">const </span><span class="s1">portal = document.querySelector(</span><span class="s2">'nextjs-portal'</span><span class="s1">);</span>
+    <span class="s3">const </span><span class="s1">shadowRoot = (portal == </span><span class="s3">null </span><span class="s1">? </span><span class="s3">void </span><span class="s5">0 </span><span class="s1">: portal.shadowRoot) || </span><span class="s3">null</span><span class="s1">;</span>
+    <span class="s3">if </span><span class="s1">(shadowRoot) {</span>
+        <span class="s1">cache.cachedShadowRoot = shadowRoot;</span>
+    <span class="s1">}</span>
+    <span class="s3">return </span><span class="s1">shadowRoot;</span>
+<span class="s1">}</span>
+<span class="s0">/**</span>
+ <span class="s0">* </span><span class="s4">@param </span><span class="s0">{HTMLElement} element</span>
+ <span class="s0">* </span><span class="s4">@param </span><span class="s0">{ShadowRoot} shadowRoot</span>
+ <span class="s0">*/ </span><span class="s3">function </span><span class="s1">insertElementIntoShadowRoot(element, shadowRoot) {</span>
+    <span class="s3">const </span><span class="s1">cache = window._nextjsDevtoolsStyleCache;</span>
+    <span class="s3">if </span><span class="s1">(!cache.lastInsertedElement) {</span>
+        <span class="s1">shadowRoot.insertBefore(element, shadowRoot.firstChild);</span>
+    <span class="s1">} </span><span class="s3">else if </span><span class="s1">(cache.lastInsertedElement.nextSibling) {</span>
+        <span class="s1">shadowRoot.insertBefore(element, cache.lastInsertedElement.nextSibling);</span>
+    <span class="s1">} </span><span class="s3">else </span><span class="s1">{</span>
+        <span class="s1">shadowRoot.appendChild(element);</span>
+    <span class="s1">}</span>
+    <span class="s1">cache.lastInsertedElement = element;</span>
+<span class="s1">}</span>
+<span class="s3">function </span><span class="s1">flushCachedElements() {</span>
+    <span class="s3">const </span><span class="s1">cache = window._nextjsDevtoolsStyleCache;</span>
+    <span class="s3">const </span><span class="s1">shadowRoot = getShadowRoot();</span>
+    <span class="s3">if </span><span class="s1">(!shadowRoot) {</span>
+        <span class="s3">return</span><span class="s1">;</span>
+    <span class="s1">}</span>
+    <span class="s1">cache.pendingElements.forEach((element)=&gt;{</span>
+        <span class="s1">insertElementIntoShadowRoot(element, shadowRoot);</span>
+    <span class="s1">});</span>
+    <span class="s1">cache.pendingElements = [];</span>
+<span class="s1">}</span>
+<span class="s3">function </span><span class="s1">startObservingForPortal() {</span>
+    <span class="s3">const </span><span class="s1">cache = window._nextjsDevtoolsStyleCache;</span>
+    <span class="s3">if </span><span class="s1">(cache.isObserving) {</span>
+        <span class="s3">return</span><span class="s1">;</span>
+    <span class="s1">}</span>
+    <span class="s1">cache.isObserving = </span><span class="s3">true</span><span class="s1">;</span>
+    <span class="s0">// First check if the portal already exists</span>
+    <span class="s3">const </span><span class="s1">shadowRoot = getShadowRoot() </span><span class="s0">// This will cache it if found</span>
+    <span class="s1">;</span>
+    <span class="s3">if </span><span class="s1">(shadowRoot) {</span>
+        <span class="s1">flushCachedElements();</span>
+        <span class="s3">return</span><span class="s1">;</span>
+    <span class="s1">}</span>
+    <span class="s0">// Set up MutationObserver to watch for the portal element</span>
+    <span class="s3">const </span><span class="s1">observer = </span><span class="s3">new </span><span class="s1">MutationObserver((mutations)=&gt;{</span>
+        <span class="s3">if </span><span class="s1">(mutations.length === </span><span class="s5">0</span><span class="s1">) {</span>
+            <span class="s3">return</span><span class="s1">;</span>
+        <span class="s1">}</span>
+        <span class="s0">// Check all mutations and all added nodes</span>
+        <span class="s3">for </span><span class="s1">(</span><span class="s3">const </span><span class="s1">mutation of mutations){</span>
+            <span class="s3">if </span><span class="s1">(mutation.addedNodes.length === </span><span class="s5">0</span><span class="s1">) </span><span class="s3">continue</span><span class="s1">;</span>
+            <span class="s3">for </span><span class="s1">(</span><span class="s3">const </span><span class="s1">addedNode of mutation.addedNodes){</span>
+                <span class="s3">if </span><span class="s1">(addedNode.nodeType !== Node.ELEMENT_NODE) </span><span class="s3">continue</span><span class="s1">;</span>
+                <span class="s3">const </span><span class="s1">mutationNode = addedNode;</span>
+                <span class="s3">let </span><span class="s1">portalNode = </span><span class="s3">null</span><span class="s1">;</span>
+                <span class="s3">if </span><span class="s1">(</span><span class="s0">// app router: body &gt; script[data-nextjs-dev-overlay] &gt; nextjs-portal</span>
+                <span class="s1">mutationNode.tagName === </span><span class="s2">'SCRIPT' </span><span class="s1">&amp;&amp; mutationNode.getAttribute(</span><span class="s2">'data-nextjs-dev-overlay'</span><span class="s1">)) {</span>
+                    <span class="s1">portalNode = mutationNode.firstChild;</span>
+                <span class="s1">} </span><span class="s3">else if </span><span class="s1">(</span><span class="s0">// pages router: body &gt; nextjs-portal</span>
+                <span class="s1">mutationNode.tagName === </span><span class="s2">'NEXTJS-PORTAL'</span><span class="s1">) {</span>
+                    <span class="s1">portalNode = mutationNode;</span>
+                <span class="s1">}</span>
+                <span class="s3">if </span><span class="s1">(portalNode) {</span>
+                    <span class="s0">// Wait until shadow root is available</span>
+                    <span class="s3">const </span><span class="s1">checkShadowRoot = ()=&gt;{</span>
+                        <span class="s3">if </span><span class="s1">(getShadowRoot()) {</span>
+                            <span class="s1">flushCachedElements();</span>
+                            <span class="s1">observer.disconnect();</span>
+                            <span class="s1">cache.isObserving = </span><span class="s3">false</span><span class="s1">;</span>
+                        <span class="s1">} </span><span class="s3">else </span><span class="s1">{</span>
+                            <span class="s0">// Try again after a short delay</span>
+                            <span class="s1">setTimeout(checkShadowRoot, </span><span class="s5">20</span><span class="s1">);</span>
+                        <span class="s1">}</span>
+                    <span class="s1">};</span>
+                    <span class="s1">checkShadowRoot();</span>
+                    <span class="s3">return</span><span class="s1">; </span><span class="s0">// Exit early once we find a portal</span>
+                <span class="s1">}</span>
+            <span class="s1">}</span>
+        <span class="s1">}</span>
+    <span class="s1">});</span>
+    <span class="s1">observer.observe(document.body, {</span>
+        <span class="s1">childList: </span><span class="s3">true</span><span class="s1">,</span>
+        <span class="s1">subtree: </span><span class="s3">true</span>
+    <span class="s1">});</span>
+<span class="s1">}</span>
+<span class="s0">/**</span>
+ <span class="s0">* </span><span class="s4">@param </span><span class="s0">{HTMLElement} element</span>
+ <span class="s0">*/ </span><span class="s3">function </span><span class="s1">insertAtTop(element) {</span>
+    <span class="s0">// Add special recognizable data prop to element</span>
+    <span class="s1">element.setAttribute(</span><span class="s2">'data-nextjs-dev-tool-style'</span><span class="s1">, </span><span class="s2">'true'</span><span class="s1">);</span>
+    <span class="s3">const </span><span class="s1">shadowRoot = getShadowRoot();</span>
+    <span class="s3">if </span><span class="s1">(shadowRoot) {</span>
+        <span class="s0">// Shadow root is available, insert directly</span>
+        <span class="s1">insertElementIntoShadowRoot(element, shadowRoot);</span>
+    <span class="s1">} </span><span class="s3">else </span><span class="s1">{</span>
+        <span class="s0">// Shadow root not available, cache the element</span>
+        <span class="s3">const </span><span class="s1">cache = window._nextjsDevtoolsStyleCache;</span>
+        <span class="s1">cache.pendingElements.push(element);</span>
+        <span class="s0">// Start observing for the portal if not already observing</span>
+        <span class="s1">startObservingForPortal();</span>
+    <span class="s1">}</span>
+<span class="s1">}</span>
+<span class="s1">module.exports = insertAtTop;</span>
+
+<span class="s0">//# sourceMappingURL=devtool-style-inject.js.map</span></pre>
+</body>
+</html>

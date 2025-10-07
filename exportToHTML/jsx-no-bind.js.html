@@ -1,0 +1,231 @@
+<html>
+<head>
+<title>jsx-no-bind.js</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #8c8c8c; font-style: italic;}
+.s1 { color: #8c8c8c; font-style: italic;}
+.s2 { color: #080808;}
+.s3 { color: #067d17;}
+.s4 { color: #0033b3;}
+.s5 { color: #1750eb;}
+</style>
+</head>
+<body bgcolor="#ffffff">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#c0c0c0" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+jsx-no-bind.js</font>
+</center></td></tr></table>
+<pre><span class="s0">/**</span>
+ <span class="s0">* </span><span class="s1">@fileoverview </span><span class="s0">Prevents usage of Function.prototype.bind and arrow functions</span>
+ <span class="s0">*               in React component props.</span>
+ <span class="s0">* </span><span class="s1">@author </span><span class="s0">Daniel Lo Nigro &lt;dan.cx&gt;</span>
+ <span class="s0">* </span><span class="s1">@author </span><span class="s0">Jacky Ho</span>
+ <span class="s0">*/</span>
+
+<span class="s3">'use strict'</span><span class="s2">;</span>
+
+<span class="s4">const </span><span class="s2">propName = require(</span><span class="s3">'jsx-ast-utils/propName'</span><span class="s2">);</span>
+<span class="s4">const </span><span class="s2">docsUrl = require(</span><span class="s3">'../util/docsUrl'</span><span class="s2">);</span>
+<span class="s4">const </span><span class="s2">astUtil = require(</span><span class="s3">'../util/ast'</span><span class="s2">);</span>
+<span class="s4">const </span><span class="s2">jsxUtil = require(</span><span class="s3">'../util/jsx'</span><span class="s2">);</span>
+<span class="s4">const </span><span class="s2">report = require(</span><span class="s3">'../util/report'</span><span class="s2">);</span>
+<span class="s4">const </span><span class="s2">getAncestors = require(</span><span class="s3">'../util/eslint'</span><span class="s2">).getAncestors;</span>
+
+<span class="s0">// -----------------------------------------------------------------------------</span>
+<span class="s0">// Rule Definition</span>
+<span class="s0">// -----------------------------------------------------------------------------</span>
+
+<span class="s4">const </span><span class="s2">messages = {</span>
+  <span class="s2">bindCall: </span><span class="s3">'JSX props should not use .bind()'</span><span class="s2">,</span>
+  <span class="s2">arrowFunc: </span><span class="s3">'JSX props should not use arrow functions'</span><span class="s2">,</span>
+  <span class="s2">bindExpression: </span><span class="s3">'JSX props should not use ::'</span><span class="s2">,</span>
+  <span class="s2">func: </span><span class="s3">'JSX props should not use functions'</span><span class="s2">,</span>
+<span class="s2">};</span>
+
+<span class="s0">/** </span><span class="s1">@type </span><span class="s0">{import('eslint').Rule.RuleModule} */</span>
+<span class="s2">module.exports = {</span>
+  <span class="s2">meta: {</span>
+    <span class="s2">docs: {</span>
+      <span class="s2">description: </span><span class="s3">'Disallow `.bind()` or arrow functions in JSX props'</span><span class="s2">,</span>
+      <span class="s2">category: </span><span class="s3">'Best Practices'</span><span class="s2">,</span>
+      <span class="s2">recommended: </span><span class="s4">false</span><span class="s2">,</span>
+      <span class="s2">url: docsUrl(</span><span class="s3">'jsx-no-bind'</span><span class="s2">),</span>
+    <span class="s2">},</span>
+
+    <span class="s2">messages,</span>
+
+    <span class="s2">schema: [{</span>
+      <span class="s2">type: </span><span class="s3">'object'</span><span class="s2">,</span>
+      <span class="s2">properties: {</span>
+        <span class="s2">allowArrowFunctions: {</span>
+          <span class="s4">default</span><span class="s2">: </span><span class="s4">false</span><span class="s2">,</span>
+          <span class="s2">type: </span><span class="s3">'boolean'</span><span class="s2">,</span>
+        <span class="s2">},</span>
+        <span class="s2">allowBind: {</span>
+          <span class="s4">default</span><span class="s2">: </span><span class="s4">false</span><span class="s2">,</span>
+          <span class="s2">type: </span><span class="s3">'boolean'</span><span class="s2">,</span>
+        <span class="s2">},</span>
+        <span class="s2">allowFunctions: {</span>
+          <span class="s4">default</span><span class="s2">: </span><span class="s4">false</span><span class="s2">,</span>
+          <span class="s2">type: </span><span class="s3">'boolean'</span><span class="s2">,</span>
+        <span class="s2">},</span>
+        <span class="s2">ignoreRefs: {</span>
+          <span class="s4">default</span><span class="s2">: </span><span class="s4">false</span><span class="s2">,</span>
+          <span class="s2">type: </span><span class="s3">'boolean'</span><span class="s2">,</span>
+        <span class="s2">},</span>
+        <span class="s2">ignoreDOMComponents: {</span>
+          <span class="s4">default</span><span class="s2">: </span><span class="s4">false</span><span class="s2">,</span>
+          <span class="s2">type: </span><span class="s3">'boolean'</span><span class="s2">,</span>
+        <span class="s2">},</span>
+      <span class="s2">},</span>
+      <span class="s2">additionalProperties: </span><span class="s4">false</span><span class="s2">,</span>
+    <span class="s2">}],</span>
+  <span class="s2">},</span>
+
+  <span class="s2">create(context) {</span>
+    <span class="s4">const </span><span class="s2">configuration = context.options[</span><span class="s5">0</span><span class="s2">] || {};</span>
+
+    <span class="s0">// Keep track of all the variable names pointing to a bind call,</span>
+    <span class="s0">// bind expression or an arrow function in different block statements</span>
+    <span class="s4">const </span><span class="s2">blockVariableNameSets = {};</span>
+
+    <span class="s0">/**</span>
+     <span class="s0">* </span><span class="s1">@param </span><span class="s0">{string | number} blockStart</span>
+     <span class="s0">*/</span>
+    <span class="s4">function </span><span class="s2">setBlockVariableNameSet(blockStart) {</span>
+      <span class="s2">blockVariableNameSets[blockStart] = {</span>
+        <span class="s2">arrowFunc: </span><span class="s4">new </span><span class="s2">Set(),</span>
+        <span class="s2">bindCall: </span><span class="s4">new </span><span class="s2">Set(),</span>
+        <span class="s2">bindExpression: </span><span class="s4">new </span><span class="s2">Set(),</span>
+        <span class="s2">func: </span><span class="s4">new </span><span class="s2">Set(),</span>
+      <span class="s2">};</span>
+    <span class="s2">}</span>
+
+    <span class="s4">function </span><span class="s2">getNodeViolationType(node) {</span>
+      <span class="s4">if </span><span class="s2">(</span>
+        <span class="s2">!configuration.allowBind</span>
+        <span class="s2">&amp;&amp; astUtil.isCallExpression(node)</span>
+        <span class="s2">&amp;&amp; node.callee.type === </span><span class="s3">'MemberExpression'</span>
+        <span class="s2">&amp;&amp; node.callee.property.type === </span><span class="s3">'Identifier'</span>
+        <span class="s2">&amp;&amp; node.callee.property.name === </span><span class="s3">'bind'</span>
+      <span class="s2">) {</span>
+        <span class="s4">return </span><span class="s3">'bindCall'</span><span class="s2">;</span>
+      <span class="s2">}</span>
+      <span class="s4">if </span><span class="s2">(node.type === </span><span class="s3">'ConditionalExpression'</span><span class="s2">) {</span>
+        <span class="s4">return </span><span class="s2">getNodeViolationType(node.test)</span>
+               <span class="s2">|| getNodeViolationType(node.consequent)</span>
+               <span class="s2">|| getNodeViolationType(node.alternate);</span>
+      <span class="s2">}</span>
+      <span class="s4">if </span><span class="s2">(!configuration.allowArrowFunctions &amp;&amp; node.type === </span><span class="s3">'ArrowFunctionExpression'</span><span class="s2">) {</span>
+        <span class="s4">return </span><span class="s3">'arrowFunc'</span><span class="s2">;</span>
+      <span class="s2">}</span>
+      <span class="s4">if </span><span class="s2">(</span>
+        <span class="s2">!configuration.allowFunctions</span>
+        <span class="s2">&amp;&amp; (node.type === </span><span class="s3">'FunctionExpression' </span><span class="s2">|| node.type === </span><span class="s3">'FunctionDeclaration'</span><span class="s2">)</span>
+      <span class="s2">) {</span>
+        <span class="s4">return </span><span class="s3">'func'</span><span class="s2">;</span>
+      <span class="s2">}</span>
+      <span class="s4">if </span><span class="s2">(!configuration.allowBind &amp;&amp; node.type === </span><span class="s3">'BindExpression'</span><span class="s2">) {</span>
+        <span class="s4">return </span><span class="s3">'bindExpression'</span><span class="s2">;</span>
+      <span class="s2">}</span>
+
+      <span class="s4">return null</span><span class="s2">;</span>
+    <span class="s2">}</span>
+
+    <span class="s0">/**</span>
+     <span class="s0">* </span><span class="s1">@param </span><span class="s0">{string | number} violationType</span>
+     <span class="s0">* </span><span class="s1">@param </span><span class="s0">{unknown} variableName</span>
+     <span class="s0">* </span><span class="s1">@param </span><span class="s0">{string | number} blockStart</span>
+     <span class="s0">*/</span>
+    <span class="s4">function </span><span class="s2">addVariableNameToSet(violationType, variableName, blockStart) {</span>
+      <span class="s2">blockVariableNameSets[blockStart][violationType].add(variableName);</span>
+    <span class="s2">}</span>
+
+    <span class="s4">function </span><span class="s2">getBlockStatementAncestors(node) {</span>
+      <span class="s4">return </span><span class="s2">getAncestors(context, node).filter(</span>
+        <span class="s2">(ancestor) =&gt; ancestor.type === </span><span class="s3">'BlockStatement'</span>
+      <span class="s2">).reverse();</span>
+    <span class="s2">}</span>
+
+    <span class="s4">function </span><span class="s2">reportVariableViolation(node, name, blockStart) {</span>
+      <span class="s4">const </span><span class="s2">blockSets = blockVariableNameSets[blockStart];</span>
+      <span class="s4">const </span><span class="s2">violationTypes = Object.keys(blockSets);</span>
+
+      <span class="s4">return </span><span class="s2">violationTypes.find((type) =&gt; {</span>
+        <span class="s4">if </span><span class="s2">(blockSets[type].has(name)) {</span>
+          <span class="s2">report(context, messages[type], type, {</span>
+            <span class="s2">node,</span>
+          <span class="s2">});</span>
+          <span class="s4">return true</span><span class="s2">;</span>
+        <span class="s2">}</span>
+
+        <span class="s4">return false</span><span class="s2">;</span>
+      <span class="s2">});</span>
+    <span class="s2">}</span>
+
+    <span class="s4">function </span><span class="s2">findVariableViolation(node, name) {</span>
+      <span class="s2">getBlockStatementAncestors(node).find(</span>
+        <span class="s2">(block) =&gt; reportVariableViolation(node, name, block.range[</span><span class="s5">0</span><span class="s2">])</span>
+      <span class="s2">);</span>
+    <span class="s2">}</span>
+
+    <span class="s4">return </span><span class="s2">{</span>
+      <span class="s2">BlockStatement(node) {</span>
+        <span class="s2">setBlockVariableNameSet(node.range[</span><span class="s5">0</span><span class="s2">]);</span>
+      <span class="s2">},</span>
+
+      <span class="s2">FunctionDeclaration(node) {</span>
+        <span class="s4">const </span><span class="s2">blockAncestors = getBlockStatementAncestors(node);</span>
+        <span class="s4">const </span><span class="s2">variableViolationType = getNodeViolationType(node);</span>
+
+        <span class="s4">if </span><span class="s2">(blockAncestors.length &gt; </span><span class="s5">0 </span><span class="s2">&amp;&amp; variableViolationType) {</span>
+          <span class="s2">addVariableNameToSet(variableViolationType, node.id.name, blockAncestors[</span><span class="s5">0</span><span class="s2">].range[</span><span class="s5">0</span><span class="s2">]);</span>
+        <span class="s2">}</span>
+      <span class="s2">},</span>
+
+      <span class="s2">VariableDeclarator(node) {</span>
+        <span class="s4">if </span><span class="s2">(!node.init) {</span>
+          <span class="s4">return</span><span class="s2">;</span>
+        <span class="s2">}</span>
+        <span class="s4">const </span><span class="s2">blockAncestors = getBlockStatementAncestors(node);</span>
+        <span class="s4">const </span><span class="s2">variableViolationType = getNodeViolationType(node.init);</span>
+
+        <span class="s4">if </span><span class="s2">(</span>
+          <span class="s2">blockAncestors.length &gt; </span><span class="s5">0</span>
+          <span class="s2">&amp;&amp; variableViolationType</span>
+          <span class="s2">&amp;&amp; </span><span class="s3">'kind' </span><span class="s4">in </span><span class="s2">node.parent</span>
+          <span class="s2">&amp;&amp; node.parent.kind === </span><span class="s3">'const' </span><span class="s0">// only support const right now</span>
+        <span class="s2">) {</span>
+          <span class="s2">addVariableNameToSet(variableViolationType, </span><span class="s3">'name' </span><span class="s4">in </span><span class="s2">node.id ? node.id.name : undefined, blockAncestors[</span><span class="s5">0</span><span class="s2">].range[</span><span class="s5">0</span><span class="s2">]);</span>
+        <span class="s2">}</span>
+      <span class="s2">},</span>
+
+      <span class="s2">JSXAttribute(node) {</span>
+        <span class="s4">const </span><span class="s2">isRef = configuration.ignoreRefs &amp;&amp; propName(node) === </span><span class="s3">'ref'</span><span class="s2">;</span>
+        <span class="s4">if </span><span class="s2">(isRef || !node.value || !node.value.expression) {</span>
+          <span class="s4">return</span><span class="s2">;</span>
+        <span class="s2">}</span>
+        <span class="s4">const </span><span class="s2">isDOMComponent = jsxUtil.isDOMComponent(node.parent);</span>
+        <span class="s4">if </span><span class="s2">(configuration.ignoreDOMComponents &amp;&amp; isDOMComponent) {</span>
+          <span class="s4">return</span><span class="s2">;</span>
+        <span class="s2">}</span>
+        <span class="s4">const </span><span class="s2">valueNode = node.value.expression;</span>
+        <span class="s4">const </span><span class="s2">valueNodeType = valueNode.type;</span>
+        <span class="s4">const </span><span class="s2">nodeViolationType = getNodeViolationType(valueNode);</span>
+
+        <span class="s4">if </span><span class="s2">(valueNodeType === </span><span class="s3">'Identifier'</span><span class="s2">) {</span>
+          <span class="s2">findVariableViolation(node, valueNode.name);</span>
+        <span class="s2">} </span><span class="s4">else if </span><span class="s2">(nodeViolationType) {</span>
+          <span class="s2">report(context, messages[nodeViolationType], nodeViolationType, {</span>
+            <span class="s2">node,</span>
+          <span class="s2">});</span>
+        <span class="s2">}</span>
+      <span class="s2">},</span>
+    <span class="s2">};</span>
+  <span class="s2">},</span>
+<span class="s2">};</span>
+</pre>
+</body>
+</html>

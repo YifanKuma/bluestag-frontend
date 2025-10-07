@@ -1,0 +1,203 @@
+<html>
+<head>
+<title>no-prototype-builtins.js</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #8c8c8c; font-style: italic;}
+.s1 { color: #8c8c8c; font-style: italic;}
+.s2 { color: #080808;}
+.s3 { color: #067d17;}
+.s4 { color: #0033b3;}
+.s5 { color: #1750eb;}
+</style>
+</head>
+<body bgcolor="#ffffff">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#c0c0c0" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+no-prototype-builtins.js</font>
+</center></td></tr></table>
+<pre><span class="s0">/**</span>
+ <span class="s0">* </span><span class="s1">@fileoverview </span><span class="s0">Rule to disallow use of Object.prototype builtins on objects</span>
+ <span class="s0">* </span><span class="s1">@author </span><span class="s0">Andrew Levine</span>
+ <span class="s0">*/</span>
+<span class="s3">&quot;use strict&quot;</span><span class="s2">;</span>
+
+<span class="s0">//------------------------------------------------------------------------------</span>
+<span class="s0">// Requirements</span>
+<span class="s0">//------------------------------------------------------------------------------</span>
+
+<span class="s4">const </span><span class="s2">astUtils = require(</span><span class="s3">&quot;./utils/ast-utils&quot;</span><span class="s2">);</span>
+
+<span class="s0">//------------------------------------------------------------------------------</span>
+<span class="s0">// Helpers</span>
+<span class="s0">//------------------------------------------------------------------------------</span>
+
+<span class="s0">/**</span>
+ <span class="s0">* Returns true if the node or any of the objects</span>
+ <span class="s0">* to the left of it in the member/call chain is optional.</span>
+ <span class="s0">*</span>
+ <span class="s0">* e.g. `a?.b`, `a?.b.c`, `a?.()`, `a()?.()`</span>
+ <span class="s0">* </span><span class="s1">@param </span><span class="s0">{ASTNode} node The expression to check</span>
+ <span class="s0">* </span><span class="s1">@returns </span><span class="s0">{boolean} `true` if there is a short-circuiting optional `?.`</span>
+ <span class="s0">* in the same option chain to the left of this call or member expression,</span>
+ <span class="s0">* or the node itself is an optional call or member `?.`.</span>
+ <span class="s0">*/</span>
+<span class="s4">function </span><span class="s2">isAfterOptional(node) {</span>
+	<span class="s4">let </span><span class="s2">leftNode;</span>
+
+	<span class="s4">if </span><span class="s2">(node.type === </span><span class="s3">&quot;MemberExpression&quot;</span><span class="s2">) {</span>
+		<span class="s2">leftNode = node.object;</span>
+	<span class="s2">} </span><span class="s4">else if </span><span class="s2">(node.type === </span><span class="s3">&quot;CallExpression&quot;</span><span class="s2">) {</span>
+		<span class="s2">leftNode = node.callee;</span>
+	<span class="s2">} </span><span class="s4">else </span><span class="s2">{</span>
+		<span class="s4">return false</span><span class="s2">;</span>
+	<span class="s2">}</span>
+	<span class="s4">if </span><span class="s2">(node.optional) {</span>
+		<span class="s4">return true</span><span class="s2">;</span>
+	<span class="s2">}</span>
+	<span class="s4">return </span><span class="s2">isAfterOptional(leftNode);</span>
+<span class="s2">}</span>
+
+<span class="s0">//------------------------------------------------------------------------------</span>
+<span class="s0">// Rule Definition</span>
+<span class="s0">//------------------------------------------------------------------------------</span>
+
+<span class="s0">/** </span><span class="s1">@type </span><span class="s0">{import('../types').Rule.RuleModule} */</span>
+<span class="s2">module.exports = {</span>
+	<span class="s2">meta: {</span>
+		<span class="s2">type: </span><span class="s3">&quot;problem&quot;</span><span class="s2">,</span>
+
+		<span class="s2">docs: {</span>
+			<span class="s2">description:</span>
+				<span class="s3">&quot;Disallow calling some `Object.prototype` methods directly on objects&quot;</span><span class="s2">,</span>
+			<span class="s2">recommended: </span><span class="s4">true</span><span class="s2">,</span>
+			<span class="s2">url: </span><span class="s3">&quot;https://eslint.org/docs/latest/rules/no-prototype-builtins&quot;</span><span class="s2">,</span>
+		<span class="s2">},</span>
+
+		<span class="s2">hasSuggestions: </span><span class="s4">true</span><span class="s2">,</span>
+
+		<span class="s2">schema: [],</span>
+
+		<span class="s2">messages: {</span>
+			<span class="s2">prototypeBuildIn:</span>
+				<span class="s3">&quot;Do not access Object.prototype method '{{prop}}' from target object.&quot;</span><span class="s2">,</span>
+			<span class="s2">callObjectPrototype: </span><span class="s3">&quot;Call Object.prototype.{{prop}} explicitly.&quot;</span><span class="s2">,</span>
+		<span class="s2">},</span>
+	<span class="s2">},</span>
+
+	<span class="s2">create(context) {</span>
+		<span class="s4">const </span><span class="s2">DISALLOWED_PROPS = </span><span class="s4">new </span><span class="s2">Set([</span>
+			<span class="s3">&quot;hasOwnProperty&quot;</span><span class="s2">,</span>
+			<span class="s3">&quot;isPrototypeOf&quot;</span><span class="s2">,</span>
+			<span class="s3">&quot;propertyIsEnumerable&quot;</span><span class="s2">,</span>
+		<span class="s2">]);</span>
+
+		<span class="s0">/**</span>
+		 <span class="s0">* Reports if a disallowed property is used in a CallExpression</span>
+		 <span class="s0">* </span><span class="s1">@param </span><span class="s0">{ASTNode} node The CallExpression node.</span>
+		 <span class="s0">* </span><span class="s1">@returns </span><span class="s0">{void}</span>
+		 <span class="s0">*/</span>
+		<span class="s4">function </span><span class="s2">disallowBuiltIns(node) {</span>
+			<span class="s4">const </span><span class="s2">callee = astUtils.skipChainExpression(node.callee);</span>
+
+			<span class="s4">if </span><span class="s2">(callee.type !== </span><span class="s3">&quot;MemberExpression&quot;</span><span class="s2">) {</span>
+				<span class="s4">return</span><span class="s2">;</span>
+			<span class="s2">}</span>
+
+			<span class="s4">const </span><span class="s2">propName = astUtils.getStaticPropertyName(callee);</span>
+
+			<span class="s4">if </span><span class="s2">(propName !== </span><span class="s4">null </span><span class="s2">&amp;&amp; DISALLOWED_PROPS.has(propName)) {</span>
+				<span class="s2">context.report({</span>
+					<span class="s2">messageId: </span><span class="s3">&quot;prototypeBuildIn&quot;</span><span class="s2">,</span>
+					<span class="s2">loc: callee.property.loc,</span>
+					<span class="s2">data: { prop: propName },</span>
+					<span class="s2">node,</span>
+					<span class="s2">suggest: [</span>
+						<span class="s2">{</span>
+							<span class="s2">messageId: </span><span class="s3">&quot;callObjectPrototype&quot;</span><span class="s2">,</span>
+							<span class="s2">data: { prop: propName },</span>
+							<span class="s2">fix(fixer) {</span>
+								<span class="s4">const </span><span class="s2">sourceCode = context.sourceCode;</span>
+
+								<span class="s0">/* 
+                                 * A call after an optional chain (e.g. a?.b.hasOwnProperty(c)) 
+                                 * must be fixed manually because the call can be short-circuited 
+                                 */</span>
+								<span class="s4">if </span><span class="s2">(isAfterOptional(node)) {</span>
+									<span class="s4">return null</span><span class="s2">;</span>
+								<span class="s2">}</span>
+
+								<span class="s0">/* 
+                                 * A call on a ChainExpression (e.g. (a?.hasOwnProperty)(c)) will trigger 
+                                 * no-unsafe-optional-chaining which should be fixed before this suggestion 
+                                 */</span>
+								<span class="s4">if </span><span class="s2">(node.callee.type === </span><span class="s3">&quot;ChainExpression&quot;</span><span class="s2">) {</span>
+									<span class="s4">return null</span><span class="s2">;</span>
+								<span class="s2">}</span>
+
+								<span class="s4">const </span><span class="s2">objectVariable =</span>
+									<span class="s2">astUtils.getVariableByName(</span>
+										<span class="s2">sourceCode.getScope(node),</span>
+										<span class="s3">&quot;Object&quot;</span><span class="s2">,</span>
+									<span class="s2">);</span>
+
+								<span class="s0">/* 
+                                 * We can't use Object if the global Object was shadowed, 
+                                 * or Object does not exist in the global scope for some reason 
+                                 */</span>
+								<span class="s4">if </span><span class="s2">(</span>
+									<span class="s2">!objectVariable ||</span>
+									<span class="s2">objectVariable.scope.type !== </span><span class="s3">&quot;global&quot; </span><span class="s2">||</span>
+									<span class="s2">objectVariable.defs.length &gt; </span><span class="s5">0</span>
+								<span class="s2">) {</span>
+									<span class="s4">return null</span><span class="s2">;</span>
+								<span class="s2">}</span>
+
+								<span class="s4">let </span><span class="s2">objectText = sourceCode.getText(</span>
+									<span class="s2">callee.object,</span>
+								<span class="s2">);</span>
+
+								<span class="s4">if </span><span class="s2">(</span>
+									<span class="s2">astUtils.getPrecedence(callee.object) &lt;=</span>
+									<span class="s2">astUtils.getPrecedence({</span>
+										<span class="s2">type: </span><span class="s3">&quot;SequenceExpression&quot;</span><span class="s2">,</span>
+									<span class="s2">})</span>
+								<span class="s2">) {</span>
+									<span class="s2">objectText = </span><span class="s3">`(</span><span class="s2">${objectText}</span><span class="s3">)`</span><span class="s2">;</span>
+								<span class="s2">}</span>
+
+								<span class="s4">const </span><span class="s2">openParenToken = sourceCode.getTokenAfter(</span>
+									<span class="s2">node.callee,</span>
+									<span class="s2">astUtils.isOpeningParenToken,</span>
+								<span class="s2">);</span>
+								<span class="s4">const </span><span class="s2">isEmptyParameters =</span>
+									<span class="s2">node.arguments.length === </span><span class="s5">0</span><span class="s2">;</span>
+								<span class="s4">const </span><span class="s2">delim = isEmptyParameters ? </span><span class="s3">&quot;&quot; </span><span class="s2">: </span><span class="s3">&quot;, &quot;</span><span class="s2">;</span>
+								<span class="s4">const </span><span class="s2">fixes = [</span>
+									<span class="s2">fixer.replaceText(</span>
+										<span class="s2">callee,</span>
+										<span class="s3">`Object.prototype.</span><span class="s2">${propName}</span><span class="s3">.call`</span><span class="s2">,</span>
+									<span class="s2">),</span>
+									<span class="s2">fixer.insertTextAfter(</span>
+										<span class="s2">openParenToken,</span>
+										<span class="s2">objectText + delim,</span>
+									<span class="s2">),</span>
+								<span class="s2">];</span>
+
+								<span class="s4">return </span><span class="s2">fixes;</span>
+							<span class="s2">},</span>
+						<span class="s2">},</span>
+					<span class="s2">],</span>
+				<span class="s2">});</span>
+			<span class="s2">}</span>
+		<span class="s2">}</span>
+
+		<span class="s4">return </span><span class="s2">{</span>
+			<span class="s2">CallExpression: disallowBuiltIns,</span>
+		<span class="s2">};</span>
+	<span class="s2">},</span>
+<span class="s2">};</span>
+</pre>
+</body>
+</html>

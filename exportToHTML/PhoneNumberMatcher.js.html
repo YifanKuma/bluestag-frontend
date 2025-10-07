@@ -1,0 +1,417 @@
+<html>
+<head>
+<title>PhoneNumberMatcher.js</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #8c8c8c; font-style: italic;}
+.s1 { color: #080808;}
+.s2 { color: #0033b3;}
+.s3 { color: #067d17;}
+.s4 { color: #0037a6;}
+.s5 { color: #1750eb;}
+.s6 { color: #8c8c8c; font-style: italic;}
+</style>
+</head>
+<body bgcolor="#ffffff">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#c0c0c0" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+PhoneNumberMatcher.js</font>
+</center></td></tr></table>
+<pre><span class="s0">/**</span>
+ <span class="s0">* A port of Google's `PhoneNumberMatcher.java`.</span>
+ <span class="s0">* https://github.com/googlei18n/libphonenumber/blob/master/java/libphonenumber/src/com/google/i18n/phonenumbers/PhoneNumberMatcher.java</span>
+ <span class="s0">* Date: 08.03.2018.</span>
+ <span class="s0">*/</span>
+
+<span class="s2">import </span><span class="s1">{</span>
+  <span class="s1">MAX_LENGTH_FOR_NSN,</span>
+  <span class="s1">MAX_LENGTH_COUNTRY_CODE,</span>
+  <span class="s1">VALID_PUNCTUATION</span>
+<span class="s1">} from </span><span class="s3">'./constants.js'</span>
+
+<span class="s2">import </span><span class="s1">createExtensionPattern from </span><span class="s3">'./helpers/extension/createExtensionPattern.js'</span>
+
+<span class="s2">import </span><span class="s1">RegExpCache from </span><span class="s3">'./findNumbers/RegExpCache.js'</span>
+
+<span class="s2">import </span><span class="s1">{</span>
+	<span class="s1">limit,</span>
+	<span class="s1">trimAfterFirstMatch</span>
+<span class="s1">} from </span><span class="s3">'./findNumbers/util.js'</span>
+
+<span class="s2">import </span><span class="s1">{</span>
+	<span class="s1">_pL,</span>
+	<span class="s1">_pN,</span>
+	<span class="s1">pZ,</span>
+	<span class="s1">PZ,</span>
+	<span class="s1">pNd</span>
+<span class="s1">} from </span><span class="s3">'./findNumbers/utf-8.js'</span>
+
+<span class="s2">import </span><span class="s1">Leniency from </span><span class="s3">'./findNumbers/Leniency.js'</span>
+<span class="s2">import </span><span class="s1">parsePreCandidate from </span><span class="s3">'./findNumbers/parsePreCandidate.js'</span>
+<span class="s2">import </span><span class="s1">isValidPreCandidate from </span><span class="s3">'./findNumbers/isValidPreCandidate.js'</span>
+<span class="s2">import </span><span class="s1">isValidCandidate, { LEAD_CLASS } from </span><span class="s3">'./findNumbers/isValidCandidate.js'</span>
+
+<span class="s2">import </span><span class="s1">{ isSupportedCountry } from </span><span class="s3">'./metadata.js'</span>
+
+<span class="s2">import </span><span class="s1">parsePhoneNumber from </span><span class="s3">'./parsePhoneNumber.js'</span>
+
+<span class="s2">const </span><span class="s1">USE_NON_GEOGRAPHIC_COUNTRY_CODE = </span><span class="s2">false</span>
+
+<span class="s2">const </span><span class="s1">EXTN_PATTERNS_FOR_MATCHING = createExtensionPattern(</span><span class="s3">'matching'</span><span class="s1">)</span>
+
+<span class="s0">/**</span>
+ <span class="s0">* Patterns used to extract phone numbers from a larger phone-number-like pattern. These are</span>
+ <span class="s0">* ordered according to specificity. For example, white-space is last since that is frequently</span>
+ <span class="s0">* used in numbers, not just to separate two numbers. We have separate patterns since we don't</span>
+ <span class="s0">* want to break up the phone-number-like text on more than one different kind of symbol at one</span>
+ <span class="s0">* time, although symbols of the same type (e.g. space) can be safely grouped together.</span>
+ <span class="s0">*</span>
+ <span class="s0">* Note that if there is a match, we will always check any text found up to the first match as</span>
+ <span class="s0">* well.</span>
+ <span class="s0">*/</span>
+<span class="s2">const </span><span class="s1">INNER_MATCHES =</span>
+<span class="s1">[</span>
+	<span class="s0">// Breaks on the slash - e.g. &quot;651-234-2345/332-445-1234&quot;</span>
+	<span class="s3">'</span><span class="s4">\\</span><span class="s3">/+(.*)/'</span><span class="s1">,</span>
+
+	<span class="s0">// Note that the bracket here is inside the capturing group, since we consider it part of the</span>
+	<span class="s0">// phone number. Will match a pattern like &quot;(650) 223 3345 (754) 223 3321&quot;.</span>
+	<span class="s3">'(</span><span class="s4">\\</span><span class="s3">([^(]*)'</span><span class="s1">,</span>
+
+	<span class="s0">// Breaks on a hyphen - e.g. &quot;12345 - 332-445-1234 is my number.&quot;</span>
+	<span class="s0">// We require a space on either side of the hyphen for it to be considered a separator.</span>
+	<span class="s3">`(?:</span><span class="s1">${pZ}</span><span class="s3">-|-</span><span class="s1">${pZ}</span><span class="s3">)</span><span class="s1">${pZ}</span><span class="s3">*(.+)`</span><span class="s1">,</span>
+
+	<span class="s0">// Various types of wide hyphens. Note we have decided not to enforce a space here, since it's</span>
+	<span class="s0">// possible that it's supposed to be used to break two numbers without spaces, and we haven't</span>
+	<span class="s0">// seen many instances of it used within a number.</span>
+	<span class="s3">`[</span><span class="s4">\u2012</span><span class="s3">-</span><span class="s4">\u2015\uFF0D</span><span class="s3">]</span><span class="s1">${pZ}</span><span class="s3">*(.+)`</span><span class="s1">,</span>
+
+	<span class="s0">// Breaks on a full stop - e.g. &quot;12345. 332-445-1234 is my number.&quot;</span>
+	<span class="s3">`</span><span class="s4">\\</span><span class="s3">.+</span><span class="s1">${pZ}</span><span class="s3">*([^.]+)`</span><span class="s1">,</span>
+
+	<span class="s0">// Breaks on space - e.g. &quot;3324451234 8002341234&quot;</span>
+	<span class="s3">`</span><span class="s1">${pZ}</span><span class="s3">+(</span><span class="s1">${PZ}</span><span class="s3">+)`</span>
+<span class="s1">]</span>
+
+<span class="s0">// Limit on the number of leading (plus) characters.</span>
+<span class="s2">const </span><span class="s1">leadLimit = limit(</span><span class="s5">0</span><span class="s1">, </span><span class="s5">2</span><span class="s1">)</span>
+
+<span class="s0">// Limit on the number of consecutive punctuation characters.</span>
+<span class="s2">const </span><span class="s1">punctuationLimit = limit(</span><span class="s5">0</span><span class="s1">, </span><span class="s5">4</span><span class="s1">)</span>
+
+<span class="s0">/* The maximum number of digits allowed in a digit-separated block. As we allow all digits in a 
+ * single block, set high enough to accommodate the entire national number and the international 
+ * country code. */</span>
+<span class="s2">const </span><span class="s1">digitBlockLimit = MAX_LENGTH_FOR_NSN + MAX_LENGTH_COUNTRY_CODE</span>
+
+<span class="s0">// Limit on the number of blocks separated by punctuation.</span>
+<span class="s0">// Uses digitBlockLimit since some formats use spaces to separate each digit.</span>
+<span class="s2">const </span><span class="s1">blockLimit = limit(</span><span class="s5">0</span><span class="s1">, digitBlockLimit)</span>
+
+<span class="s0">/* A punctuation sequence allowing white space. */</span>
+<span class="s2">const </span><span class="s1">punctuation = </span><span class="s3">`[</span><span class="s1">${VALID_PUNCTUATION}</span><span class="s3">]` </span><span class="s1">+ punctuationLimit</span>
+
+<span class="s0">// A digits block without punctuation.</span>
+<span class="s2">const </span><span class="s1">digitSequence = pNd + limit(</span><span class="s5">1</span><span class="s1">, digitBlockLimit)</span>
+
+<span class="s0">/**</span>
+ <span class="s0">* Phone number pattern allowing optional punctuation.</span>
+ <span class="s0">* The phone number pattern used by `find()`, similar to</span>
+ <span class="s0">* VALID_PHONE_NUMBER, but with the following differences:</span>
+ <span class="s0">* &lt;ul&gt;</span>
+ <span class="s0">*   &lt;li&gt;All captures are limited in order to place an upper bound to the text matched by the</span>
+ <span class="s0">*       pattern.</span>
+ <span class="s0">* &lt;ul&gt;</span>
+ <span class="s0">*   &lt;li&gt;Leading punctuation / plus signs are limited.</span>
+ <span class="s0">*   &lt;li&gt;Consecutive occurrences of punctuation are limited.</span>
+ <span class="s0">*   &lt;li&gt;Number of digits is limited.</span>
+ <span class="s0">* &lt;/ul&gt;</span>
+ <span class="s0">*   &lt;li&gt;No whitespace is allowed at the start or end.</span>
+ <span class="s0">*   &lt;li&gt;No alpha digits (vanity numbers such as 1-800-SIX-FLAGS) are currently supported.</span>
+ <span class="s0">* &lt;/ul&gt;</span>
+ <span class="s0">*/</span>
+<span class="s2">const </span><span class="s1">PATTERN = </span><span class="s3">'(?:' </span><span class="s1">+ LEAD_CLASS + punctuation + </span><span class="s3">')' </span><span class="s1">+ leadLimit</span>
+	<span class="s1">+ digitSequence + </span><span class="s3">'(?:' </span><span class="s1">+ punctuation + digitSequence + </span><span class="s3">')' </span><span class="s1">+ blockLimit</span>
+	<span class="s1">+ </span><span class="s3">'(?:' </span><span class="s1">+ EXTN_PATTERNS_FOR_MATCHING + </span><span class="s3">')?'</span>
+
+<span class="s0">// Regular expression of trailing characters that we want to remove.</span>
+<span class="s0">// We remove all characters that are not alpha or numerical characters.</span>
+<span class="s0">// The hash character is retained here, as it may signify</span>
+<span class="s0">// the previous block was an extension.</span>
+<span class="s0">//</span>
+<span class="s0">// // Don't know what does '&amp;&amp;' mean here.</span>
+<span class="s0">// const UNWANTED_END_CHAR_PATTERN = new RegExp(`[[\\P{N}&amp;&amp;\\P{L}]&amp;&amp;[^#]]+$`)</span>
+<span class="s0">//</span>
+<span class="s2">const </span><span class="s1">UNWANTED_END_CHAR_PATTERN = </span><span class="s2">new </span><span class="s1">RegExp(</span><span class="s3">`[^</span><span class="s1">${_pN}${_pL}</span><span class="s3">#]+$`</span><span class="s1">)</span>
+
+<span class="s0">// const NON_DIGITS_PATTERN = /(\D+)/</span>
+
+<span class="s2">const </span><span class="s1">MAX_SAFE_INTEGER = Number.MAX_SAFE_INTEGER || Math.pow(</span><span class="s5">2</span><span class="s1">, </span><span class="s5">53</span><span class="s1">) - </span><span class="s5">1</span>
+
+<span class="s0">/**</span>
+ <span class="s0">* A stateful class that finds and extracts telephone numbers from {</span><span class="s6">@linkplain </span><span class="s0">CharSequence text}.</span>
+ <span class="s0">* Instances can be created using the {</span><span class="s6">@linkplain </span><span class="s0">PhoneNumberUtil#findNumbers factory methods} in</span>
+ <span class="s0">* {</span><span class="s6">@link </span><span class="s0">PhoneNumberUtil}.</span>
+ <span class="s0">*</span>
+ <span class="s0">* &lt;p&gt;Vanity numbers (phone numbers using alphabetic digits such as &lt;tt&gt;1-800-SIX-FLAGS&lt;/tt&gt; are</span>
+ <span class="s0">* not found.</span>
+ <span class="s0">*</span>
+ <span class="s0">* &lt;p&gt;This class is not thread-safe.</span>
+ <span class="s0">*/</span>
+<span class="s2">export default class </span><span class="s1">PhoneNumberMatcher</span>
+<span class="s1">{</span>
+  <span class="s0">/**</span>
+   <span class="s0">* </span><span class="s6">@param </span><span class="s0">{string} text — the character sequence that we will search, null for no text.</span>
+   <span class="s0">* </span><span class="s6">@param </span><span class="s0">{'POSSIBLE'|'VALID'|'STRICT_GROUPING'|'EXACT_GROUPING'} [options.leniency] — The leniency to use when evaluating candidate phone numbers. See `source/findNumbers/Leniency.js` for more details.</span>
+   <span class="s0">* </span><span class="s6">@param </span><span class="s0">{number} [options.maxTries] — The maximum number of invalid numbers to try before giving up on the text. This is to cover degenerate cases where the text has a lot of false positives in it. Must be &gt;= 0.</span>
+   <span class="s0">*/</span>
+  <span class="s1">constructor(text = </span><span class="s3">''</span><span class="s1">, options = {}, metadata)</span>
+  <span class="s1">{</span>
+    <span class="s1">options = {</span>
+      <span class="s1">v2: options.v2,</span>
+      <span class="s1">defaultCallingCode: options.defaultCallingCode,</span>
+      <span class="s1">defaultCountry: options.defaultCountry &amp;&amp; isSupportedCountry(options.defaultCountry, metadata) ? options.defaultCountry : undefined,</span>
+      <span class="s0">// Here it should've assigned a default value only if `options.leniency === undefined`.</span>
+      <span class="s1">leniency: options.leniency || (options.extended ? </span><span class="s3">'POSSIBLE' </span><span class="s1">: </span><span class="s3">'VALID'</span><span class="s1">),</span>
+      <span class="s0">// Here it should've assigned a default value only if `options.maxTries === undefined`.</span>
+      <span class="s1">maxTries: options.maxTries || MAX_SAFE_INTEGER</span>
+    <span class="s1">}</span>
+
+    <span class="s0">// Validate `leniency`.</span>
+		<span class="s0">// if (!options.leniency) {</span>
+		<span class="s0">//  throw new TypeError('`leniency` is required')</span>
+		<span class="s0">// }</span>
+		<span class="s2">if </span><span class="s1">(!Leniency[options.leniency]) {</span>
+			<span class="s2">throw new </span><span class="s1">TypeError(</span><span class="s3">`Unknown leniency: &quot;</span><span class="s1">${options.leniency}</span><span class="s3">&quot;`</span><span class="s1">)</span>
+		<span class="s1">}</span>
+    <span class="s2">if </span><span class="s1">(options.leniency !== </span><span class="s3">'POSSIBLE' </span><span class="s1">&amp;&amp; options.leniency !== </span><span class="s3">'VALID'</span><span class="s1">) {</span>
+      <span class="s2">throw new </span><span class="s1">TypeError(</span><span class="s3">`Invalid </span><span class="s4">\`</span><span class="s3">leniency</span><span class="s4">\`</span><span class="s3">: &quot;</span><span class="s1">${options.leniency}</span><span class="s3">&quot;. Supported values: &quot;POSSIBLE&quot;, &quot;VALID&quot;.`</span><span class="s1">)</span>
+    <span class="s1">}</span>
+
+    <span class="s0">// Validate `maxTries`.</span>
+		<span class="s2">if </span><span class="s1">(options.maxTries &lt; </span><span class="s5">0</span><span class="s1">) {</span>
+			<span class="s2">throw new </span><span class="s1">TypeError(</span><span class="s3">'`maxTries` must be `&gt;= 0`'</span><span class="s1">)</span>
+		<span class="s1">}</span>
+
+		<span class="s2">this</span><span class="s1">.text = text</span>
+		<span class="s2">this</span><span class="s1">.options = options</span>
+    <span class="s2">this</span><span class="s1">.metadata = metadata</span>
+
+		<span class="s0">// The degree of phone number validation.</span>
+		<span class="s2">this</span><span class="s1">.leniency = Leniency[options.leniency]</span>
+
+		<span class="s0">/** The maximum number of retries after matching an invalid number. */</span>
+		<span class="s2">this</span><span class="s1">.maxTries = options.maxTries</span>
+
+		<span class="s2">this</span><span class="s1">.PATTERN = </span><span class="s2">new </span><span class="s1">RegExp(PATTERN, </span><span class="s3">'ig'</span><span class="s1">)</span>
+
+    <span class="s0">/** The iteration tristate. */</span>
+    <span class="s2">this</span><span class="s1">.state = </span><span class="s3">'NOT_READY'</span>
+
+    <span class="s0">/** The next index to start searching at. Undefined in {</span><span class="s6">@link </span><span class="s0">State#DONE}. */</span>
+    <span class="s2">this</span><span class="s1">.searchIndex = </span><span class="s5">0</span>
+
+    <span class="s0">// A cache for frequently used country-specific regular expressions. Set to 32 to cover ~2-3</span>
+    <span class="s0">// countries being used for the same doc with ~10 patterns for each country. Some pages will have</span>
+    <span class="s0">// a lot more countries in use, but typically fewer numbers for each so expanding the cache for</span>
+    <span class="s0">// that use-case won't have a lot of benefit.</span>
+    <span class="s2">this</span><span class="s1">.regExpCache = </span><span class="s2">new </span><span class="s1">RegExpCache(</span><span class="s5">32</span><span class="s1">)</span>
+  <span class="s1">}</span>
+
+  <span class="s0">/**</span>
+   <span class="s0">* Attempts to find the next subsequence in the searched sequence on or after {</span><span class="s6">@code </span><span class="s0">searchIndex}</span>
+   <span class="s0">* that represents a phone number. Returns the next match, null if none was found.</span>
+   <span class="s0">*</span>
+   <span class="s0">* </span><span class="s6">@param </span><span class="s0">index  the search index to start searching at</span>
+   <span class="s0">* </span><span class="s6">@return  </span><span class="s0">the phone number match found, null if none can be found</span>
+   <span class="s0">*/</span>
+	<span class="s1">find() {</span>
+		<span class="s0">// // Reset the regular expression.</span>
+		<span class="s0">// this.PATTERN.lastIndex = index</span>
+
+		<span class="s2">let </span><span class="s1">matches</span>
+		<span class="s2">while </span><span class="s1">((</span><span class="s2">this</span><span class="s1">.maxTries &gt; </span><span class="s5">0</span><span class="s1">) &amp;&amp; (matches = </span><span class="s2">this</span><span class="s1">.PATTERN.exec(</span><span class="s2">this</span><span class="s1">.text)) !== </span><span class="s2">null</span><span class="s1">) {</span>
+			<span class="s2">let </span><span class="s1">candidate = matches[</span><span class="s5">0</span><span class="s1">]</span>
+			<span class="s2">const </span><span class="s1">offset = matches.index</span>
+
+			<span class="s1">candidate = parsePreCandidate(candidate)</span>
+
+			<span class="s2">if </span><span class="s1">(isValidPreCandidate(candidate, offset, </span><span class="s2">this</span><span class="s1">.text)) {</span>
+				<span class="s2">const </span><span class="s1">match =</span>
+					<span class="s0">// Try to come up with a valid match given the entire candidate.</span>
+					<span class="s2">this</span><span class="s1">.parseAndVerify(candidate, offset, </span><span class="s2">this</span><span class="s1">.text)</span>
+					<span class="s0">// If that failed, try to find an &quot;inner match&quot; -</span>
+					<span class="s0">// there might be a phone number within this candidate.</span>
+					<span class="s1">|| </span><span class="s2">this</span><span class="s1">.extractInnerMatch(candidate, offset, </span><span class="s2">this</span><span class="s1">.text)</span>
+
+				<span class="s2">if </span><span class="s1">(match) {</span>
+					<span class="s2">if </span><span class="s1">(</span><span class="s2">this</span><span class="s1">.options.v2) {</span>
+						<span class="s2">return </span><span class="s1">{</span>
+							<span class="s1">startsAt: match.startsAt,</span>
+							<span class="s1">endsAt: match.endsAt,</span>
+							<span class="s1">number: match.phoneNumber</span>
+						<span class="s1">}</span>
+					<span class="s1">} </span><span class="s2">else </span><span class="s1">{</span>
+            <span class="s2">const </span><span class="s1">{ phoneNumber } = match</span>
+
+            <span class="s2">const </span><span class="s1">result = {</span>
+              <span class="s1">startsAt: match.startsAt,</span>
+              <span class="s1">endsAt: match.endsAt,</span>
+              <span class="s1">phone: phoneNumber.nationalNumber</span>
+            <span class="s1">}</span>
+
+            <span class="s2">if </span><span class="s1">(phoneNumber.country) {</span>
+              <span class="s0">/* istanbul ignore if */</span>
+              <span class="s2">if </span><span class="s1">(USE_NON_GEOGRAPHIC_COUNTRY_CODE &amp;&amp; country === </span><span class="s3">'001'</span><span class="s1">) {</span>
+                <span class="s1">result.countryCallingCode = phoneNumber.countryCallingCode</span>
+              <span class="s1">} </span><span class="s2">else </span><span class="s1">{</span>
+                <span class="s1">result.country = phoneNumber.country</span>
+              <span class="s1">}</span>
+            <span class="s1">} </span><span class="s2">else </span><span class="s1">{</span>
+              <span class="s1">result.countryCallingCode = phoneNumber.countryCallingCode</span>
+            <span class="s1">}</span>
+
+            <span class="s2">if </span><span class="s1">(phoneNumber.ext) {</span>
+              <span class="s1">result.ext = phoneNumber.ext</span>
+            <span class="s1">}</span>
+
+            <span class="s2">return </span><span class="s1">result</span>
+          <span class="s1">}</span>
+				<span class="s1">}</span>
+			<span class="s1">}</span>
+
+			<span class="s2">this</span><span class="s1">.maxTries--</span>
+		<span class="s1">}</span>
+	<span class="s1">}</span>
+
+  <span class="s0">/**</span>
+   <span class="s0">* Attempts to extract a match from `substring`</span>
+   <span class="s0">* if the substring itself does not qualify as a match.</span>
+   <span class="s0">*/</span>
+  <span class="s1">extractInnerMatch(substring, offset, text) {</span>
+    <span class="s2">for </span><span class="s1">(</span><span class="s2">const </span><span class="s1">innerMatchPattern of INNER_MATCHES) {</span>
+      <span class="s2">let </span><span class="s1">isFirstMatch = </span><span class="s2">true</span>
+      <span class="s2">let </span><span class="s1">candidateMatch</span>
+      <span class="s2">const </span><span class="s1">innerMatchRegExp = </span><span class="s2">new </span><span class="s1">RegExp(innerMatchPattern, </span><span class="s3">'g'</span><span class="s1">)</span>
+      <span class="s2">while </span><span class="s1">(</span><span class="s2">this</span><span class="s1">.maxTries &gt; </span><span class="s5">0 </span><span class="s1">&amp;&amp; (candidateMatch = innerMatchRegExp.exec(substring)) !== </span><span class="s2">null</span><span class="s1">) {</span>
+        <span class="s2">if </span><span class="s1">(isFirstMatch) {</span>
+          <span class="s0">// We should handle any group before this one too.</span>
+          <span class="s2">const </span><span class="s1">candidate = trimAfterFirstMatch(</span>
+            <span class="s1">UNWANTED_END_CHAR_PATTERN,</span>
+            <span class="s1">substring.slice(</span><span class="s5">0</span><span class="s1">, candidateMatch.index)</span>
+          <span class="s1">)</span>
+
+          <span class="s2">const </span><span class="s1">match = </span><span class="s2">this</span><span class="s1">.parseAndVerify(candidate, offset, text)</span>
+
+          <span class="s2">if </span><span class="s1">(match) {</span>
+            <span class="s2">return </span><span class="s1">match</span>
+          <span class="s1">}</span>
+
+          <span class="s2">this</span><span class="s1">.maxTries--</span>
+          <span class="s1">isFirstMatch = </span><span class="s2">false</span>
+        <span class="s1">}</span>
+
+        <span class="s2">const </span><span class="s1">candidate = trimAfterFirstMatch(UNWANTED_END_CHAR_PATTERN, candidateMatch[</span><span class="s5">1</span><span class="s1">])</span>
+
+        <span class="s0">// Java code does `groupMatcher.start(1)` here,</span>
+        <span class="s0">// but there's no way in javascript to get a `candidate` start index,</span>
+        <span class="s0">// therefore resort to using this kind of an approximation.</span>
+        <span class="s0">// (`groupMatcher` is called `candidateInSubstringMatch` in this javascript port)</span>
+        <span class="s0">// https://stackoverflow.com/questions/15934353/get-index-of-each-capture-in-a-javascript-regex</span>
+        <span class="s2">const </span><span class="s1">candidateIndexGuess = substring.indexOf(candidate, candidateMatch.index)</span>
+
+        <span class="s2">const </span><span class="s1">match = </span><span class="s2">this</span><span class="s1">.parseAndVerify(candidate, offset + candidateIndexGuess, text)</span>
+        <span class="s2">if </span><span class="s1">(match) {</span>
+          <span class="s2">return </span><span class="s1">match</span>
+        <span class="s1">}</span>
+
+        <span class="s2">this</span><span class="s1">.maxTries--</span>
+      <span class="s1">}</span>
+    <span class="s1">}</span>
+  <span class="s1">}</span>
+
+  <span class="s0">/**</span>
+   <span class="s0">* Parses a phone number from the `candidate` using `parse` and</span>
+   <span class="s0">* verifies it matches the requested `leniency`. If parsing and verification succeed,</span>
+   <span class="s0">* a corresponding `PhoneNumberMatch` is returned, otherwise this method returns `null`.</span>
+   <span class="s0">*</span>
+   <span class="s0">* </span><span class="s6">@param </span><span class="s0">candidate  the candidate match</span>
+   <span class="s0">* </span><span class="s6">@param </span><span class="s0">offset  the offset of {</span><span class="s6">@code </span><span class="s0">candidate} within {</span><span class="s6">@link </span><span class="s0">#text}</span>
+   <span class="s0">* </span><span class="s6">@return  </span><span class="s0">the parsed and validated phone number match, or null</span>
+   <span class="s0">*/</span>
+  <span class="s1">parseAndVerify(candidate, offset, text) {</span>
+    <span class="s2">if </span><span class="s1">(!isValidCandidate(candidate, offset, text, </span><span class="s2">this</span><span class="s1">.options.leniency)) {</span>
+      <span class="s2">return</span>
+  	<span class="s1">}</span>
+
+    <span class="s2">const </span><span class="s1">phoneNumber = parsePhoneNumber(</span>
+      <span class="s1">candidate,</span>
+      <span class="s1">{</span>
+        <span class="s1">extended: </span><span class="s2">true</span><span class="s1">,</span>
+        <span class="s1">defaultCountry: </span><span class="s2">this</span><span class="s1">.options.defaultCountry,</span>
+        <span class="s1">defaultCallingCode: </span><span class="s2">this</span><span class="s1">.options.defaultCallingCode</span>
+      <span class="s1">},</span>
+      <span class="s2">this</span><span class="s1">.metadata</span>
+    <span class="s1">)</span>
+
+    <span class="s2">if </span><span class="s1">(!phoneNumber) {</span>
+      <span class="s2">return</span>
+    <span class="s1">}</span>
+
+    <span class="s2">if </span><span class="s1">(!phoneNumber.isPossible()) {</span>
+      <span class="s2">return</span>
+    <span class="s1">}</span>
+
+    <span class="s2">if </span><span class="s1">(</span><span class="s2">this</span><span class="s1">.leniency(phoneNumber, {</span>
+      <span class="s1">candidate,</span>
+      <span class="s1">defaultCountry: </span><span class="s2">this</span><span class="s1">.options.defaultCountry,</span>
+      <span class="s1">metadata: </span><span class="s2">this</span><span class="s1">.metadata,</span>
+      <span class="s1">regExpCache: </span><span class="s2">this</span><span class="s1">.regExpCache</span>
+    <span class="s1">})) {</span>
+      <span class="s2">return </span><span class="s1">{</span>
+        <span class="s1">startsAt: offset,</span>
+        <span class="s1">endsAt: offset + candidate.length,</span>
+        <span class="s1">phoneNumber</span>
+      <span class="s1">}</span>
+    <span class="s1">}</span>
+  <span class="s1">}</span>
+
+  <span class="s1">hasNext()</span>
+  <span class="s1">{</span>
+    <span class="s2">if </span><span class="s1">(</span><span class="s2">this</span><span class="s1">.state === </span><span class="s3">'NOT_READY'</span><span class="s1">)</span>
+    <span class="s1">{</span>
+      <span class="s2">this</span><span class="s1">.lastMatch = </span><span class="s2">this</span><span class="s1">.find() </span><span class="s0">// (this.searchIndex)</span>
+
+      <span class="s2">if </span><span class="s1">(</span><span class="s2">this</span><span class="s1">.lastMatch)</span>
+      <span class="s1">{</span>
+        <span class="s0">// this.searchIndex = this.lastMatch.endsAt</span>
+        <span class="s2">this</span><span class="s1">.state = </span><span class="s3">'READY'</span>
+      <span class="s1">}</span>
+      <span class="s2">else</span>
+      <span class="s1">{</span>
+        <span class="s2">this</span><span class="s1">.state = </span><span class="s3">'DONE'</span>
+      <span class="s1">}</span>
+    <span class="s1">}</span>
+
+    <span class="s2">return this</span><span class="s1">.state === </span><span class="s3">'READY'</span>
+  <span class="s1">}</span>
+
+  <span class="s1">next()</span>
+  <span class="s1">{</span>
+    <span class="s0">// Check the state and find the next match as a side-effect if necessary.</span>
+    <span class="s2">if </span><span class="s1">(!</span><span class="s2">this</span><span class="s1">.hasNext())</span>
+    <span class="s1">{</span>
+      <span class="s2">throw new </span><span class="s1">Error(</span><span class="s3">'No next element'</span><span class="s1">)</span>
+    <span class="s1">}</span>
+
+    <span class="s0">// Don't retain that memory any longer than necessary.</span>
+    <span class="s2">const </span><span class="s1">result = </span><span class="s2">this</span><span class="s1">.lastMatch</span>
+    <span class="s2">this</span><span class="s1">.lastMatch = </span><span class="s2">null</span>
+    <span class="s2">this</span><span class="s1">.state = </span><span class="s3">'NOT_READY'</span>
+    <span class="s2">return </span><span class="s1">result</span>
+  <span class="s1">}</span>
+<span class="s1">}</span></pre>
+</body>
+</html>

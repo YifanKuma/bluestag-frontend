@@ -1,0 +1,622 @@
+<html>
+<head>
+<title>resolve-routes.js</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #067d17;}
+.s1 { color: #080808;}
+.s2 { color: #0033b3;}
+.s3 { color: #8c8c8c; font-style: italic;}
+.s4 { color: #1750eb;}
+.s5 { color: #264eff;}
+</style>
+</head>
+<body bgcolor="#ffffff">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#c0c0c0" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+resolve-routes.js</font>
+</center></td></tr></table>
+<pre><span class="s0">&quot;use strict&quot;</span><span class="s1">;</span>
+<span class="s1">Object.defineProperty(exports, </span><span class="s0">&quot;__esModule&quot;</span><span class="s1">, {</span>
+    <span class="s1">value: </span><span class="s2">true</span>
+<span class="s1">});</span>
+<span class="s1">Object.defineProperty(exports, </span><span class="s0">&quot;getResolveRoutes&quot;</span><span class="s1">, {</span>
+    <span class="s1">enumerable: </span><span class="s2">true</span><span class="s1">,</span>
+    <span class="s1">get: </span><span class="s2">function</span><span class="s1">() {</span>
+        <span class="s2">return </span><span class="s1">getResolveRoutes;</span>
+    <span class="s1">}</span>
+<span class="s1">});</span>
+<span class="s2">const </span><span class="s1">_url = </span><span class="s3">/*#__PURE__*/ </span><span class="s1">_interop_require_default(require(</span><span class="s0">&quot;url&quot;</span><span class="s1">));</span>
+<span class="s2">const </span><span class="s1">_nodepath = </span><span class="s3">/*#__PURE__*/ </span><span class="s1">_interop_require_default(require(</span><span class="s0">&quot;node:path&quot;</span><span class="s1">));</span>
+<span class="s2">const </span><span class="s1">_debug = </span><span class="s3">/*#__PURE__*/ </span><span class="s1">_interop_require_default(require(</span><span class="s0">&quot;next/dist/compiled/debug&quot;</span><span class="s1">));</span>
+<span class="s2">const </span><span class="s1">_bodystreams = require(</span><span class="s0">&quot;../../body-streams&quot;</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">_utils = require(</span><span class="s0">&quot;../server-ipc/utils&quot;</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">_serverrouteutils = require(</span><span class="s0">&quot;../../server-route-utils&quot;</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">_formathostname = require(</span><span class="s0">&quot;../format-hostname&quot;</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">_utils1 = require(</span><span class="s0">&quot;../../web/utils&quot;</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">_pipereadable = require(</span><span class="s0">&quot;../../pipe-readable&quot;</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">_gethostname = require(</span><span class="s0">&quot;../../../shared/lib/get-hostname&quot;</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">_redirectstatus = require(</span><span class="s0">&quot;../../../lib/redirect-status&quot;</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">_utils2 = require(</span><span class="s0">&quot;../../../shared/lib/utils&quot;</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">_relativizeurl = require(</span><span class="s0">&quot;../../../shared/lib/router/utils/relativize-url&quot;</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">_addpathprefix = require(</span><span class="s0">&quot;../../../shared/lib/router/utils/add-path-prefix&quot;</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">_pathhasprefix = require(</span><span class="s0">&quot;../../../shared/lib/router/utils/path-has-prefix&quot;</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">_detectdomainlocale = require(</span><span class="s0">&quot;../../../shared/lib/i18n/detect-domain-locale&quot;</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">_normalizelocalepath = require(</span><span class="s0">&quot;../../../shared/lib/i18n/normalize-locale-path&quot;</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">_removepathprefix = require(</span><span class="s0">&quot;../../../shared/lib/router/utils/remove-path-prefix&quot;</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">_nextdata = require(</span><span class="s0">&quot;../../normalizers/request/next-data&quot;</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">_basepath = require(</span><span class="s0">&quot;../../normalizers/request/base-path&quot;</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">_requestmeta = require(</span><span class="s0">&quot;../../request-meta&quot;</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">_preparedestination = require(</span><span class="s0">&quot;../../../shared/lib/router/utils/prepare-destination&quot;</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">_approuterheaders = require(</span><span class="s0">&quot;../../../client/components/app-router-headers&quot;</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">_computechangedpath = require(</span><span class="s0">&quot;../../../client/components/router-reducer/compute-changed-path&quot;</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">_generateinterceptionroutesrewrites = require(</span><span class="s0">&quot;../../../lib/generate-interception-routes-rewrites&quot;</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">_parseandvalidateflightrouterstate = require(</span><span class="s0">&quot;../../app-render/parse-and-validate-flight-router-state&quot;</span><span class="s1">);</span>
+<span class="s2">function </span><span class="s1">_interop_require_default(obj) {</span>
+    <span class="s2">return </span><span class="s1">obj &amp;&amp; obj.__esModule ? obj : {</span>
+        <span class="s2">default</span><span class="s1">: obj</span>
+    <span class="s1">};</span>
+<span class="s1">}</span>
+<span class="s2">const </span><span class="s1">debug = (</span><span class="s4">0</span><span class="s1">, _debug.default)(</span><span class="s0">'next:router-server:resolve-routes'</span><span class="s1">);</span>
+<span class="s2">function </span><span class="s1">getResolveRoutes(fsChecker, config, opts, renderServer, renderServerOpts, ensureMiddleware) {</span>
+    <span class="s2">const </span><span class="s1">routes = [</span>
+        <span class="s3">// _next/data with middleware handling</span>
+        <span class="s1">{</span>
+            <span class="s1">match: ()=&gt;({}),</span>
+            <span class="s1">name: </span><span class="s0">'middleware_next_data'</span>
+        <span class="s1">},</span>
+        <span class="s1">...opts.minimalMode ? [] : fsChecker.headers,</span>
+        <span class="s1">...opts.minimalMode ? [] : fsChecker.redirects,</span>
+        <span class="s3">// check middleware (using matchers)</span>
+        <span class="s1">{</span>
+            <span class="s1">match: ()=&gt;({}),</span>
+            <span class="s1">name: </span><span class="s0">'middleware'</span>
+        <span class="s1">},</span>
+        <span class="s1">...opts.minimalMode ? [] : fsChecker.rewrites.beforeFiles,</span>
+        <span class="s3">// check middleware (using matchers)</span>
+        <span class="s1">{</span>
+            <span class="s1">match: ()=&gt;({}),</span>
+            <span class="s1">name: </span><span class="s0">'before_files_end'</span>
+        <span class="s1">},</span>
+        <span class="s3">// we check exact matches on fs before continuing to</span>
+        <span class="s3">// after files rewrites</span>
+        <span class="s1">{</span>
+            <span class="s1">match: ()=&gt;({}),</span>
+            <span class="s1">name: </span><span class="s0">'check_fs'</span>
+        <span class="s1">},</span>
+        <span class="s1">...opts.minimalMode ? [] : fsChecker.rewrites.afterFiles,</span>
+        <span class="s3">// we always do the check: true handling before continuing to</span>
+        <span class="s3">// fallback rewrites</span>
+        <span class="s1">{</span>
+            <span class="s1">check: </span><span class="s2">true</span><span class="s1">,</span>
+            <span class="s1">match: ()=&gt;({}),</span>
+            <span class="s1">name: </span><span class="s0">'after files check: true'</span>
+        <span class="s1">},</span>
+        <span class="s1">...opts.minimalMode ? [] : fsChecker.rewrites.fallback</span>
+    <span class="s1">];</span>
+    <span class="s1">async </span><span class="s2">function </span><span class="s1">resolveRoutes({ req, res, isUpgradeReq, invokedOutputs }) {</span>
+        <span class="s2">var </span><span class="s1">_req_socket, _req_headers_xforwardedproto;</span>
+        <span class="s2">let </span><span class="s1">finished = </span><span class="s2">false</span><span class="s1">;</span>
+        <span class="s2">let </span><span class="s1">resHeaders = {};</span>
+        <span class="s2">let </span><span class="s1">matchedOutput = </span><span class="s2">null</span><span class="s1">;</span>
+        <span class="s2">let </span><span class="s1">parsedUrl = _url.default.parse(req.url || </span><span class="s0">''</span><span class="s1">, </span><span class="s2">true</span><span class="s1">);</span>
+        <span class="s2">let </span><span class="s1">didRewrite = </span><span class="s2">false</span><span class="s1">;</span>
+        <span class="s2">const </span><span class="s1">urlParts = (req.url || </span><span class="s0">''</span><span class="s1">).split(</span><span class="s0">'?'</span><span class="s1">, </span><span class="s4">1</span><span class="s1">);</span>
+        <span class="s2">const </span><span class="s1">urlNoQuery = urlParts[</span><span class="s4">0</span><span class="s1">];</span>
+        <span class="s3">// this normalizes repeated slashes in the path e.g. hello//world -&gt;</span>
+        <span class="s3">// hello/world or backslashes to forward slashes, this does not</span>
+        <span class="s3">// handle trailing slash as that is handled the same as a next.config.js</span>
+        <span class="s3">// redirect</span>
+        <span class="s2">if </span><span class="s1">(urlNoQuery == </span><span class="s2">null </span><span class="s1">? </span><span class="s2">void </span><span class="s4">0 </span><span class="s1">: urlNoQuery.match(</span><span class="s5">/(\\|\/\/)/</span><span class="s1">)) {</span>
+            <span class="s1">parsedUrl = _url.default.parse((</span><span class="s4">0</span><span class="s1">, _utils2.normalizeRepeatedSlashes)(req.url), </span><span class="s2">true</span><span class="s1">);</span>
+            <span class="s2">return </span><span class="s1">{</span>
+                <span class="s1">parsedUrl,</span>
+                <span class="s1">resHeaders,</span>
+                <span class="s1">finished: </span><span class="s2">true</span><span class="s1">,</span>
+                <span class="s1">statusCode: </span><span class="s4">308</span>
+            <span class="s1">};</span>
+        <span class="s1">}</span>
+        <span class="s3">// TODO: inherit this from higher up</span>
+        <span class="s2">const </span><span class="s1">protocol = (req == </span><span class="s2">null </span><span class="s1">? </span><span class="s2">void </span><span class="s4">0 </span><span class="s1">: (_req_socket = req.socket) == </span><span class="s2">null </span><span class="s1">? </span><span class="s2">void </span><span class="s4">0 </span><span class="s1">: _req_socket.encrypted) || ((_req_headers_xforwardedproto = req.headers[</span><span class="s0">'x-forwarded-proto'</span><span class="s1">]) == </span><span class="s2">null </span><span class="s1">? </span><span class="s2">void </span><span class="s4">0 </span><span class="s1">: _req_headers_xforwardedproto.includes(</span><span class="s0">'https'</span><span class="s1">)) ? </span><span class="s0">'https' </span><span class="s1">: </span><span class="s0">'http'</span><span class="s1">;</span>
+        <span class="s3">// When there are hostname and port we build an absolute URL</span>
+        <span class="s2">const </span><span class="s1">initUrl = config.experimental.trustHostHeader ? </span><span class="s0">`https://</span><span class="s1">${req.headers.host || </span><span class="s0">'localhost'</span><span class="s1">}${req.url}</span><span class="s0">` </span><span class="s1">: opts.port ? </span><span class="s0">`</span><span class="s1">${protocol}</span><span class="s0">://</span><span class="s1">${(</span><span class="s4">0</span><span class="s1">, _formathostname.formatHostname)(opts.hostname || </span><span class="s0">'localhost'</span><span class="s1">)}</span><span class="s0">:</span><span class="s1">${opts.port}${req.url}</span><span class="s0">` </span><span class="s1">: req.url || </span><span class="s0">''</span><span class="s1">;</span>
+        <span class="s1">(</span><span class="s4">0</span><span class="s1">, _requestmeta.addRequestMeta)(req, </span><span class="s0">'initURL'</span><span class="s1">, initUrl);</span>
+        <span class="s1">(</span><span class="s4">0</span><span class="s1">, _requestmeta.addRequestMeta)(req, </span><span class="s0">'initQuery'</span><span class="s1">, {</span>
+            <span class="s1">...parsedUrl.query</span>
+        <span class="s1">});</span>
+        <span class="s1">(</span><span class="s4">0</span><span class="s1">, _requestmeta.addRequestMeta)(req, </span><span class="s0">'initProtocol'</span><span class="s1">, protocol);</span>
+        <span class="s2">if </span><span class="s1">(!isUpgradeReq) {</span>
+            <span class="s1">(</span><span class="s4">0</span><span class="s1">, _requestmeta.addRequestMeta)(req, </span><span class="s0">'clonableBody'</span><span class="s1">, (</span><span class="s4">0</span><span class="s1">, _bodystreams.getCloneableBody)(req));</span>
+        <span class="s1">}</span>
+        <span class="s2">const </span><span class="s1">maybeAddTrailingSlash = (pathname)=&gt;{</span>
+            <span class="s2">if </span><span class="s1">(config.trailingSlash &amp;&amp; !config.skipMiddlewareUrlNormalize &amp;&amp; !pathname.endsWith(</span><span class="s0">'/'</span><span class="s1">)) {</span>
+                <span class="s2">return </span><span class="s0">`</span><span class="s1">${pathname}</span><span class="s0">/`</span><span class="s1">;</span>
+            <span class="s1">}</span>
+            <span class="s2">return </span><span class="s1">pathname;</span>
+        <span class="s1">};</span>
+        <span class="s2">let </span><span class="s1">domainLocale;</span>
+        <span class="s2">let </span><span class="s1">defaultLocale;</span>
+        <span class="s2">let </span><span class="s1">initialLocaleResult = undefined;</span>
+        <span class="s2">if </span><span class="s1">(config.i18n) {</span>
+            <span class="s2">var </span><span class="s1">_parsedUrl_pathname;</span>
+            <span class="s2">const </span><span class="s1">hadTrailingSlash = (_parsedUrl_pathname = parsedUrl.pathname) == </span><span class="s2">null </span><span class="s1">? </span><span class="s2">void </span><span class="s4">0 </span><span class="s1">: _parsedUrl_pathname.endsWith(</span><span class="s0">'/'</span><span class="s1">);</span>
+            <span class="s2">const </span><span class="s1">hadBasePath = (</span><span class="s4">0</span><span class="s1">, _pathhasprefix.pathHasPrefix)(parsedUrl.pathname || </span><span class="s0">''</span><span class="s1">, config.basePath);</span>
+            <span class="s2">let </span><span class="s1">normalizedPath = parsedUrl.pathname || </span><span class="s0">'/'</span><span class="s1">;</span>
+            <span class="s2">if </span><span class="s1">(config.basePath &amp;&amp; (</span><span class="s4">0</span><span class="s1">, _pathhasprefix.pathHasPrefix)(normalizedPath, config.basePath)) {</span>
+                <span class="s1">normalizedPath = (</span><span class="s4">0</span><span class="s1">, _removepathprefix.removePathPrefix)(normalizedPath, config.basePath);</span>
+            <span class="s1">} </span><span class="s2">else if </span><span class="s1">(config.assetPrefix &amp;&amp; (</span><span class="s4">0</span><span class="s1">, _pathhasprefix.pathHasPrefix)(normalizedPath, config.assetPrefix)) {</span>
+                <span class="s1">normalizedPath = (</span><span class="s4">0</span><span class="s1">, _removepathprefix.removePathPrefix)(normalizedPath, config.assetPrefix);</span>
+            <span class="s1">}</span>
+            <span class="s1">initialLocaleResult = (</span><span class="s4">0</span><span class="s1">, _normalizelocalepath.normalizeLocalePath)(normalizedPath, config.i18n.locales);</span>
+            <span class="s1">domainLocale = (</span><span class="s4">0</span><span class="s1">, _detectdomainlocale.detectDomainLocale)(config.i18n.domains, (</span><span class="s4">0</span><span class="s1">, _gethostname.getHostname)(parsedUrl, req.headers));</span>
+            <span class="s1">defaultLocale = (domainLocale == </span><span class="s2">null </span><span class="s1">? </span><span class="s2">void </span><span class="s4">0 </span><span class="s1">: domainLocale.defaultLocale) || config.i18n.defaultLocale;</span>
+            <span class="s1">(</span><span class="s4">0</span><span class="s1">, _requestmeta.addRequestMeta)(req, </span><span class="s0">'defaultLocale'</span><span class="s1">, defaultLocale);</span>
+            <span class="s1">(</span><span class="s4">0</span><span class="s1">, _requestmeta.addRequestMeta)(req, </span><span class="s0">'locale'</span><span class="s1">, initialLocaleResult.detectedLocale || defaultLocale);</span>
+            <span class="s3">// ensure locale is present for resolving routes</span>
+            <span class="s2">if </span><span class="s1">(!initialLocaleResult.detectedLocale &amp;&amp; !initialLocaleResult.pathname.startsWith(</span><span class="s0">'/_next/'</span><span class="s1">)) {</span>
+                <span class="s1">parsedUrl.pathname = (</span><span class="s4">0</span><span class="s1">, _addpathprefix.addPathPrefix)(initialLocaleResult.pathname === </span><span class="s0">'/' </span><span class="s1">? </span><span class="s0">`/</span><span class="s1">${defaultLocale}</span><span class="s0">` </span><span class="s1">: (</span><span class="s4">0</span><span class="s1">, _addpathprefix.addPathPrefix)(initialLocaleResult.pathname || </span><span class="s0">''</span><span class="s1">, </span><span class="s0">`/</span><span class="s1">${defaultLocale}</span><span class="s0">`</span><span class="s1">), hadBasePath ? config.basePath : </span><span class="s0">''</span><span class="s1">);</span>
+                <span class="s2">if </span><span class="s1">(hadTrailingSlash) {</span>
+                    <span class="s1">parsedUrl.pathname = maybeAddTrailingSlash(parsedUrl.pathname);</span>
+                <span class="s1">}</span>
+            <span class="s1">}</span>
+        <span class="s1">}</span>
+        <span class="s2">const </span><span class="s1">checkLocaleApi = (pathname)=&gt;{</span>
+            <span class="s2">if </span><span class="s1">(config.i18n &amp;&amp; pathname === urlNoQuery &amp;&amp; (initialLocaleResult == </span><span class="s2">null </span><span class="s1">? </span><span class="s2">void </span><span class="s4">0 </span><span class="s1">: initialLocaleResult.detectedLocale) &amp;&amp; (</span><span class="s4">0</span><span class="s1">, _pathhasprefix.pathHasPrefix)(initialLocaleResult.pathname, </span><span class="s0">'/api'</span><span class="s1">)) {</span>
+                <span class="s2">return true</span><span class="s1">;</span>
+            <span class="s1">}</span>
+        <span class="s1">};</span>
+        <span class="s1">async </span><span class="s2">function </span><span class="s1">checkTrue() {</span>
+            <span class="s2">const </span><span class="s1">pathname = parsedUrl.pathname || </span><span class="s0">'/'</span><span class="s1">;</span>
+            <span class="s2">if </span><span class="s1">(checkLocaleApi(pathname)) {</span>
+                <span class="s2">return</span><span class="s1">;</span>
+            <span class="s1">}</span>
+            <span class="s2">if </span><span class="s1">(!(invokedOutputs == </span><span class="s2">null </span><span class="s1">? </span><span class="s2">void </span><span class="s4">0 </span><span class="s1">: invokedOutputs.has(pathname))) {</span>
+                <span class="s2">const </span><span class="s1">output = </span><span class="s2">await </span><span class="s1">fsChecker.getItem(pathname);</span>
+                <span class="s2">if </span><span class="s1">(output) {</span>
+                    <span class="s2">if </span><span class="s1">(config.useFileSystemPublicRoutes || didRewrite || output.type !== </span><span class="s0">'appFile' </span><span class="s1">&amp;&amp; output.type !== </span><span class="s0">'pageFile'</span><span class="s1">) {</span>
+                        <span class="s2">return </span><span class="s1">output;</span>
+                    <span class="s1">}</span>
+                <span class="s1">}</span>
+            <span class="s1">}</span>
+            <span class="s2">const </span><span class="s1">dynamicRoutes = fsChecker.getDynamicRoutes();</span>
+            <span class="s2">let </span><span class="s1">curPathname = parsedUrl.pathname;</span>
+            <span class="s2">if </span><span class="s1">(config.basePath) {</span>
+                <span class="s2">if </span><span class="s1">(!(</span><span class="s4">0</span><span class="s1">, _pathhasprefix.pathHasPrefix)(curPathname || </span><span class="s0">''</span><span class="s1">, config.basePath)) {</span>
+                    <span class="s2">return</span><span class="s1">;</span>
+                <span class="s1">}</span>
+                <span class="s1">curPathname = (curPathname == </span><span class="s2">null </span><span class="s1">? </span><span class="s2">void </span><span class="s4">0 </span><span class="s1">: curPathname.substring(config.basePath.length)) || </span><span class="s0">'/'</span><span class="s1">;</span>
+            <span class="s1">}</span>
+            <span class="s2">const </span><span class="s1">localeResult = fsChecker.handleLocale(curPathname || </span><span class="s0">''</span><span class="s1">);</span>
+            <span class="s2">for </span><span class="s1">(</span><span class="s2">const </span><span class="s1">route of dynamicRoutes){</span>
+                <span class="s3">// when resolving fallback: false the</span>
+                <span class="s3">// render worker may return a no-fallback response</span>
+                <span class="s3">// which signals we need to continue resolving.</span>
+                <span class="s3">// TODO: optimize this to collect static paths</span>
+                <span class="s3">// to use at the routing layer</span>
+                <span class="s2">if </span><span class="s1">(invokedOutputs == </span><span class="s2">null </span><span class="s1">? </span><span class="s2">void </span><span class="s4">0 </span><span class="s1">: invokedOutputs.has(route.page)) {</span>
+                    <span class="s2">continue</span><span class="s1">;</span>
+                <span class="s1">}</span>
+                <span class="s2">const </span><span class="s1">params = route.match(localeResult.pathname);</span>
+                <span class="s2">if </span><span class="s1">(params) {</span>
+                    <span class="s2">const </span><span class="s1">pageOutput = </span><span class="s2">await </span><span class="s1">fsChecker.getItem((</span><span class="s4">0</span><span class="s1">, _addpathprefix.addPathPrefix)(route.page, config.basePath || </span><span class="s0">''</span><span class="s1">));</span>
+                    <span class="s3">// i18n locales aren't matched for app dir</span>
+                    <span class="s2">if </span><span class="s1">((pageOutput == </span><span class="s2">null </span><span class="s1">? </span><span class="s2">void </span><span class="s4">0 </span><span class="s1">: pageOutput.type) === </span><span class="s0">'appFile' </span><span class="s1">&amp;&amp; (initialLocaleResult == </span><span class="s2">null </span><span class="s1">? </span><span class="s2">void </span><span class="s4">0 </span><span class="s1">: initialLocaleResult.detectedLocale)) {</span>
+                        <span class="s2">continue</span><span class="s1">;</span>
+                    <span class="s1">}</span>
+                    <span class="s2">if </span><span class="s1">(pageOutput &amp;&amp; (curPathname == </span><span class="s2">null </span><span class="s1">? </span><span class="s2">void </span><span class="s4">0 </span><span class="s1">: curPathname.startsWith(</span><span class="s0">'/_next/data'</span><span class="s1">))) {</span>
+                        <span class="s1">(</span><span class="s4">0</span><span class="s1">, _requestmeta.addRequestMeta)(req, </span><span class="s0">'isNextDataReq'</span><span class="s1">, </span><span class="s2">true</span><span class="s1">);</span>
+                    <span class="s1">}</span>
+                    <span class="s2">if </span><span class="s1">(config.useFileSystemPublicRoutes || didRewrite) {</span>
+                        <span class="s2">return </span><span class="s1">pageOutput;</span>
+                    <span class="s1">}</span>
+                <span class="s1">}</span>
+            <span class="s1">}</span>
+        <span class="s1">}</span>
+        <span class="s2">const </span><span class="s1">normalizers = {</span>
+            <span class="s1">basePath: config.basePath &amp;&amp; config.basePath !== </span><span class="s0">'/' </span><span class="s1">? </span><span class="s2">new </span><span class="s1">_basepath.BasePathPathnameNormalizer(config.basePath) : undefined,</span>
+            <span class="s1">data: </span><span class="s2">new </span><span class="s1">_nextdata.NextDataPathnameNormalizer(fsChecker.buildId)</span>
+        <span class="s1">};</span>
+        <span class="s1">async </span><span class="s2">function </span><span class="s1">handleRoute(route) {</span>
+            <span class="s2">let </span><span class="s1">curPathname = parsedUrl.pathname || </span><span class="s0">'/'</span><span class="s1">;</span>
+            <span class="s2">if </span><span class="s1">(config.i18n &amp;&amp; route.internal) {</span>
+                <span class="s2">const </span><span class="s1">hadTrailingSlash = curPathname.endsWith(</span><span class="s0">'/'</span><span class="s1">);</span>
+                <span class="s2">if </span><span class="s1">(config.basePath) {</span>
+                    <span class="s1">curPathname = (</span><span class="s4">0</span><span class="s1">, _removepathprefix.removePathPrefix)(curPathname, config.basePath);</span>
+                <span class="s1">}</span>
+                <span class="s2">const </span><span class="s1">hadBasePath = curPathname !== parsedUrl.pathname;</span>
+                <span class="s2">const </span><span class="s1">localeResult = (</span><span class="s4">0</span><span class="s1">, _normalizelocalepath.normalizeLocalePath)(curPathname, config.i18n.locales);</span>
+                <span class="s2">const </span><span class="s1">isDefaultLocale = localeResult.detectedLocale === defaultLocale;</span>
+                <span class="s2">if </span><span class="s1">(isDefaultLocale) {</span>
+                    <span class="s1">curPathname = localeResult.pathname === </span><span class="s0">'/' </span><span class="s1">&amp;&amp; hadBasePath ? config.basePath : (</span><span class="s4">0</span><span class="s1">, _addpathprefix.addPathPrefix)(localeResult.pathname, hadBasePath ? config.basePath : </span><span class="s0">''</span><span class="s1">);</span>
+                <span class="s1">} </span><span class="s2">else if </span><span class="s1">(hadBasePath) {</span>
+                    <span class="s1">curPathname = curPathname === </span><span class="s0">'/' </span><span class="s1">? config.basePath : (</span><span class="s4">0</span><span class="s1">, _addpathprefix.addPathPrefix)(curPathname, config.basePath);</span>
+                <span class="s1">}</span>
+                <span class="s2">if </span><span class="s1">((isDefaultLocale || hadBasePath) &amp;&amp; hadTrailingSlash) {</span>
+                    <span class="s1">curPathname = maybeAddTrailingSlash(curPathname);</span>
+                <span class="s1">}</span>
+            <span class="s1">}</span>
+            <span class="s2">let </span><span class="s1">params = route.match(curPathname);</span>
+            <span class="s2">if </span><span class="s1">((route.has || route.missing) &amp;&amp; params) {</span>
+                <span class="s2">const </span><span class="s1">hasParams = (</span><span class="s4">0</span><span class="s1">, _preparedestination.matchHas)(req, parsedUrl.query, route.has, route.missing);</span>
+                <span class="s2">if </span><span class="s1">(hasParams) {</span>
+                    <span class="s1">Object.assign(params, hasParams);</span>
+                <span class="s1">} </span><span class="s2">else </span><span class="s1">{</span>
+                    <span class="s1">params = </span><span class="s2">false</span><span class="s1">;</span>
+                <span class="s1">}</span>
+            <span class="s1">}</span>
+            <span class="s2">if </span><span class="s1">(params) {</span>
+                <span class="s2">if </span><span class="s1">(fsChecker.exportPathMapRoutes &amp;&amp; route.name === </span><span class="s0">'before_files_end'</span><span class="s1">) {</span>
+                    <span class="s2">for </span><span class="s1">(</span><span class="s2">const </span><span class="s1">exportPathMapRoute of fsChecker.exportPathMapRoutes){</span>
+                        <span class="s2">const </span><span class="s1">result = </span><span class="s2">await </span><span class="s1">handleRoute(exportPathMapRoute);</span>
+                        <span class="s2">if </span><span class="s1">(result) {</span>
+                            <span class="s2">return </span><span class="s1">result;</span>
+                        <span class="s1">}</span>
+                    <span class="s1">}</span>
+                <span class="s1">}</span>
+                <span class="s2">if </span><span class="s1">(route.name === </span><span class="s0">'middleware_next_data' </span><span class="s1">&amp;&amp; parsedUrl.pathname) {</span>
+                    <span class="s2">var </span><span class="s1">_fsChecker_getMiddlewareMatchers;</span>
+                    <span class="s2">if </span><span class="s1">((_fsChecker_getMiddlewareMatchers = fsChecker.getMiddlewareMatchers()) == </span><span class="s2">null </span><span class="s1">? </span><span class="s2">void </span><span class="s4">0 </span><span class="s1">: _fsChecker_getMiddlewareMatchers.length) {</span>
+                        <span class="s2">var </span><span class="s1">_normalizers_basePath;</span>
+                        <span class="s2">let </span><span class="s1">normalized = parsedUrl.pathname;</span>
+                        <span class="s3">// Remove the base path if it exists.</span>
+                        <span class="s2">const </span><span class="s1">hadBasePath = (_normalizers_basePath = normalizers.basePath) == </span><span class="s2">null </span><span class="s1">? </span><span class="s2">void </span><span class="s4">0 </span><span class="s1">: _normalizers_basePath.match(parsedUrl.pathname);</span>
+                        <span class="s2">if </span><span class="s1">(hadBasePath &amp;&amp; normalizers.basePath) {</span>
+                            <span class="s1">normalized = normalizers.basePath.normalize(normalized, </span><span class="s2">true</span><span class="s1">);</span>
+                        <span class="s1">}</span>
+                        <span class="s2">let </span><span class="s1">updated = </span><span class="s2">false</span><span class="s1">;</span>
+                        <span class="s2">if </span><span class="s1">(normalizers.data.match(normalized)) {</span>
+                            <span class="s1">updated = </span><span class="s2">true</span><span class="s1">;</span>
+                            <span class="s1">(</span><span class="s4">0</span><span class="s1">, _requestmeta.addRequestMeta)(req, </span><span class="s0">'isNextDataReq'</span><span class="s1">, </span><span class="s2">true</span><span class="s1">);</span>
+                            <span class="s1">normalized = normalizers.data.normalize(normalized, </span><span class="s2">true</span><span class="s1">);</span>
+                        <span class="s1">}</span>
+                        <span class="s2">if </span><span class="s1">(config.i18n) {</span>
+                            <span class="s2">const </span><span class="s1">curLocaleResult = (</span><span class="s4">0</span><span class="s1">, _normalizelocalepath.normalizeLocalePath)(normalized, config.i18n.locales);</span>
+                            <span class="s2">if </span><span class="s1">(curLocaleResult.detectedLocale) {</span>
+                                <span class="s1">(</span><span class="s4">0</span><span class="s1">, _requestmeta.addRequestMeta)(req, </span><span class="s0">'locale'</span><span class="s1">, curLocaleResult.detectedLocale);</span>
+                            <span class="s1">}</span>
+                        <span class="s1">}</span>
+                        <span class="s3">// If we updated the pathname, and it had a base path, re-add the</span>
+                        <span class="s3">// base path.</span>
+                        <span class="s2">if </span><span class="s1">(updated) {</span>
+                            <span class="s2">if </span><span class="s1">(hadBasePath) {</span>
+                                <span class="s1">normalized = normalized === </span><span class="s0">'/' </span><span class="s1">? config.basePath : _nodepath.default.posix.join(config.basePath, normalized);</span>
+                            <span class="s1">}</span>
+                            <span class="s3">// Re-add the trailing slash (if required).</span>
+                            <span class="s1">normalized = maybeAddTrailingSlash(normalized);</span>
+                            <span class="s1">parsedUrl.pathname = normalized;</span>
+                        <span class="s1">}</span>
+                    <span class="s1">}</span>
+                <span class="s1">}</span>
+                <span class="s2">if </span><span class="s1">(route.name === </span><span class="s0">'check_fs'</span><span class="s1">) {</span>
+                    <span class="s2">const </span><span class="s1">pathname = parsedUrl.pathname || </span><span class="s0">'/'</span><span class="s1">;</span>
+                    <span class="s2">if </span><span class="s1">((invokedOutputs == </span><span class="s2">null </span><span class="s1">? </span><span class="s2">void </span><span class="s4">0 </span><span class="s1">: invokedOutputs.has(pathname)) || checkLocaleApi(pathname)) {</span>
+                        <span class="s2">return</span><span class="s1">;</span>
+                    <span class="s1">}</span>
+                    <span class="s2">const </span><span class="s1">output = </span><span class="s2">await </span><span class="s1">fsChecker.getItem(pathname);</span>
+                    <span class="s2">if </span><span class="s1">(output &amp;&amp; !(config.i18n &amp;&amp; (initialLocaleResult == </span><span class="s2">null </span><span class="s1">? </span><span class="s2">void </span><span class="s4">0 </span><span class="s1">: initialLocaleResult.detectedLocale) &amp;&amp; (</span><span class="s4">0</span><span class="s1">, _pathhasprefix.pathHasPrefix)(pathname, </span><span class="s0">'/api'</span><span class="s1">))) {</span>
+                        <span class="s2">if </span><span class="s1">(config.useFileSystemPublicRoutes || didRewrite || output.type !== </span><span class="s0">'appFile' </span><span class="s1">&amp;&amp; output.type !== </span><span class="s0">'pageFile'</span><span class="s1">) {</span>
+                            <span class="s1">matchedOutput = output;</span>
+                            <span class="s2">if </span><span class="s1">(output.locale) {</span>
+                                <span class="s1">(</span><span class="s4">0</span><span class="s1">, _requestmeta.addRequestMeta)(req, </span><span class="s0">'locale'</span><span class="s1">, output.locale);</span>
+                            <span class="s1">}</span>
+                            <span class="s2">return </span><span class="s1">{</span>
+                                <span class="s1">parsedUrl,</span>
+                                <span class="s1">resHeaders,</span>
+                                <span class="s1">finished: </span><span class="s2">true</span><span class="s1">,</span>
+                                <span class="s1">matchedOutput</span>
+                            <span class="s1">};</span>
+                        <span class="s1">}</span>
+                    <span class="s1">}</span>
+                <span class="s1">}</span>
+                <span class="s2">if </span><span class="s1">(!opts.minimalMode &amp;&amp; route.name === </span><span class="s0">'middleware'</span><span class="s1">) {</span>
+                    <span class="s2">const </span><span class="s1">match = fsChecker.getMiddlewareMatchers();</span>
+                    <span class="s2">let </span><span class="s1">maybeDecodedPathname = parsedUrl.pathname || </span><span class="s0">'/'</span><span class="s1">;</span>
+                    <span class="s2">try </span><span class="s1">{</span>
+                        <span class="s1">maybeDecodedPathname = decodeURIComponent(maybeDecodedPathname);</span>
+                    <span class="s1">} </span><span class="s2">catch  </span><span class="s1">{</span>
+                    <span class="s3">/* non-fatal we can't decode so can't match it */ </span><span class="s1">}</span>
+                    <span class="s2">if </span><span class="s1">(</span><span class="s3">// @ts-expect-error BaseNextRequest stuff</span>
+                    <span class="s1">(match == </span><span class="s2">null </span><span class="s1">? </span><span class="s2">void </span><span class="s4">0 </span><span class="s1">: match(parsedUrl.pathname, req, parsedUrl.query)) || (match == </span><span class="s2">null </span><span class="s1">? </span><span class="s2">void </span><span class="s4">0 </span><span class="s1">: match(maybeDecodedPathname, </span><span class="s3">// @ts-expect-error BaseNextRequest stuff</span>
+                    <span class="s1">req, parsedUrl.query))) {</span>
+                        <span class="s2">if </span><span class="s1">(ensureMiddleware) {</span>
+                            <span class="s2">await </span><span class="s1">ensureMiddleware(req.url);</span>
+                        <span class="s1">}</span>
+                        <span class="s2">const </span><span class="s1">serverResult = </span><span class="s2">await </span><span class="s1">(renderServer == </span><span class="s2">null </span><span class="s1">? </span><span class="s2">void </span><span class="s4">0 </span><span class="s1">: renderServer.initialize(renderServerOpts));</span>
+                        <span class="s2">if </span><span class="s1">(!serverResult) {</span>
+                            <span class="s2">throw </span><span class="s1">Object.defineProperty(</span><span class="s2">new </span><span class="s1">Error(</span><span class="s0">`Failed to initialize render server &quot;middleware&quot;`</span><span class="s1">), </span><span class="s0">&quot;__NEXT_ERROR_CODE&quot;</span><span class="s1">, {</span>
+                                <span class="s1">value: </span><span class="s0">&quot;E222&quot;</span><span class="s1">,</span>
+                                <span class="s1">enumerable: </span><span class="s2">false</span><span class="s1">,</span>
+                                <span class="s1">configurable: </span><span class="s2">true</span>
+                            <span class="s1">});</span>
+                        <span class="s1">}</span>
+                        <span class="s1">(</span><span class="s4">0</span><span class="s1">, _requestmeta.addRequestMeta)(req, </span><span class="s0">'invokePath'</span><span class="s1">, </span><span class="s0">''</span><span class="s1">);</span>
+                        <span class="s1">(</span><span class="s4">0</span><span class="s1">, _requestmeta.addRequestMeta)(req, </span><span class="s0">'invokeOutput'</span><span class="s1">, </span><span class="s0">''</span><span class="s1">);</span>
+                        <span class="s1">(</span><span class="s4">0</span><span class="s1">, _requestmeta.addRequestMeta)(req, </span><span class="s0">'invokeQuery'</span><span class="s1">, {});</span>
+                        <span class="s1">(</span><span class="s4">0</span><span class="s1">, _requestmeta.addRequestMeta)(req, </span><span class="s0">'middlewareInvoke'</span><span class="s1">, </span><span class="s2">true</span><span class="s1">);</span>
+                        <span class="s1">debug(</span><span class="s0">'invoking middleware'</span><span class="s1">, req.url, req.headers);</span>
+                        <span class="s2">let </span><span class="s1">middlewareRes = undefined;</span>
+                        <span class="s2">let </span><span class="s1">bodyStream = undefined;</span>
+                        <span class="s2">try </span><span class="s1">{</span>
+                            <span class="s2">try </span><span class="s1">{</span>
+                                <span class="s2">await </span><span class="s1">serverResult.requestHandler(req, res, parsedUrl);</span>
+                            <span class="s1">} </span><span class="s2">catch </span><span class="s1">(err) {</span>
+                                <span class="s2">if </span><span class="s1">(!(</span><span class="s0">'result' </span><span class="s2">in </span><span class="s1">err) || !(</span><span class="s0">'response' </span><span class="s2">in </span><span class="s1">err.result)) {</span>
+                                    <span class="s2">throw </span><span class="s1">err;</span>
+                                <span class="s1">}</span>
+                                <span class="s1">middlewareRes = err.result.response;</span>
+                                <span class="s1">res.statusCode = middlewareRes.status;</span>
+                                <span class="s2">if </span><span class="s1">(middlewareRes.body) {</span>
+                                    <span class="s1">bodyStream = middlewareRes.body;</span>
+                                <span class="s1">} </span><span class="s2">else if </span><span class="s1">(middlewareRes.status) {</span>
+                                    <span class="s1">bodyStream = </span><span class="s2">new </span><span class="s1">ReadableStream({</span>
+                                        <span class="s1">start (controller) {</span>
+                                            <span class="s1">controller.enqueue(</span><span class="s0">''</span><span class="s1">);</span>
+                                            <span class="s1">controller.close();</span>
+                                        <span class="s1">}</span>
+                                    <span class="s1">});</span>
+                                <span class="s1">}</span>
+                            <span class="s1">}</span>
+                        <span class="s1">} </span><span class="s2">catch </span><span class="s1">(e) {</span>
+                            <span class="s3">// If the client aborts before we can receive a response object</span>
+                            <span class="s3">// (when the headers are flushed), then we can early exit without</span>
+                            <span class="s3">// further processing.</span>
+                            <span class="s2">if </span><span class="s1">((</span><span class="s4">0</span><span class="s1">, _pipereadable.isAbortError)(e)) {</span>
+                                <span class="s2">return </span><span class="s1">{</span>
+                                    <span class="s1">parsedUrl,</span>
+                                    <span class="s1">resHeaders,</span>
+                                    <span class="s1">finished: </span><span class="s2">true</span>
+                                <span class="s1">};</span>
+                            <span class="s1">}</span>
+                            <span class="s2">throw </span><span class="s1">e;</span>
+                        <span class="s1">}</span>
+                        <span class="s2">if </span><span class="s1">(res.closed || res.finished || !middlewareRes) {</span>
+                            <span class="s2">return </span><span class="s1">{</span>
+                                <span class="s1">parsedUrl,</span>
+                                <span class="s1">resHeaders,</span>
+                                <span class="s1">finished: </span><span class="s2">true</span>
+                            <span class="s1">};</span>
+                        <span class="s1">}</span>
+                        <span class="s2">const </span><span class="s1">middlewareHeaders = (</span><span class="s4">0</span><span class="s1">, _utils1.toNodeOutgoingHttpHeaders)(middlewareRes.headers);</span>
+                        <span class="s1">debug(</span><span class="s0">'middleware res'</span><span class="s1">, middlewareRes.status, middlewareHeaders);</span>
+                        <span class="s2">if </span><span class="s1">(middlewareHeaders[</span><span class="s0">'x-middleware-override-headers'</span><span class="s1">]) {</span>
+                            <span class="s2">const </span><span class="s1">overriddenHeaders = </span><span class="s2">new </span><span class="s1">Set();</span>
+                            <span class="s2">let </span><span class="s1">overrideHeaders = middlewareHeaders[</span><span class="s0">'x-middleware-override-headers'</span><span class="s1">];</span>
+                            <span class="s2">if </span><span class="s1">(</span><span class="s2">typeof </span><span class="s1">overrideHeaders === </span><span class="s0">'string'</span><span class="s1">) {</span>
+                                <span class="s1">overrideHeaders = overrideHeaders.split(</span><span class="s0">','</span><span class="s1">);</span>
+                            <span class="s1">}</span>
+                            <span class="s2">for </span><span class="s1">(</span><span class="s2">const </span><span class="s1">key of overrideHeaders){</span>
+                                <span class="s1">overriddenHeaders.add(key.trim());</span>
+                            <span class="s1">}</span>
+                            <span class="s2">delete </span><span class="s1">middlewareHeaders[</span><span class="s0">'x-middleware-override-headers'</span><span class="s1">];</span>
+                            <span class="s3">// Delete headers.</span>
+                            <span class="s2">for </span><span class="s1">(</span><span class="s2">const </span><span class="s1">key of Object.keys(req.headers)){</span>
+                                <span class="s2">if </span><span class="s1">(!overriddenHeaders.has(key)) {</span>
+                                    <span class="s2">delete </span><span class="s1">req.headers[key];</span>
+                                <span class="s1">}</span>
+                            <span class="s1">}</span>
+                            <span class="s3">// Update or add headers.</span>
+                            <span class="s2">for </span><span class="s1">(</span><span class="s2">const </span><span class="s1">key of overriddenHeaders.keys()){</span>
+                                <span class="s2">const </span><span class="s1">valueKey = </span><span class="s0">'x-middleware-request-' </span><span class="s1">+ key;</span>
+                                <span class="s2">const </span><span class="s1">newValue = middlewareHeaders[valueKey];</span>
+                                <span class="s2">const </span><span class="s1">oldValue = req.headers[key];</span>
+                                <span class="s2">if </span><span class="s1">(oldValue !== newValue) {</span>
+                                    <span class="s1">req.headers[key] = newValue === </span><span class="s2">null </span><span class="s1">? undefined : newValue;</span>
+                                <span class="s1">}</span>
+                                <span class="s2">delete </span><span class="s1">middlewareHeaders[valueKey];</span>
+                            <span class="s1">}</span>
+                        <span class="s1">}</span>
+                        <span class="s2">if </span><span class="s1">(!middlewareHeaders[</span><span class="s0">'x-middleware-rewrite'</span><span class="s1">] &amp;&amp; !middlewareHeaders[</span><span class="s0">'x-middleware-next'</span><span class="s1">] &amp;&amp; !middlewareHeaders[</span><span class="s0">'location'</span><span class="s1">]) {</span>
+                            <span class="s1">middlewareHeaders[</span><span class="s0">'x-middleware-refresh'</span><span class="s1">] = </span><span class="s0">'1'</span><span class="s1">;</span>
+                        <span class="s1">}</span>
+                        <span class="s2">delete </span><span class="s1">middlewareHeaders[</span><span class="s0">'x-middleware-next'</span><span class="s1">];</span>
+                        <span class="s2">for </span><span class="s1">(</span><span class="s2">const </span><span class="s1">[key, value] of Object.entries({</span>
+                            <span class="s1">...(</span><span class="s4">0</span><span class="s1">, _utils.filterReqHeaders)(middlewareHeaders, _utils.ipcForbiddenHeaders)</span>
+                        <span class="s1">})){</span>
+                            <span class="s2">if </span><span class="s1">([</span>
+                                <span class="s0">'content-length'</span><span class="s1">,</span>
+                                <span class="s0">'x-middleware-rewrite'</span><span class="s1">,</span>
+                                <span class="s0">'x-middleware-redirect'</span><span class="s1">,</span>
+                                <span class="s0">'x-middleware-refresh'</span>
+                            <span class="s1">].includes(key)) {</span>
+                                <span class="s2">continue</span><span class="s1">;</span>
+                            <span class="s1">}</span>
+                            <span class="s3">// for set-cookie, the header shouldn't be added to the response</span>
+                            <span class="s3">// as it's only needed for the request to the middleware function.</span>
+                            <span class="s2">if </span><span class="s1">(key === </span><span class="s0">'x-middleware-set-cookie'</span><span class="s1">) {</span>
+                                <span class="s1">req.headers[key] = value;</span>
+                                <span class="s2">continue</span><span class="s1">;</span>
+                            <span class="s1">}</span>
+                            <span class="s2">if </span><span class="s1">(value) {</span>
+                                <span class="s1">resHeaders[key] = value;</span>
+                                <span class="s1">req.headers[key] = value;</span>
+                            <span class="s1">}</span>
+                        <span class="s1">}</span>
+                        <span class="s2">if </span><span class="s1">(middlewareHeaders[</span><span class="s0">'x-middleware-rewrite'</span><span class="s1">]) {</span>
+                            <span class="s2">const </span><span class="s1">value = middlewareHeaders[</span><span class="s0">'x-middleware-rewrite'</span><span class="s1">];</span>
+                            <span class="s2">const </span><span class="s1">destination = (</span><span class="s4">0</span><span class="s1">, _relativizeurl.getRelativeURL)(value, initUrl);</span>
+                            <span class="s1">resHeaders[</span><span class="s0">'x-middleware-rewrite'</span><span class="s1">] = destination;</span>
+                            <span class="s1">parsedUrl = _url.default.parse(destination, </span><span class="s2">true</span><span class="s1">);</span>
+                            <span class="s2">if </span><span class="s1">(parsedUrl.protocol) {</span>
+                                <span class="s2">return </span><span class="s1">{</span>
+                                    <span class="s1">parsedUrl,</span>
+                                    <span class="s1">resHeaders,</span>
+                                    <span class="s1">finished: </span><span class="s2">true</span>
+                                <span class="s1">};</span>
+                            <span class="s1">}</span>
+                            <span class="s2">if </span><span class="s1">(config.i18n) {</span>
+                                <span class="s2">const </span><span class="s1">curLocaleResult = (</span><span class="s4">0</span><span class="s1">, _normalizelocalepath.normalizeLocalePath)(parsedUrl.pathname || </span><span class="s0">''</span><span class="s1">, config.i18n.locales);</span>
+                                <span class="s2">if </span><span class="s1">(curLocaleResult.detectedLocale) {</span>
+                                    <span class="s1">(</span><span class="s4">0</span><span class="s1">, _requestmeta.addRequestMeta)(req, </span><span class="s0">'locale'</span><span class="s1">, curLocaleResult.detectedLocale);</span>
+                                <span class="s1">}</span>
+                            <span class="s1">}</span>
+                        <span class="s1">}</span>
+                        <span class="s2">if </span><span class="s1">(middlewareHeaders[</span><span class="s0">'location'</span><span class="s1">]) {</span>
+                            <span class="s2">const </span><span class="s1">value = middlewareHeaders[</span><span class="s0">'location'</span><span class="s1">];</span>
+                            <span class="s3">// Only process Location header as a redirect if it has a proper redirect status</span>
+                            <span class="s3">// This prevents a Location header with non-redirect status from being treated as a redirect</span>
+                            <span class="s2">const </span><span class="s1">isRedirectStatus = _redirectstatus.allowedStatusCodes.has(middlewareRes.status);</span>
+                            <span class="s2">if </span><span class="s1">(isRedirectStatus) {</span>
+                                <span class="s3">// Process as redirect: update parsedUrl and convert to relative URL</span>
+                                <span class="s2">const </span><span class="s1">rel = (</span><span class="s4">0</span><span class="s1">, _relativizeurl.getRelativeURL)(value, initUrl);</span>
+                                <span class="s1">resHeaders[</span><span class="s0">'location'</span><span class="s1">] = rel;</span>
+                                <span class="s1">parsedUrl = _url.default.parse(rel, </span><span class="s2">true</span><span class="s1">);</span>
+                                <span class="s2">return </span><span class="s1">{</span>
+                                    <span class="s1">parsedUrl,</span>
+                                    <span class="s1">resHeaders,</span>
+                                    <span class="s1">finished: </span><span class="s2">true</span><span class="s1">,</span>
+                                    <span class="s1">statusCode: middlewareRes.status</span>
+                                <span class="s1">};</span>
+                            <span class="s1">} </span><span class="s2">else </span><span class="s1">{</span>
+                                <span class="s3">// Not a redirect: just pass through the Location header</span>
+                                <span class="s1">resHeaders[</span><span class="s0">'location'</span><span class="s1">] = value;</span>
+                                <span class="s2">return </span><span class="s1">{</span>
+                                    <span class="s1">parsedUrl,</span>
+                                    <span class="s1">resHeaders,</span>
+                                    <span class="s1">finished: </span><span class="s2">true</span><span class="s1">,</span>
+                                    <span class="s1">bodyStream,</span>
+                                    <span class="s1">statusCode: middlewareRes.status</span>
+                                <span class="s1">};</span>
+                            <span class="s1">}</span>
+                        <span class="s1">}</span>
+                        <span class="s2">if </span><span class="s1">(middlewareHeaders[</span><span class="s0">'x-middleware-refresh'</span><span class="s1">]) {</span>
+                            <span class="s2">return </span><span class="s1">{</span>
+                                <span class="s1">parsedUrl,</span>
+                                <span class="s1">resHeaders,</span>
+                                <span class="s1">finished: </span><span class="s2">true</span><span class="s1">,</span>
+                                <span class="s1">bodyStream,</span>
+                                <span class="s1">statusCode: middlewareRes.status</span>
+                            <span class="s1">};</span>
+                        <span class="s1">}</span>
+                    <span class="s1">}</span>
+                <span class="s1">}</span>
+                <span class="s3">// handle redirect</span>
+                <span class="s2">if </span><span class="s1">((</span><span class="s0">'statusCode' </span><span class="s2">in </span><span class="s1">route || </span><span class="s0">'permanent' </span><span class="s2">in </span><span class="s1">route) &amp;&amp; route.destination) {</span>
+                    <span class="s2">const </span><span class="s1">{ parsedDestination } = (</span><span class="s4">0</span><span class="s1">, _preparedestination.prepareDestination)({</span>
+                        <span class="s1">appendParamsToQuery: </span><span class="s2">false</span><span class="s1">,</span>
+                        <span class="s1">destination: route.destination,</span>
+                        <span class="s1">params: params,</span>
+                        <span class="s1">query: parsedUrl.query</span>
+                    <span class="s1">});</span>
+                    <span class="s2">const </span><span class="s1">{ query } = parsedDestination;</span>
+                    <span class="s2">delete </span><span class="s1">parsedDestination.query;</span>
+                    <span class="s1">parsedDestination.search = (</span><span class="s4">0</span><span class="s1">, _serverrouteutils.stringifyQuery)(req, query);</span>
+                    <span class="s1">parsedDestination.pathname = (</span><span class="s4">0</span><span class="s1">, _utils2.normalizeRepeatedSlashes)(parsedDestination.pathname);</span>
+                    <span class="s2">return </span><span class="s1">{</span>
+                        <span class="s1">finished: </span><span class="s2">true</span><span class="s1">,</span>
+                        <span class="s3">// @ts-expect-error custom ParsedUrl</span>
+                        <span class="s1">parsedUrl: parsedDestination,</span>
+                        <span class="s1">statusCode: (</span><span class="s4">0</span><span class="s1">, _redirectstatus.getRedirectStatus)(route)</span>
+                    <span class="s1">};</span>
+                <span class="s1">}</span>
+                <span class="s3">// handle headers</span>
+                <span class="s2">if </span><span class="s1">(route.headers) {</span>
+                    <span class="s2">const </span><span class="s1">hasParams = Object.keys(params).length &gt; </span><span class="s4">0</span><span class="s1">;</span>
+                    <span class="s2">for </span><span class="s1">(</span><span class="s2">const </span><span class="s1">header of route.headers){</span>
+                        <span class="s2">let </span><span class="s1">{ key, value } = header;</span>
+                        <span class="s2">if </span><span class="s1">(hasParams) {</span>
+                            <span class="s1">key = (</span><span class="s4">0</span><span class="s1">, _preparedestination.compileNonPath)(key, params);</span>
+                            <span class="s1">value = (</span><span class="s4">0</span><span class="s1">, _preparedestination.compileNonPath)(value, params);</span>
+                        <span class="s1">}</span>
+                        <span class="s2">if </span><span class="s1">(key.toLowerCase() === </span><span class="s0">'set-cookie'</span><span class="s1">) {</span>
+                            <span class="s2">if </span><span class="s1">(!Array.isArray(resHeaders[key])) {</span>
+                                <span class="s2">const </span><span class="s1">val = resHeaders[key];</span>
+                                <span class="s1">resHeaders[key] = </span><span class="s2">typeof </span><span class="s1">val === </span><span class="s0">'string' </span><span class="s1">? [</span>
+                                    <span class="s1">val</span>
+                                <span class="s1">] : [];</span>
+                            <span class="s1">}</span>
+                            <span class="s1">;</span>
+                            <span class="s1">resHeaders[key].push(value);</span>
+                        <span class="s1">} </span><span class="s2">else </span><span class="s1">{</span>
+                            <span class="s1">resHeaders[key] = value;</span>
+                        <span class="s1">}</span>
+                    <span class="s1">}</span>
+                <span class="s1">}</span>
+                <span class="s3">// handle rewrite</span>
+                <span class="s2">if </span><span class="s1">(route.destination) {</span>
+                    <span class="s2">let </span><span class="s1">rewriteParams = params;</span>
+                    <span class="s2">try </span><span class="s1">{</span>
+                        <span class="s3">// An interception rewrite might reference a dynamic param for a route the user</span>
+                        <span class="s3">// is currently on, which wouldn't be extractable from the matched route params.</span>
+                        <span class="s3">// This attempts to extract the dynamic params from the provided router state.</span>
+                        <span class="s2">if </span><span class="s1">((</span><span class="s4">0</span><span class="s1">, _generateinterceptionroutesrewrites.isInterceptionRouteRewrite)(route)) {</span>
+                            <span class="s2">const </span><span class="s1">stateHeader = req.headers[_approuterheaders.NEXT_ROUTER_STATE_TREE_HEADER];</span>
+                            <span class="s2">if </span><span class="s1">(stateHeader) {</span>
+                                <span class="s1">rewriteParams = {</span>
+                                    <span class="s1">...(</span><span class="s4">0</span><span class="s1">, _computechangedpath.getSelectedParams)((</span><span class="s4">0</span><span class="s1">, _parseandvalidateflightrouterstate.parseAndValidateFlightRouterState)(stateHeader)),</span>
+                                    <span class="s1">...params</span>
+                                <span class="s1">};</span>
+                            <span class="s1">}</span>
+                        <span class="s1">}</span>
+                    <span class="s1">} </span><span class="s2">catch </span><span class="s1">(err) {</span>
+                    <span class="s3">// this is a no-op -- we couldn't extract dynamic params from the provided router state,</span>
+                    <span class="s3">// so we'll just use the params from the route matcher</span>
+                    <span class="s1">}</span>
+                    <span class="s2">const </span><span class="s1">{ parsedDestination } = (</span><span class="s4">0</span><span class="s1">, _preparedestination.prepareDestination)({</span>
+                        <span class="s1">appendParamsToQuery: </span><span class="s2">true</span><span class="s1">,</span>
+                        <span class="s1">destination: route.destination,</span>
+                        <span class="s1">params: rewriteParams,</span>
+                        <span class="s1">query: parsedUrl.query</span>
+                    <span class="s1">});</span>
+                    <span class="s2">if </span><span class="s1">(parsedDestination.protocol) {</span>
+                        <span class="s2">return </span><span class="s1">{</span>
+                            <span class="s3">// @ts-expect-error custom ParsedUrl</span>
+                            <span class="s1">parsedUrl: parsedDestination,</span>
+                            <span class="s1">finished: </span><span class="s2">true</span>
+                        <span class="s1">};</span>
+                    <span class="s1">}</span>
+                    <span class="s3">// Set the rewrite headers only if this is a RSC request.</span>
+                    <span class="s2">if </span><span class="s1">(req.headers[_approuterheaders.RSC_HEADER] === </span><span class="s0">'1'</span><span class="s1">) {</span>
+                        <span class="s3">// We set the rewritten path and query headers on the response now</span>
+                        <span class="s3">// that we know that the it's not an external rewrite.</span>
+                        <span class="s2">if </span><span class="s1">(parsedUrl.pathname !== parsedDestination.pathname) {</span>
+                            <span class="s1">res.setHeader(_approuterheaders.NEXT_REWRITTEN_PATH_HEADER, parsedDestination.pathname);</span>
+                        <span class="s1">}</span>
+                        <span class="s2">if </span><span class="s1">(parsedUrl.search !== parsedDestination.search) {</span>
+                            <span class="s1">res.setHeader(_approuterheaders.NEXT_REWRITTEN_QUERY_HEADER, </span><span class="s3">// remove the leading ? from the search</span>
+                            <span class="s1">parsedDestination.search.slice(</span><span class="s4">1</span><span class="s1">));</span>
+                        <span class="s1">}</span>
+                    <span class="s1">}</span>
+                    <span class="s2">if </span><span class="s1">(config.i18n) {</span>
+                        <span class="s2">const </span><span class="s1">curLocaleResult = (</span><span class="s4">0</span><span class="s1">, _normalizelocalepath.normalizeLocalePath)((</span><span class="s4">0</span><span class="s1">, _removepathprefix.removePathPrefix)(parsedDestination.pathname, config.basePath), config.i18n.locales);</span>
+                        <span class="s2">if </span><span class="s1">(curLocaleResult.detectedLocale) {</span>
+                            <span class="s1">(</span><span class="s4">0</span><span class="s1">, _requestmeta.addRequestMeta)(req, </span><span class="s0">'locale'</span><span class="s1">, curLocaleResult.detectedLocale);</span>
+                        <span class="s1">}</span>
+                    <span class="s1">}</span>
+                    <span class="s1">didRewrite = </span><span class="s2">true</span><span class="s1">;</span>
+                    <span class="s1">parsedUrl.pathname = parsedDestination.pathname;</span>
+                    <span class="s1">Object.assign(parsedUrl.query, parsedDestination.query);</span>
+                <span class="s1">}</span>
+                <span class="s3">// handle check: true</span>
+                <span class="s2">if </span><span class="s1">(route.check) {</span>
+                    <span class="s2">const </span><span class="s1">output = </span><span class="s2">await </span><span class="s1">checkTrue();</span>
+                    <span class="s2">if </span><span class="s1">(output) {</span>
+                        <span class="s2">return </span><span class="s1">{</span>
+                            <span class="s1">parsedUrl,</span>
+                            <span class="s1">resHeaders,</span>
+                            <span class="s1">finished: </span><span class="s2">true</span><span class="s1">,</span>
+                            <span class="s1">matchedOutput: output</span>
+                        <span class="s1">};</span>
+                    <span class="s1">}</span>
+                <span class="s1">}</span>
+            <span class="s1">}</span>
+        <span class="s1">}</span>
+        <span class="s2">for </span><span class="s1">(</span><span class="s2">const </span><span class="s1">route of routes){</span>
+            <span class="s2">const </span><span class="s1">result = </span><span class="s2">await </span><span class="s1">handleRoute(route);</span>
+            <span class="s2">if </span><span class="s1">(result) {</span>
+                <span class="s2">return </span><span class="s1">result;</span>
+            <span class="s1">}</span>
+        <span class="s1">}</span>
+        <span class="s2">return </span><span class="s1">{</span>
+            <span class="s1">finished,</span>
+            <span class="s1">parsedUrl,</span>
+            <span class="s1">resHeaders,</span>
+            <span class="s1">matchedOutput</span>
+        <span class="s1">};</span>
+    <span class="s1">}</span>
+    <span class="s2">return </span><span class="s1">resolveRoutes;</span>
+<span class="s1">}</span>
+
+<span class="s3">//# sourceMappingURL=resolve-routes.js.map</span></pre>
+</body>
+</html>

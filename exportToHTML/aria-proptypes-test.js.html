@@ -1,0 +1,333 @@
+<html>
+<head>
+<title>aria-proptypes-test.js</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #8c8c8c; font-style: italic;}
+.s1 { color: #8c8c8c; font-style: italic;}
+.s2 { color: #080808;}
+.s3 { color: #0033b3;}
+.s4 { color: #067d17;}
+.s5 { color: #0037a6;}
+</style>
+</head>
+<body bgcolor="#ffffff">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#c0c0c0" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+aria-proptypes-test.js</font>
+</center></td></tr></table>
+<pre><span class="s0">/**</span>
+ <span class="s0">* </span><span class="s1">@fileoverview </span><span class="s0">Enforce ARIA state and property values are valid.</span>
+ <span class="s0">* </span><span class="s1">@author </span><span class="s0">Ethan Cohen</span>
+ <span class="s0">*/</span>
+
+<span class="s0">// -----------------------------------------------------------------------------</span>
+<span class="s0">// Requirements</span>
+<span class="s0">// -----------------------------------------------------------------------------</span>
+
+<span class="s3">import </span><span class="s2">{ aria } from </span><span class="s4">'aria-query'</span><span class="s2">;</span>
+<span class="s3">import </span><span class="s2">{ RuleTester } from </span><span class="s4">'eslint'</span><span class="s2">;</span>
+<span class="s3">import </span><span class="s2">test from </span><span class="s4">'tape'</span><span class="s2">;</span>
+
+<span class="s3">import </span><span class="s2">parserOptionsMapper from </span><span class="s4">'../../__util__/parserOptionsMapper'</span><span class="s2">;</span>
+<span class="s3">import </span><span class="s2">parsers from </span><span class="s4">'../../__util__/helpers/parsers'</span><span class="s2">;</span>
+<span class="s3">import </span><span class="s2">rule from </span><span class="s4">'../../../src/rules/aria-proptypes'</span><span class="s2">;</span>
+
+<span class="s3">const </span><span class="s2">{ validityCheck } = rule;</span>
+
+<span class="s0">// -----------------------------------------------------------------------------</span>
+<span class="s0">// Tests</span>
+<span class="s0">// -----------------------------------------------------------------------------</span>
+
+<span class="s3">const </span><span class="s2">ruleTester = </span><span class="s3">new </span><span class="s2">RuleTester();</span>
+
+<span class="s3">const </span><span class="s2">errorMessage = (name) =&gt; {</span>
+  <span class="s3">const </span><span class="s2">{</span>
+    <span class="s2">type,</span>
+    <span class="s2">values: permittedValues,</span>
+  <span class="s2">} = aria.get(name.toLowerCase());</span>
+
+  <span class="s3">switch </span><span class="s2">(type) {</span>
+    <span class="s3">case </span><span class="s4">'tristate'</span><span class="s2">:</span>
+      <span class="s3">return </span><span class="s2">{ message: </span><span class="s4">`The value for </span><span class="s2">${name} </span><span class="s4">must be a boolean or the string &quot;mixed&quot;.` </span><span class="s2">};</span>
+    <span class="s3">case </span><span class="s4">'token'</span><span class="s2">:</span>
+      <span class="s3">return </span><span class="s2">{ message: </span><span class="s4">`The value for </span><span class="s2">${name} </span><span class="s4">must be a single token from the following: </span><span class="s2">${permittedValues}</span><span class="s4">.` </span><span class="s2">};</span>
+    <span class="s3">case </span><span class="s4">'tokenlist'</span><span class="s2">:</span>
+      <span class="s3">return </span><span class="s2">{</span>
+        <span class="s2">message: </span><span class="s4">`The value for </span><span class="s2">${name} </span><span class="s4">must be a list of one or more </span><span class="s5">\ 
+</span><span class="s4">tokens from the following: </span><span class="s2">${permittedValues}</span><span class="s4">.`</span><span class="s2">,</span>
+      <span class="s2">};</span>
+    <span class="s3">case </span><span class="s4">'idlist'</span><span class="s2">:</span>
+      <span class="s3">return </span><span class="s2">{ message: </span><span class="s4">`The value for </span><span class="s2">${name} </span><span class="s4">must be a list of strings that represent DOM element IDs (idlist)` </span><span class="s2">};</span>
+    <span class="s3">case </span><span class="s4">'id'</span><span class="s2">:</span>
+      <span class="s3">return </span><span class="s2">{ message: </span><span class="s4">`The value for </span><span class="s2">${name} </span><span class="s4">must be a string that represents a DOM element ID` </span><span class="s2">};</span>
+    <span class="s3">case </span><span class="s4">'boolean'</span><span class="s2">:</span>
+    <span class="s3">case </span><span class="s4">'string'</span><span class="s2">:</span>
+    <span class="s3">case </span><span class="s4">'integer'</span><span class="s2">:</span>
+    <span class="s3">case </span><span class="s4">'number'</span><span class="s2">:</span>
+    <span class="s3">default</span><span class="s2">:</span>
+      <span class="s3">return </span><span class="s2">{ message: </span><span class="s4">`The value for </span><span class="s2">${name} </span><span class="s4">must be a </span><span class="s2">${type}</span><span class="s4">.` </span><span class="s2">};</span>
+  <span class="s2">}</span>
+<span class="s2">};</span>
+
+<span class="s2">test(</span><span class="s4">'validityCheck'</span><span class="s2">, (t) =&gt; {</span>
+  <span class="s2">t.equal(</span>
+    <span class="s2">validityCheck(</span><span class="s3">null</span><span class="s2">, </span><span class="s3">null</span><span class="s2">),</span>
+    <span class="s3">false</span><span class="s2">,</span>
+    <span class="s4">'is false for an unknown expected type'</span><span class="s2">,</span>
+  <span class="s2">);</span>
+
+  <span class="s2">t.end();</span>
+<span class="s2">});</span>
+
+<span class="s2">ruleTester.run(</span><span class="s4">'aria-proptypes'</span><span class="s2">, rule, {</span>
+  <span class="s2">valid: parsers.all([].concat(</span>
+    <span class="s0">// DON'T TEST INVALID ARIA-* PROPS</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;div aria-foo=&quot;true&quot; /&gt;' </span><span class="s2">},</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;div abcaria-foo=&quot;true&quot; /&gt;' </span><span class="s2">},</span>
+
+    <span class="s0">// BOOLEAN</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;div aria-hidden={true} /&gt;' </span><span class="s2">},</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;div aria-hidden=&quot;true&quot; /&gt;' </span><span class="s2">},</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;div aria-hidden={&quot;false&quot;} /&gt;' </span><span class="s2">},</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;div aria-hidden={!false} /&gt;' </span><span class="s2">},</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;div aria-hidden /&gt;' </span><span class="s2">},</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;div aria-hidden={false} /&gt;' </span><span class="s2">},</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;div aria-hidden={!true} /&gt;' </span><span class="s2">},</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;div aria-hidden={!&quot;yes&quot;} /&gt;' </span><span class="s2">},</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;div aria-hidden={foo} /&gt;' </span><span class="s2">},</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;div aria-hidden={foo.bar} /&gt;' </span><span class="s2">},</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;div aria-hidden={null} /&gt;' </span><span class="s2">},</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;div aria-hidden={undefined} /&gt;' </span><span class="s2">},</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;div aria-hidden={&lt;div /&gt;} /&gt;' </span><span class="s2">},</span>
+
+    <span class="s0">// STRING</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;div aria-label=&quot;Close&quot; /&gt;' </span><span class="s2">},</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;div aria-label={`Close`} /&gt;' </span><span class="s2">},</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;div aria-label={foo} /&gt;' </span><span class="s2">},</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;div aria-label={foo.bar} /&gt;' </span><span class="s2">},</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;div aria-label={null} /&gt;' </span><span class="s2">},</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;div aria-label={undefined} /&gt;' </span><span class="s2">},</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;input aria-invalid={error ? &quot;true&quot; : &quot;false&quot;} /&gt;' </span><span class="s2">},</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;input aria-invalid={undefined ? &quot;true&quot; : &quot;false&quot;} /&gt;' </span><span class="s2">},</span>
+
+    <span class="s0">// TRISTATE</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;div aria-checked={true} /&gt;' </span><span class="s2">},</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;div aria-checked=&quot;true&quot; /&gt;' </span><span class="s2">},</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;div aria-checked={&quot;false&quot;} /&gt;' </span><span class="s2">},</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;div aria-checked={!false} /&gt;' </span><span class="s2">},</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;div aria-checked /&gt;' </span><span class="s2">},</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;div aria-checked={false} /&gt;' </span><span class="s2">},</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;div aria-checked={!true} /&gt;' </span><span class="s2">},</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;div aria-checked={!&quot;yes&quot;} /&gt;' </span><span class="s2">},</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;div aria-checked={foo} /&gt;' </span><span class="s2">},</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;div aria-checked={foo.bar} /&gt;' </span><span class="s2">},</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;div aria-checked=&quot;mixed&quot; /&gt;' </span><span class="s2">},</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;div aria-checked={`mixed`} /&gt;' </span><span class="s2">},</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;div aria-checked={null} /&gt;' </span><span class="s2">},</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;div aria-checked={undefined} /&gt;' </span><span class="s2">},</span>
+
+    <span class="s0">// INTEGER</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;div aria-level={123} /&gt;' </span><span class="s2">},</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;div aria-level={-123} /&gt;' </span><span class="s2">},</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;div aria-level={+123} /&gt;' </span><span class="s2">},</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;div aria-level={~123} /&gt;' </span><span class="s2">},</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;div aria-level={&quot;123&quot;} /&gt;' </span><span class="s2">},</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;div aria-level={`123`} /&gt;' </span><span class="s2">},</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;div aria-level=&quot;123&quot; /&gt;' </span><span class="s2">},</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;div aria-level={foo} /&gt;' </span><span class="s2">},</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;div aria-level={foo.bar} /&gt;' </span><span class="s2">},</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;div aria-level={null} /&gt;' </span><span class="s2">},</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;div aria-level={undefined} /&gt;' </span><span class="s2">},</span>
+
+    <span class="s0">// NUMBER</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;div aria-valuemax={123} /&gt;' </span><span class="s2">},</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;div aria-valuemax={-123} /&gt;' </span><span class="s2">},</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;div aria-valuemax={+123} /&gt;' </span><span class="s2">},</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;div aria-valuemax={~123} /&gt;' </span><span class="s2">},</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;div aria-valuemax={&quot;123&quot;} /&gt;' </span><span class="s2">},</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;div aria-valuemax={`123`} /&gt;' </span><span class="s2">},</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;div aria-valuemax=&quot;123&quot; /&gt;' </span><span class="s2">},</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;div aria-valuemax={foo} /&gt;' </span><span class="s2">},</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;div aria-valuemax={foo.bar} /&gt;' </span><span class="s2">},</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;div aria-valuemax={null} /&gt;' </span><span class="s2">},</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;div aria-valuemax={undefined} /&gt;' </span><span class="s2">},</span>
+
+    <span class="s0">// TOKEN</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;div aria-sort=&quot;ascending&quot; /&gt;' </span><span class="s2">},</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;div aria-sort=&quot;ASCENDING&quot; /&gt;' </span><span class="s2">},</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;div aria-sort={&quot;ascending&quot;} /&gt;' </span><span class="s2">},</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;div aria-sort={`ascending`} /&gt;' </span><span class="s2">},</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;div aria-sort=&quot;descending&quot; /&gt;' </span><span class="s2">},</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;div aria-sort={&quot;descending&quot;} /&gt;' </span><span class="s2">},</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;div aria-sort={`descending`} /&gt;' </span><span class="s2">},</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;div aria-sort=&quot;none&quot; /&gt;' </span><span class="s2">},</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;div aria-sort={&quot;none&quot;} /&gt;' </span><span class="s2">},</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;div aria-sort={`none`} /&gt;' </span><span class="s2">},</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;div aria-sort=&quot;other&quot; /&gt;' </span><span class="s2">},</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;div aria-sort={&quot;other&quot;} /&gt;' </span><span class="s2">},</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;div aria-sort={`other`} /&gt;' </span><span class="s2">},</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;div aria-sort={foo} /&gt;' </span><span class="s2">},</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;div aria-sort={foo.bar} /&gt;' </span><span class="s2">},</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;div aria-invalid={true} /&gt;' </span><span class="s2">},</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;div aria-invalid=&quot;true&quot; /&gt;' </span><span class="s2">},</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;div aria-invalid={false} /&gt;' </span><span class="s2">},</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;div aria-invalid=&quot;false&quot; /&gt;' </span><span class="s2">},</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;div aria-invalid=&quot;grammar&quot; /&gt;' </span><span class="s2">},</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;div aria-invalid=&quot;spelling&quot; /&gt;' </span><span class="s2">},</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;div aria-invalid={null} /&gt;' </span><span class="s2">},</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;div aria-invalid={undefined} /&gt;' </span><span class="s2">},</span>
+
+    <span class="s0">// TOKENLIST</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;div aria-relevant=&quot;additions&quot; /&gt;' </span><span class="s2">},</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;div aria-relevant={&quot;additions&quot;} /&gt;' </span><span class="s2">},</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;div aria-relevant={`additions`} /&gt;' </span><span class="s2">},</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;div aria-relevant=&quot;additions removals&quot; /&gt;' </span><span class="s2">},</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;div aria-relevant=&quot;additions additions&quot; /&gt;' </span><span class="s2">},</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;div aria-relevant={&quot;additions removals&quot;} /&gt;' </span><span class="s2">},</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;div aria-relevant={`additions removals`} /&gt;' </span><span class="s2">},</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;div aria-relevant=&quot;additions removals text&quot; /&gt;' </span><span class="s2">},</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;div aria-relevant={&quot;additions removals text&quot;} /&gt;' </span><span class="s2">},</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;div aria-relevant={`additions removals text`} /&gt;' </span><span class="s2">},</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;div aria-relevant=&quot;additions removals text all&quot; /&gt;' </span><span class="s2">},</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;div aria-relevant={&quot;additions removals text all&quot;} /&gt;' </span><span class="s2">},</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;div aria-relevant={`removals additions text all`} /&gt;' </span><span class="s2">},</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;div aria-relevant={foo} /&gt;' </span><span class="s2">},</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;div aria-relevant={foo.bar} /&gt;' </span><span class="s2">},</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;div aria-relevant={null} /&gt;' </span><span class="s2">},</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;div aria-relevant={undefined} /&gt;' </span><span class="s2">},</span>
+
+    <span class="s0">// ID</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;div aria-activedescendant=&quot;ascending&quot; /&gt;' </span><span class="s2">},</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;div aria-activedescendant=&quot;ASCENDING&quot; /&gt;' </span><span class="s2">},</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;div aria-activedescendant={&quot;ascending&quot;} /&gt;' </span><span class="s2">},</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;div aria-activedescendant={`ascending`} /&gt;' </span><span class="s2">},</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;div aria-activedescendant=&quot;descending&quot; /&gt;' </span><span class="s2">},</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;div aria-activedescendant={&quot;descending&quot;} /&gt;' </span><span class="s2">},</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;div aria-activedescendant={`descending`} /&gt;' </span><span class="s2">},</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;div aria-activedescendant=&quot;none&quot; /&gt;' </span><span class="s2">},</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;div aria-activedescendant={&quot;none&quot;} /&gt;' </span><span class="s2">},</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;div aria-activedescendant={`none`} /&gt;' </span><span class="s2">},</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;div aria-activedescendant=&quot;other&quot; /&gt;' </span><span class="s2">},</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;div aria-activedescendant={&quot;other&quot;} /&gt;' </span><span class="s2">},</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;div aria-activedescendant={`other`} /&gt;' </span><span class="s2">},</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;div aria-activedescendant={foo} /&gt;' </span><span class="s2">},</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;div aria-activedescendant={foo.bar} /&gt;' </span><span class="s2">},</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;div aria-activedescendant={null} /&gt;' </span><span class="s2">},</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;div aria-activedescendant={undefined} /&gt;' </span><span class="s2">},</span>
+
+    <span class="s0">// IDLIST</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;div aria-labelledby=&quot;additions&quot; /&gt;' </span><span class="s2">},</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;div aria-labelledby={&quot;additions&quot;} /&gt;' </span><span class="s2">},</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;div aria-labelledby={`additions`} /&gt;' </span><span class="s2">},</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;div aria-labelledby=&quot;additions removals&quot; /&gt;' </span><span class="s2">},</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;div aria-labelledby=&quot;additions additions&quot; /&gt;' </span><span class="s2">},</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;div aria-labelledby={&quot;additions removals&quot;} /&gt;' </span><span class="s2">},</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;div aria-labelledby={`additions removals`} /&gt;' </span><span class="s2">},</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;div aria-labelledby=&quot;additions removals text&quot; /&gt;' </span><span class="s2">},</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;div aria-labelledby={&quot;additions removals text&quot;} /&gt;' </span><span class="s2">},</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;div aria-labelledby={`additions removals text`} /&gt;' </span><span class="s2">},</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;div aria-labelledby=&quot;additions removals text all&quot; /&gt;' </span><span class="s2">},</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;div aria-labelledby={&quot;additions removals text all&quot;} /&gt;' </span><span class="s2">},</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;div aria-labelledby={`removals additions text all`} /&gt;' </span><span class="s2">},</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;div aria-labelledby={foo} /&gt;' </span><span class="s2">},</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;div aria-labelledby={foo.bar} /&gt;' </span><span class="s2">},</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;div aria-labelledby={null} /&gt;' </span><span class="s2">},</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;div aria-labelledby={undefined} /&gt;' </span><span class="s2">},</span>
+  <span class="s2">)).map(parserOptionsMapper),</span>
+  <span class="s2">invalid: parsers.all([].concat(</span>
+    <span class="s0">// BOOLEAN</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;div aria-hidden=&quot;yes&quot; /&gt;'</span><span class="s2">, errors: [errorMessage(</span><span class="s4">'aria-hidden'</span><span class="s2">)] },</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;div aria-hidden=&quot;no&quot; /&gt;'</span><span class="s2">, errors: [errorMessage(</span><span class="s4">'aria-hidden'</span><span class="s2">)] },</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;div aria-hidden={1234} /&gt;'</span><span class="s2">, errors: [errorMessage(</span><span class="s4">'aria-hidden'</span><span class="s2">)] },</span>
+    <span class="s2">{</span>
+      <span class="s2">code: </span><span class="s4">'&lt;div aria-hidden={`${abc}`} /&gt;'</span><span class="s2">,</span>
+      <span class="s2">errors: [errorMessage(</span><span class="s4">'aria-hidden'</span><span class="s2">)],</span>
+    <span class="s2">},</span>
+
+    <span class="s0">// STRING</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;div aria-label /&gt;'</span><span class="s2">, errors: [errorMessage(</span><span class="s4">'aria-label'</span><span class="s2">)] },</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;div aria-label={true} /&gt;'</span><span class="s2">, errors: [errorMessage(</span><span class="s4">'aria-label'</span><span class="s2">)] },</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;div aria-label={false} /&gt;'</span><span class="s2">, errors: [errorMessage(</span><span class="s4">'aria-label'</span><span class="s2">)] },</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;div aria-label={1234} /&gt;'</span><span class="s2">, errors: [errorMessage(</span><span class="s4">'aria-label'</span><span class="s2">)] },</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;div aria-label={!true} /&gt;'</span><span class="s2">, errors: [errorMessage(</span><span class="s4">'aria-label'</span><span class="s2">)] },</span>
+
+    <span class="s0">// TRISTATE</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;div aria-checked=&quot;yes&quot; /&gt;'</span><span class="s2">, errors: [errorMessage(</span><span class="s4">'aria-checked'</span><span class="s2">)] },</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;div aria-checked=&quot;no&quot; /&gt;'</span><span class="s2">, errors: [errorMessage(</span><span class="s4">'aria-checked'</span><span class="s2">)] },</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;div aria-checked={1234} /&gt;'</span><span class="s2">, errors: [errorMessage(</span><span class="s4">'aria-checked'</span><span class="s2">)] },</span>
+    <span class="s2">{</span>
+      <span class="s2">code: </span><span class="s4">'&lt;div aria-checked={`${abc}`} /&gt;'</span><span class="s2">,</span>
+      <span class="s2">errors: [errorMessage(</span><span class="s4">'aria-checked'</span><span class="s2">)],</span>
+    <span class="s2">},</span>
+
+    <span class="s0">// INTEGER</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;div aria-level=&quot;yes&quot; /&gt;'</span><span class="s2">, errors: [errorMessage(</span><span class="s4">'aria-level'</span><span class="s2">)] },</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;div aria-level=&quot;no&quot; /&gt;'</span><span class="s2">, errors: [errorMessage(</span><span class="s4">'aria-level'</span><span class="s2">)] },</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;div aria-level={`abc`} /&gt;'</span><span class="s2">, errors: [errorMessage(</span><span class="s4">'aria-level'</span><span class="s2">)] },</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;div aria-level={true} /&gt;'</span><span class="s2">, errors: [errorMessage(</span><span class="s4">'aria-level'</span><span class="s2">)] },</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;div aria-level /&gt;'</span><span class="s2">, errors: [errorMessage(</span><span class="s4">'aria-level'</span><span class="s2">)] },</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;div aria-level={&quot;false&quot;} /&gt;'</span><span class="s2">, errors: [errorMessage(</span><span class="s4">'aria-level'</span><span class="s2">)] },</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;div aria-level={!&quot;false&quot;} /&gt;'</span><span class="s2">, errors: [errorMessage(</span><span class="s4">'aria-level'</span><span class="s2">)] },</span>
+
+    <span class="s0">// NUMBER</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;div aria-valuemax=&quot;yes&quot; /&gt;'</span><span class="s2">, errors: [errorMessage(</span><span class="s4">'aria-valuemax'</span><span class="s2">)] },</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;div aria-valuemax=&quot;no&quot; /&gt;'</span><span class="s2">, errors: [errorMessage(</span><span class="s4">'aria-valuemax'</span><span class="s2">)] },</span>
+    <span class="s2">{</span>
+      <span class="s2">code: </span><span class="s4">'&lt;div aria-valuemax={`abc`} /&gt;'</span><span class="s2">,</span>
+      <span class="s2">errors: [errorMessage(</span><span class="s4">'aria-valuemax'</span><span class="s2">)],</span>
+    <span class="s2">},</span>
+    <span class="s2">{</span>
+      <span class="s2">code: </span><span class="s4">'&lt;div aria-valuemax={true} /&gt;'</span><span class="s2">,</span>
+      <span class="s2">errors: [errorMessage(</span><span class="s4">'aria-valuemax'</span><span class="s2">)],</span>
+    <span class="s2">},</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;div aria-valuemax /&gt;'</span><span class="s2">, errors: [errorMessage(</span><span class="s4">'aria-valuemax'</span><span class="s2">)] },</span>
+    <span class="s2">{</span>
+      <span class="s2">code: </span><span class="s4">'&lt;div aria-valuemax={&quot;false&quot;} /&gt;'</span><span class="s2">,</span>
+      <span class="s2">errors: [errorMessage(</span><span class="s4">'aria-valuemax'</span><span class="s2">)],</span>
+    <span class="s2">},</span>
+    <span class="s2">{</span>
+      <span class="s2">code: </span><span class="s4">'&lt;div aria-valuemax={!&quot;false&quot;} /&gt;'</span><span class="s2">,</span>
+      <span class="s2">errors: [errorMessage(</span><span class="s4">'aria-valuemax'</span><span class="s2">)],</span>
+    <span class="s2">},</span>
+
+    <span class="s0">// TOKEN</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;div aria-sort=&quot;&quot; /&gt;'</span><span class="s2">, errors: [errorMessage(</span><span class="s4">'aria-sort'</span><span class="s2">)] },</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;div aria-sort=&quot;descnding&quot; /&gt;'</span><span class="s2">, errors: [errorMessage(</span><span class="s4">'aria-sort'</span><span class="s2">)] },</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;div aria-sort /&gt;'</span><span class="s2">, errors: [errorMessage(</span><span class="s4">'aria-sort'</span><span class="s2">)] },</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;div aria-sort={true} /&gt;'</span><span class="s2">, errors: [errorMessage(</span><span class="s4">'aria-sort'</span><span class="s2">)] },</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;div aria-sort={&quot;false&quot;} /&gt;'</span><span class="s2">, errors: [errorMessage(</span><span class="s4">'aria-sort'</span><span class="s2">)] },</span>
+    <span class="s2">{</span>
+      <span class="s2">code: </span><span class="s4">'&lt;div aria-sort=&quot;ascending descending&quot; /&gt;'</span><span class="s2">,</span>
+      <span class="s2">errors: [errorMessage(</span><span class="s4">'aria-sort'</span><span class="s2">)],</span>
+    <span class="s2">},</span>
+
+    <span class="s0">// TOKENLIST</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;div aria-relevant=&quot;&quot; /&gt;'</span><span class="s2">, errors: [errorMessage(</span><span class="s4">'aria-relevant'</span><span class="s2">)] },</span>
+    <span class="s2">{</span>
+      <span class="s2">code: </span><span class="s4">'&lt;div aria-relevant=&quot;foobar&quot; /&gt;'</span><span class="s2">,</span>
+      <span class="s2">errors: [errorMessage(</span><span class="s4">'aria-relevant'</span><span class="s2">)],</span>
+    <span class="s2">},</span>
+    <span class="s2">{ code: </span><span class="s4">'&lt;div aria-relevant /&gt;'</span><span class="s2">, errors: [errorMessage(</span><span class="s4">'aria-relevant'</span><span class="s2">)] },</span>
+    <span class="s2">{</span>
+      <span class="s2">code: </span><span class="s4">'&lt;div aria-relevant={true} /&gt;'</span><span class="s2">,</span>
+      <span class="s2">errors: [errorMessage(</span><span class="s4">'aria-relevant'</span><span class="s2">)],</span>
+    <span class="s2">},</span>
+    <span class="s2">{</span>
+      <span class="s2">code: </span><span class="s4">'&lt;div aria-relevant={&quot;false&quot;} /&gt;'</span><span class="s2">,</span>
+      <span class="s2">errors: [errorMessage(</span><span class="s4">'aria-relevant'</span><span class="s2">)],</span>
+    <span class="s2">},</span>
+    <span class="s2">{</span>
+      <span class="s2">code: </span><span class="s4">'&lt;div aria-relevant=&quot;additions removalss&quot; /&gt;'</span><span class="s2">,</span>
+      <span class="s2">errors: [errorMessage(</span><span class="s4">'aria-relevant'</span><span class="s2">)],</span>
+    <span class="s2">},</span>
+    <span class="s2">{</span>
+      <span class="s2">code: </span><span class="s4">'&lt;div aria-relevant=&quot;additions removalss &quot; /&gt;'</span><span class="s2">,</span>
+      <span class="s2">errors: [errorMessage(</span><span class="s4">'aria-relevant'</span><span class="s2">)],</span>
+    <span class="s2">},</span>
+  <span class="s2">)).map(parserOptionsMapper),</span>
+<span class="s2">});</span>
+</pre>
+</body>
+</html>

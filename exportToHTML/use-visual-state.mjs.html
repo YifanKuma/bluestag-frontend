@@ -1,0 +1,101 @@
+<html>
+<head>
+<title>use-visual-state.mjs</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #067d17;}
+.s1 { color: #080808;}
+.s2 { color: #0033b3;}
+.s3 { color: #1750eb;}
+.s4 { color: #8c8c8c; font-style: italic;}
+</style>
+</head>
+<body bgcolor="#ffffff">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#c0c0c0" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+use-visual-state.mjs</font>
+</center></td></tr></table>
+<pre><span class="s0">&quot;use client&quot;</span><span class="s1">;</span>
+<span class="s2">import </span><span class="s1">{ useContext } from </span><span class="s0">'react'</span><span class="s1">;</span>
+<span class="s2">import </span><span class="s1">{ isAnimationControls } from </span><span class="s0">'../../animation/utils/is-animation-controls.mjs'</span><span class="s1">;</span>
+<span class="s2">import </span><span class="s1">{ MotionContext } from </span><span class="s0">'../../context/MotionContext/index.mjs'</span><span class="s1">;</span>
+<span class="s2">import </span><span class="s1">{ PresenceContext } from </span><span class="s0">'../../context/PresenceContext.mjs'</span><span class="s1">;</span>
+<span class="s2">import </span><span class="s1">{ isControllingVariants, isVariantNode } from </span><span class="s0">'../../render/utils/is-controlling-variants.mjs'</span><span class="s1">;</span>
+<span class="s2">import </span><span class="s1">{ resolveVariantFromProps } from </span><span class="s0">'../../render/utils/resolve-variants.mjs'</span><span class="s1">;</span>
+<span class="s2">import </span><span class="s1">{ useConstant } from </span><span class="s0">'../../utils/use-constant.mjs'</span><span class="s1">;</span>
+<span class="s2">import </span><span class="s1">{ resolveMotionValue } from </span><span class="s0">'../../value/utils/resolve-motion-value.mjs'</span><span class="s1">;</span>
+
+<span class="s2">function </span><span class="s1">makeState({ scrapeMotionValuesFromProps, createRenderState, }, props, context, presenceContext) {</span>
+    <span class="s2">const </span><span class="s1">state = {</span>
+        <span class="s1">latestValues: makeLatestValues(props, context, presenceContext, scrapeMotionValuesFromProps),</span>
+        <span class="s1">renderState: createRenderState(),</span>
+    <span class="s1">};</span>
+    <span class="s2">return </span><span class="s1">state;</span>
+<span class="s1">}</span>
+<span class="s2">function </span><span class="s1">makeLatestValues(props, context, presenceContext, scrapeMotionValues) {</span>
+    <span class="s2">const </span><span class="s1">values = {};</span>
+    <span class="s2">const </span><span class="s1">motionValues = scrapeMotionValues(props, {});</span>
+    <span class="s2">for </span><span class="s1">(</span><span class="s2">const </span><span class="s1">key </span><span class="s2">in </span><span class="s1">motionValues) {</span>
+        <span class="s1">values[key] = resolveMotionValue(motionValues[key]);</span>
+    <span class="s1">}</span>
+    <span class="s2">let </span><span class="s1">{ initial, animate } = props;</span>
+    <span class="s2">const </span><span class="s1">isControllingVariants$1 = isControllingVariants(props);</span>
+    <span class="s2">const </span><span class="s1">isVariantNode$1 = isVariantNode(props);</span>
+    <span class="s2">if </span><span class="s1">(context &amp;&amp;</span>
+        <span class="s1">isVariantNode$1 &amp;&amp;</span>
+        <span class="s1">!isControllingVariants$1 &amp;&amp;</span>
+        <span class="s1">props.inherit !== </span><span class="s2">false</span><span class="s1">) {</span>
+        <span class="s2">if </span><span class="s1">(initial === undefined)</span>
+            <span class="s1">initial = context.initial;</span>
+        <span class="s2">if </span><span class="s1">(animate === undefined)</span>
+            <span class="s1">animate = context.animate;</span>
+    <span class="s1">}</span>
+    <span class="s2">let </span><span class="s1">isInitialAnimationBlocked = presenceContext</span>
+        <span class="s1">? presenceContext.initial === </span><span class="s2">false</span>
+        <span class="s1">: </span><span class="s2">false</span><span class="s1">;</span>
+    <span class="s1">isInitialAnimationBlocked = isInitialAnimationBlocked || initial === </span><span class="s2">false</span><span class="s1">;</span>
+    <span class="s2">const </span><span class="s1">variantToSet = isInitialAnimationBlocked ? animate : initial;</span>
+    <span class="s2">if </span><span class="s1">(variantToSet &amp;&amp;</span>
+        <span class="s2">typeof </span><span class="s1">variantToSet !== </span><span class="s0">&quot;boolean&quot; </span><span class="s1">&amp;&amp;</span>
+        <span class="s1">!isAnimationControls(variantToSet)) {</span>
+        <span class="s2">const </span><span class="s1">list = Array.isArray(variantToSet) ? variantToSet : [variantToSet];</span>
+        <span class="s2">for </span><span class="s1">(</span><span class="s2">let </span><span class="s1">i = </span><span class="s3">0</span><span class="s1">; i &lt; list.length; i++) {</span>
+            <span class="s2">const </span><span class="s1">resolved = resolveVariantFromProps(props, list[i]);</span>
+            <span class="s2">if </span><span class="s1">(resolved) {</span>
+                <span class="s2">const </span><span class="s1">{ transitionEnd, transition, ...target } = resolved;</span>
+                <span class="s2">for </span><span class="s1">(</span><span class="s2">const </span><span class="s1">key </span><span class="s2">in </span><span class="s1">target) {</span>
+                    <span class="s2">let </span><span class="s1">valueTarget = target[key];</span>
+                    <span class="s2">if </span><span class="s1">(Array.isArray(valueTarget)) {</span>
+                        <span class="s4">/**</span>
+                         <span class="s4">* Take final keyframe if the initial animation is blocked because</span>
+                         <span class="s4">* we want to initialise at the end of that blocked animation.</span>
+                         <span class="s4">*/</span>
+                        <span class="s2">const </span><span class="s1">index = isInitialAnimationBlocked</span>
+                            <span class="s1">? valueTarget.length - </span><span class="s3">1</span>
+                            <span class="s1">: </span><span class="s3">0</span><span class="s1">;</span>
+                        <span class="s1">valueTarget = valueTarget[index];</span>
+                    <span class="s1">}</span>
+                    <span class="s2">if </span><span class="s1">(valueTarget !== </span><span class="s2">null</span><span class="s1">) {</span>
+                        <span class="s1">values[key] = valueTarget;</span>
+                    <span class="s1">}</span>
+                <span class="s1">}</span>
+                <span class="s2">for </span><span class="s1">(</span><span class="s2">const </span><span class="s1">key </span><span class="s2">in </span><span class="s1">transitionEnd) {</span>
+                    <span class="s1">values[key] = transitionEnd[key];</span>
+                <span class="s1">}</span>
+            <span class="s1">}</span>
+        <span class="s1">}</span>
+    <span class="s1">}</span>
+    <span class="s2">return </span><span class="s1">values;</span>
+<span class="s1">}</span>
+<span class="s2">const </span><span class="s1">makeUseVisualState = (config) =&gt; (props, isStatic) =&gt; {</span>
+    <span class="s2">const </span><span class="s1">context = useContext(MotionContext);</span>
+    <span class="s2">const </span><span class="s1">presenceContext = useContext(PresenceContext);</span>
+    <span class="s2">const </span><span class="s1">make = () =&gt; makeState(config, props, context, presenceContext);</span>
+    <span class="s2">return </span><span class="s1">isStatic ? make() : useConstant(make);</span>
+<span class="s1">};</span>
+
+<span class="s2">export </span><span class="s1">{ makeUseVisualState };</span>
+</pre>
+</body>
+</html>

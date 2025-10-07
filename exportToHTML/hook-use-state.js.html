@@ -1,0 +1,228 @@
+<html>
+<head>
+<title>hook-use-state.js</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #8c8c8c; font-style: italic;}
+.s1 { color: #8c8c8c; font-style: italic;}
+.s2 { color: #080808;}
+.s3 { color: #067d17;}
+.s4 { color: #0033b3;}
+.s5 { color: #1750eb;}
+.s6 { color: #264eff;}
+</style>
+</head>
+<body bgcolor="#ffffff">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#c0c0c0" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+hook-use-state.js</font>
+</center></td></tr></table>
+<pre><span class="s0">/**</span>
+ <span class="s0">* </span><span class="s1">@fileoverview </span><span class="s0">Ensure symmetric naming of useState hook value and setter variables</span>
+ <span class="s0">* </span><span class="s1">@author </span><span class="s0">Duncan Beevers</span>
+ <span class="s0">*/</span>
+
+<span class="s3">'use strict'</span><span class="s2">;</span>
+
+<span class="s4">const </span><span class="s2">Components = require(</span><span class="s3">'../util/Components'</span><span class="s2">);</span>
+<span class="s4">const </span><span class="s2">docsUrl = require(</span><span class="s3">'../util/docsUrl'</span><span class="s2">);</span>
+<span class="s4">const </span><span class="s2">report = require(</span><span class="s3">'../util/report'</span><span class="s2">);</span>
+<span class="s4">const </span><span class="s2">getMessageData = require(</span><span class="s3">'../util/message'</span><span class="s2">);</span>
+<span class="s4">const </span><span class="s2">getText = require(</span><span class="s3">'../util/eslint'</span><span class="s2">).getText;</span>
+
+<span class="s0">// ------------------------------------------------------------------------------</span>
+<span class="s0">// Rule Definition</span>
+<span class="s0">// ------------------------------------------------------------------------------</span>
+
+<span class="s4">function </span><span class="s2">isNodeDestructuring(node) {</span>
+  <span class="s4">return </span><span class="s2">node &amp;&amp; (node.type === </span><span class="s3">'ArrayPattern' </span><span class="s2">|| node.type === </span><span class="s3">'ObjectPattern'</span><span class="s2">);</span>
+<span class="s2">}</span>
+
+<span class="s4">const </span><span class="s2">messages = {</span>
+  <span class="s2">useStateErrorMessage: </span><span class="s3">'useState call is not destructured into value + setter pair'</span><span class="s2">,</span>
+  <span class="s2">useStateErrorMessageOrAddOption: </span><span class="s3">'useState call is not destructured into value + setter pair (you can allow destructuring by enabling &quot;allowDestructuredState&quot; option)'</span><span class="s2">,</span>
+  <span class="s2">suggestPair: </span><span class="s3">'Destructure useState call into value + setter pair'</span><span class="s2">,</span>
+  <span class="s2">suggestMemo: </span><span class="s3">'Replace useState call with useMemo'</span><span class="s2">,</span>
+<span class="s2">};</span>
+
+<span class="s0">/** </span><span class="s1">@type </span><span class="s0">{import('eslint').Rule.RuleModule} */</span>
+<span class="s2">module.exports = {</span>
+  <span class="s2">meta: {</span>
+    <span class="s2">docs: {</span>
+      <span class="s2">description: </span><span class="s3">'Ensure destructuring and symmetric naming of useState hook value and setter variables'</span><span class="s2">,</span>
+      <span class="s2">category: </span><span class="s3">'Best Practices'</span><span class="s2">,</span>
+      <span class="s2">recommended: </span><span class="s4">false</span><span class="s2">,</span>
+      <span class="s2">url: docsUrl(</span><span class="s3">'hook-use-state'</span><span class="s2">),</span>
+    <span class="s2">},</span>
+    <span class="s2">messages,</span>
+    <span class="s2">schema: [{</span>
+      <span class="s2">type: </span><span class="s3">'object'</span><span class="s2">,</span>
+      <span class="s2">properties: {</span>
+        <span class="s2">allowDestructuredState: {</span>
+          <span class="s4">default</span><span class="s2">: </span><span class="s4">false</span><span class="s2">,</span>
+          <span class="s2">type: </span><span class="s3">'boolean'</span><span class="s2">,</span>
+        <span class="s2">},</span>
+      <span class="s2">},</span>
+      <span class="s2">additionalProperties: </span><span class="s4">false</span><span class="s2">,</span>
+    <span class="s2">}],</span>
+    <span class="s2">type: </span><span class="s3">'suggestion'</span><span class="s2">,</span>
+    <span class="s2">hasSuggestions: </span><span class="s4">true</span><span class="s2">,</span>
+  <span class="s2">},</span>
+
+  <span class="s2">create: Components.detect((context, components, util) =&gt; {</span>
+    <span class="s4">const </span><span class="s2">configuration = context.options[</span><span class="s5">0</span><span class="s2">] || {};</span>
+    <span class="s4">const </span><span class="s2">allowDestructuredState = configuration.allowDestructuredState || </span><span class="s4">false</span><span class="s2">;</span>
+
+    <span class="s4">return </span><span class="s2">{</span>
+      <span class="s2">CallExpression(node) {</span>
+        <span class="s4">const </span><span class="s2">isImmediateReturn = node.parent</span>
+          <span class="s2">&amp;&amp; node.parent.type === </span><span class="s3">'ReturnStatement'</span><span class="s2">;</span>
+
+        <span class="s4">if </span><span class="s2">(isImmediateReturn || !util.isReactHookCall(node, [</span><span class="s3">'useState'</span><span class="s2">])) {</span>
+          <span class="s4">return</span><span class="s2">;</span>
+        <span class="s2">}</span>
+
+        <span class="s4">const </span><span class="s2">isDestructuringDeclarator = node.parent</span>
+          <span class="s2">&amp;&amp; node.parent.type === </span><span class="s3">'VariableDeclarator'</span>
+          <span class="s2">&amp;&amp; node.parent.id.type === </span><span class="s3">'ArrayPattern'</span><span class="s2">;</span>
+
+        <span class="s4">if </span><span class="s2">(!isDestructuringDeclarator) {</span>
+          <span class="s2">report(</span>
+            <span class="s2">context,</span>
+            <span class="s2">messages.useStateErrorMessage,</span>
+            <span class="s3">'useStateErrorMessage'</span><span class="s2">,</span>
+            <span class="s2">{</span>
+              <span class="s2">node,</span>
+              <span class="s2">suggest: </span><span class="s4">false</span><span class="s2">,</span>
+            <span class="s2">}</span>
+          <span class="s2">);</span>
+          <span class="s4">return</span><span class="s2">;</span>
+        <span class="s2">}</span>
+
+        <span class="s4">const </span><span class="s2">variableNodes = node.parent.id.elements;</span>
+        <span class="s4">const </span><span class="s2">valueVariable = variableNodes[</span><span class="s5">0</span><span class="s2">];</span>
+        <span class="s4">const </span><span class="s2">setterVariable = variableNodes[</span><span class="s5">1</span><span class="s2">];</span>
+        <span class="s4">const </span><span class="s2">isOnlyValueDestructuring = isNodeDestructuring(valueVariable) &amp;&amp; !isNodeDestructuring(setterVariable);</span>
+
+        <span class="s4">if </span><span class="s2">(allowDestructuredState &amp;&amp; isOnlyValueDestructuring) {</span>
+          <span class="s4">return</span><span class="s2">;</span>
+        <span class="s2">}</span>
+
+        <span class="s4">const </span><span class="s2">valueVariableName = valueVariable</span>
+          <span class="s2">? valueVariable.name</span>
+          <span class="s2">: undefined;</span>
+
+        <span class="s4">const </span><span class="s2">setterVariableName = setterVariable</span>
+          <span class="s2">? setterVariable.name</span>
+          <span class="s2">: undefined;</span>
+
+        <span class="s4">const </span><span class="s2">caseCandidateMatch = valueVariableName ? valueVariableName.match(</span><span class="s6">/(^[a-z]+)(.*)/</span><span class="s2">) : undefined;</span>
+        <span class="s4">const </span><span class="s2">upperCaseCandidatePrefix = caseCandidateMatch ? caseCandidateMatch[</span><span class="s5">1</span><span class="s2">] : undefined;</span>
+        <span class="s4">const </span><span class="s2">caseCandidateSuffix = caseCandidateMatch ? caseCandidateMatch[</span><span class="s5">2</span><span class="s2">] : undefined;</span>
+        <span class="s4">const </span><span class="s2">expectedSetterVariableNames = upperCaseCandidatePrefix ? [</span>
+          <span class="s3">`set</span><span class="s2">${upperCaseCandidatePrefix.charAt(</span><span class="s5">0</span><span class="s2">).toUpperCase()}${upperCaseCandidatePrefix.slice(</span><span class="s5">1</span><span class="s2">)}${caseCandidateSuffix}</span><span class="s3">`</span><span class="s2">,</span>
+          <span class="s3">`set</span><span class="s2">${upperCaseCandidatePrefix.toUpperCase()}${caseCandidateSuffix}</span><span class="s3">`</span><span class="s2">,</span>
+        <span class="s2">] : [];</span>
+
+        <span class="s4">const </span><span class="s2">isSymmetricGetterSetterPair = valueVariable</span>
+          <span class="s2">&amp;&amp; setterVariable</span>
+          <span class="s2">&amp;&amp; expectedSetterVariableNames.indexOf(setterVariableName) !== -</span><span class="s5">1</span>
+          <span class="s2">&amp;&amp; variableNodes.length === </span><span class="s5">2</span><span class="s2">;</span>
+
+        <span class="s4">if </span><span class="s2">(!isSymmetricGetterSetterPair) {</span>
+          <span class="s4">const </span><span class="s2">suggestions = [</span>
+            <span class="s2">Object.assign(</span>
+              <span class="s2">getMessageData(</span><span class="s3">'suggestPair'</span><span class="s2">, messages.suggestPair),</span>
+              <span class="s2">{</span>
+                <span class="s2">fix(fixer) {</span>
+                  <span class="s4">if </span><span class="s2">(expectedSetterVariableNames.length &gt; </span><span class="s5">0</span><span class="s2">) {</span>
+                    <span class="s4">return </span><span class="s2">fixer.replaceTextRange(</span>
+                      <span class="s2">node.parent.id.range,</span>
+                      <span class="s3">`[</span><span class="s2">${valueVariableName}</span><span class="s3">, </span><span class="s2">${expectedSetterVariableNames[</span><span class="s5">0</span><span class="s2">]}</span><span class="s3">]`</span>
+                    <span class="s2">);</span>
+                  <span class="s2">}</span>
+                <span class="s2">},</span>
+              <span class="s2">}</span>
+            <span class="s2">),</span>
+          <span class="s2">];</span>
+
+          <span class="s4">const </span><span class="s2">defaultReactImports = components.getDefaultReactImports();</span>
+          <span class="s4">const </span><span class="s2">defaultReactImportSpecifier = defaultReactImports</span>
+            <span class="s2">? defaultReactImports[</span><span class="s5">0</span><span class="s2">]</span>
+            <span class="s2">: undefined;</span>
+
+          <span class="s4">const </span><span class="s2">defaultReactImportName = defaultReactImportSpecifier</span>
+            <span class="s2">? defaultReactImportSpecifier.local.name</span>
+            <span class="s2">: undefined;</span>
+
+          <span class="s4">const </span><span class="s2">namedReactImports = components.getNamedReactImports();</span>
+          <span class="s4">const </span><span class="s2">useStateReactImportSpecifier = namedReactImports</span>
+            <span class="s2">? namedReactImports.find((specifier) =&gt; specifier.imported.name === </span><span class="s3">'useState'</span><span class="s2">)</span>
+            <span class="s2">: undefined;</span>
+
+          <span class="s4">const </span><span class="s2">isSingleGetter = valueVariable &amp;&amp; variableNodes.length === </span><span class="s5">1</span><span class="s2">;</span>
+          <span class="s4">const </span><span class="s2">isUseStateCalledWithSingleArgument = node.arguments.length === </span><span class="s5">1</span><span class="s2">;</span>
+          <span class="s4">if </span><span class="s2">(isSingleGetter &amp;&amp; isUseStateCalledWithSingleArgument) {</span>
+            <span class="s4">const </span><span class="s2">useMemoReactImportSpecifier = namedReactImports</span>
+              <span class="s2">&amp;&amp; namedReactImports.find((specifier) =&gt; specifier.imported.name === </span><span class="s3">'useMemo'</span><span class="s2">);</span>
+
+            <span class="s4">let </span><span class="s2">useMemoCode;</span>
+            <span class="s4">if </span><span class="s2">(useMemoReactImportSpecifier) {</span>
+              <span class="s2">useMemoCode = useMemoReactImportSpecifier.local.name;</span>
+            <span class="s2">} </span><span class="s4">else if </span><span class="s2">(defaultReactImportName) {</span>
+              <span class="s2">useMemoCode = </span><span class="s3">`</span><span class="s2">${defaultReactImportName}</span><span class="s3">.useMemo`</span><span class="s2">;</span>
+            <span class="s2">} </span><span class="s4">else </span><span class="s2">{</span>
+              <span class="s2">useMemoCode = </span><span class="s3">'useMemo'</span><span class="s2">;</span>
+            <span class="s2">}</span>
+
+            <span class="s2">suggestions.unshift(Object.assign(</span>
+              <span class="s2">getMessageData(</span><span class="s3">'suggestMemo'</span><span class="s2">, messages.suggestMemo),</span>
+              <span class="s2">{</span>
+                <span class="s2">fix: (fixer) =&gt; [</span>
+                  <span class="s0">// Add useMemo import, if necessary</span>
+                  <span class="s2">useStateReactImportSpecifier</span>
+                    <span class="s2">&amp;&amp; (!useMemoReactImportSpecifier || defaultReactImportName)</span>
+                    <span class="s2">&amp;&amp; fixer.insertTextAfter(useStateReactImportSpecifier, </span><span class="s3">', useMemo'</span><span class="s2">),</span>
+                  <span class="s0">// Convert single-value destructure to simple assignment</span>
+                  <span class="s2">fixer.replaceTextRange(node.parent.id.range, valueVariableName),</span>
+                  <span class="s0">// Convert useState call to useMemo + arrow function + dependency array</span>
+                  <span class="s2">fixer.replaceTextRange(</span>
+                    <span class="s2">node.range,</span>
+                    <span class="s3">`</span><span class="s2">${useMemoCode}</span><span class="s3">(() =&gt; </span><span class="s2">${getText(context, node.arguments[</span><span class="s5">0</span><span class="s2">])}</span><span class="s3">, [])`</span>
+                  <span class="s2">),</span>
+                <span class="s2">].filter(Boolean),</span>
+              <span class="s2">}</span>
+            <span class="s2">));</span>
+          <span class="s2">}</span>
+
+          <span class="s4">if </span><span class="s2">(isOnlyValueDestructuring) {</span>
+            <span class="s2">report(</span>
+              <span class="s2">context,</span>
+              <span class="s2">messages.useStateErrorMessageOrAddOption,</span>
+              <span class="s3">'useStateErrorMessageOrAddOption'</span><span class="s2">,</span>
+              <span class="s2">{</span>
+                <span class="s2">node: node.parent.id,</span>
+                <span class="s2">suggest: </span><span class="s4">false</span><span class="s2">,</span>
+              <span class="s2">}</span>
+            <span class="s2">);</span>
+            <span class="s4">return</span><span class="s2">;</span>
+          <span class="s2">}</span>
+
+          <span class="s2">report(</span>
+            <span class="s2">context,</span>
+            <span class="s2">messages.useStateErrorMessage,</span>
+            <span class="s3">'useStateErrorMessage'</span><span class="s2">,</span>
+            <span class="s2">{</span>
+              <span class="s2">node: node.parent.id,</span>
+              <span class="s2">suggest: suggestions,</span>
+            <span class="s2">}</span>
+          <span class="s2">);</span>
+        <span class="s2">}</span>
+      <span class="s2">},</span>
+    <span class="s2">};</span>
+  <span class="s2">}),</span>
+<span class="s2">};</span>
+</pre>
+</body>
+</html>

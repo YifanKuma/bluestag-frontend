@@ -1,0 +1,180 @@
+<html>
+<head>
+<title>no-unescaped-entities.js</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #8c8c8c; font-style: italic;}
+.s1 { color: #8c8c8c; font-style: italic;}
+.s2 { color: #080808;}
+.s3 { color: #067d17;}
+.s4 { color: #0033b3;}
+.s5 { color: #0037a6;}
+.s6 { color: #1750eb;}
+</style>
+</head>
+<body bgcolor="#ffffff">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#c0c0c0" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+no-unescaped-entities.js</font>
+</center></td></tr></table>
+<pre><span class="s0">/**</span>
+ <span class="s0">* </span><span class="s1">@fileoverview </span><span class="s0">HTML special characters should be escaped.</span>
+ <span class="s0">* </span><span class="s1">@author </span><span class="s0">Patrick Hayes</span>
+ <span class="s0">*/</span>
+
+<span class="s3">'use strict'</span><span class="s2">;</span>
+
+<span class="s4">const </span><span class="s2">docsUrl = require(</span><span class="s3">'../util/docsUrl'</span><span class="s2">);</span>
+<span class="s4">const </span><span class="s2">getSourceCode = require(</span><span class="s3">'../util/eslint'</span><span class="s2">).getSourceCode;</span>
+<span class="s4">const </span><span class="s2">jsxUtil = require(</span><span class="s3">'../util/jsx'</span><span class="s2">);</span>
+<span class="s4">const </span><span class="s2">report = require(</span><span class="s3">'../util/report'</span><span class="s2">);</span>
+<span class="s4">const </span><span class="s2">getMessageData = require(</span><span class="s3">'../util/message'</span><span class="s2">);</span>
+
+<span class="s0">// ------------------------------------------------------------------------------</span>
+<span class="s0">// Rule Definition</span>
+<span class="s0">// ------------------------------------------------------------------------------</span>
+
+<span class="s0">// NOTE: '&lt;' and '{' are also problematic characters, but they do not need</span>
+<span class="s0">// to be included here because it is a syntax error when these characters are</span>
+<span class="s0">// included accidentally.</span>
+<span class="s4">const </span><span class="s2">DEFAULTS = [{</span>
+  <span class="s2">char: </span><span class="s3">'&gt;'</span><span class="s2">,</span>
+  <span class="s2">alternatives: [</span><span class="s3">'&amp;gt;'</span><span class="s2">],</span>
+<span class="s2">}, {</span>
+  <span class="s2">char: </span><span class="s3">'&quot;'</span><span class="s2">,</span>
+  <span class="s2">alternatives: [</span><span class="s3">'&amp;quot;'</span><span class="s2">, </span><span class="s3">'&amp;ldquo;'</span><span class="s2">, </span><span class="s3">'&amp;#34;'</span><span class="s2">, </span><span class="s3">'&amp;rdquo;'</span><span class="s2">],</span>
+<span class="s2">}, {</span>
+  <span class="s2">char: </span><span class="s3">'</span><span class="s5">\'</span><span class="s3">'</span><span class="s2">,</span>
+  <span class="s2">alternatives: [</span><span class="s3">'&amp;apos;'</span><span class="s2">, </span><span class="s3">'&amp;lsquo;'</span><span class="s2">, </span><span class="s3">'&amp;#39;'</span><span class="s2">, </span><span class="s3">'&amp;rsquo;'</span><span class="s2">],</span>
+<span class="s2">}, {</span>
+  <span class="s2">char: </span><span class="s3">'}'</span><span class="s2">,</span>
+  <span class="s2">alternatives: [</span><span class="s3">'&amp;#125;'</span><span class="s2">],</span>
+<span class="s2">}];</span>
+
+<span class="s4">const </span><span class="s2">messages = {</span>
+  <span class="s2">unescapedEntity: </span><span class="s3">'HTML entity, `{{entity}}` , must be escaped.'</span><span class="s2">,</span>
+  <span class="s2">unescapedEntityAlts: </span><span class="s3">'`{{entity}}` can be escaped with {{alts}}.'</span><span class="s2">,</span>
+  <span class="s2">replaceWithAlt: </span><span class="s3">'Replace with `{{alt}}`.'</span><span class="s2">,</span>
+<span class="s2">};</span>
+
+<span class="s0">/** </span><span class="s1">@type </span><span class="s0">{import('eslint').Rule.RuleModule} */</span>
+<span class="s2">module.exports = {</span>
+  <span class="s2">meta: {</span>
+    <span class="s2">hasSuggestions: </span><span class="s4">true</span><span class="s2">,</span>
+    <span class="s2">docs: {</span>
+      <span class="s2">description: </span><span class="s3">'Disallow unescaped HTML entities from appearing in markup'</span><span class="s2">,</span>
+      <span class="s2">category: </span><span class="s3">'Possible Errors'</span><span class="s2">,</span>
+      <span class="s2">recommended: </span><span class="s4">true</span><span class="s2">,</span>
+      <span class="s2">url: docsUrl(</span><span class="s3">'no-unescaped-entities'</span><span class="s2">),</span>
+    <span class="s2">},</span>
+
+    <span class="s2">messages,</span>
+
+    <span class="s2">schema: [{</span>
+      <span class="s2">type: </span><span class="s3">'object'</span><span class="s2">,</span>
+      <span class="s2">properties: {</span>
+        <span class="s2">forbid: {</span>
+          <span class="s2">type: </span><span class="s3">'array'</span><span class="s2">,</span>
+          <span class="s2">items: {</span>
+            <span class="s2">anyOf: [{</span>
+              <span class="s2">type: </span><span class="s3">'string'</span><span class="s2">,</span>
+            <span class="s2">}, {</span>
+              <span class="s2">type: </span><span class="s3">'object'</span><span class="s2">,</span>
+              <span class="s2">properties: {</span>
+                <span class="s2">char: {</span>
+                  <span class="s2">type: </span><span class="s3">'string'</span><span class="s2">,</span>
+                <span class="s2">},</span>
+                <span class="s2">alternatives: {</span>
+                  <span class="s2">type: </span><span class="s3">'array'</span><span class="s2">,</span>
+                  <span class="s2">uniqueItems: </span><span class="s4">true</span><span class="s2">,</span>
+                  <span class="s2">items: {</span>
+                    <span class="s2">type: </span><span class="s3">'string'</span><span class="s2">,</span>
+                  <span class="s2">},</span>
+                <span class="s2">},</span>
+              <span class="s2">},</span>
+            <span class="s2">}],</span>
+          <span class="s2">},</span>
+        <span class="s2">},</span>
+      <span class="s2">},</span>
+      <span class="s2">additionalProperties: </span><span class="s4">false</span><span class="s2">,</span>
+    <span class="s2">}],</span>
+  <span class="s2">},</span>
+
+  <span class="s2">create(context) {</span>
+    <span class="s4">function </span><span class="s2">reportInvalidEntity(node) {</span>
+      <span class="s4">const </span><span class="s2">configuration = context.options[</span><span class="s6">0</span><span class="s2">] || {};</span>
+      <span class="s4">const </span><span class="s2">entities = configuration.forbid || DEFAULTS;</span>
+
+      <span class="s0">// HTML entities are already escaped in node.value (as well as node.raw),</span>
+      <span class="s0">// so pull the raw text from getSourceCode(context)</span>
+      <span class="s4">for </span><span class="s2">(</span><span class="s4">let </span><span class="s2">i = node.loc.start.line; i &lt;= node.loc.end.line; i++) {</span>
+        <span class="s4">let </span><span class="s2">rawLine = getSourceCode(context).lines[i - </span><span class="s6">1</span><span class="s2">];</span>
+        <span class="s4">let </span><span class="s2">start = </span><span class="s6">0</span><span class="s2">;</span>
+        <span class="s4">let </span><span class="s2">end = rawLine.length;</span>
+        <span class="s4">if </span><span class="s2">(i === node.loc.start.line) {</span>
+          <span class="s2">start = node.loc.start.column;</span>
+        <span class="s2">}</span>
+        <span class="s4">if </span><span class="s2">(i === node.loc.end.line) {</span>
+          <span class="s2">end = node.loc.end.column;</span>
+        <span class="s2">}</span>
+        <span class="s2">rawLine = rawLine.slice(start, end);</span>
+        <span class="s4">for </span><span class="s2">(</span><span class="s4">let </span><span class="s2">j = </span><span class="s6">0</span><span class="s2">; j &lt; entities.length; j++) {</span>
+          <span class="s4">for </span><span class="s2">(</span><span class="s4">let </span><span class="s2">index = </span><span class="s6">0</span><span class="s2">; index &lt; rawLine.length; index++) {</span>
+            <span class="s4">const </span><span class="s2">c = rawLine[index];</span>
+            <span class="s4">if </span><span class="s2">(</span><span class="s4">typeof </span><span class="s2">entities[j] === </span><span class="s3">'string'</span><span class="s2">) {</span>
+              <span class="s4">if </span><span class="s2">(c === entities[j]) {</span>
+                <span class="s2">report(context, messages.unescapedEntity, </span><span class="s3">'unescapedEntity'</span><span class="s2">, {</span>
+                  <span class="s2">node,</span>
+                  <span class="s2">loc: { line: i, column: start + index },</span>
+                  <span class="s2">data: {</span>
+                    <span class="s2">entity: entities[j],</span>
+                  <span class="s2">},</span>
+                <span class="s2">});</span>
+              <span class="s2">}</span>
+            <span class="s2">} </span><span class="s4">else if </span><span class="s2">(c === entities[j].char) {</span>
+              <span class="s2">report(context, messages.unescapedEntityAlts, </span><span class="s3">'unescapedEntityAlts'</span><span class="s2">, {</span>
+                <span class="s2">node,</span>
+                <span class="s2">loc: { line: i, column: start + index },</span>
+                <span class="s2">data: {</span>
+                  <span class="s2">entity: entities[j].char,</span>
+                  <span class="s2">alts: entities[j].alternatives.map((alt) =&gt; </span><span class="s3">`</span><span class="s5">\`</span><span class="s2">${alt}</span><span class="s5">\`</span><span class="s3">`</span><span class="s2">).join(</span><span class="s3">', '</span><span class="s2">),</span>
+                <span class="s2">},</span>
+                <span class="s2">suggest: entities[j].alternatives.map((alt) =&gt; Object.assign(</span>
+                  <span class="s2">getMessageData(</span><span class="s3">'replaceWithAlt'</span><span class="s2">, messages.replaceWithAlt),</span>
+                  <span class="s2">{</span>
+                    <span class="s2">data: { alt },</span>
+                    <span class="s2">fix(fixer) {</span>
+                      <span class="s4">const </span><span class="s2">lineToChange = i - node.loc.start.line;</span>
+
+                      <span class="s4">const </span><span class="s2">newText = node.raw.split(</span><span class="s3">'</span><span class="s5">\n</span><span class="s3">'</span><span class="s2">).map((line, idx) =&gt; {</span>
+                        <span class="s4">if </span><span class="s2">(idx === lineToChange) {</span>
+                          <span class="s4">return </span><span class="s2">line.slice(</span><span class="s6">0</span><span class="s2">, index) + alt + line.slice(index + </span><span class="s6">1</span><span class="s2">);</span>
+                        <span class="s2">}</span>
+
+                        <span class="s4">return </span><span class="s2">line;</span>
+                      <span class="s2">}).join(</span><span class="s3">'</span><span class="s5">\n</span><span class="s3">'</span><span class="s2">);</span>
+
+                      <span class="s4">return </span><span class="s2">fixer.replaceText(node, newText);</span>
+                    <span class="s2">},</span>
+                  <span class="s2">}</span>
+                <span class="s2">)),</span>
+              <span class="s2">});</span>
+            <span class="s2">}</span>
+          <span class="s2">}</span>
+        <span class="s2">}</span>
+      <span class="s2">}</span>
+    <span class="s2">}</span>
+
+    <span class="s4">return </span><span class="s2">{</span>
+      <span class="s3">'Literal, JSXText'</span><span class="s2">(node) {</span>
+        <span class="s4">if </span><span class="s2">(jsxUtil.isJSX(node.parent)) {</span>
+          <span class="s2">reportInvalidEntity(node);</span>
+        <span class="s2">}</span>
+      <span class="s2">},</span>
+    <span class="s2">};</span>
+  <span class="s2">},</span>
+<span class="s2">};</span>
+</pre>
+</body>
+</html>

@@ -1,0 +1,109 @@
+<html>
+<head>
+<title>core.js</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #0033b3;}
+.s1 { color: #080808;}
+.s2 { color: #067d17;}
+.s3 { color: #1750eb;}
+.s4 { color: #8c8c8c; font-style: italic;}
+</style>
+</head>
+<body bgcolor="#ffffff">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#c0c0c0" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+core.js</font>
+</center></td></tr></table>
+<pre><span class="s0">var </span><span class="s1">test = require(</span><span class="s2">'tape'</span><span class="s1">);</span>
+<span class="s0">var </span><span class="s1">keys = require(</span><span class="s2">'object-keys'</span><span class="s1">);</span>
+<span class="s0">var </span><span class="s1">semver = require(</span><span class="s2">'semver'</span><span class="s1">);</span>
+
+<span class="s0">var </span><span class="s1">resolve = require(</span><span class="s2">'../'</span><span class="s1">);</span>
+
+<span class="s0">var </span><span class="s1">brokenNode = semver.satisfies(process.version, </span><span class="s2">'11.11 - 11.13'</span><span class="s1">);</span>
+
+<span class="s1">test(</span><span class="s2">'core modules'</span><span class="s1">, </span><span class="s0">function </span><span class="s1">(t) {</span>
+    <span class="s1">t.test(</span><span class="s2">'isCore()'</span><span class="s1">, </span><span class="s0">function </span><span class="s1">(st) {</span>
+        <span class="s1">st.ok(resolve.isCore(</span><span class="s2">'fs'</span><span class="s1">));</span>
+        <span class="s1">st.ok(resolve.isCore(</span><span class="s2">'net'</span><span class="s1">));</span>
+        <span class="s1">st.ok(resolve.isCore(</span><span class="s2">'http'</span><span class="s1">));</span>
+
+        <span class="s1">st.ok(!resolve.isCore(</span><span class="s2">'seq'</span><span class="s1">));</span>
+        <span class="s1">st.ok(!resolve.isCore(</span><span class="s2">'../'</span><span class="s1">));</span>
+
+        <span class="s1">st.ok(!resolve.isCore(</span><span class="s2">'toString'</span><span class="s1">));</span>
+
+        <span class="s1">st.end();</span>
+    <span class="s1">});</span>
+
+    <span class="s1">t.test(</span><span class="s2">'core list'</span><span class="s1">, </span><span class="s0">function </span><span class="s1">(st) {</span>
+        <span class="s0">var </span><span class="s1">cores = keys(resolve.core);</span>
+        <span class="s1">st.plan(cores.length);</span>
+
+        <span class="s0">for </span><span class="s1">(</span><span class="s0">var </span><span class="s1">i = </span><span class="s3">0</span><span class="s1">; i &lt; cores.length; ++i) {</span>
+            <span class="s0">var </span><span class="s1">mod = cores[i];</span>
+            <span class="s4">// note: this must be require, not require.resolve, due to https://github.com/nodejs/node/issues/43274</span>
+            <span class="s0">var </span><span class="s1">requireFunc = </span><span class="s0">function </span><span class="s1">() { require(mod); }; </span><span class="s4">// eslint-disable-line no-loop-func</span>
+            <span class="s1">t.comment(mod + </span><span class="s2">': ' </span><span class="s1">+ resolve.core[mod]);</span>
+            <span class="s0">if </span><span class="s1">(resolve.core[mod]) {</span>
+                <span class="s1">st.doesNotThrow(requireFunc, mod + </span><span class="s2">' supported; requiring does not throw'</span><span class="s1">);</span>
+            <span class="s1">} </span><span class="s0">else if </span><span class="s1">(brokenNode) {</span>
+                <span class="s1">st.ok(</span><span class="s0">true</span><span class="s1">, </span><span class="s2">'this version of node is broken: attempting to require things that fail to resolve breaks &quot;home_paths&quot; tests'</span><span class="s1">);</span>
+            <span class="s1">} </span><span class="s0">else </span><span class="s1">{</span>
+                <span class="s1">st.throws(requireFunc, mod + </span><span class="s2">' not supported; requiring throws'</span><span class="s1">);</span>
+            <span class="s1">}</span>
+        <span class="s1">}</span>
+
+        <span class="s1">st.end();</span>
+    <span class="s1">});</span>
+
+    <span class="s1">t.test(</span><span class="s2">'core via repl module'</span><span class="s1">, { skip: !resolve.core.repl }, </span><span class="s0">function </span><span class="s1">(st) {</span>
+        <span class="s0">var </span><span class="s1">libs = require(</span><span class="s2">'repl'</span><span class="s1">)._builtinLibs; </span><span class="s4">// eslint-disable-line no-underscore-dangle</span>
+        <span class="s0">if </span><span class="s1">(!libs) {</span>
+            <span class="s1">st.skip(</span><span class="s2">'module.builtinModules does not exist'</span><span class="s1">);</span>
+            <span class="s0">return </span><span class="s1">st.end();</span>
+        <span class="s1">}</span>
+        <span class="s0">for </span><span class="s1">(</span><span class="s0">var </span><span class="s1">i = </span><span class="s3">0</span><span class="s1">; i &lt; libs.length; ++i) {</span>
+            <span class="s0">var </span><span class="s1">mod = libs[i];</span>
+            <span class="s1">st.ok(resolve.core[mod], mod + </span><span class="s2">' is a core module'</span><span class="s1">);</span>
+            <span class="s1">st.doesNotThrow(</span>
+                <span class="s0">function </span><span class="s1">() { require(mod); }, </span><span class="s4">// eslint-disable-line no-loop-func</span>
+                <span class="s2">'requiring ' </span><span class="s1">+ mod + </span><span class="s2">' does not throw'</span>
+            <span class="s1">);</span>
+        <span class="s1">}</span>
+        <span class="s1">st.end();</span>
+    <span class="s1">});</span>
+
+    <span class="s1">t.test(</span><span class="s2">'core via builtinModules list'</span><span class="s1">, { skip: !resolve.core.module }, </span><span class="s0">function </span><span class="s1">(st) {</span>
+        <span class="s0">var </span><span class="s1">libs = require(</span><span class="s2">'module'</span><span class="s1">).builtinModules;</span>
+        <span class="s0">if </span><span class="s1">(!libs) {</span>
+            <span class="s1">st.skip(</span><span class="s2">'module.builtinModules does not exist'</span><span class="s1">);</span>
+            <span class="s0">return </span><span class="s1">st.end();</span>
+        <span class="s1">}</span>
+        <span class="s0">var </span><span class="s1">blacklist = [</span>
+            <span class="s2">'_debug_agent'</span><span class="s1">,</span>
+            <span class="s2">'v8/tools/tickprocessor-driver'</span><span class="s1">,</span>
+            <span class="s2">'v8/tools/SourceMap'</span><span class="s1">,</span>
+            <span class="s2">'v8/tools/tickprocessor'</span><span class="s1">,</span>
+            <span class="s2">'v8/tools/profile'</span>
+        <span class="s1">];</span>
+        <span class="s0">for </span><span class="s1">(</span><span class="s0">var </span><span class="s1">i = </span><span class="s3">0</span><span class="s1">; i &lt; libs.length; ++i) {</span>
+            <span class="s0">var </span><span class="s1">mod = libs[i];</span>
+            <span class="s0">if </span><span class="s1">(blacklist.indexOf(mod) === -</span><span class="s3">1</span><span class="s1">) {</span>
+                <span class="s1">st.ok(resolve.core[mod], mod + </span><span class="s2">' is a core module'</span><span class="s1">);</span>
+                <span class="s1">st.doesNotThrow(</span>
+                    <span class="s0">function </span><span class="s1">() { require(mod); }, </span><span class="s4">// eslint-disable-line no-loop-func</span>
+                    <span class="s2">'requiring ' </span><span class="s1">+ mod + </span><span class="s2">' does not throw'</span>
+                <span class="s1">);</span>
+            <span class="s1">}</span>
+        <span class="s1">}</span>
+        <span class="s1">st.end();</span>
+    <span class="s1">});</span>
+
+    <span class="s1">t.end();</span>
+<span class="s1">});</span>
+</pre>
+</body>
+</html>

@@ -1,0 +1,108 @@
+<html>
+<head>
+<title>resource-managers.js</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #067d17;}
+.s1 { color: #080808;}
+.s2 { color: #0033b3;}
+.s3 { color: #1750eb;}
+.s4 { color: #8c8c8c; font-style: italic;}
+</style>
+</head>
+<body bgcolor="#ffffff">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#c0c0c0" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+resource-managers.js</font>
+</center></td></tr></table>
+<pre><span class="s0">&quot;use strict&quot;</span><span class="s1">;</span>
+<span class="s1">Object.defineProperty(exports, </span><span class="s0">&quot;__esModule&quot;</span><span class="s1">, {</span>
+    <span class="s1">value: </span><span class="s2">true</span>
+<span class="s1">});</span>
+<span class="s3">0 </span><span class="s1">&amp;&amp; (module.exports = {</span>
+    <span class="s1">intervalsManager: </span><span class="s2">null</span><span class="s1">,</span>
+    <span class="s1">timeoutsManager: </span><span class="s2">null</span>
+<span class="s1">});</span>
+<span class="s2">function </span><span class="s1">_export(target, all) {</span>
+    <span class="s2">for</span><span class="s1">(</span><span class="s2">var </span><span class="s1">name </span><span class="s2">in </span><span class="s1">all)Object.defineProperty(target, name, {</span>
+        <span class="s1">enumerable: </span><span class="s2">true</span><span class="s1">,</span>
+        <span class="s1">get: all[name]</span>
+    <span class="s1">});</span>
+<span class="s1">}</span>
+<span class="s1">_export(exports, {</span>
+    <span class="s1">intervalsManager: </span><span class="s2">function</span><span class="s1">() {</span>
+        <span class="s2">return </span><span class="s1">intervalsManager;</span>
+    <span class="s1">},</span>
+    <span class="s1">timeoutsManager: </span><span class="s2">function</span><span class="s1">() {</span>
+        <span class="s2">return </span><span class="s1">timeoutsManager;</span>
+    <span class="s1">}</span>
+<span class="s1">});</span>
+<span class="s2">class </span><span class="s1">ResourceManager {</span>
+    <span class="s1">add(resourceArgs) {</span>
+        <span class="s2">const </span><span class="s1">resource = </span><span class="s2">this</span><span class="s1">.create(resourceArgs);</span>
+        <span class="s2">this</span><span class="s1">.resources.push(resource);</span>
+        <span class="s2">return </span><span class="s1">resource;</span>
+    <span class="s1">}</span>
+    <span class="s1">remove(resource) {</span>
+        <span class="s2">this</span><span class="s1">.resources = </span><span class="s2">this</span><span class="s1">.resources.filter((r)=&gt;r !== resource);</span>
+        <span class="s2">this</span><span class="s1">.destroy(resource);</span>
+    <span class="s1">}</span>
+    <span class="s1">removeAll() {</span>
+        <span class="s2">this</span><span class="s1">.resources.forEach(</span><span class="s2">this</span><span class="s1">.destroy);</span>
+        <span class="s2">this</span><span class="s1">.resources = [];</span>
+    <span class="s1">}</span>
+    <span class="s1">constructor(){</span>
+        <span class="s2">this</span><span class="s1">.resources = [];</span>
+    <span class="s1">}</span>
+<span class="s1">}</span>
+<span class="s2">class </span><span class="s1">IntervalsManager </span><span class="s2">extends </span><span class="s1">ResourceManager {</span>
+    <span class="s1">create(args) {</span>
+        <span class="s4">// TODO: use the edge runtime provided `setInterval` instead</span>
+        <span class="s2">return </span><span class="s1">webSetIntervalPolyfill(...args);</span>
+    <span class="s1">}</span>
+    <span class="s1">destroy(interval) {</span>
+        <span class="s1">clearInterval(interval);</span>
+    <span class="s1">}</span>
+<span class="s1">}</span>
+<span class="s2">class </span><span class="s1">TimeoutsManager </span><span class="s2">extends </span><span class="s1">ResourceManager {</span>
+    <span class="s1">create(args) {</span>
+        <span class="s4">// TODO: use the edge runtime provided `setTimeout` instead</span>
+        <span class="s2">return </span><span class="s1">webSetTimeoutPolyfill(...args);</span>
+    <span class="s1">}</span>
+    <span class="s1">destroy(timeout) {</span>
+        <span class="s1">clearTimeout(timeout);</span>
+    <span class="s1">}</span>
+<span class="s1">}</span>
+<span class="s2">function </span><span class="s1">webSetIntervalPolyfill(callback, ms, ...args) {</span>
+    <span class="s2">return </span><span class="s1">setInterval(()=&gt;{</span>
+        <span class="s4">// node's `setInterval` sets `this` to the `Timeout` instance it returned,</span>
+        <span class="s4">// but web `setInterval` always sets `this` to `window`</span>
+        <span class="s4">// see: https://developer.mozilla.org/en-US/docs/Web/API/Window/setInterval#the_this_problem</span>
+        <span class="s2">return </span><span class="s1">callback.apply(globalThis, args);</span>
+    <span class="s1">}, ms)[Symbol.toPrimitive]();</span>
+<span class="s1">}</span>
+<span class="s2">function </span><span class="s1">webSetTimeoutPolyfill(callback, ms, ...args) {</span>
+    <span class="s2">const </span><span class="s1">wrappedCallback = ()=&gt;{</span>
+        <span class="s2">try </span><span class="s1">{</span>
+            <span class="s4">// node's `setTimeout` sets `this` to the `Timeout` instance it returned,</span>
+            <span class="s4">// but web `setTimeout` always sets `this` to `window`</span>
+            <span class="s4">// see: https://developer.mozilla.org/en-US/docs/Web/API/Window/setTimeout#the_this_problem</span>
+            <span class="s2">return </span><span class="s1">callback.apply(globalThis, args);</span>
+        <span class="s1">} </span><span class="s2">finally</span><span class="s1">{</span>
+            <span class="s4">// On certain older node versions (&lt;20.16.0, &lt;22.4.0),</span>
+            <span class="s4">// a `setTimeout` whose Timeout was converted to a primitive will leak.</span>
+            <span class="s4">// See: https://github.com/nodejs/node/issues/53335</span>
+            <span class="s4">// We can work around this by explicitly calling `clearTimeout` after the callback runs.</span>
+            <span class="s1">clearTimeout(timeout);</span>
+        <span class="s1">}</span>
+    <span class="s1">};</span>
+    <span class="s2">const </span><span class="s1">timeout = setTimeout(wrappedCallback, ms);</span>
+    <span class="s2">return </span><span class="s1">timeout[Symbol.toPrimitive]();</span>
+<span class="s1">}</span>
+<span class="s2">const </span><span class="s1">intervalsManager = </span><span class="s2">new </span><span class="s1">IntervalsManager();</span>
+<span class="s2">const </span><span class="s1">timeoutsManager = </span><span class="s2">new </span><span class="s1">TimeoutsManager();</span>
+
+<span class="s4">//# sourceMappingURL=resource-managers.js.map</span></pre>
+</body>
+</html>

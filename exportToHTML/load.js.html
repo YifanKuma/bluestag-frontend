@@ -1,0 +1,118 @@
+<html>
+<head>
+<title>load.js</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #067d17;}
+.s1 { color: #080808;}
+.s2 { color: #0033b3;}
+.s3 { color: #1750eb;}
+.s4 { color: #8c8c8c; font-style: italic;}
+.s5 { color: #8c8c8c; font-style: italic;}
+</style>
+</head>
+<body bgcolor="#ffffff">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#c0c0c0" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+load.js</font>
+</center></td></tr></table>
+<pre><span class="s0">&quot;use strict&quot;</span><span class="s1">;</span>
+<span class="s1">Object.defineProperty(exports, </span><span class="s0">&quot;__esModule&quot;</span><span class="s1">, { value: </span><span class="s2">true </span><span class="s1">});</span>
+<span class="s1">exports.asyncifyLoadSync = exports.loadSync = exports.asyncifyLoad = exports.load = </span><span class="s2">void </span><span class="s3">0</span><span class="s1">;</span>
+<span class="s2">const </span><span class="s1">webassembly_1 = require(</span><span class="s0">&quot;./webassembly&quot;</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">asyncify_1 = require(</span><span class="s0">&quot;./asyncify&quot;</span><span class="s1">);</span>
+<span class="s2">function </span><span class="s1">validateImports(imports) {</span>
+    <span class="s2">if </span><span class="s1">(imports &amp;&amp; </span><span class="s2">typeof </span><span class="s1">imports !== </span><span class="s0">'object'</span><span class="s1">) {</span>
+        <span class="s2">throw new </span><span class="s1">TypeError(</span><span class="s0">'imports must be an object or undefined'</span><span class="s1">);</span>
+    <span class="s1">}</span>
+<span class="s1">}</span>
+<span class="s2">function </span><span class="s1">fetchWasm(urlOrBuffer, imports) {</span>
+    <span class="s2">if </span><span class="s1">(</span><span class="s2">typeof </span><span class="s1">wx !== </span><span class="s0">'undefined' </span><span class="s1">&amp;&amp; </span><span class="s2">typeof </span><span class="s1">__wxConfig !== </span><span class="s0">'undefined'</span><span class="s1">) {</span>
+        <span class="s2">return </span><span class="s1">webassembly_1._WebAssembly.instantiate(urlOrBuffer, imports);</span>
+    <span class="s1">}</span>
+    <span class="s2">return </span><span class="s1">fetch(urlOrBuffer)</span>
+        <span class="s1">.then(response =&gt; response.arrayBuffer())</span>
+        <span class="s1">.then(buffer =&gt; webassembly_1._WebAssembly.instantiate(buffer, imports));</span>
+<span class="s1">}</span>
+<span class="s4">/** </span><span class="s5">@public </span><span class="s4">*/</span>
+<span class="s2">function </span><span class="s1">load(wasmInput, imports) {</span>
+    <span class="s1">validateImports(imports);</span>
+    <span class="s1">imports = imports !== </span><span class="s2">null </span><span class="s1">&amp;&amp; imports !== </span><span class="s2">void </span><span class="s3">0 </span><span class="s1">? imports : {};</span>
+    <span class="s2">let </span><span class="s1">source;</span>
+    <span class="s2">if </span><span class="s1">(wasmInput </span><span class="s2">instanceof </span><span class="s1">ArrayBuffer || ArrayBuffer.isView(wasmInput)) {</span>
+        <span class="s2">return </span><span class="s1">webassembly_1._WebAssembly.instantiate(wasmInput, imports);</span>
+    <span class="s1">}</span>
+    <span class="s2">if </span><span class="s1">(wasmInput </span><span class="s2">instanceof </span><span class="s1">webassembly_1._WebAssembly.Module) {</span>
+        <span class="s2">return </span><span class="s1">webassembly_1._WebAssembly.instantiate(wasmInput, imports).then((instance) =&gt; {</span>
+            <span class="s2">return </span><span class="s1">{ instance, module: wasmInput };</span>
+        <span class="s1">});</span>
+    <span class="s1">}</span>
+    <span class="s2">if </span><span class="s1">(</span><span class="s2">typeof </span><span class="s1">wasmInput !== </span><span class="s0">'string' </span><span class="s1">&amp;&amp; !(wasmInput </span><span class="s2">instanceof </span><span class="s1">URL)) {</span>
+        <span class="s2">throw new </span><span class="s1">TypeError(</span><span class="s0">'Invalid source'</span><span class="s1">);</span>
+    <span class="s1">}</span>
+    <span class="s2">if </span><span class="s1">(</span><span class="s2">typeof </span><span class="s1">webassembly_1._WebAssembly.instantiateStreaming === </span><span class="s0">'function'</span><span class="s1">) {</span>
+        <span class="s2">let </span><span class="s1">responsePromise;</span>
+        <span class="s2">try </span><span class="s1">{</span>
+            <span class="s1">responsePromise = fetch(wasmInput);</span>
+            <span class="s1">source = webassembly_1._WebAssembly.instantiateStreaming(responsePromise, imports).catch(() =&gt; {</span>
+                <span class="s2">return </span><span class="s1">fetchWasm(wasmInput, imports);</span>
+            <span class="s1">});</span>
+        <span class="s1">}</span>
+        <span class="s2">catch </span><span class="s1">(_) {</span>
+            <span class="s1">source = fetchWasm(wasmInput, imports);</span>
+        <span class="s1">}</span>
+    <span class="s1">}</span>
+    <span class="s2">else </span><span class="s1">{</span>
+        <span class="s1">source = fetchWasm(wasmInput, imports);</span>
+    <span class="s1">}</span>
+    <span class="s2">return </span><span class="s1">source;</span>
+<span class="s1">}</span>
+<span class="s1">exports.load = load;</span>
+<span class="s4">/** </span><span class="s5">@public </span><span class="s4">*/</span>
+<span class="s2">function </span><span class="s1">asyncifyLoad(asyncify, urlOrBuffer, imports) {</span>
+    <span class="s1">validateImports(imports);</span>
+    <span class="s1">imports = imports !== </span><span class="s2">null </span><span class="s1">&amp;&amp; imports !== </span><span class="s2">void </span><span class="s3">0 </span><span class="s1">? imports : {};</span>
+    <span class="s2">const </span><span class="s1">asyncifyHelper = </span><span class="s2">new </span><span class="s1">asyncify_1.Asyncify();</span>
+    <span class="s1">imports = asyncifyHelper.wrapImports(imports);</span>
+    <span class="s2">return </span><span class="s1">load(urlOrBuffer, imports).then(source =&gt; {</span>
+        <span class="s2">var </span><span class="s1">_a;</span>
+        <span class="s2">const </span><span class="s1">memory = source.instance.exports.memory || ((_a = imports.env) === </span><span class="s2">null </span><span class="s1">|| _a === </span><span class="s2">void </span><span class="s3">0 </span><span class="s1">? </span><span class="s2">void </span><span class="s3">0 </span><span class="s1">: _a.memory);</span>
+        <span class="s2">return </span><span class="s1">{ module: source.module, instance: asyncifyHelper.init(memory, source.instance, asyncify) };</span>
+    <span class="s1">});</span>
+<span class="s1">}</span>
+<span class="s1">exports.asyncifyLoad = asyncifyLoad;</span>
+<span class="s4">/** </span><span class="s5">@public </span><span class="s4">*/</span>
+<span class="s2">function </span><span class="s1">loadSync(wasmInput, imports) {</span>
+    <span class="s1">validateImports(imports);</span>
+    <span class="s1">imports = imports !== </span><span class="s2">null </span><span class="s1">&amp;&amp; imports !== </span><span class="s2">void </span><span class="s3">0 </span><span class="s1">? imports : {};</span>
+    <span class="s2">let </span><span class="s1">module;</span>
+    <span class="s2">if </span><span class="s1">((wasmInput </span><span class="s2">instanceof </span><span class="s1">ArrayBuffer) || ArrayBuffer.isView(wasmInput)) {</span>
+        <span class="s1">module = </span><span class="s2">new </span><span class="s1">webassembly_1._WebAssembly.Module(wasmInput);</span>
+    <span class="s1">}</span>
+    <span class="s2">else if </span><span class="s1">(wasmInput </span><span class="s2">instanceof </span><span class="s1">WebAssembly.Module) {</span>
+        <span class="s1">module = wasmInput;</span>
+    <span class="s1">}</span>
+    <span class="s2">else </span><span class="s1">{</span>
+        <span class="s2">throw new </span><span class="s1">TypeError(</span><span class="s0">'Invalid source'</span><span class="s1">);</span>
+    <span class="s1">}</span>
+    <span class="s2">const </span><span class="s1">instance = </span><span class="s2">new </span><span class="s1">webassembly_1._WebAssembly.Instance(module, imports);</span>
+    <span class="s2">const </span><span class="s1">source = { instance, module };</span>
+    <span class="s2">return </span><span class="s1">source;</span>
+<span class="s1">}</span>
+<span class="s1">exports.loadSync = loadSync;</span>
+<span class="s4">/** </span><span class="s5">@public </span><span class="s4">*/</span>
+<span class="s2">function </span><span class="s1">asyncifyLoadSync(asyncify, buffer, imports) {</span>
+    <span class="s2">var </span><span class="s1">_a;</span>
+    <span class="s1">validateImports(imports);</span>
+    <span class="s1">imports = imports !== </span><span class="s2">null </span><span class="s1">&amp;&amp; imports !== </span><span class="s2">void </span><span class="s3">0 </span><span class="s1">? imports : {};</span>
+    <span class="s2">const </span><span class="s1">asyncifyHelper = </span><span class="s2">new </span><span class="s1">asyncify_1.Asyncify();</span>
+    <span class="s1">imports = asyncifyHelper.wrapImports(imports);</span>
+    <span class="s2">const </span><span class="s1">source = loadSync(buffer, imports);</span>
+    <span class="s2">const </span><span class="s1">memory = source.instance.exports.memory || ((_a = imports.env) === </span><span class="s2">null </span><span class="s1">|| _a === </span><span class="s2">void </span><span class="s3">0 </span><span class="s1">? </span><span class="s2">void </span><span class="s3">0 </span><span class="s1">: _a.memory);</span>
+    <span class="s2">return </span><span class="s1">{ module: source.module, instance: asyncifyHelper.init(memory, source.instance, asyncify) };</span>
+<span class="s1">}</span>
+<span class="s1">exports.asyncifyLoadSync = asyncifyLoadSync;</span>
+<span class="s4">//# sourceMappingURL=load.js.map</span></pre>
+</body>
+</html>

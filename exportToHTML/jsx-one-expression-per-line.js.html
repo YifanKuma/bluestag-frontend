@@ -1,0 +1,273 @@
+<html>
+<head>
+<title>jsx-one-expression-per-line.js</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #8c8c8c; font-style: italic;}
+.s1 { color: #8c8c8c; font-style: italic;}
+.s2 { color: #080808;}
+.s3 { color: #067d17;}
+.s4 { color: #0033b3;}
+.s5 { color: #1750eb;}
+.s6 { color: #264eff;}
+.s7 { color: #0037a6;}
+</style>
+</head>
+<body bgcolor="#ffffff">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#c0c0c0" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+jsx-one-expression-per-line.js</font>
+</center></td></tr></table>
+<pre><span class="s0">/**</span>
+ <span class="s0">* </span><span class="s1">@fileoverview </span><span class="s0">Limit to one expression per line in JSX</span>
+ <span class="s0">* </span><span class="s1">@author </span><span class="s0">Mark Ivan Allen &lt;Vydia.com&gt;</span>
+ <span class="s0">*/</span>
+
+<span class="s3">'use strict'</span><span class="s2">;</span>
+
+<span class="s4">const </span><span class="s2">docsUrl = require(</span><span class="s3">'../util/docsUrl'</span><span class="s2">);</span>
+<span class="s4">const </span><span class="s2">eslintUtil = require(</span><span class="s3">'../util/eslint'</span><span class="s2">);</span>
+<span class="s4">const </span><span class="s2">jsxUtil = require(</span><span class="s3">'../util/jsx'</span><span class="s2">);</span>
+<span class="s4">const </span><span class="s2">report = require(</span><span class="s3">'../util/report'</span><span class="s2">);</span>
+
+<span class="s4">const </span><span class="s2">getSourceCode = eslintUtil.getSourceCode;</span>
+<span class="s4">const </span><span class="s2">getText = eslintUtil.getText;</span>
+
+<span class="s0">// ------------------------------------------------------------------------------</span>
+<span class="s0">// Rule Definition</span>
+<span class="s0">// ------------------------------------------------------------------------------</span>
+
+<span class="s4">const </span><span class="s2">optionDefaults = {</span>
+  <span class="s2">allow: </span><span class="s3">'none'</span><span class="s2">,</span>
+<span class="s2">};</span>
+
+<span class="s4">const </span><span class="s2">messages = {</span>
+  <span class="s2">moveToNewLine: </span><span class="s3">'`{{descriptor}}` must be placed on a new line'</span><span class="s2">,</span>
+<span class="s2">};</span>
+
+<span class="s0">/** </span><span class="s1">@type </span><span class="s0">{import('eslint').Rule.RuleModule} */</span>
+<span class="s2">module.exports = {</span>
+  <span class="s2">meta: {</span>
+    <span class="s2">docs: {</span>
+      <span class="s2">description: </span><span class="s3">'Require one JSX element per line'</span><span class="s2">,</span>
+      <span class="s2">category: </span><span class="s3">'Stylistic Issues'</span><span class="s2">,</span>
+      <span class="s2">recommended: </span><span class="s4">false</span><span class="s2">,</span>
+      <span class="s2">url: docsUrl(</span><span class="s3">'jsx-one-expression-per-line'</span><span class="s2">),</span>
+    <span class="s2">},</span>
+    <span class="s2">fixable: </span><span class="s3">'whitespace'</span><span class="s2">,</span>
+
+    <span class="s2">messages,</span>
+
+    <span class="s2">schema: [</span>
+      <span class="s2">{</span>
+        <span class="s2">type: </span><span class="s3">'object'</span><span class="s2">,</span>
+        <span class="s2">properties: {</span>
+          <span class="s2">allow: {</span>
+            <span class="s4">enum</span><span class="s2">: [</span><span class="s3">'none'</span><span class="s2">, </span><span class="s3">'literal'</span><span class="s2">, </span><span class="s3">'single-child'</span><span class="s2">, </span><span class="s3">'non-jsx'</span><span class="s2">],</span>
+          <span class="s2">},</span>
+        <span class="s2">},</span>
+        <span class="s4">default</span><span class="s2">: optionDefaults,</span>
+        <span class="s2">additionalProperties: </span><span class="s4">false</span><span class="s2">,</span>
+      <span class="s2">},</span>
+    <span class="s2">],</span>
+  <span class="s2">},</span>
+
+  <span class="s2">create(context) {</span>
+    <span class="s4">const </span><span class="s2">options = Object.assign({}, optionDefaults, context.options[</span><span class="s5">0</span><span class="s2">]);</span>
+
+    <span class="s4">function </span><span class="s2">nodeKey(node) {</span>
+      <span class="s4">return </span><span class="s3">`</span><span class="s2">${node.loc.start.line}</span><span class="s3">,</span><span class="s2">${node.loc.start.column}</span><span class="s3">`</span><span class="s2">;</span>
+    <span class="s2">}</span>
+
+    <span class="s0">/**</span>
+     <span class="s0">* </span><span class="s1">@param </span><span class="s0">{ASTNode} n</span>
+     <span class="s0">* </span><span class="s1">@returns </span><span class="s0">{string}</span>
+     <span class="s0">*/</span>
+    <span class="s4">function </span><span class="s2">nodeDescriptor(n) {</span>
+      <span class="s4">return </span><span class="s2">n.openingElement ? n.openingElement.name.name : getText(context, n).replace(</span><span class="s6">/\n/g</span><span class="s2">, </span><span class="s3">''</span><span class="s2">);</span>
+    <span class="s2">}</span>
+
+    <span class="s4">function </span><span class="s2">handleJSX(node) {</span>
+      <span class="s4">const </span><span class="s2">children = node.children;</span>
+
+      <span class="s4">if </span><span class="s2">(!children || !children.length) {</span>
+        <span class="s4">return</span><span class="s2">;</span>
+      <span class="s2">}</span>
+
+      <span class="s4">if </span><span class="s2">(</span>
+        <span class="s2">options.allow === </span><span class="s3">'non-jsx'</span>
+        <span class="s2">&amp;&amp; !children.find((child) =&gt; (child.type === </span><span class="s3">'JSXFragment' </span><span class="s2">|| child.type === </span><span class="s3">'JSXElement'</span><span class="s2">))</span>
+      <span class="s2">) {</span>
+        <span class="s4">return</span><span class="s2">;</span>
+      <span class="s2">}</span>
+
+      <span class="s4">const </span><span class="s2">openingElement = node.openingElement || node.openingFragment;</span>
+      <span class="s4">const </span><span class="s2">closingElement = node.closingElement || node.closingFragment;</span>
+      <span class="s4">const </span><span class="s2">openingElementStartLine = openingElement.loc.start.line;</span>
+      <span class="s4">const </span><span class="s2">openingElementEndLine = openingElement.loc.end.line;</span>
+      <span class="s4">const </span><span class="s2">closingElementStartLine = closingElement.loc.start.line;</span>
+      <span class="s4">const </span><span class="s2">closingElementEndLine = closingElement.loc.end.line;</span>
+
+      <span class="s4">if </span><span class="s2">(children.length === </span><span class="s5">1</span><span class="s2">) {</span>
+        <span class="s4">const </span><span class="s2">child = children[</span><span class="s5">0</span><span class="s2">];</span>
+        <span class="s4">if </span><span class="s2">(</span>
+          <span class="s2">openingElementStartLine === openingElementEndLine</span>
+          <span class="s2">&amp;&amp; openingElementEndLine === closingElementStartLine</span>
+          <span class="s2">&amp;&amp; closingElementStartLine === closingElementEndLine</span>
+          <span class="s2">&amp;&amp; closingElementEndLine === child.loc.start.line</span>
+          <span class="s2">&amp;&amp; child.loc.start.line === child.loc.end.line</span>
+        <span class="s2">) {</span>
+          <span class="s4">if </span><span class="s2">(</span>
+            <span class="s2">options.allow === </span><span class="s3">'single-child'</span>
+            <span class="s2">|| (options.allow === </span><span class="s3">'literal' </span><span class="s2">&amp;&amp; (child.type === </span><span class="s3">'Literal' </span><span class="s2">|| child.type === </span><span class="s3">'JSXText'</span><span class="s2">))</span>
+          <span class="s2">) {</span>
+            <span class="s4">return</span><span class="s2">;</span>
+          <span class="s2">}</span>
+        <span class="s2">}</span>
+      <span class="s2">}</span>
+
+      <span class="s4">const </span><span class="s2">childrenGroupedByLine = {};</span>
+      <span class="s4">const </span><span class="s2">fixDetailsByNode = {};</span>
+
+      <span class="s2">children.forEach((child) =&gt; {</span>
+        <span class="s4">let </span><span class="s2">countNewLinesBeforeContent = </span><span class="s5">0</span><span class="s2">;</span>
+        <span class="s4">let </span><span class="s2">countNewLinesAfterContent = </span><span class="s5">0</span><span class="s2">;</span>
+
+        <span class="s4">if </span><span class="s2">(child.type === </span><span class="s3">'Literal' </span><span class="s2">|| child.type === </span><span class="s3">'JSXText'</span><span class="s2">) {</span>
+          <span class="s4">if </span><span class="s2">(jsxUtil.isWhiteSpaces(child.raw)) {</span>
+            <span class="s4">return</span><span class="s2">;</span>
+          <span class="s2">}</span>
+
+          <span class="s2">countNewLinesBeforeContent = (child.raw.match(</span><span class="s6">/^\s*\n/g</span><span class="s2">) || []).length;</span>
+          <span class="s2">countNewLinesAfterContent = (child.raw.match(</span><span class="s6">/\n\s*$/g</span><span class="s2">) || []).length;</span>
+        <span class="s2">}</span>
+
+        <span class="s4">const </span><span class="s2">startLine = child.loc.start.line + countNewLinesBeforeContent;</span>
+        <span class="s4">const </span><span class="s2">endLine = child.loc.end.line - countNewLinesAfterContent;</span>
+
+        <span class="s4">if </span><span class="s2">(startLine === endLine) {</span>
+          <span class="s4">if </span><span class="s2">(!childrenGroupedByLine[startLine]) {</span>
+            <span class="s2">childrenGroupedByLine[startLine] = [];</span>
+          <span class="s2">}</span>
+          <span class="s2">childrenGroupedByLine[startLine].push(child);</span>
+        <span class="s2">} </span><span class="s4">else </span><span class="s2">{</span>
+          <span class="s4">if </span><span class="s2">(!childrenGroupedByLine[startLine]) {</span>
+            <span class="s2">childrenGroupedByLine[startLine] = [];</span>
+          <span class="s2">}</span>
+          <span class="s2">childrenGroupedByLine[startLine].push(child);</span>
+          <span class="s4">if </span><span class="s2">(!childrenGroupedByLine[endLine]) {</span>
+            <span class="s2">childrenGroupedByLine[endLine] = [];</span>
+          <span class="s2">}</span>
+          <span class="s2">childrenGroupedByLine[endLine].push(child);</span>
+        <span class="s2">}</span>
+      <span class="s2">});</span>
+
+      <span class="s2">Object.keys(childrenGroupedByLine).forEach((_line) =&gt; {</span>
+        <span class="s4">const </span><span class="s2">line = parseInt(_line, </span><span class="s5">10</span><span class="s2">);</span>
+        <span class="s4">const </span><span class="s2">firstIndex = </span><span class="s5">0</span><span class="s2">;</span>
+        <span class="s4">const </span><span class="s2">lastIndex = childrenGroupedByLine[line].length - </span><span class="s5">1</span><span class="s2">;</span>
+
+        <span class="s2">childrenGroupedByLine[line].forEach((child, i) =&gt; {</span>
+          <span class="s4">let </span><span class="s2">prevChild;</span>
+          <span class="s4">let </span><span class="s2">nextChild;</span>
+
+          <span class="s4">if </span><span class="s2">(i === firstIndex) {</span>
+            <span class="s4">if </span><span class="s2">(line === openingElementEndLine) {</span>
+              <span class="s2">prevChild = openingElement;</span>
+            <span class="s2">}</span>
+          <span class="s2">} </span><span class="s4">else </span><span class="s2">{</span>
+            <span class="s2">prevChild = childrenGroupedByLine[line][i - </span><span class="s5">1</span><span class="s2">];</span>
+          <span class="s2">}</span>
+
+          <span class="s4">if </span><span class="s2">(i === lastIndex) {</span>
+            <span class="s4">if </span><span class="s2">(line === closingElementStartLine) {</span>
+              <span class="s2">nextChild = closingElement;</span>
+            <span class="s2">}</span>
+          <span class="s2">} </span><span class="s4">else </span><span class="s2">{</span>
+            <span class="s0">// We don't need to append a trailing because the next child will prepend a leading.</span>
+            <span class="s0">// nextChild = childrenGroupedByLine[line][i + 1];</span>
+          <span class="s2">}</span>
+
+          <span class="s4">function </span><span class="s2">spaceBetweenPrev() {</span>
+            <span class="s4">return </span><span class="s2">((prevChild.type === </span><span class="s3">'Literal' </span><span class="s2">|| prevChild.type === </span><span class="s3">'JSXText'</span><span class="s2">) &amp;&amp; </span><span class="s6">/ $/</span><span class="s2">.test(prevChild.raw))</span>
+              <span class="s2">|| ((child.type === </span><span class="s3">'Literal' </span><span class="s2">|| child.type === </span><span class="s3">'JSXText'</span><span class="s2">) &amp;&amp; </span><span class="s6">/^ /</span><span class="s2">.test(child.raw))</span>
+              <span class="s2">|| getSourceCode(context).isSpaceBetweenTokens(prevChild, child);</span>
+          <span class="s2">}</span>
+
+          <span class="s4">function </span><span class="s2">spaceBetweenNext() {</span>
+            <span class="s4">return </span><span class="s2">((nextChild.type === </span><span class="s3">'Literal' </span><span class="s2">|| nextChild.type === </span><span class="s3">'JSXText'</span><span class="s2">) &amp;&amp; </span><span class="s6">/^ /</span><span class="s2">.test(nextChild.raw))</span>
+              <span class="s2">|| ((child.type === </span><span class="s3">'Literal' </span><span class="s2">|| child.type === </span><span class="s3">'JSXText'</span><span class="s2">) &amp;&amp; </span><span class="s6">/ $/</span><span class="s2">.test(child.raw))</span>
+              <span class="s2">|| getSourceCode(context).isSpaceBetweenTokens(child, nextChild);</span>
+          <span class="s2">}</span>
+
+          <span class="s4">if </span><span class="s2">(!prevChild &amp;&amp; !nextChild) {</span>
+            <span class="s4">return</span><span class="s2">;</span>
+          <span class="s2">}</span>
+
+          <span class="s4">const </span><span class="s2">source = getText(context, child);</span>
+          <span class="s4">const </span><span class="s2">leadingSpace = !!(prevChild &amp;&amp; spaceBetweenPrev());</span>
+          <span class="s4">const </span><span class="s2">trailingSpace = !!(nextChild &amp;&amp; spaceBetweenNext());</span>
+          <span class="s4">const </span><span class="s2">leadingNewLine = !!prevChild;</span>
+          <span class="s4">const </span><span class="s2">trailingNewLine = !!nextChild;</span>
+
+          <span class="s4">const </span><span class="s2">key = nodeKey(child);</span>
+
+          <span class="s4">if </span><span class="s2">(!fixDetailsByNode[key]) {</span>
+            <span class="s2">fixDetailsByNode[key] = {</span>
+              <span class="s2">node: child,</span>
+              <span class="s2">source,</span>
+              <span class="s2">descriptor: nodeDescriptor(child),</span>
+            <span class="s2">};</span>
+          <span class="s2">}</span>
+
+          <span class="s4">if </span><span class="s2">(leadingSpace) {</span>
+            <span class="s2">fixDetailsByNode[key].leadingSpace = </span><span class="s4">true</span><span class="s2">;</span>
+          <span class="s2">}</span>
+          <span class="s4">if </span><span class="s2">(leadingNewLine) {</span>
+            <span class="s2">fixDetailsByNode[key].leadingNewLine = </span><span class="s4">true</span><span class="s2">;</span>
+          <span class="s2">}</span>
+          <span class="s4">if </span><span class="s2">(trailingNewLine) {</span>
+            <span class="s2">fixDetailsByNode[key].trailingNewLine = </span><span class="s4">true</span><span class="s2">;</span>
+          <span class="s2">}</span>
+          <span class="s4">if </span><span class="s2">(trailingSpace) {</span>
+            <span class="s2">fixDetailsByNode[key].trailingSpace = </span><span class="s4">true</span><span class="s2">;</span>
+          <span class="s2">}</span>
+        <span class="s2">});</span>
+      <span class="s2">});</span>
+
+      <span class="s2">Object.keys(fixDetailsByNode).forEach((key) =&gt; {</span>
+        <span class="s4">const </span><span class="s2">details = fixDetailsByNode[key];</span>
+
+        <span class="s4">const </span><span class="s2">nodeToReport = details.node;</span>
+        <span class="s4">const </span><span class="s2">descriptor = details.descriptor;</span>
+        <span class="s4">const </span><span class="s2">source = details.source.replace(</span><span class="s6">/(^ +| +(?=\n)*$)/g</span><span class="s2">, </span><span class="s3">''</span><span class="s2">);</span>
+
+        <span class="s4">const </span><span class="s2">leadingSpaceString = details.leadingSpace ? </span><span class="s3">'</span><span class="s7">\n</span><span class="s3">{</span><span class="s7">\' \'</span><span class="s3">}' </span><span class="s2">: </span><span class="s3">''</span><span class="s2">;</span>
+        <span class="s4">const </span><span class="s2">trailingSpaceString = details.trailingSpace ? </span><span class="s3">'{</span><span class="s7">\' \'</span><span class="s3">}</span><span class="s7">\n</span><span class="s3">' </span><span class="s2">: </span><span class="s3">''</span><span class="s2">;</span>
+        <span class="s4">const </span><span class="s2">leadingNewLineString = details.leadingNewLine ? </span><span class="s3">'</span><span class="s7">\n</span><span class="s3">' </span><span class="s2">: </span><span class="s3">''</span><span class="s2">;</span>
+        <span class="s4">const </span><span class="s2">trailingNewLineString = details.trailingNewLine ? </span><span class="s3">'</span><span class="s7">\n</span><span class="s3">' </span><span class="s2">: </span><span class="s3">''</span><span class="s2">;</span>
+
+        <span class="s4">const </span><span class="s2">replaceText = </span><span class="s3">`</span><span class="s2">${leadingSpaceString}${leadingNewLineString}${source}${trailingNewLineString}${trailingSpaceString}</span><span class="s3">`</span><span class="s2">;</span>
+
+        <span class="s2">report(context, messages.moveToNewLine, </span><span class="s3">'moveToNewLine'</span><span class="s2">, {</span>
+          <span class="s2">node: nodeToReport,</span>
+          <span class="s2">data: {</span>
+            <span class="s2">descriptor,</span>
+          <span class="s2">},</span>
+          <span class="s2">fix(fixer) {</span>
+            <span class="s4">return </span><span class="s2">fixer.replaceText(nodeToReport, replaceText);</span>
+          <span class="s2">},</span>
+        <span class="s2">});</span>
+      <span class="s2">});</span>
+    <span class="s2">}</span>
+
+    <span class="s4">return </span><span class="s2">{</span>
+      <span class="s2">JSXElement: handleJSX,</span>
+      <span class="s2">JSXFragment: handleJSX,</span>
+    <span class="s2">};</span>
+  <span class="s2">},</span>
+<span class="s2">};</span>
+</pre>
+</body>
+</html>

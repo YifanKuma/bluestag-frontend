@@ -1,0 +1,168 @@
+<html>
+<head>
+<title>KeyframesResolver.mjs</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #0033b3;}
+.s1 { color: #080808;}
+.s2 { color: #067d17;}
+.s3 { color: #8c8c8c; font-style: italic;}
+.s4 { color: #1750eb;}
+</style>
+</head>
+<body bgcolor="#ffffff">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#c0c0c0" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+KeyframesResolver.mjs</font>
+</center></td></tr></table>
+<pre><span class="s0">import </span><span class="s1">{ fillWildcards } from </span><span class="s2">'./utils/fill-wildcards.mjs'</span><span class="s1">;</span>
+<span class="s0">import </span><span class="s1">{ removeNonTranslationalTransform } from </span><span class="s2">'./utils/unit-conversion.mjs'</span><span class="s1">;</span>
+<span class="s0">import </span><span class="s1">{ frame } from </span><span class="s2">'../../frameloop/frame.mjs'</span><span class="s1">;</span>
+
+<span class="s0">const </span><span class="s1">toResolve = </span><span class="s0">new </span><span class="s1">Set();</span>
+<span class="s0">let </span><span class="s1">isScheduled = </span><span class="s0">false</span><span class="s1">;</span>
+<span class="s0">let </span><span class="s1">anyNeedsMeasurement = </span><span class="s0">false</span><span class="s1">;</span>
+<span class="s0">let </span><span class="s1">isForced = </span><span class="s0">false</span><span class="s1">;</span>
+<span class="s0">function </span><span class="s1">measureAllKeyframes() {</span>
+    <span class="s0">if </span><span class="s1">(anyNeedsMeasurement) {</span>
+        <span class="s0">const </span><span class="s1">resolversToMeasure = Array.from(toResolve).filter((resolver) =&gt; resolver.needsMeasurement);</span>
+        <span class="s0">const </span><span class="s1">elementsToMeasure = </span><span class="s0">new </span><span class="s1">Set(resolversToMeasure.map((resolver) =&gt; resolver.element));</span>
+        <span class="s0">const </span><span class="s1">transformsToRestore = </span><span class="s0">new </span><span class="s1">Map();</span>
+        <span class="s3">/**</span>
+         <span class="s3">* Write pass</span>
+         <span class="s3">* If we're measuring elements we want to remove bounding box-changing transforms.</span>
+         <span class="s3">*/</span>
+        <span class="s1">elementsToMeasure.forEach((element) =&gt; {</span>
+            <span class="s0">const </span><span class="s1">removedTransforms = removeNonTranslationalTransform(element);</span>
+            <span class="s0">if </span><span class="s1">(!removedTransforms.length)</span>
+                <span class="s0">return</span><span class="s1">;</span>
+            <span class="s1">transformsToRestore.set(element, removedTransforms);</span>
+            <span class="s1">element.render();</span>
+        <span class="s1">});</span>
+        <span class="s3">// Read</span>
+        <span class="s1">resolversToMeasure.forEach((resolver) =&gt; resolver.measureInitialState());</span>
+        <span class="s3">// Write</span>
+        <span class="s1">elementsToMeasure.forEach((element) =&gt; {</span>
+            <span class="s1">element.render();</span>
+            <span class="s0">const </span><span class="s1">restore = transformsToRestore.get(element);</span>
+            <span class="s0">if </span><span class="s1">(restore) {</span>
+                <span class="s1">restore.forEach(([key, value]) =&gt; {</span>
+                    <span class="s1">element.getValue(key)?.set(value);</span>
+                <span class="s1">});</span>
+            <span class="s1">}</span>
+        <span class="s1">});</span>
+        <span class="s3">// Read</span>
+        <span class="s1">resolversToMeasure.forEach((resolver) =&gt; resolver.measureEndState());</span>
+        <span class="s3">// Write</span>
+        <span class="s1">resolversToMeasure.forEach((resolver) =&gt; {</span>
+            <span class="s0">if </span><span class="s1">(resolver.suspendedScrollY !== undefined) {</span>
+                <span class="s1">window.scrollTo(</span><span class="s4">0</span><span class="s1">, resolver.suspendedScrollY);</span>
+            <span class="s1">}</span>
+        <span class="s1">});</span>
+    <span class="s1">}</span>
+    <span class="s1">anyNeedsMeasurement = </span><span class="s0">false</span><span class="s1">;</span>
+    <span class="s1">isScheduled = </span><span class="s0">false</span><span class="s1">;</span>
+    <span class="s1">toResolve.forEach((resolver) =&gt; resolver.complete(isForced));</span>
+    <span class="s1">toResolve.clear();</span>
+<span class="s1">}</span>
+<span class="s0">function </span><span class="s1">readAllKeyframes() {</span>
+    <span class="s1">toResolve.forEach((resolver) =&gt; {</span>
+        <span class="s1">resolver.readKeyframes();</span>
+        <span class="s0">if </span><span class="s1">(resolver.needsMeasurement) {</span>
+            <span class="s1">anyNeedsMeasurement = </span><span class="s0">true</span><span class="s1">;</span>
+        <span class="s1">}</span>
+    <span class="s1">});</span>
+<span class="s1">}</span>
+<span class="s0">function </span><span class="s1">flushKeyframeResolvers() {</span>
+    <span class="s1">isForced = </span><span class="s0">true</span><span class="s1">;</span>
+    <span class="s1">readAllKeyframes();</span>
+    <span class="s1">measureAllKeyframes();</span>
+    <span class="s1">isForced = </span><span class="s0">false</span><span class="s1">;</span>
+<span class="s1">}</span>
+<span class="s0">class </span><span class="s1">KeyframeResolver {</span>
+    <span class="s1">constructor(unresolvedKeyframes, onComplete, name, motionValue, element, isAsync = </span><span class="s0">false</span><span class="s1">) {</span>
+        <span class="s0">this</span><span class="s1">.state = </span><span class="s2">&quot;pending&quot;</span><span class="s1">;</span>
+        <span class="s3">/**</span>
+         <span class="s3">* Track whether this resolver is async. If it is, it'll be added to the</span>
+         <span class="s3">* resolver queue and flushed in the next frame. Resolvers that aren't going</span>
+         <span class="s3">* to trigger read/write thrashing don't need to be async.</span>
+         <span class="s3">*/</span>
+        <span class="s0">this</span><span class="s1">.isAsync = </span><span class="s0">false</span><span class="s1">;</span>
+        <span class="s3">/**</span>
+         <span class="s3">* Track whether this resolver needs to perform a measurement</span>
+         <span class="s3">* to resolve its keyframes.</span>
+         <span class="s3">*/</span>
+        <span class="s0">this</span><span class="s1">.needsMeasurement = </span><span class="s0">false</span><span class="s1">;</span>
+        <span class="s0">this</span><span class="s1">.unresolvedKeyframes = [...unresolvedKeyframes];</span>
+        <span class="s0">this</span><span class="s1">.onComplete = onComplete;</span>
+        <span class="s0">this</span><span class="s1">.name = name;</span>
+        <span class="s0">this</span><span class="s1">.motionValue = motionValue;</span>
+        <span class="s0">this</span><span class="s1">.element = element;</span>
+        <span class="s0">this</span><span class="s1">.isAsync = isAsync;</span>
+    <span class="s1">}</span>
+    <span class="s1">scheduleResolve() {</span>
+        <span class="s0">this</span><span class="s1">.state = </span><span class="s2">&quot;scheduled&quot;</span><span class="s1">;</span>
+        <span class="s0">if </span><span class="s1">(</span><span class="s0">this</span><span class="s1">.isAsync) {</span>
+            <span class="s1">toResolve.add(</span><span class="s0">this</span><span class="s1">);</span>
+            <span class="s0">if </span><span class="s1">(!isScheduled) {</span>
+                <span class="s1">isScheduled = </span><span class="s0">true</span><span class="s1">;</span>
+                <span class="s1">frame.read(readAllKeyframes);</span>
+                <span class="s1">frame.resolveKeyframes(measureAllKeyframes);</span>
+            <span class="s1">}</span>
+        <span class="s1">}</span>
+        <span class="s0">else </span><span class="s1">{</span>
+            <span class="s0">this</span><span class="s1">.readKeyframes();</span>
+            <span class="s0">this</span><span class="s1">.complete();</span>
+        <span class="s1">}</span>
+    <span class="s1">}</span>
+    <span class="s1">readKeyframes() {</span>
+        <span class="s0">const </span><span class="s1">{ unresolvedKeyframes, name, element, motionValue } = </span><span class="s0">this</span><span class="s1">;</span>
+        <span class="s3">// If initial keyframe is null we need to read it from the DOM</span>
+        <span class="s0">if </span><span class="s1">(unresolvedKeyframes[</span><span class="s4">0</span><span class="s1">] === </span><span class="s0">null</span><span class="s1">) {</span>
+            <span class="s0">const </span><span class="s1">currentValue = motionValue?.get();</span>
+            <span class="s3">// TODO: This doesn't work if the final keyframe is a wildcard</span>
+            <span class="s0">const </span><span class="s1">finalKeyframe = unresolvedKeyframes[unresolvedKeyframes.length - </span><span class="s4">1</span><span class="s1">];</span>
+            <span class="s0">if </span><span class="s1">(currentValue !== undefined) {</span>
+                <span class="s1">unresolvedKeyframes[</span><span class="s4">0</span><span class="s1">] = currentValue;</span>
+            <span class="s1">}</span>
+            <span class="s0">else if </span><span class="s1">(element &amp;&amp; name) {</span>
+                <span class="s0">const </span><span class="s1">valueAsRead = element.readValue(name, finalKeyframe);</span>
+                <span class="s0">if </span><span class="s1">(valueAsRead !== undefined &amp;&amp; valueAsRead !== </span><span class="s0">null</span><span class="s1">) {</span>
+                    <span class="s1">unresolvedKeyframes[</span><span class="s4">0</span><span class="s1">] = valueAsRead;</span>
+                <span class="s1">}</span>
+            <span class="s1">}</span>
+            <span class="s0">if </span><span class="s1">(unresolvedKeyframes[</span><span class="s4">0</span><span class="s1">] === undefined) {</span>
+                <span class="s1">unresolvedKeyframes[</span><span class="s4">0</span><span class="s1">] = finalKeyframe;</span>
+            <span class="s1">}</span>
+            <span class="s0">if </span><span class="s1">(motionValue &amp;&amp; currentValue === undefined) {</span>
+                <span class="s1">motionValue.set(unresolvedKeyframes[</span><span class="s4">0</span><span class="s1">]);</span>
+            <span class="s1">}</span>
+        <span class="s1">}</span>
+        <span class="s1">fillWildcards(unresolvedKeyframes);</span>
+    <span class="s1">}</span>
+    <span class="s1">setFinalKeyframe() { }</span>
+    <span class="s1">measureInitialState() { }</span>
+    <span class="s1">renderEndStyles() { }</span>
+    <span class="s1">measureEndState() { }</span>
+    <span class="s1">complete(isForcedComplete = </span><span class="s0">false</span><span class="s1">) {</span>
+        <span class="s0">this</span><span class="s1">.state = </span><span class="s2">&quot;complete&quot;</span><span class="s1">;</span>
+        <span class="s0">this</span><span class="s1">.onComplete(</span><span class="s0">this</span><span class="s1">.unresolvedKeyframes, </span><span class="s0">this</span><span class="s1">.finalKeyframe, isForcedComplete);</span>
+        <span class="s1">toResolve.delete(</span><span class="s0">this</span><span class="s1">);</span>
+    <span class="s1">}</span>
+    <span class="s1">cancel() {</span>
+        <span class="s0">if </span><span class="s1">(</span><span class="s0">this</span><span class="s1">.state === </span><span class="s2">&quot;scheduled&quot;</span><span class="s1">) {</span>
+            <span class="s1">toResolve.delete(</span><span class="s0">this</span><span class="s1">);</span>
+            <span class="s0">this</span><span class="s1">.state = </span><span class="s2">&quot;pending&quot;</span><span class="s1">;</span>
+        <span class="s1">}</span>
+    <span class="s1">}</span>
+    <span class="s1">resume() {</span>
+        <span class="s0">if </span><span class="s1">(</span><span class="s0">this</span><span class="s1">.state === </span><span class="s2">&quot;pending&quot;</span><span class="s1">)</span>
+            <span class="s0">this</span><span class="s1">.scheduleResolve();</span>
+    <span class="s1">}</span>
+<span class="s1">}</span>
+
+<span class="s0">export </span><span class="s1">{ KeyframeResolver, flushKeyframeResolvers };</span>
+</pre>
+</body>
+</html>

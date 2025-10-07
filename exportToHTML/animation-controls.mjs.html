@@ -1,0 +1,101 @@
+<html>
+<head>
+<title>animation-controls.mjs</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #0033b3;}
+.s1 { color: #080808;}
+.s2 { color: #067d17;}
+.s3 { color: #8c8c8c; font-style: italic;}
+.s4 { color: #8c8c8c; font-style: italic;}
+</style>
+</head>
+<body bgcolor="#ffffff">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#c0c0c0" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+animation-controls.mjs</font>
+</center></td></tr></table>
+<pre><span class="s0">import </span><span class="s1">{ invariant } from </span><span class="s2">'motion-utils'</span><span class="s1">;</span>
+<span class="s0">import </span><span class="s1">{ setTarget } from </span><span class="s2">'../../render/utils/setters.mjs'</span><span class="s1">;</span>
+<span class="s0">import </span><span class="s1">{ animateVisualElement } from </span><span class="s2">'../interfaces/visual-element.mjs'</span><span class="s1">;</span>
+
+<span class="s0">function </span><span class="s1">stopAnimation(visualElement) {</span>
+    <span class="s1">visualElement.values.forEach((value) =&gt; value.stop());</span>
+<span class="s1">}</span>
+<span class="s0">function </span><span class="s1">setVariants(visualElement, variantLabels) {</span>
+    <span class="s0">const </span><span class="s1">reversedLabels = [...variantLabels].reverse();</span>
+    <span class="s1">reversedLabels.forEach((key) =&gt; {</span>
+        <span class="s0">const </span><span class="s1">variant = visualElement.getVariant(key);</span>
+        <span class="s1">variant &amp;&amp; setTarget(visualElement, variant);</span>
+        <span class="s0">if </span><span class="s1">(visualElement.variantChildren) {</span>
+            <span class="s1">visualElement.variantChildren.forEach((child) =&gt; {</span>
+                <span class="s1">setVariants(child, variantLabels);</span>
+            <span class="s1">});</span>
+        <span class="s1">}</span>
+    <span class="s1">});</span>
+<span class="s1">}</span>
+<span class="s0">function </span><span class="s1">setValues(visualElement, definition) {</span>
+    <span class="s0">if </span><span class="s1">(Array.isArray(definition)) {</span>
+        <span class="s0">return </span><span class="s1">setVariants(visualElement, definition);</span>
+    <span class="s1">}</span>
+    <span class="s0">else if </span><span class="s1">(</span><span class="s0">typeof </span><span class="s1">definition === </span><span class="s2">&quot;string&quot;</span><span class="s1">) {</span>
+        <span class="s0">return </span><span class="s1">setVariants(visualElement, [definition]);</span>
+    <span class="s1">}</span>
+    <span class="s0">else </span><span class="s1">{</span>
+        <span class="s1">setTarget(visualElement, definition);</span>
+    <span class="s1">}</span>
+<span class="s1">}</span>
+<span class="s3">/**</span>
+ <span class="s3">* </span><span class="s4">@public</span>
+ <span class="s3">*/</span>
+<span class="s0">function </span><span class="s1">animationControls() {</span>
+    <span class="s3">/**</span>
+     <span class="s3">* Track whether the host component has mounted.</span>
+     <span class="s3">*/</span>
+    <span class="s0">let </span><span class="s1">hasMounted = </span><span class="s0">false</span><span class="s1">;</span>
+    <span class="s3">/**</span>
+     <span class="s3">* A collection of linked component animation controls.</span>
+     <span class="s3">*/</span>
+    <span class="s0">const </span><span class="s1">subscribers = </span><span class="s0">new </span><span class="s1">Set();</span>
+    <span class="s0">const </span><span class="s1">controls = {</span>
+        <span class="s1">subscribe(visualElement) {</span>
+            <span class="s1">subscribers.add(visualElement);</span>
+            <span class="s0">return </span><span class="s1">() =&gt; </span><span class="s0">void </span><span class="s1">subscribers.delete(visualElement);</span>
+        <span class="s1">},</span>
+        <span class="s1">start(definition, transitionOverride) {</span>
+            <span class="s1">invariant(hasMounted, </span><span class="s2">&quot;controls.start() should only be called after a component has mounted. Consider calling within a useEffect hook.&quot;</span><span class="s1">);</span>
+            <span class="s0">const </span><span class="s1">animations = [];</span>
+            <span class="s1">subscribers.forEach((visualElement) =&gt; {</span>
+                <span class="s1">animations.push(animateVisualElement(visualElement, definition, {</span>
+                    <span class="s1">transitionOverride,</span>
+                <span class="s1">}));</span>
+            <span class="s1">});</span>
+            <span class="s0">return </span><span class="s1">Promise.all(animations);</span>
+        <span class="s1">},</span>
+        <span class="s1">set(definition) {</span>
+            <span class="s1">invariant(hasMounted, </span><span class="s2">&quot;controls.set() should only be called after a component has mounted. Consider calling within a useEffect hook.&quot;</span><span class="s1">);</span>
+            <span class="s0">return </span><span class="s1">subscribers.forEach((visualElement) =&gt; {</span>
+                <span class="s1">setValues(visualElement, definition);</span>
+            <span class="s1">});</span>
+        <span class="s1">},</span>
+        <span class="s1">stop() {</span>
+            <span class="s1">subscribers.forEach((visualElement) =&gt; {</span>
+                <span class="s1">stopAnimation(visualElement);</span>
+            <span class="s1">});</span>
+        <span class="s1">},</span>
+        <span class="s1">mount() {</span>
+            <span class="s1">hasMounted = </span><span class="s0">true</span><span class="s1">;</span>
+            <span class="s0">return </span><span class="s1">() =&gt; {</span>
+                <span class="s1">hasMounted = </span><span class="s0">false</span><span class="s1">;</span>
+                <span class="s1">controls.stop();</span>
+            <span class="s1">};</span>
+        <span class="s1">},</span>
+    <span class="s1">};</span>
+    <span class="s0">return </span><span class="s1">controls;</span>
+<span class="s1">}</span>
+
+<span class="s0">export </span><span class="s1">{ animationControls, setValues };</span>
+</pre>
+</body>
+</html>

@@ -1,0 +1,89 @@
+<html>
+<head>
+<title>parseIncompletePhoneNumber.js</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #0033b3;}
+.s1 { color: #080808;}
+.s2 { color: #067d17;}
+.s3 { color: #8c8c8c; font-style: italic;}
+.s4 { color: #8c8c8c; font-style: italic;}
+</style>
+</head>
+<body bgcolor="#ffffff">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#c0c0c0" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+parseIncompletePhoneNumber.js</font>
+</center></td></tr></table>
+<pre><span class="s0">import </span><span class="s1">{ parseDigit } from </span><span class="s2">'./helpers/parseDigits.js'</span>
+
+<span class="s3">/**</span>
+ <span class="s3">* Parses phone number characters from a string.</span>
+ <span class="s3">* Drops all punctuation leaving only digits and the leading `+` sign (if any).</span>
+ <span class="s3">* Also converts wide-ascii and arabic-indic numerals to conventional numerals.</span>
+ <span class="s3">* E.g. in Iraq they don't write `+442323234` but rather `+٤٤٢٣٢٣٢٣٤`.</span>
+ <span class="s3">* </span><span class="s4">@param  </span><span class="s3">{string} string</span>
+ <span class="s3">* </span><span class="s4">@return </span><span class="s3">{string}</span>
+ <span class="s3">* </span><span class="s4">@example</span>
+ <span class="s3">* ```js</span>
+ <span class="s3">* // Outputs '8800555'.</span>
+ <span class="s3">* parseIncompletePhoneNumber('8 (800) 555')</span>
+ <span class="s3">* // Outputs '+7800555'.</span>
+ <span class="s3">* parseIncompletePhoneNumber('+7 800 555')</span>
+ <span class="s3">* ```</span>
+ <span class="s3">*/</span>
+<span class="s0">export default function </span><span class="s1">parseIncompletePhoneNumber(string) {</span>
+	<span class="s0">let </span><span class="s1">result = </span><span class="s2">''</span>
+	<span class="s3">// Using `.split('')` here instead of normal `for ... of`</span>
+	<span class="s3">// because the importing application doesn't neccessarily include an ES6 polyfill.</span>
+	<span class="s3">// The `.split('')` approach discards &quot;exotic&quot; UTF-8 characters</span>
+	<span class="s3">// (the ones consisting of four bytes) but digits</span>
+	<span class="s3">// (including non-European ones) don't fall into that range</span>
+	<span class="s3">// so such &quot;exotic&quot; characters would be discarded anyway.</span>
+	<span class="s0">for </span><span class="s1">(</span><span class="s0">const </span><span class="s1">character of string.split(</span><span class="s2">''</span><span class="s1">)) {</span>
+		<span class="s1">result += parsePhoneNumberCharacter(character, result) || </span><span class="s2">''</span>
+	<span class="s1">}</span>
+	<span class="s0">return </span><span class="s1">result</span>
+<span class="s1">}</span>
+
+<span class="s3">/**</span>
+ <span class="s3">* Parses next character while parsing phone number digits (including a `+`)</span>
+ <span class="s3">* from text: discards everything except `+` and digits, and `+` is only allowed</span>
+ <span class="s3">* at the start of a phone number.</span>
+ <span class="s3">* For example, is used in `react-phone-number-input` where it uses</span>
+ <span class="s3">* [`input-format`](https://gitlab.com/catamphetamine/input-format).</span>
+ <span class="s3">* </span><span class="s4">@param  </span><span class="s3">{string} character - Yet another character from raw input string.</span>
+ <span class="s3">* </span><span class="s4">@param  </span><span class="s3">{string?} prevParsedCharacters - Previous parsed characters.</span>
+ <span class="s3">* </span><span class="s4">@param  </span><span class="s3">{function?} eventListener - An optional &quot;on event&quot; function.</span>
+ <span class="s3">* </span><span class="s4">@return </span><span class="s3">{string?} The parsed character.</span>
+ <span class="s3">*/</span>
+<span class="s0">export function </span><span class="s1">parsePhoneNumberCharacter(character, prevParsedCharacters, eventListener) {</span>
+	<span class="s3">// Only allow a leading `+`.</span>
+	<span class="s0">if </span><span class="s1">(character === </span><span class="s2">'+'</span><span class="s1">) {</span>
+		<span class="s3">// If this `+` is not the first parsed character</span>
+		<span class="s3">// then discard it.</span>
+		<span class="s0">if </span><span class="s1">(prevParsedCharacters) {</span>
+			<span class="s3">// `eventListener` argument was added to this `export`ed function on Dec 26th, 2023.</span>
+			<span class="s3">// Any 3rd-party code that used to `import` and call this function before that</span>
+			<span class="s3">// won't be passing any `eventListener` argument.</span>
+			<span class="s3">//</span>
+			<span class="s3">// The addition of the `eventListener` argument was to fix the slightly-weird behavior</span>
+			<span class="s3">// of parsing an input string when the user inputs something like `&quot;2+7&quot;</span>
+			<span class="s3">// https://github.com/catamphetamine/react-phone-number-input/issues/437</span>
+			<span class="s3">//</span>
+			<span class="s3">// If the parser encounters an unexpected `+` in a string being parsed</span>
+			<span class="s3">// then it simply discards that out-of-place `+` and any following characters.</span>
+			<span class="s3">//</span>
+			<span class="s0">if </span><span class="s1">(</span><span class="s0">typeof </span><span class="s1">eventListener === </span><span class="s2">'function'</span><span class="s1">) {</span>
+				<span class="s1">eventListener(</span><span class="s2">'end'</span><span class="s1">)</span>
+			<span class="s1">}</span>
+			<span class="s0">return</span>
+		<span class="s1">}</span>
+		<span class="s0">return </span><span class="s2">'+'</span>
+	<span class="s1">}</span>
+	<span class="s3">// Allow digits.</span>
+	<span class="s0">return </span><span class="s1">parseDigit(character)</span>
+<span class="s1">}</span></pre>
+</body>
+</html>

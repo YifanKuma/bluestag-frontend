@@ -1,0 +1,113 @@
+<html>
+<head>
+<title>check-for-metadata-changes-and-release.js</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #8c8c8c; font-style: italic;}
+.s1 { color: #080808;}
+.s2 { color: #0033b3;}
+.s3 { color: #067d17;}
+.s4 { color: #1750eb;}
+.s5 { color: #0037a6;}
+</style>
+</head>
+<body bgcolor="#ffffff">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#c0c0c0" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+check-for-metadata-changes-and-release.js</font>
+</center></td></tr></table>
+<pre><span class="s0">// Pulls the latest metadata from Google's repo, and, if it has changed,</span>
+<span class="s0">// pushes the changes in the main branch and releases a new version on `npm`.</span>
+
+<span class="s2">import </span><span class="s1">fs from </span><span class="s3">'fs'</span>
+<span class="s2">import </span><span class="s1">gmailSend from </span><span class="s3">'gmail-send'</span>
+
+<span class="s2">import </span><span class="s1">update_metadata_from_google_metadata from </span><span class="s3">'./helpers/update-metadata-from-google-metadata.js'</span>
+<span class="s2">import </span><span class="s1">commit from </span><span class="s3">'./helpers/commit.js'</span>
+<span class="s2">import </span><span class="s1">exec from </span><span class="s3">'./helpers/exec.js'</span>
+
+<span class="s2">const </span><span class="s1">googleMetadataFilePath = process.argv[</span><span class="s4">2</span><span class="s1">]</span>
+<span class="s2">const </span><span class="s1">metadataInfoFilePath = process.argv[</span><span class="s4">3</span><span class="s1">]</span>
+
+<span class="s2">if </span><span class="s1">(update_metadata_from_google_metadata(googleMetadataFilePath, metadataInfoFilePath))</span>
+<span class="s1">{</span>
+	<span class="s1">commit()</span>
+
+	<span class="s1">console.log()</span>
+	<span class="s1">console.log(</span><span class="s3">'========================================'</span><span class="s1">)</span>
+	<span class="s1">console.log(</span><span class="s3">'=  Push the changes to the repository  ='</span><span class="s1">)</span>
+	<span class="s1">console.log(</span><span class="s3">'========================================'</span><span class="s1">)</span>
+	<span class="s1">console.log()</span>
+
+	<span class="s1">console.log(exec(</span><span class="s3">'git push'</span><span class="s1">))</span>
+
+	<span class="s1">console.log()</span>
+	<span class="s1">console.log(</span><span class="s3">'========================================'</span><span class="s1">)</span>
+	<span class="s1">console.log(</span><span class="s3">'=        Increment the version         ='</span><span class="s1">)</span>
+	<span class="s1">console.log(</span><span class="s3">'========================================'</span><span class="s1">)</span>
+	<span class="s1">console.log()</span>
+
+	<span class="s1">console.log(exec(</span><span class="s3">'npm version patch'</span><span class="s1">))</span>
+	<span class="s1">console.log(exec(</span><span class="s3">'git push'</span><span class="s1">))</span>
+
+	<span class="s1">console.log()</span>
+	<span class="s1">console.log(</span><span class="s3">'========================================'</span><span class="s1">)</span>
+	<span class="s1">console.log(</span><span class="s3">'=       Publish the new version        ='</span><span class="s1">)</span>
+	<span class="s1">console.log(</span><span class="s3">'========================================'</span><span class="s1">)</span>
+	<span class="s1">console.log()</span>
+
+	<span class="s0">// `npm` requires &quot;two-factor authentication&quot;, so running an `npm publish`</span>
+	<span class="s0">// command programmatically won't work without human intervention.</span>
+	<span class="s0">//</span>
+	<span class="s0">// To work around that, one could optionally specify GMail credentials.</span>
+	<span class="s0">// In that case, instead of attempting to run `npm publish` command,</span>
+	<span class="s0">// it will send an email notification to do that manually.</span>
+	<span class="s0">//</span>
+	<span class="s2">const </span><span class="s1">emailSettings = getEmailSettings()</span>
+	<span class="s2">if </span><span class="s1">(emailSettings) {</span>
+		<span class="s0">// Send an email notification about manually publishing the new version of the package to `npm`.</span>
+		<span class="s1">gmailSend({</span>
+			<span class="s1">user: emailSettings.email,</span>
+			<span class="s1">pass: emailSettings.accessToken,</span>
+			<span class="s1">to: emailSettings.email,</span>
+			<span class="s1">subject: </span><span class="s3">'[libphonenumber-js] Publish a new version'</span><span class="s1">,</span>
+			<span class="s1">text: </span><span class="s3">'A new version of `libphonenumber-js` has been pushed to the repository:</span><span class="s5">\n</span><span class="s3">https://gitlab.com/catamphetamine/libphonenumber-js/-/commits/master</span><span class="s5">\n\n</span><span class="s3">Run `npm publish` in `libphonenumber-js` directory to publish the new version.'</span><span class="s1">,</span>
+			<span class="s0">// html: '&lt;b&gt;html text&lt;/b&gt;' // alternative to specifying `text`, one could specify `html`.</span>
+		<span class="s1">})()</span>
+
+		<span class="s1">console.log()</span>
+		<span class="s1">console.log(</span><span class="s3">'=========================================================='</span><span class="s1">)</span>
+		<span class="s1">console.log(</span><span class="s3">'= Email notification sent. Publish the package manually. ='</span><span class="s1">)</span>
+		<span class="s1">console.log(</span><span class="s3">'=========================================================='</span><span class="s1">)</span>
+		<span class="s1">console.log()</span>
+	<span class="s1">} </span><span class="s2">else </span><span class="s1">{</span>
+		<span class="s1">console.log(exec(</span><span class="s3">'npm publish'</span><span class="s1">))</span>
+
+		<span class="s1">console.log()</span>
+		<span class="s1">console.log(</span><span class="s3">'========================================'</span><span class="s1">)</span>
+		<span class="s1">console.log(</span><span class="s3">'=               Published              ='</span><span class="s1">)</span>
+		<span class="s1">console.log(</span><span class="s3">'========================================'</span><span class="s1">)</span>
+		<span class="s1">console.log()</span>
+	<span class="s1">}</span>
+<span class="s1">}</span>
+
+<span class="s0">// Reads email settings from a JSON file just outside of `libphonenumber-js` repo folder.</span>
+<span class="s2">function </span><span class="s1">getEmailSettings() {</span>
+	<span class="s2">const </span><span class="s1">emailSettingsPath = </span><span class="s3">'../libphonenumber-js-autoupdate-email-notification-settings.json'</span>
+	<span class="s2">if </span><span class="s1">(fs.existsSync(emailSettingsPath)) {</span>
+		<span class="s2">const </span><span class="s1">emailSettings = JSON.parse(fs.readFileSync(emailSettingsPath, </span><span class="s3">'utf-8'</span><span class="s1">))</span>
+		<span class="s0">// Validate `emailSettings`.</span>
+		<span class="s2">if </span><span class="s1">(!emailSettings.email) {</span>
+			<span class="s2">throw new </span><span class="s1">Error(</span><span class="s3">'`email` parameter not specified in the email config file'</span><span class="s1">)</span>
+		<span class="s1">}</span>
+		<span class="s0">// The instructions on how to obtain an `accessToken` are described in `gmail-send` readme:</span>
+		<span class="s0">// https://www.npmjs.com/package/gmail-send</span>
+		<span class="s2">if </span><span class="s1">(!emailSettings.accessToken) {</span>
+			<span class="s2">throw new </span><span class="s1">Error(</span><span class="s3">'`accessToken` parameter not specified in the email config file'</span><span class="s1">)</span>
+		<span class="s1">}</span>
+		<span class="s2">return </span><span class="s1">emailSettings;</span>
+	<span class="s1">}</span>
+<span class="s1">}</span></pre>
+</body>
+</html>

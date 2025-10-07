@@ -1,0 +1,212 @@
+<html>
+<head>
+<title>slow-module-detection-plugin.js</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #067d17;}
+.s1 { color: #080808;}
+.s2 { color: #0033b3;}
+.s3 { color: #1750eb;}
+.s4 { color: #8c8c8c; font-style: italic;}
+.s5 { color: #264eff;}
+.s6 { color: #0037a6;}
+</style>
+</head>
+<body bgcolor="#ffffff">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#c0c0c0" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+slow-module-detection-plugin.js</font>
+</center></td></tr></table>
+<pre><span class="s0">&quot;use strict&quot;</span><span class="s1">;</span>
+<span class="s1">Object.defineProperty(exports, </span><span class="s0">&quot;__esModule&quot;</span><span class="s1">, {</span>
+    <span class="s1">value: </span><span class="s2">true</span>
+<span class="s1">});</span>
+<span class="s1">Object.defineProperty(exports, </span><span class="s0">&quot;default&quot;</span><span class="s1">, {</span>
+    <span class="s1">enumerable: </span><span class="s2">true</span><span class="s1">,</span>
+    <span class="s1">get: </span><span class="s2">function</span><span class="s1">() {</span>
+        <span class="s2">return </span><span class="s1">SlowModuleDetectionPlugin;</span>
+    <span class="s1">}</span>
+<span class="s1">});</span>
+<span class="s2">const </span><span class="s1">_picocolors = require(</span><span class="s0">&quot;../../../lib/picocolors&quot;</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">PLUGIN_NAME = </span><span class="s0">'SlowModuleDetectionPlugin'</span><span class="s1">;</span>
+<span class="s2">const </span><span class="s1">TreeSymbols = {</span>
+    <span class="s1">VERTICAL_LINE: </span><span class="s0">'│  '</span><span class="s1">,</span>
+    <span class="s1">BRANCH: </span><span class="s0">'├─ '</span>
+<span class="s1">};</span>
+<span class="s2">const </span><span class="s1">PATH_TRUNCATION_LENGTH = </span><span class="s3">120</span><span class="s1">;</span>
+<span class="s4">// Matches node_modules paths, including pnpm-style paths</span>
+<span class="s2">const </span><span class="s1">NODE_MODULES_PATH_PATTERN = </span><span class="s5">/node_modules(?:\/\.pnpm)?\/(.*)/</span><span class="s1">;</span>
+<span class="s2">const </span><span class="s1">getModuleIdentifier = (module)=&gt;{</span>
+    <span class="s2">const </span><span class="s1">debugId = module.debugId;</span>
+    <span class="s2">return </span><span class="s1">String(debugId);</span>
+<span class="s1">};</span>
+<span class="s2">const </span><span class="s1">getModuleDisplayName = (module)=&gt;{</span>
+    <span class="s2">const </span><span class="s1">resourcePath = </span><span class="s0">'resource' </span><span class="s2">in </span><span class="s1">module &amp;&amp; </span><span class="s2">typeof </span><span class="s1">module.resource === </span><span class="s0">'string' </span><span class="s1">? module.resource : undefined;</span>
+    <span class="s2">if </span><span class="s1">(!resourcePath) {</span>
+        <span class="s2">return </span><span class="s1">undefined;</span>
+    <span class="s1">}</span>
+    <span class="s2">let </span><span class="s1">displayPath = resourcePath.replace(process.cwd(), </span><span class="s0">'.'</span><span class="s1">);</span>
+    <span class="s2">const </span><span class="s1">nodeModulesMatch = displayPath.match(NODE_MODULES_PATH_PATTERN);</span>
+    <span class="s2">if </span><span class="s1">(nodeModulesMatch) {</span>
+        <span class="s2">return </span><span class="s1">nodeModulesMatch[</span><span class="s3">1</span><span class="s1">];</span>
+    <span class="s1">}</span>
+    <span class="s2">return </span><span class="s1">displayPath;</span>
+<span class="s1">};</span>
+<span class="s4">/**</span>
+ <span class="s4">* Truncates a path to a maximum length. If the path exceeds this length,</span>
+ <span class="s4">* it will be truncated in the middle and replaced with '...'.</span>
+ <span class="s4">*/ </span><span class="s2">function </span><span class="s1">truncatePath(path, maxLength) {</span>
+    <span class="s4">// If the path length is within the limit, return it as is</span>
+    <span class="s2">if </span><span class="s1">(path.length &lt;= maxLength) </span><span class="s2">return </span><span class="s1">path;</span>
+    <span class="s4">// Calculate the available length for the start and end segments after accounting for '...'</span>
+    <span class="s2">const </span><span class="s1">availableLength = maxLength - </span><span class="s3">3</span><span class="s1">;</span>
+    <span class="s2">const </span><span class="s1">startSegmentLength = Math.ceil(availableLength / </span><span class="s3">2</span><span class="s1">);</span>
+    <span class="s2">const </span><span class="s1">endSegmentLength = Math.floor(availableLength / </span><span class="s3">2</span><span class="s1">);</span>
+    <span class="s4">// Extract the start and end segments of the path</span>
+    <span class="s2">const </span><span class="s1">startSegment = path.slice(</span><span class="s3">0</span><span class="s1">, startSegmentLength);</span>
+    <span class="s2">const </span><span class="s1">endSegment = path.slice(-endSegmentLength);</span>
+    <span class="s4">// Return the truncated path with '...' in the middle</span>
+    <span class="s2">return </span><span class="s0">`</span><span class="s1">${startSegment}</span><span class="s0">...</span><span class="s1">${endSegment}</span><span class="s0">`</span><span class="s1">;</span>
+<span class="s1">}</span>
+<span class="s2">class </span><span class="s1">ModuleBuildTimeAnalyzer {</span>
+    <span class="s1">constructor(options){</span>
+        <span class="s2">this</span><span class="s1">.options = options;</span>
+        <span class="s2">this</span><span class="s1">.pendingModules = [];</span>
+        <span class="s2">this</span><span class="s1">.modules = </span><span class="s2">new </span><span class="s1">Map();</span>
+        <span class="s2">this</span><span class="s1">.moduleParents = </span><span class="s2">new </span><span class="s1">Map();</span>
+        <span class="s2">this</span><span class="s1">.moduleChildren = </span><span class="s2">new </span><span class="s1">Map();</span>
+        <span class="s2">this</span><span class="s1">.isFinalized = </span><span class="s2">false</span><span class="s1">;</span>
+        <span class="s2">this</span><span class="s1">.moduleBuildTimes = </span><span class="s2">new </span><span class="s1">WeakMap();</span>
+        <span class="s2">this</span><span class="s1">.buildTimeThresholdMs = options.buildTimeThresholdMs;</span>
+    <span class="s1">}</span>
+    <span class="s1">recordModuleBuildTime(module, duration) {</span>
+        <span class="s4">// Webpack guarantees that no more modules will be built after finishModules hook is called,</span>
+        <span class="s4">// where we generate the report. This check is just a defensive measure.</span>
+        <span class="s2">if </span><span class="s1">(</span><span class="s2">this</span><span class="s1">.isFinalized) {</span>
+            <span class="s2">throw </span><span class="s1">Object.defineProperty(</span><span class="s2">new </span><span class="s1">Error(</span><span class="s0">`Invariant (SlowModuleDetectionPlugin): Module is recorded after the report is generated. This is a Next.js internal bug.`</span><span class="s1">), </span><span class="s0">&quot;__NEXT_ERROR_CODE&quot;</span><span class="s1">, {</span>
+                <span class="s1">value: </span><span class="s0">&quot;E630&quot;</span><span class="s1">,</span>
+                <span class="s1">enumerable: </span><span class="s2">false</span><span class="s1">,</span>
+                <span class="s1">configurable: </span><span class="s2">true</span>
+            <span class="s1">});</span>
+        <span class="s1">}</span>
+        <span class="s2">if </span><span class="s1">(duration &lt; </span><span class="s2">this</span><span class="s1">.buildTimeThresholdMs) {</span>
+            <span class="s2">return</span><span class="s1">; </span><span class="s4">// Skip fast modules</span>
+        <span class="s1">}</span>
+        <span class="s2">this</span><span class="s1">.moduleBuildTimes.set(module, duration);</span>
+        <span class="s2">this</span><span class="s1">.pendingModules.push(module);</span>
+    <span class="s1">}</span>
+    <span class="s4">/**</span>
+   <span class="s4">* For each slow module, traverses up the dependency chain to find all ancestor modules.</span>
+   <span class="s4">* Builds a directed graph where:</span>
+   <span class="s4">* 1. Each slow module and its ancestors become nodes</span>
+   <span class="s4">* 2. Edges represent &quot;imported by&quot; relationships</span>
+   <span class="s4">* 3. Root nodes are entry points with no parents</span>
+   <span class="s4">*</span>
+   <span class="s4">* The resulting graph allows us to visualize the import chains that led to slow builds.</span>
+   <span class="s4">*/ </span><span class="s1">prepareReport(compilation) {</span>
+        <span class="s2">for </span><span class="s1">(</span><span class="s2">const </span><span class="s1">module of </span><span class="s2">this</span><span class="s1">.pendingModules){</span>
+            <span class="s2">const </span><span class="s1">chain = </span><span class="s2">new </span><span class="s1">Set();</span>
+            <span class="s4">// Walk up the module graph until we hit a root module (no issuer) to populate the chain</span>
+            <span class="s1">{</span>
+                <span class="s2">let </span><span class="s1">currentModule = module;</span>
+                <span class="s1">chain.add(currentModule);</span>
+                <span class="s2">while</span><span class="s1">(</span><span class="s2">true</span><span class="s1">){</span>
+                    <span class="s2">const </span><span class="s1">issuerModule = compilation.moduleGraph.getIssuer(currentModule);</span>
+                    <span class="s2">if </span><span class="s1">(!issuerModule) </span><span class="s2">break</span><span class="s1">;</span>
+                    <span class="s2">if </span><span class="s1">(chain.has(issuerModule)) {</span>
+                        <span class="s2">throw </span><span class="s1">Object.defineProperty(</span><span class="s2">new </span><span class="s1">Error(</span><span class="s0">`Invariant (SlowModuleDetectionPlugin): Circular dependency detected in module graph. This is a Next.js internal bug.`</span><span class="s1">), </span><span class="s0">&quot;__NEXT_ERROR_CODE&quot;</span><span class="s1">, {</span>
+                            <span class="s1">value: </span><span class="s0">&quot;E631&quot;</span><span class="s1">,</span>
+                            <span class="s1">enumerable: </span><span class="s2">false</span><span class="s1">,</span>
+                            <span class="s1">configurable: </span><span class="s2">true</span>
+                        <span class="s1">});</span>
+                    <span class="s1">}</span>
+                    <span class="s1">chain.add(issuerModule);</span>
+                    <span class="s1">currentModule = issuerModule;</span>
+                <span class="s1">}</span>
+            <span class="s1">}</span>
+            <span class="s4">// Add all visited modules to our graph and create parent-child relationships</span>
+            <span class="s2">let </span><span class="s1">previousModule = </span><span class="s2">null</span><span class="s1">;</span>
+            <span class="s2">for </span><span class="s1">(</span><span class="s2">const </span><span class="s1">currentModule of chain){</span>
+                <span class="s2">const </span><span class="s1">moduleId = getModuleIdentifier(currentModule);</span>
+                <span class="s2">if </span><span class="s1">(!</span><span class="s2">this</span><span class="s1">.modules.has(moduleId)) {</span>
+                    <span class="s2">this</span><span class="s1">.modules.set(moduleId, currentModule);</span>
+                <span class="s1">}</span>
+                <span class="s2">if </span><span class="s1">(previousModule) {</span>
+                    <span class="s2">this</span><span class="s1">.moduleParents.set(previousModule, currentModule);</span>
+                    <span class="s2">let </span><span class="s1">parentChildren = </span><span class="s2">this</span><span class="s1">.moduleChildren.get(currentModule);</span>
+                    <span class="s2">if </span><span class="s1">(!parentChildren) {</span>
+                        <span class="s1">parentChildren = </span><span class="s2">new </span><span class="s1">Map();</span>
+                        <span class="s2">this</span><span class="s1">.moduleChildren.set(currentModule, parentChildren);</span>
+                    <span class="s1">}</span>
+                    <span class="s1">parentChildren.set(getModuleIdentifier(previousModule), previousModule);</span>
+                <span class="s1">}</span>
+                <span class="s1">previousModule = currentModule;</span>
+            <span class="s1">}</span>
+        <span class="s1">}</span>
+        <span class="s2">this</span><span class="s1">.isFinalized = </span><span class="s2">true</span><span class="s1">;</span>
+    <span class="s1">}</span>
+    <span class="s1">generateReport(compilation) {</span>
+        <span class="s2">if </span><span class="s1">(!</span><span class="s2">this</span><span class="s1">.isFinalized) {</span>
+            <span class="s2">this</span><span class="s1">.prepareReport(compilation);</span>
+        <span class="s1">}</span>
+        <span class="s4">// Find root modules (those with no parents)</span>
+        <span class="s2">const </span><span class="s1">rootModules = [</span>
+            <span class="s1">...</span><span class="s2">this</span><span class="s1">.modules.values()</span>
+        <span class="s1">].filter((node)=&gt;!</span><span class="s2">this</span><span class="s1">.moduleParents.has(node));</span>
+        <span class="s2">const </span><span class="s1">formatModuleNode = (node, depth)=&gt;{</span>
+            <span class="s2">const </span><span class="s1">moduleName = getModuleDisplayName(node) || </span><span class="s0">''</span><span class="s1">;</span>
+            <span class="s2">if </span><span class="s1">(!moduleName) {</span>
+                <span class="s2">return </span><span class="s1">formatChildModules(node, depth);</span>
+            <span class="s1">}</span>
+            <span class="s2">const </span><span class="s1">prefix = </span><span class="s0">' ' </span><span class="s1">+ TreeSymbols.VERTICAL_LINE.repeat(depth) + TreeSymbols.BRANCH;</span>
+            <span class="s2">const </span><span class="s1">moduleText = (</span><span class="s3">0</span><span class="s1">, _picocolors.blue)(truncatePath(moduleName, PATH_TRUNCATION_LENGTH - prefix.length));</span>
+            <span class="s2">const </span><span class="s1">buildTimeMs = </span><span class="s2">this</span><span class="s1">.moduleBuildTimes.get(node);</span>
+            <span class="s2">const </span><span class="s1">duration = buildTimeMs ? (</span><span class="s3">0</span><span class="s1">, _picocolors.yellow)(</span><span class="s0">` (</span><span class="s1">${Math.ceil(buildTimeMs)}</span><span class="s0">ms)`</span><span class="s1">) : </span><span class="s0">''</span><span class="s1">;</span>
+            <span class="s2">return </span><span class="s1">prefix + moduleText + duration + </span><span class="s0">'</span><span class="s6">\n</span><span class="s0">' </span><span class="s1">+ formatChildModules(node, depth + </span><span class="s3">1</span><span class="s1">);</span>
+        <span class="s1">};</span>
+        <span class="s2">const </span><span class="s1">formatChildModules = (node, depth)=&gt;{</span>
+            <span class="s2">const </span><span class="s1">children = </span><span class="s2">this</span><span class="s1">.moduleChildren.get(node);</span>
+            <span class="s2">if </span><span class="s1">(!children) </span><span class="s2">return </span><span class="s0">''</span><span class="s1">;</span>
+            <span class="s2">return </span><span class="s1">[</span>
+                <span class="s1">...children</span>
+            <span class="s1">].map(([_, child])=&gt;formatModuleNode(child, depth)).join(</span><span class="s0">''</span><span class="s1">);</span>
+        <span class="s1">};</span>
+        <span class="s2">const </span><span class="s1">report = rootModules.map((root)=&gt;formatModuleNode(root, </span><span class="s3">0</span><span class="s1">)).join(</span><span class="s0">''</span><span class="s1">);</span>
+        <span class="s2">if </span><span class="s1">(report) {</span>
+            <span class="s1">console.log((</span><span class="s3">0</span><span class="s1">, _picocolors.green)(</span><span class="s0">`🐌 Detected slow modules while compiling </span><span class="s1">${</span><span class="s2">this</span><span class="s1">.options.compilerType}</span><span class="s0">:`</span><span class="s1">) + </span><span class="s0">'</span><span class="s6">\n</span><span class="s0">' </span><span class="s1">+ report);</span>
+        <span class="s1">}</span>
+    <span class="s1">}</span>
+<span class="s1">}</span>
+<span class="s2">class </span><span class="s1">SlowModuleDetectionPlugin {</span>
+    <span class="s1">constructor(options){</span>
+        <span class="s2">this</span><span class="s1">.options = options;</span>
+        <span class="s2">this</span><span class="s1">.apply = (compiler)=&gt;{</span>
+            <span class="s1">compiler.hooks.compilation.tap(PLUGIN_NAME, (compilation)=&gt;{</span>
+                <span class="s2">const </span><span class="s1">analyzer = </span><span class="s2">new </span><span class="s1">ModuleBuildTimeAnalyzer(</span><span class="s2">this</span><span class="s1">.options);</span>
+                <span class="s2">const </span><span class="s1">moduleBuildStartTimes = </span><span class="s2">new </span><span class="s1">WeakMap();</span>
+                <span class="s1">compilation.hooks.buildModule.tap(PLUGIN_NAME, (module)=&gt;{</span>
+                    <span class="s1">moduleBuildStartTimes.set(module, performance.now());</span>
+                <span class="s1">});</span>
+                <span class="s1">compilation.hooks.succeedModule.tap(PLUGIN_NAME, (module)=&gt;{</span>
+                    <span class="s2">const </span><span class="s1">startTime = moduleBuildStartTimes.get(module);</span>
+                    <span class="s2">if </span><span class="s1">(!startTime) {</span>
+                        <span class="s2">throw </span><span class="s1">Object.defineProperty(</span><span class="s2">new </span><span class="s1">Error(</span><span class="s0">`Invariant (SlowModuleDetectionPlugin): Unable to find the start time for a module build. This is a Next.js internal bug.`</span><span class="s1">), </span><span class="s0">&quot;__NEXT_ERROR_CODE&quot;</span><span class="s1">, {</span>
+                            <span class="s1">value: </span><span class="s0">&quot;E629&quot;</span><span class="s1">,</span>
+                            <span class="s1">enumerable: </span><span class="s2">false</span><span class="s1">,</span>
+                            <span class="s1">configurable: </span><span class="s2">true</span>
+                        <span class="s1">});</span>
+                    <span class="s1">}</span>
+                    <span class="s1">analyzer.recordModuleBuildTime(module, performance.now() - startTime);</span>
+                <span class="s1">});</span>
+                <span class="s1">compilation.hooks.finishModules.tap(PLUGIN_NAME, ()=&gt;{</span>
+                    <span class="s1">analyzer.generateReport(compilation);</span>
+                <span class="s1">});</span>
+            <span class="s1">});</span>
+        <span class="s1">};</span>
+    <span class="s1">}</span>
+<span class="s1">}</span>
+
+<span class="s4">//# sourceMappingURL=slow-module-detection-plugin.js.map</span></pre>
+</body>
+</html>

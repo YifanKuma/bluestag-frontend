@@ -1,103 +1,120 @@
-import Image from "next/image";
+"use client";
+
+import {motion} from "framer-motion";
+import {ArrowRight, Check, PhoneCall, Rocket} from "lucide-react";
+import DemoSection from "@/components/DemoSection";
+import UseCasesSlider from "@/components/UseCasesSlider";
+import FAQSection from "@/components/FAQSection";
+import PhoneCta from "@/components/PhoneCta";
+import NetworkStats from "@/components/NetworkStats";
+import FeaturesSection from "@/components/FeaturesSection";
+import VerticalSlider from "@/components/VerticalSlider/VerticalSlider";
+import AgentPicker from "@/components/AgentPicker";
+import Integrations from "@/components/Integrations";
+import LanguageSupport from "@/components/LanguageSupport";
+import Footer from "@/components/Footer";
+import TypedText from "@/components/TypedText";
 
 export default function Home() {
-  return (
-    <div className="font-sans grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20">
-      <main className="flex flex-col gap-[32px] row-start-2 items-center sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={180}
-          height={38}
-          priority
-        />
-        <ol className="font-mono list-inside list-decimal text-sm/6 text-center sm:text-left">
-          <li className="mb-2 tracking-[-.01em]">
-            Get started by editing{" "}
-            <code className="bg-black/[.05] dark:bg-white/[.06] font-mono font-semibold px-1 py-0.5 rounded">
-              src/app/page.tsx
-            </code>
-            .
-          </li>
-          <li className="tracking-[-.01em]">
-            Save and see your changes instantly.
-          </li>
-        </ol>
+    return (
+        <main className="min-h-screen bg-white text-gray-900">
+            {/* Header */}
+            <header className="sticky top-0 z-40 bg-white/80 backdrop-blur border-b border-gray-100">
+                <div className="mx-auto max-w-7xl px-4 py-3 flex items-center justify-between">
+                    <h1 className="font-extrabold text-xl text-blue-600">BLUESTAG.AI</h1>
+                    <nav className="hidden md:flex items-center gap-8 text-sm text-gray-700">
+                        <a href="#use-cases" className="hover:text-gray-900">Use Cases</a>
+                        <a href="#features" className="hover:text-gray-900">Features</a>
+                        <a href="#pricing" className="hover:text-gray-900">Pricing</a>
+                    </nav>
+                    <a
+                        href="#get-started"
+                        className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-blue-600 text-white hover:bg-blue-700"
+                    >
+                        Get started <ArrowRight size={16}/>
+                    </a>
+                </div>
+            </header>
 
-        <div className="flex gap-4 items-center flex-col sm:flex-row">
-          <a
-            className="rounded-full border border-solid border-transparent transition-colors flex items-center justify-center bg-foreground text-background gap-2 hover:bg-[#383838] dark:hover:bg-[#ccc] font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 sm:w-auto"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={20}
-              height={20}
-            />
-            Deploy now
-          </a>
-          <a
-            className="rounded-full border border-solid border-black/[.08] dark:border-white/[.145] transition-colors flex items-center justify-center hover:bg-[#f2f2f2] dark:hover:bg-[#1a1a1a] hover:border-transparent font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 w-full sm:w-auto md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Read our docs
-          </a>
-        </div>
-      </main>
-      <footer className="row-start-3 flex gap-[24px] flex-wrap items-center justify-center">
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/file.svg"
-            alt="File icon"
-            width={16}
-            height={16}
-          />
-          Learn
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/window.svg"
-            alt="Window icon"
-            width={16}
-            height={16}
-          />
-          Examples
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/globe.svg"
-            alt="Globe icon"
-            width={16}
-            height={16}
-          />
-          Go to nextjs.org →
-        </a>
-      </footer>
-    </div>
-  );
+            {/* Hero Section */}
+            <section className="mx-auto max-w-7xl px-4 py-20 text-center">
+                <motion.h2
+                    initial={{opacity: 0, y: 20}}
+                    animate={{opacity: 1, y: 0}}
+                    transition={{duration: 0.5}}
+                    className="text-4xl sm:text-5xl font-extrabold tracking-tight"
+                >
+                    AI Agents That Help You Scale
+                </motion.h2>
+
+                <TypedText />
+
+                <p className="mt-6 text-lg text-gray-600 max-w-2xl mx-auto">
+                    Try our demo. Experience the magic—qualify leads, book appointments, and resolve queries 24/7.
+                </p>
+
+                {/* Phone CTA (flag dropdown + validation) */}
+                <PhoneCta/>
+
+                {/* Optional secondary CTAs */}
+                <div className="mt-6 flex flex-wrap justify-center gap-4">
+                    <a
+                        href="#get-started"
+                        className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-blue-600 text-white hover:bg-blue-700"
+                    >
+                        Get Started <Rocket size={16}/>
+                    </a>
+                    <a
+                        href="#demo"
+                        className="inline-flex items-center gap-2 px-6 py-3 rounded-xl border border-gray-200 hover:border-gray-300"
+                    >
+                        Book a Demo <PhoneCall size={16}/>
+                    </a>
+                </div>
+            </section>
+
+            <UseCasesSlider/>
+
+            <NetworkStats/>
+
+            <div id='features'>
+                <FeaturesSection/>
+            </div>
+
+            <VerticalSlider/>
+
+            {/* Use Cases & Demo */}
+            <div id="use-cases">
+                <AgentPicker
+                    title="Use your Ringg Agent."
+                    note="Agent call is available for 2 minutes"
+                    onStartCall={(category, company) => {
+                        // hook up your modal / dialer here
+                        console.log("start", {category, company});
+                    }}
+                />
+            </div>
+
+            <Integrations/>
+
+            <LanguageSupport/>
+
+            <FAQSection/>
+
+            {/* CTA */}
+            <section id="get-started" className="bg-blue-600 text-white text-center py-20">
+                <h3 className="text-3xl font-bold">Ready to scale with BLUESTAG.AI?</h3>
+                <p className="mt-2 text-blue-100">No credit card required. Cancel anytime.</p>
+                <a
+                    href="#"
+                    className="mt-6 inline-block px-6 py-3 rounded-xl bg-white text-blue-600 font-semibold hover:bg-gray-100"
+                >
+                    Get Started
+                </a>
+            </section>
+
+            {/* Footer */}
+            <Footer/>
+        </main>
+    );
 }

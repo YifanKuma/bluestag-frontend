@@ -1,0 +1,207 @@
+<html>
+<head>
+<title>stats.cc</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #8c8c8c; font-style: italic;}
+.s1 { color: #080808;}
+.s2 { color: #0033b3;}
+.s3 { color: #067d17;}
+.s4 { color: #000000;}
+.s5 { color: #00627a;}
+.s6 { color: #1750eb; font-style: italic;}
+.s7 { color: #871094; font-style: italic;}
+</style>
+</head>
+<body bgcolor="#ffffff">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#c0c0c0" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+stats.cc</font>
+</center></td></tr></table>
+<pre><span class="s0">// Copyright 2013 Lovell Fuller and others.</span>
+<span class="s0">// SPDX-License-Identifier: Apache-2.0</span>
+
+<span class="s2">#include </span><span class="s3">&lt;numeric&gt;</span>
+<span class="s2">#include </span><span class="s3">&lt;vector&gt;</span>
+<span class="s2">#include </span><span class="s3">&lt;iostream&gt;</span>
+
+<span class="s2">#include </span><span class="s3">&lt;napi.h&gt;</span>
+<span class="s2">#include </span><span class="s3">&lt;vips/vips8&gt;</span>
+
+<span class="s2">#include </span><span class="s3">&quot;common.h&quot;</span>
+<span class="s2">#include </span><span class="s3">&quot;stats.h&quot;</span>
+
+<span class="s2">class </span>StatsWorker <span class="s1">: </span><span class="s2">public </span>Napi<span class="s1">::AsyncWorker {</span>
+ <span class="s2">public:</span>
+  <span class="s5">StatsWorker</span><span class="s1">(</span>Napi<span class="s1">::</span>Function callback<span class="s1">, </span>StatsBaton <span class="s2">*</span>baton<span class="s1">, </span>Napi<span class="s1">::</span>Function debuglog<span class="s1">) :</span>
+    <span class="s1">Napi::</span><span class="s5">AsyncWorker</span><span class="s1">(callback), </span><span class="s5">baton</span><span class="s1">(baton), </span><span class="s5">debuglog</span><span class="s1">(</span>Napi<span class="s1">::</span><span class="s5">Persistent</span><span class="s1">(debuglog)) {}</span>
+  <span class="s5">~StatsWorker</span><span class="s1">() {}</span>
+
+  <span class="s2">const int </span><span class="s1">STAT_MIN_INDEX </span><span class="s2">= </span><span class="s6">0</span><span class="s1">;</span>
+  <span class="s2">const int </span><span class="s1">STAT_MAX_INDEX </span><span class="s2">= </span><span class="s6">1</span><span class="s1">;</span>
+  <span class="s2">const int </span><span class="s1">STAT_SUM_INDEX </span><span class="s2">= </span><span class="s6">2</span><span class="s1">;</span>
+  <span class="s2">const int </span><span class="s1">STAT_SQ_SUM_INDEX </span><span class="s2">= </span><span class="s6">3</span><span class="s1">;</span>
+  <span class="s2">const int </span><span class="s1">STAT_MEAN_INDEX </span><span class="s2">= </span><span class="s6">4</span><span class="s1">;</span>
+  <span class="s2">const int </span><span class="s1">STAT_STDEV_INDEX </span><span class="s2">= </span><span class="s6">5</span><span class="s1">;</span>
+  <span class="s2">const int </span><span class="s1">STAT_MINX_INDEX </span><span class="s2">= </span><span class="s6">6</span><span class="s1">;</span>
+  <span class="s2">const int </span><span class="s1">STAT_MINY_INDEX </span><span class="s2">= </span><span class="s6">7</span><span class="s1">;</span>
+  <span class="s2">const int </span><span class="s1">STAT_MAXX_INDEX </span><span class="s2">= </span><span class="s6">8</span><span class="s1">;</span>
+  <span class="s2">const int </span><span class="s1">STAT_MAXY_INDEX </span><span class="s2">= </span><span class="s6">9</span><span class="s1">;</span>
+
+  <span class="s1">void </span><span class="s5">Execute</span><span class="s1">() {</span>
+    <span class="s0">// Decrement queued task counter</span>
+    sharp<span class="s1">::counterQueue</span><span class="s2">--</span><span class="s1">;</span>
+
+    vips<span class="s1">::VImage image;</span>
+    sharp<span class="s1">::ImageType imageType </span><span class="s2">= </span>sharp<span class="s1">::</span>ImageType<span class="s1">::UNKNOWN;</span>
+    <span class="s2">try </span><span class="s1">{</span>
+      std<span class="s1">::</span><span class="s5">tie</span><span class="s1">(image, imageType) </span><span class="s2">= </span><span class="s5">OpenInput</span><span class="s1">(</span>baton<span class="s1">-&gt;</span>input<span class="s1">);</span>
+    <span class="s1">} </span><span class="s2">catch </span><span class="s1">(</span>vips<span class="s1">::VError </span><span class="s2">const &amp;</span><span class="s1">err) {</span>
+      <span class="s1">(</span>baton<span class="s1">-&gt;</span>err<span class="s1">).</span><span class="s5">append</span><span class="s1">(</span>err<span class="s1">.</span><span class="s5">what</span><span class="s1">());</span>
+    <span class="s1">}</span>
+    <span class="s2">if </span><span class="s1">(imageType </span><span class="s2">!= </span>sharp<span class="s1">::</span>ImageType<span class="s1">::UNKNOWN) {</span>
+      <span class="s2">try </span><span class="s1">{</span>
+        vips<span class="s1">::VImage stats </span><span class="s2">= </span>image<span class="s1">.</span><span class="s5">stats</span><span class="s1">();</span>
+        <span class="s2">int const </span><span class="s1">bands </span><span class="s2">= </span>image<span class="s1">.</span><span class="s5">bands</span><span class="s1">();</span>
+        <span class="s2">for </span><span class="s1">(</span><span class="s2">int </span><span class="s1">b </span><span class="s2">= </span><span class="s6">1</span><span class="s1">; b </span><span class="s2">&lt;= </span><span class="s1">bands; b</span><span class="s2">++</span><span class="s1">) {</span>
+          <span class="s1">ChannelStats </span><span class="s5">cStats</span><span class="s1">(</span>
+            <span class="s2">static_cast&lt;int&gt;</span><span class="s1">(</span>stats<span class="s1">.</span><span class="s5">getpoint</span><span class="s1">(STAT_MIN_INDEX, b).</span><span class="s5">front</span><span class="s1">()),</span>
+            <span class="s2">static_cast&lt;int&gt;</span><span class="s1">(</span>stats<span class="s1">.</span><span class="s5">getpoint</span><span class="s1">(STAT_MAX_INDEX, b).</span><span class="s5">front</span><span class="s1">()),</span>
+            stats<span class="s1">.</span><span class="s5">getpoint</span><span class="s1">(STAT_SUM_INDEX, b).</span><span class="s5">front</span><span class="s1">(),</span>
+            stats<span class="s1">.</span><span class="s5">getpoint</span><span class="s1">(STAT_SQ_SUM_INDEX, b).</span><span class="s5">front</span><span class="s1">(),</span>
+            stats<span class="s1">.</span><span class="s5">getpoint</span><span class="s1">(STAT_MEAN_INDEX, b).</span><span class="s5">front</span><span class="s1">(),</span>
+            stats<span class="s1">.</span><span class="s5">getpoint</span><span class="s1">(STAT_STDEV_INDEX, b).</span><span class="s5">front</span><span class="s1">(),</span>
+            <span class="s2">static_cast&lt;int&gt;</span><span class="s1">(</span>stats<span class="s1">.</span><span class="s5">getpoint</span><span class="s1">(STAT_MINX_INDEX, b).</span><span class="s5">front</span><span class="s1">()),</span>
+            <span class="s2">static_cast&lt;int&gt;</span><span class="s1">(</span>stats<span class="s1">.</span><span class="s5">getpoint</span><span class="s1">(STAT_MINY_INDEX, b).</span><span class="s5">front</span><span class="s1">()),</span>
+            <span class="s2">static_cast&lt;int&gt;</span><span class="s1">(</span>stats<span class="s1">.</span><span class="s5">getpoint</span><span class="s1">(STAT_MAXX_INDEX, b).</span><span class="s5">front</span><span class="s1">()),</span>
+            <span class="s2">static_cast&lt;int&gt;</span><span class="s1">(</span>stats<span class="s1">.</span><span class="s5">getpoint</span><span class="s1">(STAT_MAXY_INDEX, b).</span><span class="s5">front</span><span class="s1">()));</span>
+          baton<span class="s1">-&gt;</span>channelStats<span class="s1">.</span><span class="s5">push_back</span><span class="s1">(cStats);</span>
+        <span class="s1">}</span>
+        <span class="s0">// Image is not opaque when alpha layer is present and contains a non-mamixa value</span>
+        <span class="s2">if </span><span class="s1">(</span>image<span class="s1">.</span><span class="s5">has_alpha</span><span class="s1">()) {</span>
+          <span class="s2">double const </span><span class="s1">minAlpha </span><span class="s2">= static_cast&lt;double&gt;</span><span class="s1">(</span>stats<span class="s1">.</span><span class="s5">getpoint</span><span class="s1">(STAT_MIN_INDEX, bands).</span><span class="s5">front</span><span class="s1">());</span>
+          <span class="s2">if </span><span class="s1">(minAlpha </span><span class="s2">!= </span><span class="s5">vips_interpretation_max_alpha</span><span class="s1">(</span>image<span class="s1">.</span><span class="s5">interpretation</span><span class="s1">())) {</span>
+            baton<span class="s1">-&gt;</span>isOpaque <span class="s2">= </span><span class="s7">false</span><span class="s1">;</span>
+          <span class="s1">}</span>
+        <span class="s1">}</span>
+        <span class="s0">// Convert to greyscale</span>
+        vips<span class="s1">::VImage greyscale </span><span class="s2">= </span>image<span class="s1">.</span><span class="s5">colourspace</span><span class="s1">(VIPS_INTERPRETATION_B_W)[</span><span class="s6">0</span><span class="s1">];</span>
+        <span class="s0">// Estimate entropy via histogram of greyscale value frequency</span>
+        baton<span class="s1">-&gt;</span>entropy <span class="s2">= </span>std<span class="s1">::</span><span class="s5">abs</span><span class="s1">(</span>greyscale<span class="s1">.</span><span class="s5">hist_find</span><span class="s1">().</span><span class="s5">hist_entropy</span><span class="s1">());</span>
+        <span class="s0">// Estimate sharpness via standard deviation of greyscale laplacian</span>
+        <span class="s2">if </span><span class="s1">(</span>image<span class="s1">.</span><span class="s5">width</span><span class="s1">() </span><span class="s2">&gt; </span><span class="s6">1 </span><span class="s2">|| </span>image<span class="s1">.</span><span class="s5">height</span><span class="s1">() </span><span class="s2">&gt; </span><span class="s6">1</span><span class="s1">) {</span>
+          <span class="s1">VImage laplacian </span><span class="s2">= </span>VImage<span class="s1">::</span><span class="s5">new_matrixv</span><span class="s1">(</span><span class="s6">3</span><span class="s1">, </span><span class="s6">3</span><span class="s1">,</span>
+            <span class="s6">0.0</span><span class="s1">,  </span><span class="s6">1.0</span><span class="s1">, </span><span class="s6">0.0</span><span class="s1">,</span>
+            <span class="s6">1.0</span><span class="s1">, </span><span class="s2">-</span><span class="s6">4.0</span><span class="s1">, </span><span class="s6">1.0</span><span class="s1">,</span>
+            <span class="s6">0.0</span><span class="s1">,  </span><span class="s6">1.0</span><span class="s1">, </span><span class="s6">0.0</span><span class="s1">);</span>
+          laplacian<span class="s1">.</span><span class="s5">set</span><span class="s1">(</span><span class="s3">&quot;scale&quot;</span><span class="s1">, </span><span class="s6">9.0</span><span class="s1">);</span>
+          baton<span class="s1">-&gt;</span>sharpness <span class="s2">= </span>greyscale<span class="s1">.</span><span class="s5">conv</span><span class="s1">(laplacian).</span><span class="s5">deviate</span><span class="s1">();</span>
+        <span class="s1">}</span>
+        <span class="s0">// Most dominant sRGB colour via 4096-bin 3D histogram</span>
+        vips<span class="s1">::VImage hist </span><span class="s2">= </span>sharp<span class="s1">::</span><span class="s5">RemoveAlpha</span><span class="s1">(image)</span>
+          <span class="s1">.</span><span class="s5">colourspace</span><span class="s1">(VIPS_INTERPRETATION_sRGB)</span>
+          <span class="s1">.</span><span class="s5">hist_find_ndim</span><span class="s1">(</span>VImage<span class="s1">::</span><span class="s5">option</span><span class="s1">()-&gt;</span><span class="s5">set</span><span class="s1">(</span><span class="s3">&quot;bins&quot;</span><span class="s1">, </span><span class="s6">16</span><span class="s1">));</span>
+        std<span class="s1">::complex</span><span class="s2">&lt;double&gt; </span><span class="s1">maxpos </span><span class="s2">= </span>hist<span class="s1">.</span><span class="s5">maxpos</span><span class="s1">();</span>
+        <span class="s2">int const </span><span class="s1">dx </span><span class="s2">= static_cast&lt;int&gt;</span><span class="s1">(</span>std<span class="s1">::</span><span class="s5">real</span><span class="s1">(maxpos));</span>
+        <span class="s2">int const </span><span class="s1">dy </span><span class="s2">= static_cast&lt;int&gt;</span><span class="s1">(</span>std<span class="s1">::</span><span class="s5">imag</span><span class="s1">(maxpos));</span>
+        std<span class="s1">::vector</span><span class="s2">&lt;double&gt; </span><span class="s1">pel </span><span class="s2">= </span><span class="s5">hist</span><span class="s1">(dx, dy);</span>
+        <span class="s2">int const </span><span class="s1">dz </span><span class="s2">= </span>std<span class="s1">::</span><span class="s5">distance</span><span class="s1">(</span>pel<span class="s1">.</span><span class="s5">begin</span><span class="s1">(), </span>std<span class="s1">::</span><span class="s5">find</span><span class="s1">(</span>pel<span class="s1">.</span><span class="s5">begin</span><span class="s1">(), </span>pel<span class="s1">.</span><span class="s5">end</span><span class="s1">(), </span>hist<span class="s1">.</span><span class="s5">max</span><span class="s1">()));</span>
+        baton<span class="s1">-&gt;</span>dominantRed <span class="s2">= </span><span class="s1">dx </span><span class="s2">* </span><span class="s6">16 </span><span class="s2">+ </span><span class="s6">8</span><span class="s1">;</span>
+        baton<span class="s1">-&gt;</span>dominantGreen <span class="s2">= </span><span class="s1">dy </span><span class="s2">* </span><span class="s6">16 </span><span class="s2">+ </span><span class="s6">8</span><span class="s1">;</span>
+        baton<span class="s1">-&gt;</span>dominantBlue <span class="s2">= </span><span class="s1">dz </span><span class="s2">* </span><span class="s6">16 </span><span class="s2">+ </span><span class="s6">8</span><span class="s1">;</span>
+      <span class="s1">} </span><span class="s2">catch </span><span class="s1">(</span>vips<span class="s1">::VError </span><span class="s2">const &amp;</span><span class="s1">err) {</span>
+        <span class="s1">(</span>baton<span class="s1">-&gt;</span>err<span class="s1">).</span><span class="s5">append</span><span class="s1">(</span>err<span class="s1">.</span><span class="s5">what</span><span class="s1">());</span>
+      <span class="s1">}</span>
+    <span class="s1">}</span>
+
+    <span class="s0">// Clean up</span>
+    <span class="s5">vips_error_clear</span><span class="s1">();</span>
+    <span class="s5">vips_thread_shutdown</span><span class="s1">();</span>
+  <span class="s1">}</span>
+
+  <span class="s1">void </span><span class="s5">OnOK</span><span class="s1">() {</span>
+    Napi<span class="s1">::Env env </span><span class="s2">= </span><span class="s5">Env</span><span class="s1">();</span>
+    Napi<span class="s1">::HandleScope </span><span class="s5">scope</span><span class="s1">(env);</span>
+
+    <span class="s0">// Handle warnings</span>
+    std<span class="s1">::string warning </span><span class="s2">= </span>sharp<span class="s1">::</span><span class="s5">VipsWarningPop</span><span class="s1">();</span>
+    <span class="s2">while </span><span class="s1">(</span><span class="s2">!</span>warning<span class="s1">.</span><span class="s5">empty</span><span class="s1">()) {</span>
+      debuglog<span class="s1">.</span><span class="s5">Call</span><span class="s1">(</span><span class="s5">Receiver</span><span class="s1">().</span><span class="s5">Value</span><span class="s1">(), { </span>Napi<span class="s1">::</span>String<span class="s1">::</span><span class="s5">New</span><span class="s1">(env, warning) });</span>
+      <span class="s1">warning </span><span class="s2">= </span>sharp<span class="s1">::</span><span class="s5">VipsWarningPop</span><span class="s1">();</span>
+    <span class="s1">}</span>
+
+    <span class="s2">if </span><span class="s1">(</span>baton<span class="s1">-&gt;</span>err<span class="s1">.</span><span class="s5">empty</span><span class="s1">()) {</span>
+      <span class="s0">// Stats Object</span>
+      Napi<span class="s1">::Object info </span><span class="s2">= </span>Napi<span class="s1">::</span>Object<span class="s1">::</span><span class="s5">New</span><span class="s1">(env);</span>
+      Napi<span class="s1">::Array channels </span><span class="s2">= </span>Napi<span class="s1">::</span>Array<span class="s1">::</span><span class="s5">New</span><span class="s1">(env);</span>
+
+      std<span class="s1">::</span>vector<span class="s1">&lt;ChannelStats&gt;::iterator it;</span>
+      <span class="s2">int </span><span class="s1">i </span><span class="s2">= </span><span class="s6">0</span><span class="s1">;</span>
+      <span class="s2">for </span><span class="s1">(it </span><span class="s2">= </span>baton<span class="s1">-&gt;</span>channelStats<span class="s1">.</span><span class="s5">begin</span><span class="s1">(); it </span><span class="s2">&lt; </span>baton<span class="s1">-&gt;</span>channelStats<span class="s1">.</span><span class="s5">end</span><span class="s1">(); it</span><span class="s2">++</span><span class="s1">, i</span><span class="s2">++</span><span class="s1">) {</span>
+        Napi<span class="s1">::Object channelStat </span><span class="s2">= </span>Napi<span class="s1">::</span>Object<span class="s1">::</span><span class="s5">New</span><span class="s1">(env);</span>
+        channelStat<span class="s1">.</span><span class="s5">Set</span><span class="s1">(</span><span class="s3">&quot;min&quot;</span><span class="s1">, </span>it<span class="s1">-&gt;</span>min<span class="s1">);</span>
+        channelStat<span class="s1">.</span><span class="s5">Set</span><span class="s1">(</span><span class="s3">&quot;max&quot;</span><span class="s1">, </span>it<span class="s1">-&gt;</span>max<span class="s1">);</span>
+        channelStat<span class="s1">.</span><span class="s5">Set</span><span class="s1">(</span><span class="s3">&quot;sum&quot;</span><span class="s1">, </span>it<span class="s1">-&gt;</span>sum<span class="s1">);</span>
+        channelStat<span class="s1">.</span><span class="s5">Set</span><span class="s1">(</span><span class="s3">&quot;squaresSum&quot;</span><span class="s1">, </span>it<span class="s1">-&gt;</span>squaresSum<span class="s1">);</span>
+        channelStat<span class="s1">.</span><span class="s5">Set</span><span class="s1">(</span><span class="s3">&quot;mean&quot;</span><span class="s1">, </span>it<span class="s1">-&gt;</span>mean<span class="s1">);</span>
+        channelStat<span class="s1">.</span><span class="s5">Set</span><span class="s1">(</span><span class="s3">&quot;stdev&quot;</span><span class="s1">, </span>it<span class="s1">-&gt;</span>stdev<span class="s1">);</span>
+        channelStat<span class="s1">.</span><span class="s5">Set</span><span class="s1">(</span><span class="s3">&quot;minX&quot;</span><span class="s1">, </span>it<span class="s1">-&gt;</span>minX<span class="s1">);</span>
+        channelStat<span class="s1">.</span><span class="s5">Set</span><span class="s1">(</span><span class="s3">&quot;minY&quot;</span><span class="s1">, </span>it<span class="s1">-&gt;</span>minY<span class="s1">);</span>
+        channelStat<span class="s1">.</span><span class="s5">Set</span><span class="s1">(</span><span class="s3">&quot;maxX&quot;</span><span class="s1">, </span>it<span class="s1">-&gt;</span>maxX<span class="s1">);</span>
+        channelStat<span class="s1">.</span><span class="s5">Set</span><span class="s1">(</span><span class="s3">&quot;maxY&quot;</span><span class="s1">, </span>it<span class="s1">-&gt;</span>maxY<span class="s1">);</span>
+        channels<span class="s1">.</span><span class="s5">Set</span><span class="s1">(i, channelStat);</span>
+      <span class="s1">}</span>
+
+      info<span class="s1">.</span><span class="s5">Set</span><span class="s1">(</span><span class="s3">&quot;channels&quot;</span><span class="s1">, channels);</span>
+      info<span class="s1">.</span><span class="s5">Set</span><span class="s1">(</span><span class="s3">&quot;isOpaque&quot;</span><span class="s1">, </span>baton<span class="s1">-&gt;</span>isOpaque<span class="s1">);</span>
+      info<span class="s1">.</span><span class="s5">Set</span><span class="s1">(</span><span class="s3">&quot;entropy&quot;</span><span class="s1">, </span>baton<span class="s1">-&gt;</span>entropy<span class="s1">);</span>
+      info<span class="s1">.</span><span class="s5">Set</span><span class="s1">(</span><span class="s3">&quot;sharpness&quot;</span><span class="s1">, </span>baton<span class="s1">-&gt;</span>sharpness<span class="s1">);</span>
+      Napi<span class="s1">::Object dominant </span><span class="s2">= </span>Napi<span class="s1">::</span>Object<span class="s1">::</span><span class="s5">New</span><span class="s1">(env);</span>
+      dominant<span class="s1">.</span><span class="s5">Set</span><span class="s1">(</span><span class="s3">&quot;r&quot;</span><span class="s1">, </span>baton<span class="s1">-&gt;</span>dominantRed<span class="s1">);</span>
+      dominant<span class="s1">.</span><span class="s5">Set</span><span class="s1">(</span><span class="s3">&quot;g&quot;</span><span class="s1">, </span>baton<span class="s1">-&gt;</span>dominantGreen<span class="s1">);</span>
+      dominant<span class="s1">.</span><span class="s5">Set</span><span class="s1">(</span><span class="s3">&quot;b&quot;</span><span class="s1">, </span>baton<span class="s1">-&gt;</span>dominantBlue<span class="s1">);</span>
+      info<span class="s1">.</span><span class="s5">Set</span><span class="s1">(</span><span class="s3">&quot;dominant&quot;</span><span class="s1">, dominant);</span>
+      <span class="s5">Callback</span><span class="s1">().</span><span class="s5">Call</span><span class="s1">(</span><span class="s5">Receiver</span><span class="s1">().</span><span class="s5">Value</span><span class="s1">(), { </span>env<span class="s1">.</span><span class="s5">Null</span><span class="s1">(), info });</span>
+    <span class="s1">} </span><span class="s2">else </span><span class="s1">{</span>
+      <span class="s5">Callback</span><span class="s1">().</span><span class="s5">Call</span><span class="s1">(</span><span class="s5">Receiver</span><span class="s1">().</span><span class="s5">Value</span><span class="s1">(), { </span>Napi<span class="s1">::</span>Error<span class="s1">::</span><span class="s5">New</span><span class="s1">(env, </span>sharp<span class="s1">::</span><span class="s5">TrimEnd</span><span class="s1">(</span>baton<span class="s1">-&gt;</span>err<span class="s1">)).</span><span class="s5">Value</span><span class="s1">() });</span>
+    <span class="s1">}</span>
+
+    <span class="s2">delete </span>baton<span class="s1">-&gt;</span>input<span class="s1">;</span>
+    <span class="s2">delete </span><span class="s1">baton;</span>
+  <span class="s1">}</span>
+
+ <span class="s2">private:</span>
+  <span class="s1">StatsBaton</span><span class="s2">* </span><span class="s1">baton;</span>
+  Napi<span class="s1">::FunctionReference debuglog;</span>
+<span class="s1">};</span>
+
+<span class="s0">/*</span>
+  <span class="s0">stats(options, callback) 
+*/</span>
+Napi<span class="s1">::Value </span><span class="s5">stats</span><span class="s1">(</span><span class="s2">const </span>Napi<span class="s1">::</span>CallbackInfo<span class="s2">&amp; </span>info<span class="s1">) {</span>
+  <span class="s0">// V8 objects are converted to non-V8 types held in the baton struct</span>
+  <span class="s1">StatsBaton </span><span class="s2">*</span><span class="s1">baton </span><span class="s2">= new </span><span class="s1">StatsBaton;</span>
+  Napi<span class="s1">::Object options </span><span class="s2">= </span>info<span class="s1">[</span><span class="s2">size_t</span><span class="s1">(</span><span class="s6">0</span><span class="s1">)].</span>As<span class="s2">&lt;</span>Napi<span class="s1">::Object</span><span class="s2">&gt;</span><span class="s1">();</span>
+
+  <span class="s0">// Input</span>
+  baton<span class="s1">-&gt;</span>input <span class="s2">= </span>sharp<span class="s1">::</span><span class="s5">CreateInputDescriptor</span><span class="s1">(</span>options<span class="s1">.</span><span class="s5">Get</span><span class="s1">(</span><span class="s3">&quot;input&quot;</span><span class="s1">).</span>As<span class="s2">&lt;</span>Napi<span class="s1">::Object</span><span class="s2">&gt;</span><span class="s1">());</span>
+  baton<span class="s1">-&gt;</span>input<span class="s1">-&gt;</span>access <span class="s2">= </span><span class="s1">VIPS_ACCESS_RANDOM;</span>
+
+  <span class="s0">// Function to notify of libvips warnings</span>
+  Napi<span class="s1">::Function debuglog </span><span class="s2">= </span>options<span class="s1">.</span><span class="s5">Get</span><span class="s1">(</span><span class="s3">&quot;debuglog&quot;</span><span class="s1">).</span>As<span class="s2">&lt;</span>Napi<span class="s1">::Function</span><span class="s2">&gt;</span><span class="s1">();</span>
+
+  <span class="s0">// Join queue for worker thread</span>
+  Napi<span class="s1">::Function callback </span><span class="s2">= </span>info<span class="s1">[</span><span class="s2">size_t</span><span class="s1">(</span><span class="s6">1</span><span class="s1">)].</span>As<span class="s2">&lt;</span>Napi<span class="s1">::Function</span><span class="s2">&gt;</span><span class="s1">();</span>
+  <span class="s1">StatsWorker </span><span class="s2">*</span><span class="s1">worker </span><span class="s2">= new </span><span class="s5">StatsWorker</span><span class="s1">(callback, baton, debuglog);</span>
+  worker<span class="s1">-&gt;</span><span class="s5">Receiver</span><span class="s1">().</span><span class="s5">Set</span><span class="s1">(</span><span class="s3">&quot;options&quot;</span><span class="s1">, options);</span>
+  worker<span class="s1">-&gt;</span><span class="s5">Queue</span><span class="s1">();</span>
+
+  <span class="s0">// Increment queued task counter</span>
+  sharp<span class="s1">::counterQueue</span><span class="s2">++</span><span class="s1">;</span>
+
+  <span class="s2">return </span>info<span class="s1">.</span><span class="s5">Env</span><span class="s1">().</span><span class="s5">Undefined</span><span class="s1">();</span>
+<span class="s1">}</span>
+</pre>
+</body>
+</html>

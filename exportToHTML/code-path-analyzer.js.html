@@ -1,0 +1,850 @@
+<html>
+<head>
+<title>code-path-analyzer.js</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #8c8c8c; font-style: italic;}
+.s1 { color: #8c8c8c; font-style: italic;}
+.s2 { color: #080808;}
+.s3 { color: #067d17;}
+.s4 { color: #0033b3;}
+.s5 { color: #1750eb;}
+</style>
+</head>
+<body bgcolor="#ffffff">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#c0c0c0" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+code-path-analyzer.js</font>
+</center></td></tr></table>
+<pre><span class="s0">/**</span>
+ <span class="s0">* </span><span class="s1">@fileoverview </span><span class="s0">A class of the code path analyzer.</span>
+ <span class="s0">* </span><span class="s1">@author </span><span class="s0">Toru Nagashima</span>
+ <span class="s0">*/</span>
+
+<span class="s3">&quot;use strict&quot;</span><span class="s2">;</span>
+
+<span class="s0">//------------------------------------------------------------------------------</span>
+<span class="s0">// Requirements</span>
+<span class="s0">//------------------------------------------------------------------------------</span>
+
+<span class="s4">const </span><span class="s2">assert = require(</span><span class="s3">&quot;../../shared/assert&quot;</span><span class="s2">),</span>
+	<span class="s2">{ breakableTypePattern } = require(</span><span class="s3">&quot;../../shared/ast-utils&quot;</span><span class="s2">),</span>
+	<span class="s2">CodePath = require(</span><span class="s3">&quot;./code-path&quot;</span><span class="s2">),</span>
+	<span class="s2">CodePathSegment = require(</span><span class="s3">&quot;./code-path-segment&quot;</span><span class="s2">),</span>
+	<span class="s2">IdGenerator = require(</span><span class="s3">&quot;./id-generator&quot;</span><span class="s2">),</span>
+	<span class="s2">debug = require(</span><span class="s3">&quot;./debug-helpers&quot;</span><span class="s2">);</span>
+
+<span class="s0">//------------------------------------------------------------------------------</span>
+<span class="s0">// Helpers</span>
+<span class="s0">//------------------------------------------------------------------------------</span>
+
+<span class="s0">/**</span>
+ <span class="s0">* Checks whether or not a given node is a `case` node (not `default` node).</span>
+ <span class="s0">* </span><span class="s1">@param </span><span class="s0">{ASTNode} node A `SwitchCase` node to check.</span>
+ <span class="s0">* </span><span class="s1">@returns </span><span class="s0">{boolean} `true` if the node is a `case` node (not `default` node).</span>
+ <span class="s0">*/</span>
+<span class="s4">function </span><span class="s2">isCaseNode(node) {</span>
+	<span class="s4">return </span><span class="s2">Boolean(node.test);</span>
+<span class="s2">}</span>
+
+<span class="s0">/**</span>
+ <span class="s0">* Checks if a given node appears as the value of a PropertyDefinition node.</span>
+ <span class="s0">* </span><span class="s1">@param </span><span class="s0">{ASTNode} node THe node to check.</span>
+ <span class="s0">* </span><span class="s1">@returns </span><span class="s0">{boolean} `true` if the node is a PropertyDefinition value,</span>
+ <span class="s0">*      false if not.</span>
+ <span class="s0">*/</span>
+<span class="s4">function </span><span class="s2">isPropertyDefinitionValue(node) {</span>
+	<span class="s4">const </span><span class="s2">parent = node.parent;</span>
+
+	<span class="s4">return </span><span class="s2">(</span>
+		<span class="s2">parent &amp;&amp; parent.type === </span><span class="s3">&quot;PropertyDefinition&quot; </span><span class="s2">&amp;&amp; parent.value === node</span>
+	<span class="s2">);</span>
+<span class="s2">}</span>
+
+<span class="s0">/**</span>
+ <span class="s0">* Checks whether the given logical operator is taken into account for the code</span>
+ <span class="s0">* path analysis.</span>
+ <span class="s0">* </span><span class="s1">@param </span><span class="s0">{string} operator The operator found in the LogicalExpression node</span>
+ <span class="s0">* </span><span class="s1">@returns </span><span class="s0">{boolean} `true` if the operator is &quot;&amp;&amp;&quot; or &quot;||&quot; or &quot;??&quot;</span>
+ <span class="s0">*/</span>
+<span class="s4">function </span><span class="s2">isHandledLogicalOperator(operator) {</span>
+	<span class="s4">return </span><span class="s2">operator === </span><span class="s3">&quot;&amp;&amp;&quot; </span><span class="s2">|| operator === </span><span class="s3">&quot;||&quot; </span><span class="s2">|| operator === </span><span class="s3">&quot;??&quot;</span><span class="s2">;</span>
+<span class="s2">}</span>
+
+<span class="s0">/**</span>
+ <span class="s0">* Checks whether the given assignment operator is a logical assignment operator.</span>
+ <span class="s0">* Logical assignments are taken into account for the code path analysis</span>
+ <span class="s0">* because of their short-circuiting semantics.</span>
+ <span class="s0">* </span><span class="s1">@param </span><span class="s0">{string} operator The operator found in the AssignmentExpression node</span>
+ <span class="s0">* </span><span class="s1">@returns </span><span class="s0">{boolean} `true` if the operator is &quot;&amp;&amp;=&quot; or &quot;||=&quot; or &quot;??=&quot;</span>
+ <span class="s0">*/</span>
+<span class="s4">function </span><span class="s2">isLogicalAssignmentOperator(operator) {</span>
+	<span class="s4">return </span><span class="s2">operator === </span><span class="s3">&quot;&amp;&amp;=&quot; </span><span class="s2">|| operator === </span><span class="s3">&quot;||=&quot; </span><span class="s2">|| operator === </span><span class="s3">&quot;??=&quot;</span><span class="s2">;</span>
+<span class="s2">}</span>
+
+<span class="s0">/**</span>
+ <span class="s0">* Gets the label if the parent node of a given node is a LabeledStatement.</span>
+ <span class="s0">* </span><span class="s1">@param </span><span class="s0">{ASTNode} node A node to get.</span>
+ <span class="s0">* </span><span class="s1">@returns </span><span class="s0">{string|null} The label or `null`.</span>
+ <span class="s0">*/</span>
+<span class="s4">function </span><span class="s2">getLabel(node) {</span>
+	<span class="s4">if </span><span class="s2">(node.parent.type === </span><span class="s3">&quot;LabeledStatement&quot;</span><span class="s2">) {</span>
+		<span class="s4">return </span><span class="s2">node.parent.label.name;</span>
+	<span class="s2">}</span>
+	<span class="s4">return null</span><span class="s2">;</span>
+<span class="s2">}</span>
+
+<span class="s0">/**</span>
+ <span class="s0">* Checks whether or not a given logical expression node goes different path</span>
+ <span class="s0">* between the `true` case and the `false` case.</span>
+ <span class="s0">* </span><span class="s1">@param </span><span class="s0">{ASTNode} node A node to check.</span>
+ <span class="s0">* </span><span class="s1">@returns </span><span class="s0">{boolean} `true` if the node is a test of a choice statement.</span>
+ <span class="s0">*/</span>
+<span class="s4">function </span><span class="s2">isForkingByTrueOrFalse(node) {</span>
+	<span class="s4">const </span><span class="s2">parent = node.parent;</span>
+
+	<span class="s4">switch </span><span class="s2">(parent.type) {</span>
+		<span class="s4">case </span><span class="s3">&quot;ConditionalExpression&quot;</span><span class="s2">:</span>
+		<span class="s4">case </span><span class="s3">&quot;IfStatement&quot;</span><span class="s2">:</span>
+		<span class="s4">case </span><span class="s3">&quot;WhileStatement&quot;</span><span class="s2">:</span>
+		<span class="s4">case </span><span class="s3">&quot;DoWhileStatement&quot;</span><span class="s2">:</span>
+		<span class="s4">case </span><span class="s3">&quot;ForStatement&quot;</span><span class="s2">:</span>
+			<span class="s4">return </span><span class="s2">parent.test === node;</span>
+
+		<span class="s4">case </span><span class="s3">&quot;LogicalExpression&quot;</span><span class="s2">:</span>
+			<span class="s4">return </span><span class="s2">isHandledLogicalOperator(parent.operator);</span>
+
+		<span class="s4">case </span><span class="s3">&quot;AssignmentExpression&quot;</span><span class="s2">:</span>
+			<span class="s4">return </span><span class="s2">isLogicalAssignmentOperator(parent.operator);</span>
+
+		<span class="s4">default</span><span class="s2">:</span>
+			<span class="s4">return false</span><span class="s2">;</span>
+	<span class="s2">}</span>
+<span class="s2">}</span>
+
+<span class="s0">/**</span>
+ <span class="s0">* Gets the boolean value of a given literal node.</span>
+ <span class="s0">*</span>
+ <span class="s0">* This is used to detect infinity loops (e.g. `while (true) {}`).</span>
+ <span class="s0">* Statements preceded by an infinity loop are unreachable if the loop didn't</span>
+ <span class="s0">* have any `break` statement.</span>
+ <span class="s0">* </span><span class="s1">@param </span><span class="s0">{ASTNode} node A node to get.</span>
+ <span class="s0">* </span><span class="s1">@returns </span><span class="s0">{boolean|undefined} a boolean value if the node is a Literal node,</span>
+ <span class="s0">*   otherwise `undefined`.</span>
+ <span class="s0">*/</span>
+<span class="s4">function </span><span class="s2">getBooleanValueIfSimpleConstant(node) {</span>
+	<span class="s4">if </span><span class="s2">(node.type === </span><span class="s3">&quot;Literal&quot;</span><span class="s2">) {</span>
+		<span class="s4">return </span><span class="s2">Boolean(node.value);</span>
+	<span class="s2">}</span>
+	<span class="s4">return void </span><span class="s5">0</span><span class="s2">;</span>
+<span class="s2">}</span>
+
+<span class="s0">/**</span>
+ <span class="s0">* Checks that a given identifier node is a reference or not.</span>
+ <span class="s0">*</span>
+ <span class="s0">* This is used to detect the first throwable node in a `try` block.</span>
+ <span class="s0">* </span><span class="s1">@param </span><span class="s0">{ASTNode} node An Identifier node to check.</span>
+ <span class="s0">* </span><span class="s1">@returns </span><span class="s0">{boolean} `true` if the node is a reference.</span>
+ <span class="s0">*/</span>
+<span class="s4">function </span><span class="s2">isIdentifierReference(node) {</span>
+	<span class="s4">const </span><span class="s2">parent = node.parent;</span>
+
+	<span class="s4">switch </span><span class="s2">(parent.type) {</span>
+		<span class="s4">case </span><span class="s3">&quot;LabeledStatement&quot;</span><span class="s2">:</span>
+		<span class="s4">case </span><span class="s3">&quot;BreakStatement&quot;</span><span class="s2">:</span>
+		<span class="s4">case </span><span class="s3">&quot;ContinueStatement&quot;</span><span class="s2">:</span>
+		<span class="s4">case </span><span class="s3">&quot;ArrayPattern&quot;</span><span class="s2">:</span>
+		<span class="s4">case </span><span class="s3">&quot;RestElement&quot;</span><span class="s2">:</span>
+		<span class="s4">case </span><span class="s3">&quot;ImportSpecifier&quot;</span><span class="s2">:</span>
+		<span class="s4">case </span><span class="s3">&quot;ImportDefaultSpecifier&quot;</span><span class="s2">:</span>
+		<span class="s4">case </span><span class="s3">&quot;ImportNamespaceSpecifier&quot;</span><span class="s2">:</span>
+		<span class="s4">case </span><span class="s3">&quot;CatchClause&quot;</span><span class="s2">:</span>
+			<span class="s4">return false</span><span class="s2">;</span>
+
+		<span class="s4">case </span><span class="s3">&quot;FunctionDeclaration&quot;</span><span class="s2">:</span>
+		<span class="s4">case </span><span class="s3">&quot;FunctionExpression&quot;</span><span class="s2">:</span>
+		<span class="s4">case </span><span class="s3">&quot;ArrowFunctionExpression&quot;</span><span class="s2">:</span>
+		<span class="s4">case </span><span class="s3">&quot;ClassDeclaration&quot;</span><span class="s2">:</span>
+		<span class="s4">case </span><span class="s3">&quot;ClassExpression&quot;</span><span class="s2">:</span>
+		<span class="s4">case </span><span class="s3">&quot;VariableDeclarator&quot;</span><span class="s2">:</span>
+			<span class="s4">return </span><span class="s2">parent.id !== node;</span>
+
+		<span class="s4">case </span><span class="s3">&quot;Property&quot;</span><span class="s2">:</span>
+		<span class="s4">case </span><span class="s3">&quot;PropertyDefinition&quot;</span><span class="s2">:</span>
+		<span class="s4">case </span><span class="s3">&quot;MethodDefinition&quot;</span><span class="s2">:</span>
+			<span class="s4">return </span><span class="s2">parent.key !== node || parent.computed || parent.shorthand;</span>
+
+		<span class="s4">case </span><span class="s3">&quot;AssignmentPattern&quot;</span><span class="s2">:</span>
+			<span class="s4">return </span><span class="s2">parent.key !== node;</span>
+
+		<span class="s4">default</span><span class="s2">:</span>
+			<span class="s4">return true</span><span class="s2">;</span>
+	<span class="s2">}</span>
+<span class="s2">}</span>
+
+<span class="s0">/**</span>
+ <span class="s0">* Updates the current segment with the head segment.</span>
+ <span class="s0">* This is similar to local branches and tracking branches of git.</span>
+ <span class="s0">*</span>
+ <span class="s0">* To separate the current and the head is in order to not make useless segments.</span>
+ <span class="s0">*</span>
+ <span class="s0">* In this process, both &quot;onCodePathSegmentStart&quot; and &quot;onCodePathSegmentEnd&quot;</span>
+ <span class="s0">* events are fired.</span>
+ <span class="s0">* </span><span class="s1">@param </span><span class="s0">{CodePathAnalyzer} analyzer The instance.</span>
+ <span class="s0">* </span><span class="s1">@param </span><span class="s0">{ASTNode} node The current AST node.</span>
+ <span class="s0">* </span><span class="s1">@returns </span><span class="s0">{void}</span>
+ <span class="s0">*/</span>
+<span class="s4">function </span><span class="s2">forwardCurrentToHead(analyzer, node) {</span>
+	<span class="s4">const </span><span class="s2">codePath = analyzer.codePath;</span>
+	<span class="s4">const </span><span class="s2">state = CodePath.getState(codePath);</span>
+	<span class="s4">const </span><span class="s2">currentSegments = state.currentSegments;</span>
+	<span class="s4">const </span><span class="s2">headSegments = state.headSegments;</span>
+	<span class="s4">const </span><span class="s2">end = Math.max(currentSegments.length, headSegments.length);</span>
+	<span class="s4">let </span><span class="s2">i, currentSegment, headSegment;</span>
+
+	<span class="s0">// Fires leaving events.</span>
+	<span class="s4">for </span><span class="s2">(i = </span><span class="s5">0</span><span class="s2">; i &lt; end; ++i) {</span>
+		<span class="s2">currentSegment = currentSegments[i];</span>
+		<span class="s2">headSegment = headSegments[i];</span>
+
+		<span class="s4">if </span><span class="s2">(currentSegment !== headSegment &amp;&amp; currentSegment) {</span>
+			<span class="s4">const </span><span class="s2">eventName = currentSegment.reachable</span>
+				<span class="s2">? </span><span class="s3">&quot;onCodePathSegmentEnd&quot;</span>
+				<span class="s2">: </span><span class="s3">&quot;onUnreachableCodePathSegmentEnd&quot;</span><span class="s2">;</span>
+
+			<span class="s2">debug.dump(</span><span class="s3">`</span><span class="s2">${eventName} ${currentSegment.id}</span><span class="s3">`</span><span class="s2">);</span>
+
+			<span class="s2">analyzer.emit(eventName, [currentSegment, node]);</span>
+		<span class="s2">}</span>
+	<span class="s2">}</span>
+
+	<span class="s0">// Update state.</span>
+	<span class="s2">state.currentSegments = headSegments;</span>
+
+	<span class="s0">// Fires entering events.</span>
+	<span class="s4">for </span><span class="s2">(i = </span><span class="s5">0</span><span class="s2">; i &lt; end; ++i) {</span>
+		<span class="s2">currentSegment = currentSegments[i];</span>
+		<span class="s2">headSegment = headSegments[i];</span>
+
+		<span class="s4">if </span><span class="s2">(currentSegment !== headSegment &amp;&amp; headSegment) {</span>
+			<span class="s4">const </span><span class="s2">eventName = headSegment.reachable</span>
+				<span class="s2">? </span><span class="s3">&quot;onCodePathSegmentStart&quot;</span>
+				<span class="s2">: </span><span class="s3">&quot;onUnreachableCodePathSegmentStart&quot;</span><span class="s2">;</span>
+
+			<span class="s2">debug.dump(</span><span class="s3">`</span><span class="s2">${eventName} ${headSegment.id}</span><span class="s3">`</span><span class="s2">);</span>
+			<span class="s2">CodePathSegment.markUsed(headSegment);</span>
+			<span class="s2">analyzer.emit(eventName, [headSegment, node]);</span>
+		<span class="s2">}</span>
+	<span class="s2">}</span>
+<span class="s2">}</span>
+
+<span class="s0">/**</span>
+ <span class="s0">* Updates the current segment with empty.</span>
+ <span class="s0">* This is called at the last of functions or the program.</span>
+ <span class="s0">* </span><span class="s1">@param </span><span class="s0">{CodePathAnalyzer} analyzer The instance.</span>
+ <span class="s0">* </span><span class="s1">@param </span><span class="s0">{ASTNode} node The current AST node.</span>
+ <span class="s0">* </span><span class="s1">@returns </span><span class="s0">{void}</span>
+ <span class="s0">*/</span>
+<span class="s4">function </span><span class="s2">leaveFromCurrentSegment(analyzer, node) {</span>
+	<span class="s4">const </span><span class="s2">state = CodePath.getState(analyzer.codePath);</span>
+	<span class="s4">const </span><span class="s2">currentSegments = state.currentSegments;</span>
+
+	<span class="s4">for </span><span class="s2">(</span><span class="s4">let </span><span class="s2">i = </span><span class="s5">0</span><span class="s2">; i &lt; currentSegments.length; ++i) {</span>
+		<span class="s4">const </span><span class="s2">currentSegment = currentSegments[i];</span>
+		<span class="s4">const </span><span class="s2">eventName = currentSegment.reachable</span>
+			<span class="s2">? </span><span class="s3">&quot;onCodePathSegmentEnd&quot;</span>
+			<span class="s2">: </span><span class="s3">&quot;onUnreachableCodePathSegmentEnd&quot;</span><span class="s2">;</span>
+
+		<span class="s2">debug.dump(</span><span class="s3">`</span><span class="s2">${eventName} ${currentSegment.id}</span><span class="s3">`</span><span class="s2">);</span>
+
+		<span class="s2">analyzer.emit(eventName, [currentSegment, node]);</span>
+	<span class="s2">}</span>
+
+	<span class="s2">state.currentSegments = [];</span>
+<span class="s2">}</span>
+
+<span class="s0">/**</span>
+ <span class="s0">* Updates the code path due to the position of a given node in the parent node</span>
+ <span class="s0">* thereof.</span>
+ <span class="s0">*</span>
+ <span class="s0">* For example, if the node is `parent.consequent`, this creates a fork from the</span>
+ <span class="s0">* current path.</span>
+ <span class="s0">* </span><span class="s1">@param </span><span class="s0">{CodePathAnalyzer} analyzer The instance.</span>
+ <span class="s0">* </span><span class="s1">@param </span><span class="s0">{ASTNode} node The current AST node.</span>
+ <span class="s0">* </span><span class="s1">@returns </span><span class="s0">{void}</span>
+ <span class="s0">*/</span>
+<span class="s4">function </span><span class="s2">preprocess(analyzer, node) {</span>
+	<span class="s4">const </span><span class="s2">codePath = analyzer.codePath;</span>
+	<span class="s4">const </span><span class="s2">state = CodePath.getState(codePath);</span>
+	<span class="s4">const </span><span class="s2">parent = node.parent;</span>
+
+	<span class="s4">switch </span><span class="s2">(parent.type) {</span>
+		<span class="s0">// The `arguments.length == 0` case is in `postprocess` function.</span>
+		<span class="s4">case </span><span class="s3">&quot;CallExpression&quot;</span><span class="s2">:</span>
+			<span class="s4">if </span><span class="s2">(</span>
+				<span class="s2">parent.optional === </span><span class="s4">true </span><span class="s2">&amp;&amp;</span>
+				<span class="s2">parent.arguments.length &gt;= </span><span class="s5">1 </span><span class="s2">&amp;&amp;</span>
+				<span class="s2">parent.arguments[</span><span class="s5">0</span><span class="s2">] === node</span>
+			<span class="s2">) {</span>
+				<span class="s2">state.makeOptionalRight();</span>
+			<span class="s2">}</span>
+			<span class="s4">break</span><span class="s2">;</span>
+		<span class="s4">case </span><span class="s3">&quot;MemberExpression&quot;</span><span class="s2">:</span>
+			<span class="s4">if </span><span class="s2">(parent.optional === </span><span class="s4">true </span><span class="s2">&amp;&amp; parent.property === node) {</span>
+				<span class="s2">state.makeOptionalRight();</span>
+			<span class="s2">}</span>
+			<span class="s4">break</span><span class="s2">;</span>
+
+		<span class="s4">case </span><span class="s3">&quot;LogicalExpression&quot;</span><span class="s2">:</span>
+			<span class="s4">if </span><span class="s2">(</span>
+				<span class="s2">parent.right === node &amp;&amp;</span>
+				<span class="s2">isHandledLogicalOperator(parent.operator)</span>
+			<span class="s2">) {</span>
+				<span class="s2">state.makeLogicalRight();</span>
+			<span class="s2">}</span>
+			<span class="s4">break</span><span class="s2">;</span>
+
+		<span class="s4">case </span><span class="s3">&quot;AssignmentExpression&quot;</span><span class="s2">:</span>
+			<span class="s4">if </span><span class="s2">(</span>
+				<span class="s2">parent.right === node &amp;&amp;</span>
+				<span class="s2">isLogicalAssignmentOperator(parent.operator)</span>
+			<span class="s2">) {</span>
+				<span class="s2">state.makeLogicalRight();</span>
+			<span class="s2">}</span>
+			<span class="s4">break</span><span class="s2">;</span>
+
+		<span class="s4">case </span><span class="s3">&quot;ConditionalExpression&quot;</span><span class="s2">:</span>
+		<span class="s4">case </span><span class="s3">&quot;IfStatement&quot;</span><span class="s2">:</span>
+			<span class="s0">/* 
+             * Fork if this node is at `consequent`/`alternate`. 
+             * `popForkContext()` exists at `IfStatement:exit` and 
+             * `ConditionalExpression:exit`. 
+             */</span>
+			<span class="s4">if </span><span class="s2">(parent.consequent === node) {</span>
+				<span class="s2">state.makeIfConsequent();</span>
+			<span class="s2">} </span><span class="s4">else if </span><span class="s2">(parent.alternate === node) {</span>
+				<span class="s2">state.makeIfAlternate();</span>
+			<span class="s2">}</span>
+			<span class="s4">break</span><span class="s2">;</span>
+
+		<span class="s4">case </span><span class="s3">&quot;SwitchCase&quot;</span><span class="s2">:</span>
+			<span class="s4">if </span><span class="s2">(parent.consequent[</span><span class="s5">0</span><span class="s2">] === node) {</span>
+				<span class="s2">state.makeSwitchCaseBody(</span><span class="s4">false</span><span class="s2">, !parent.test);</span>
+			<span class="s2">}</span>
+			<span class="s4">break</span><span class="s2">;</span>
+
+		<span class="s4">case </span><span class="s3">&quot;TryStatement&quot;</span><span class="s2">:</span>
+			<span class="s4">if </span><span class="s2">(parent.handler === node) {</span>
+				<span class="s2">state.makeCatchBlock();</span>
+			<span class="s2">} </span><span class="s4">else if </span><span class="s2">(parent.finalizer === node) {</span>
+				<span class="s2">state.makeFinallyBlock();</span>
+			<span class="s2">}</span>
+			<span class="s4">break</span><span class="s2">;</span>
+
+		<span class="s4">case </span><span class="s3">&quot;WhileStatement&quot;</span><span class="s2">:</span>
+			<span class="s4">if </span><span class="s2">(parent.test === node) {</span>
+				<span class="s2">state.makeWhileTest(getBooleanValueIfSimpleConstant(node));</span>
+			<span class="s2">} </span><span class="s4">else </span><span class="s2">{</span>
+				<span class="s2">assert(parent.body === node);</span>
+				<span class="s2">state.makeWhileBody();</span>
+			<span class="s2">}</span>
+			<span class="s4">break</span><span class="s2">;</span>
+
+		<span class="s4">case </span><span class="s3">&quot;DoWhileStatement&quot;</span><span class="s2">:</span>
+			<span class="s4">if </span><span class="s2">(parent.body === node) {</span>
+				<span class="s2">state.makeDoWhileBody();</span>
+			<span class="s2">} </span><span class="s4">else </span><span class="s2">{</span>
+				<span class="s2">assert(parent.test === node);</span>
+				<span class="s2">state.makeDoWhileTest(getBooleanValueIfSimpleConstant(node));</span>
+			<span class="s2">}</span>
+			<span class="s4">break</span><span class="s2">;</span>
+
+		<span class="s4">case </span><span class="s3">&quot;ForStatement&quot;</span><span class="s2">:</span>
+			<span class="s4">if </span><span class="s2">(parent.test === node) {</span>
+				<span class="s2">state.makeForTest(getBooleanValueIfSimpleConstant(node));</span>
+			<span class="s2">} </span><span class="s4">else if </span><span class="s2">(parent.update === node) {</span>
+				<span class="s2">state.makeForUpdate();</span>
+			<span class="s2">} </span><span class="s4">else if </span><span class="s2">(parent.body === node) {</span>
+				<span class="s2">state.makeForBody();</span>
+			<span class="s2">}</span>
+			<span class="s4">break</span><span class="s2">;</span>
+
+		<span class="s4">case </span><span class="s3">&quot;ForInStatement&quot;</span><span class="s2">:</span>
+		<span class="s4">case </span><span class="s3">&quot;ForOfStatement&quot;</span><span class="s2">:</span>
+			<span class="s4">if </span><span class="s2">(parent.left === node) {</span>
+				<span class="s2">state.makeForInOfLeft();</span>
+			<span class="s2">} </span><span class="s4">else if </span><span class="s2">(parent.right === node) {</span>
+				<span class="s2">state.makeForInOfRight();</span>
+			<span class="s2">} </span><span class="s4">else </span><span class="s2">{</span>
+				<span class="s2">assert(parent.body === node);</span>
+				<span class="s2">state.makeForInOfBody();</span>
+			<span class="s2">}</span>
+			<span class="s4">break</span><span class="s2">;</span>
+
+		<span class="s4">case </span><span class="s3">&quot;AssignmentPattern&quot;</span><span class="s2">:</span>
+			<span class="s0">/* 
+             * Fork if this node is at `right`. 
+             * `left` is executed always, so it uses the current path. 
+             * `popForkContext()` exists at `AssignmentPattern:exit`. 
+             */</span>
+			<span class="s4">if </span><span class="s2">(parent.right === node) {</span>
+				<span class="s2">state.pushForkContext();</span>
+				<span class="s2">state.forkBypassPath();</span>
+				<span class="s2">state.forkPath();</span>
+			<span class="s2">}</span>
+			<span class="s4">break</span><span class="s2">;</span>
+
+		<span class="s4">default</span><span class="s2">:</span>
+			<span class="s4">break</span><span class="s2">;</span>
+	<span class="s2">}</span>
+<span class="s2">}</span>
+
+<span class="s0">/**</span>
+ <span class="s0">* Updates the code path due to the type of a given node in entering.</span>
+ <span class="s0">* </span><span class="s1">@param </span><span class="s0">{CodePathAnalyzer} analyzer The instance.</span>
+ <span class="s0">* </span><span class="s1">@param </span><span class="s0">{ASTNode} node The current AST node.</span>
+ <span class="s0">* </span><span class="s1">@returns </span><span class="s0">{void}</span>
+ <span class="s0">*/</span>
+<span class="s4">function </span><span class="s2">processCodePathToEnter(analyzer, node) {</span>
+	<span class="s4">let </span><span class="s2">codePath = analyzer.codePath;</span>
+	<span class="s4">let </span><span class="s2">state = codePath &amp;&amp; CodePath.getState(codePath);</span>
+	<span class="s4">const </span><span class="s2">parent = node.parent;</span>
+
+	<span class="s0">/**</span>
+	 <span class="s0">* Creates a new code path and trigger the onCodePathStart event</span>
+	 <span class="s0">* based on the currently selected node.</span>
+	 <span class="s0">* </span><span class="s1">@param </span><span class="s0">{string} origin The reason the code path was started.</span>
+	 <span class="s0">* </span><span class="s1">@returns </span><span class="s0">{void}</span>
+	 <span class="s0">*/</span>
+	<span class="s4">function </span><span class="s2">startCodePath(origin) {</span>
+		<span class="s4">if </span><span class="s2">(codePath) {</span>
+			<span class="s0">// Emits onCodePathSegmentStart events if updated.</span>
+			<span class="s2">forwardCurrentToHead(analyzer, node);</span>
+			<span class="s2">debug.dumpState(node, state, </span><span class="s4">false</span><span class="s2">);</span>
+		<span class="s2">}</span>
+
+		<span class="s0">// Create the code path of this scope.</span>
+		<span class="s2">codePath = analyzer.codePath = </span><span class="s4">new </span><span class="s2">CodePath({</span>
+			<span class="s2">id: analyzer.idGenerator.next(),</span>
+			<span class="s2">origin,</span>
+			<span class="s2">upper: codePath,</span>
+			<span class="s2">onLooped: analyzer.onLooped,</span>
+		<span class="s2">});</span>
+		<span class="s2">state = CodePath.getState(codePath);</span>
+
+		<span class="s0">// Emits onCodePathStart events.</span>
+		<span class="s2">debug.dump(</span><span class="s3">`onCodePathStart </span><span class="s2">${codePath.id}</span><span class="s3">`</span><span class="s2">);</span>
+		<span class="s2">analyzer.emit(</span><span class="s3">&quot;onCodePathStart&quot;</span><span class="s2">, [codePath, node]);</span>
+	<span class="s2">}</span>
+
+	<span class="s0">/* 
+     * Special case: The right side of class field initializer is considered 
+     * to be its own function, so we need to start a new code path in this 
+     * case. 
+     */</span>
+	<span class="s4">if </span><span class="s2">(isPropertyDefinitionValue(node)) {</span>
+		<span class="s2">startCodePath(</span><span class="s3">&quot;class-field-initializer&quot;</span><span class="s2">);</span>
+
+		<span class="s0">/* 
+         * Intentional fall through because `node` needs to also be 
+         * processed by the code below. For example, if we have: 
+         * 
+         * class Foo { 
+         *     a = () =&gt; {} 
+         * } 
+         * 
+         * In this case, we also need start a second code path. 
+         */</span>
+	<span class="s2">}</span>
+
+	<span class="s4">switch </span><span class="s2">(node.type) {</span>
+		<span class="s4">case </span><span class="s3">&quot;Program&quot;</span><span class="s2">:</span>
+			<span class="s2">startCodePath(</span><span class="s3">&quot;program&quot;</span><span class="s2">);</span>
+			<span class="s4">break</span><span class="s2">;</span>
+
+		<span class="s4">case </span><span class="s3">&quot;FunctionDeclaration&quot;</span><span class="s2">:</span>
+		<span class="s4">case </span><span class="s3">&quot;FunctionExpression&quot;</span><span class="s2">:</span>
+		<span class="s4">case </span><span class="s3">&quot;ArrowFunctionExpression&quot;</span><span class="s2">:</span>
+			<span class="s2">startCodePath(</span><span class="s3">&quot;function&quot;</span><span class="s2">);</span>
+			<span class="s4">break</span><span class="s2">;</span>
+
+		<span class="s4">case </span><span class="s3">&quot;StaticBlock&quot;</span><span class="s2">:</span>
+			<span class="s2">startCodePath(</span><span class="s3">&quot;class-static-block&quot;</span><span class="s2">);</span>
+			<span class="s4">break</span><span class="s2">;</span>
+
+		<span class="s4">case </span><span class="s3">&quot;ChainExpression&quot;</span><span class="s2">:</span>
+			<span class="s2">state.pushChainContext();</span>
+			<span class="s4">break</span><span class="s2">;</span>
+		<span class="s4">case </span><span class="s3">&quot;CallExpression&quot;</span><span class="s2">:</span>
+			<span class="s4">if </span><span class="s2">(node.optional === </span><span class="s4">true</span><span class="s2">) {</span>
+				<span class="s2">state.makeOptionalNode();</span>
+			<span class="s2">}</span>
+			<span class="s4">break</span><span class="s2">;</span>
+		<span class="s4">case </span><span class="s3">&quot;MemberExpression&quot;</span><span class="s2">:</span>
+			<span class="s4">if </span><span class="s2">(node.optional === </span><span class="s4">true</span><span class="s2">) {</span>
+				<span class="s2">state.makeOptionalNode();</span>
+			<span class="s2">}</span>
+			<span class="s4">break</span><span class="s2">;</span>
+
+		<span class="s4">case </span><span class="s3">&quot;LogicalExpression&quot;</span><span class="s2">:</span>
+			<span class="s4">if </span><span class="s2">(isHandledLogicalOperator(node.operator)) {</span>
+				<span class="s2">state.pushChoiceContext(</span>
+					<span class="s2">node.operator,</span>
+					<span class="s2">isForkingByTrueOrFalse(node),</span>
+				<span class="s2">);</span>
+			<span class="s2">}</span>
+			<span class="s4">break</span><span class="s2">;</span>
+
+		<span class="s4">case </span><span class="s3">&quot;AssignmentExpression&quot;</span><span class="s2">:</span>
+			<span class="s4">if </span><span class="s2">(isLogicalAssignmentOperator(node.operator)) {</span>
+				<span class="s2">state.pushChoiceContext(</span>
+					<span class="s2">node.operator.slice(</span><span class="s5">0</span><span class="s2">, -</span><span class="s5">1</span><span class="s2">), </span><span class="s0">// removes `=` from the end</span>
+					<span class="s2">isForkingByTrueOrFalse(node),</span>
+				<span class="s2">);</span>
+			<span class="s2">}</span>
+			<span class="s4">break</span><span class="s2">;</span>
+
+		<span class="s4">case </span><span class="s3">&quot;ConditionalExpression&quot;</span><span class="s2">:</span>
+		<span class="s4">case </span><span class="s3">&quot;IfStatement&quot;</span><span class="s2">:</span>
+			<span class="s2">state.pushChoiceContext(</span><span class="s3">&quot;test&quot;</span><span class="s2">, </span><span class="s4">false</span><span class="s2">);</span>
+			<span class="s4">break</span><span class="s2">;</span>
+
+		<span class="s4">case </span><span class="s3">&quot;SwitchStatement&quot;</span><span class="s2">:</span>
+			<span class="s2">state.pushSwitchContext(</span>
+				<span class="s2">node.cases.some(isCaseNode),</span>
+				<span class="s2">getLabel(node),</span>
+			<span class="s2">);</span>
+			<span class="s4">break</span><span class="s2">;</span>
+
+		<span class="s4">case </span><span class="s3">&quot;TryStatement&quot;</span><span class="s2">:</span>
+			<span class="s2">state.pushTryContext(Boolean(node.finalizer));</span>
+			<span class="s4">break</span><span class="s2">;</span>
+
+		<span class="s4">case </span><span class="s3">&quot;SwitchCase&quot;</span><span class="s2">:</span>
+			<span class="s0">/* 
+             * Fork if this node is after the 2st node in `cases`. 
+             * It's similar to `else` blocks. 
+             * The next `test` node is processed in this path. 
+             */</span>
+			<span class="s4">if </span><span class="s2">(parent.discriminant !== node &amp;&amp; parent.cases[</span><span class="s5">0</span><span class="s2">] !== node) {</span>
+				<span class="s2">state.forkPath();</span>
+			<span class="s2">}</span>
+			<span class="s4">break</span><span class="s2">;</span>
+
+		<span class="s4">case </span><span class="s3">&quot;WhileStatement&quot;</span><span class="s2">:</span>
+		<span class="s4">case </span><span class="s3">&quot;DoWhileStatement&quot;</span><span class="s2">:</span>
+		<span class="s4">case </span><span class="s3">&quot;ForStatement&quot;</span><span class="s2">:</span>
+		<span class="s4">case </span><span class="s3">&quot;ForInStatement&quot;</span><span class="s2">:</span>
+		<span class="s4">case </span><span class="s3">&quot;ForOfStatement&quot;</span><span class="s2">:</span>
+			<span class="s2">state.pushLoopContext(node.type, getLabel(node));</span>
+			<span class="s4">break</span><span class="s2">;</span>
+
+		<span class="s4">case </span><span class="s3">&quot;LabeledStatement&quot;</span><span class="s2">:</span>
+			<span class="s4">if </span><span class="s2">(!breakableTypePattern.test(node.body.type)) {</span>
+				<span class="s2">state.pushBreakContext(</span><span class="s4">false</span><span class="s2">, node.label.name);</span>
+			<span class="s2">}</span>
+			<span class="s4">break</span><span class="s2">;</span>
+
+		<span class="s4">default</span><span class="s2">:</span>
+			<span class="s4">break</span><span class="s2">;</span>
+	<span class="s2">}</span>
+
+	<span class="s0">// Emits onCodePathSegmentStart events if updated.</span>
+	<span class="s2">forwardCurrentToHead(analyzer, node);</span>
+	<span class="s2">debug.dumpState(node, state, </span><span class="s4">false</span><span class="s2">);</span>
+<span class="s2">}</span>
+
+<span class="s0">/**</span>
+ <span class="s0">* Updates the code path due to the type of a given node in leaving.</span>
+ <span class="s0">* </span><span class="s1">@param </span><span class="s0">{CodePathAnalyzer} analyzer The instance.</span>
+ <span class="s0">* </span><span class="s1">@param </span><span class="s0">{ASTNode} node The current AST node.</span>
+ <span class="s0">* </span><span class="s1">@returns </span><span class="s0">{void}</span>
+ <span class="s0">*/</span>
+<span class="s4">function </span><span class="s2">processCodePathToExit(analyzer, node) {</span>
+	<span class="s4">const </span><span class="s2">codePath = analyzer.codePath;</span>
+	<span class="s4">const </span><span class="s2">state = CodePath.getState(codePath);</span>
+	<span class="s4">let </span><span class="s2">dontForward = </span><span class="s4">false</span><span class="s2">;</span>
+
+	<span class="s4">switch </span><span class="s2">(node.type) {</span>
+		<span class="s4">case </span><span class="s3">&quot;ChainExpression&quot;</span><span class="s2">:</span>
+			<span class="s2">state.popChainContext();</span>
+			<span class="s4">break</span><span class="s2">;</span>
+
+		<span class="s4">case </span><span class="s3">&quot;IfStatement&quot;</span><span class="s2">:</span>
+		<span class="s4">case </span><span class="s3">&quot;ConditionalExpression&quot;</span><span class="s2">:</span>
+			<span class="s2">state.popChoiceContext();</span>
+			<span class="s4">break</span><span class="s2">;</span>
+
+		<span class="s4">case </span><span class="s3">&quot;LogicalExpression&quot;</span><span class="s2">:</span>
+			<span class="s4">if </span><span class="s2">(isHandledLogicalOperator(node.operator)) {</span>
+				<span class="s2">state.popChoiceContext();</span>
+			<span class="s2">}</span>
+			<span class="s4">break</span><span class="s2">;</span>
+
+		<span class="s4">case </span><span class="s3">&quot;AssignmentExpression&quot;</span><span class="s2">:</span>
+			<span class="s4">if </span><span class="s2">(isLogicalAssignmentOperator(node.operator)) {</span>
+				<span class="s2">state.popChoiceContext();</span>
+			<span class="s2">}</span>
+			<span class="s4">break</span><span class="s2">;</span>
+
+		<span class="s4">case </span><span class="s3">&quot;SwitchStatement&quot;</span><span class="s2">:</span>
+			<span class="s2">state.popSwitchContext();</span>
+			<span class="s4">break</span><span class="s2">;</span>
+
+		<span class="s4">case </span><span class="s3">&quot;SwitchCase&quot;</span><span class="s2">:</span>
+			<span class="s0">/* 
+             * This is the same as the process at the 1st `consequent` node in 
+             * `preprocess` function. 
+             * Must do if this `consequent` is empty. 
+             */</span>
+			<span class="s4">if </span><span class="s2">(node.consequent.length === </span><span class="s5">0</span><span class="s2">) {</span>
+				<span class="s2">state.makeSwitchCaseBody(</span><span class="s4">true</span><span class="s2">, !node.test);</span>
+			<span class="s2">}</span>
+			<span class="s4">if </span><span class="s2">(state.forkContext.reachable) {</span>
+				<span class="s2">dontForward = </span><span class="s4">true</span><span class="s2">;</span>
+			<span class="s2">}</span>
+			<span class="s4">break</span><span class="s2">;</span>
+
+		<span class="s4">case </span><span class="s3">&quot;TryStatement&quot;</span><span class="s2">:</span>
+			<span class="s2">state.popTryContext();</span>
+			<span class="s4">break</span><span class="s2">;</span>
+
+		<span class="s4">case </span><span class="s3">&quot;BreakStatement&quot;</span><span class="s2">:</span>
+			<span class="s2">forwardCurrentToHead(analyzer, node);</span>
+			<span class="s2">state.makeBreak(node.label &amp;&amp; node.label.name);</span>
+			<span class="s2">dontForward = </span><span class="s4">true</span><span class="s2">;</span>
+			<span class="s4">break</span><span class="s2">;</span>
+
+		<span class="s4">case </span><span class="s3">&quot;ContinueStatement&quot;</span><span class="s2">:</span>
+			<span class="s2">forwardCurrentToHead(analyzer, node);</span>
+			<span class="s2">state.makeContinue(node.label &amp;&amp; node.label.name);</span>
+			<span class="s2">dontForward = </span><span class="s4">true</span><span class="s2">;</span>
+			<span class="s4">break</span><span class="s2">;</span>
+
+		<span class="s4">case </span><span class="s3">&quot;ReturnStatement&quot;</span><span class="s2">:</span>
+			<span class="s2">forwardCurrentToHead(analyzer, node);</span>
+			<span class="s2">state.makeReturn();</span>
+			<span class="s2">dontForward = </span><span class="s4">true</span><span class="s2">;</span>
+			<span class="s4">break</span><span class="s2">;</span>
+
+		<span class="s4">case </span><span class="s3">&quot;ThrowStatement&quot;</span><span class="s2">:</span>
+			<span class="s2">forwardCurrentToHead(analyzer, node);</span>
+			<span class="s2">state.makeThrow();</span>
+			<span class="s2">dontForward = </span><span class="s4">true</span><span class="s2">;</span>
+			<span class="s4">break</span><span class="s2">;</span>
+
+		<span class="s4">case </span><span class="s3">&quot;Identifier&quot;</span><span class="s2">:</span>
+			<span class="s4">if </span><span class="s2">(isIdentifierReference(node)) {</span>
+				<span class="s2">state.makeFirstThrowablePathInTryBlock();</span>
+				<span class="s2">dontForward = </span><span class="s4">true</span><span class="s2">;</span>
+			<span class="s2">}</span>
+			<span class="s4">break</span><span class="s2">;</span>
+
+		<span class="s4">case </span><span class="s3">&quot;CallExpression&quot;</span><span class="s2">:</span>
+		<span class="s4">case </span><span class="s3">&quot;ImportExpression&quot;</span><span class="s2">:</span>
+		<span class="s4">case </span><span class="s3">&quot;MemberExpression&quot;</span><span class="s2">:</span>
+		<span class="s4">case </span><span class="s3">&quot;NewExpression&quot;</span><span class="s2">:</span>
+		<span class="s4">case </span><span class="s3">&quot;YieldExpression&quot;</span><span class="s2">:</span>
+			<span class="s2">state.makeFirstThrowablePathInTryBlock();</span>
+			<span class="s4">break</span><span class="s2">;</span>
+
+		<span class="s4">case </span><span class="s3">&quot;WhileStatement&quot;</span><span class="s2">:</span>
+		<span class="s4">case </span><span class="s3">&quot;DoWhileStatement&quot;</span><span class="s2">:</span>
+		<span class="s4">case </span><span class="s3">&quot;ForStatement&quot;</span><span class="s2">:</span>
+		<span class="s4">case </span><span class="s3">&quot;ForInStatement&quot;</span><span class="s2">:</span>
+		<span class="s4">case </span><span class="s3">&quot;ForOfStatement&quot;</span><span class="s2">:</span>
+			<span class="s2">state.popLoopContext();</span>
+			<span class="s4">break</span><span class="s2">;</span>
+
+		<span class="s4">case </span><span class="s3">&quot;AssignmentPattern&quot;</span><span class="s2">:</span>
+			<span class="s2">state.popForkContext();</span>
+			<span class="s4">break</span><span class="s2">;</span>
+
+		<span class="s4">case </span><span class="s3">&quot;LabeledStatement&quot;</span><span class="s2">:</span>
+			<span class="s4">if </span><span class="s2">(!breakableTypePattern.test(node.body.type)) {</span>
+				<span class="s2">state.popBreakContext();</span>
+			<span class="s2">}</span>
+			<span class="s4">break</span><span class="s2">;</span>
+
+		<span class="s4">default</span><span class="s2">:</span>
+			<span class="s4">break</span><span class="s2">;</span>
+	<span class="s2">}</span>
+
+	<span class="s0">// Emits onCodePathSegmentStart events if updated.</span>
+	<span class="s4">if </span><span class="s2">(!dontForward) {</span>
+		<span class="s2">forwardCurrentToHead(analyzer, node);</span>
+	<span class="s2">}</span>
+	<span class="s2">debug.dumpState(node, state, </span><span class="s4">true</span><span class="s2">);</span>
+<span class="s2">}</span>
+
+<span class="s0">/**</span>
+ <span class="s0">* Updates the code path to finalize the current code path.</span>
+ <span class="s0">* </span><span class="s1">@param </span><span class="s0">{CodePathAnalyzer} analyzer The instance.</span>
+ <span class="s0">* </span><span class="s1">@param </span><span class="s0">{ASTNode} node The current AST node.</span>
+ <span class="s0">* </span><span class="s1">@returns </span><span class="s0">{void}</span>
+ <span class="s0">*/</span>
+<span class="s4">function </span><span class="s2">postprocess(analyzer, node) {</span>
+	<span class="s0">/**</span>
+	 <span class="s0">* Ends the code path for the current node.</span>
+	 <span class="s0">* </span><span class="s1">@returns </span><span class="s0">{void}</span>
+	 <span class="s0">*/</span>
+	<span class="s4">function </span><span class="s2">endCodePath() {</span>
+		<span class="s4">let </span><span class="s2">codePath = analyzer.codePath;</span>
+
+		<span class="s0">// Mark the current path as the final node.</span>
+		<span class="s2">CodePath.getState(codePath).makeFinal();</span>
+
+		<span class="s0">// Emits onCodePathSegmentEnd event of the current segments.</span>
+		<span class="s2">leaveFromCurrentSegment(analyzer, node);</span>
+
+		<span class="s0">// Emits onCodePathEnd event of this code path.</span>
+		<span class="s2">debug.dump(</span><span class="s3">`onCodePathEnd </span><span class="s2">${codePath.id}</span><span class="s3">`</span><span class="s2">);</span>
+		<span class="s2">analyzer.emit(</span><span class="s3">&quot;onCodePathEnd&quot;</span><span class="s2">, [codePath, node]);</span>
+		<span class="s2">debug.dumpDot(codePath);</span>
+
+		<span class="s2">codePath = analyzer.codePath = analyzer.codePath.upper;</span>
+		<span class="s4">if </span><span class="s2">(codePath) {</span>
+			<span class="s2">debug.dumpState(node, CodePath.getState(codePath), </span><span class="s4">true</span><span class="s2">);</span>
+		<span class="s2">}</span>
+	<span class="s2">}</span>
+
+	<span class="s4">switch </span><span class="s2">(node.type) {</span>
+		<span class="s4">case </span><span class="s3">&quot;Program&quot;</span><span class="s2">:</span>
+		<span class="s4">case </span><span class="s3">&quot;FunctionDeclaration&quot;</span><span class="s2">:</span>
+		<span class="s4">case </span><span class="s3">&quot;FunctionExpression&quot;</span><span class="s2">:</span>
+		<span class="s4">case </span><span class="s3">&quot;ArrowFunctionExpression&quot;</span><span class="s2">:</span>
+		<span class="s4">case </span><span class="s3">&quot;StaticBlock&quot;</span><span class="s2">: {</span>
+			<span class="s2">endCodePath();</span>
+			<span class="s4">break</span><span class="s2">;</span>
+		<span class="s2">}</span>
+
+		<span class="s0">// The `arguments.length &gt;= 1` case is in `preprocess` function.</span>
+		<span class="s4">case </span><span class="s3">&quot;CallExpression&quot;</span><span class="s2">:</span>
+			<span class="s4">if </span><span class="s2">(node.optional === </span><span class="s4">true </span><span class="s2">&amp;&amp; node.arguments.length === </span><span class="s5">0</span><span class="s2">) {</span>
+				<span class="s2">CodePath.getState(analyzer.codePath).makeOptionalRight();</span>
+			<span class="s2">}</span>
+			<span class="s4">break</span><span class="s2">;</span>
+
+		<span class="s4">default</span><span class="s2">:</span>
+			<span class="s4">break</span><span class="s2">;</span>
+	<span class="s2">}</span>
+
+	<span class="s0">/* 
+     * Special case: The right side of class field initializer is considered 
+     * to be its own function, so we need to end a code path in this 
+     * case. 
+     * 
+     * We need to check after the other checks in order to close the 
+     * code paths in the correct order for code like this: 
+     * 
+     * 
+     * class Foo { 
+     *     a = () =&gt; {} 
+     * } 
+     * 
+     * In this case, The ArrowFunctionExpression code path is closed first 
+     * and then we need to close the code path for the PropertyDefinition 
+     * value. 
+     */</span>
+	<span class="s4">if </span><span class="s2">(isPropertyDefinitionValue(node)) {</span>
+		<span class="s2">endCodePath();</span>
+	<span class="s2">}</span>
+<span class="s2">}</span>
+
+<span class="s0">//------------------------------------------------------------------------------</span>
+<span class="s0">// Public Interface</span>
+<span class="s0">//------------------------------------------------------------------------------</span>
+
+<span class="s0">/**</span>
+ <span class="s0">* The class to analyze code paths.</span>
+ <span class="s0">* This class implements the EventGenerator interface.</span>
+ <span class="s0">*/</span>
+<span class="s4">class </span><span class="s2">CodePathAnalyzer {</span>
+	<span class="s0">/**</span>
+	 <span class="s0">* </span><span class="s1">@param </span><span class="s0">{EventGenerator} eventGenerator An event generator to wrap.</span>
+	 <span class="s0">*/</span>
+	<span class="s2">constructor(eventGenerator) {</span>
+		<span class="s4">this</span><span class="s2">.original = eventGenerator;</span>
+		<span class="s4">this</span><span class="s2">.emit = eventGenerator.emit;</span>
+		<span class="s4">this</span><span class="s2">.codePath = </span><span class="s4">null</span><span class="s2">;</span>
+		<span class="s4">this</span><span class="s2">.idGenerator = </span><span class="s4">new </span><span class="s2">IdGenerator(</span><span class="s3">&quot;s&quot;</span><span class="s2">);</span>
+		<span class="s4">this</span><span class="s2">.currentNode = </span><span class="s4">null</span><span class="s2">;</span>
+		<span class="s4">this</span><span class="s2">.onLooped = </span><span class="s4">this</span><span class="s2">.onLooped.bind(</span><span class="s4">this</span><span class="s2">);</span>
+	<span class="s2">}</span>
+
+	<span class="s0">/**</span>
+	 <span class="s0">* Does the process to enter a given AST node.</span>
+	 <span class="s0">* This updates state of analysis and calls `enterNode` of the wrapped.</span>
+	 <span class="s0">* </span><span class="s1">@param </span><span class="s0">{ASTNode} node A node which is entering.</span>
+	 <span class="s0">* </span><span class="s1">@returns </span><span class="s0">{void}</span>
+	 <span class="s0">*/</span>
+	<span class="s2">enterNode(node) {</span>
+		<span class="s4">this</span><span class="s2">.currentNode = node;</span>
+
+		<span class="s0">// Updates the code path due to node's position in its parent node.</span>
+		<span class="s4">if </span><span class="s2">(node.parent) {</span>
+			<span class="s2">preprocess(</span><span class="s4">this</span><span class="s2">, node);</span>
+		<span class="s2">}</span>
+
+		<span class="s0">/* 
+         * Updates the code path. 
+         * And emits onCodePathStart/onCodePathSegmentStart events. 
+         */</span>
+		<span class="s2">processCodePathToEnter(</span><span class="s4">this</span><span class="s2">, node);</span>
+
+		<span class="s0">// Emits node events.</span>
+		<span class="s4">this</span><span class="s2">.original.enterNode(node);</span>
+
+		<span class="s4">this</span><span class="s2">.currentNode = </span><span class="s4">null</span><span class="s2">;</span>
+	<span class="s2">}</span>
+
+	<span class="s0">/**</span>
+	 <span class="s0">* Does the process to leave a given AST node.</span>
+	 <span class="s0">* This updates state of analysis and calls `leaveNode` of the wrapped.</span>
+	 <span class="s0">* </span><span class="s1">@param </span><span class="s0">{ASTNode} node A node which is leaving.</span>
+	 <span class="s0">* </span><span class="s1">@returns </span><span class="s0">{void}</span>
+	 <span class="s0">*/</span>
+	<span class="s2">leaveNode(node) {</span>
+		<span class="s4">this</span><span class="s2">.currentNode = node;</span>
+
+		<span class="s0">/* 
+         * Updates the code path. 
+         * And emits onCodePathStart/onCodePathSegmentStart events. 
+         */</span>
+		<span class="s2">processCodePathToExit(</span><span class="s4">this</span><span class="s2">, node);</span>
+
+		<span class="s0">// Emits node events.</span>
+		<span class="s4">this</span><span class="s2">.original.leaveNode(node);</span>
+
+		<span class="s0">// Emits the last onCodePathStart/onCodePathSegmentStart events.</span>
+		<span class="s2">postprocess(</span><span class="s4">this</span><span class="s2">, node);</span>
+
+		<span class="s4">this</span><span class="s2">.currentNode = </span><span class="s4">null</span><span class="s2">;</span>
+	<span class="s2">}</span>
+
+	<span class="s0">/**</span>
+	 <span class="s0">* This is called on a code path looped.</span>
+	 <span class="s0">* Then this raises a looped event.</span>
+	 <span class="s0">* </span><span class="s1">@param </span><span class="s0">{CodePathSegment} fromSegment A segment of prev.</span>
+	 <span class="s0">* </span><span class="s1">@param </span><span class="s0">{CodePathSegment} toSegment A segment of next.</span>
+	 <span class="s0">* </span><span class="s1">@returns </span><span class="s0">{void}</span>
+	 <span class="s0">*/</span>
+	<span class="s2">onLooped(fromSegment, toSegment) {</span>
+		<span class="s4">if </span><span class="s2">(fromSegment.reachable &amp;&amp; toSegment.reachable) {</span>
+			<span class="s2">debug.dump(</span>
+				<span class="s3">`onCodePathSegmentLoop </span><span class="s2">${fromSegment.id} </span><span class="s3">-&gt; </span><span class="s2">${toSegment.id}</span><span class="s3">`</span><span class="s2">,</span>
+			<span class="s2">);</span>
+			<span class="s4">this</span><span class="s2">.emit(</span><span class="s3">&quot;onCodePathSegmentLoop&quot;</span><span class="s2">, [</span>
+				<span class="s2">fromSegment,</span>
+				<span class="s2">toSegment,</span>
+				<span class="s4">this</span><span class="s2">.currentNode,</span>
+			<span class="s2">]);</span>
+		<span class="s2">}</span>
+	<span class="s2">}</span>
+<span class="s2">}</span>
+
+<span class="s2">module.exports = CodePathAnalyzer;</span>
+</pre>
+</body>
+</html>

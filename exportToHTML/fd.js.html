@@ -1,0 +1,288 @@
+<html>
+<head>
+<title>fd.js</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #067d17;}
+.s1 { color: #080808;}
+.s2 { color: #0033b3;}
+.s3 { color: #1750eb;}
+.s4 { color: #8c8c8c; font-style: italic;}
+</style>
+</head>
+<body bgcolor="#ffffff">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#c0c0c0" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+fd.js</font>
+</center></td></tr></table>
+<pre><span class="s0">&quot;use strict&quot;</span><span class="s1">;</span>
+<span class="s1">Object.defineProperty(exports, </span><span class="s0">&quot;__esModule&quot;</span><span class="s1">, { value: </span><span class="s2">true </span><span class="s1">});</span>
+<span class="s1">exports.AsyncTable = exports.SyncTable = exports.FileDescriptorTable = exports.toFileStat = exports.toFileType = exports.StandardOutput = exports.FileDescriptor = exports.concatBuffer = </span><span class="s2">void </span><span class="s3">0</span><span class="s1">;</span>
+<span class="s2">const </span><span class="s1">types_1 = require(</span><span class="s0">&quot;./types&quot;</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">rights_1 = require(</span><span class="s0">&quot;./rights&quot;</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">error_1 = require(</span><span class="s0">&quot;./error&quot;</span><span class="s1">);</span>
+<span class="s2">function </span><span class="s1">concatBuffer(buffers, size) {</span>
+    <span class="s2">let </span><span class="s1">total = </span><span class="s3">0</span><span class="s1">;</span>
+    <span class="s2">if </span><span class="s1">(</span><span class="s2">typeof </span><span class="s1">size === </span><span class="s0">'number' </span><span class="s1">&amp;&amp; size &gt;= </span><span class="s3">0</span><span class="s1">) {</span>
+        <span class="s1">total = size;</span>
+    <span class="s1">}</span>
+    <span class="s2">else </span><span class="s1">{</span>
+        <span class="s2">for </span><span class="s1">(</span><span class="s2">let </span><span class="s1">i = </span><span class="s3">0</span><span class="s1">; i &lt; buffers.length; i++) {</span>
+            <span class="s2">const </span><span class="s1">buffer = buffers[i];</span>
+            <span class="s1">total += buffer.length;</span>
+        <span class="s1">}</span>
+    <span class="s1">}</span>
+    <span class="s2">let </span><span class="s1">pos = </span><span class="s3">0</span><span class="s1">;</span>
+    <span class="s2">const </span><span class="s1">ret = </span><span class="s2">new </span><span class="s1">Uint8Array(total);</span>
+    <span class="s2">for </span><span class="s1">(</span><span class="s2">let </span><span class="s1">i = </span><span class="s3">0</span><span class="s1">; i &lt; buffers.length; i++) {</span>
+        <span class="s2">const </span><span class="s1">buffer = buffers[i];</span>
+        <span class="s1">ret.set(buffer, pos);</span>
+        <span class="s1">pos += buffer.length;</span>
+    <span class="s1">}</span>
+    <span class="s2">return </span><span class="s1">ret;</span>
+<span class="s1">}</span>
+<span class="s1">exports.concatBuffer = concatBuffer;</span>
+<span class="s2">class </span><span class="s1">FileDescriptor {</span>
+    <span class="s1">constructor(id, fd, path, realPath, type, rightsBase, rightsInheriting, preopen) {</span>
+        <span class="s2">this</span><span class="s1">.id = id;</span>
+        <span class="s2">this</span><span class="s1">.fd = fd;</span>
+        <span class="s2">this</span><span class="s1">.path = path;</span>
+        <span class="s2">this</span><span class="s1">.realPath = realPath;</span>
+        <span class="s2">this</span><span class="s1">.type = type;</span>
+        <span class="s2">this</span><span class="s1">.rightsBase = rightsBase;</span>
+        <span class="s2">this</span><span class="s1">.rightsInheriting = rightsInheriting;</span>
+        <span class="s2">this</span><span class="s1">.preopen = preopen;</span>
+        <span class="s2">this</span><span class="s1">.pos = BigInt(</span><span class="s3">0</span><span class="s1">);</span>
+        <span class="s2">this</span><span class="s1">.size = BigInt(</span><span class="s3">0</span><span class="s1">);</span>
+    <span class="s1">}</span>
+    <span class="s1">seek(offset, whence) {</span>
+        <span class="s2">if </span><span class="s1">(whence === types_1.WasiWhence.SET) {</span>
+            <span class="s2">this</span><span class="s1">.pos = BigInt(offset);</span>
+        <span class="s1">}</span>
+        <span class="s2">else if </span><span class="s1">(whence === types_1.WasiWhence.CUR) {</span>
+            <span class="s2">this</span><span class="s1">.pos += BigInt(offset);</span>
+        <span class="s1">}</span>
+        <span class="s2">else if </span><span class="s1">(whence === types_1.WasiWhence.END) {</span>
+            <span class="s2">this</span><span class="s1">.pos = BigInt(</span><span class="s2">this</span><span class="s1">.size) - BigInt(offset);</span>
+        <span class="s1">}</span>
+        <span class="s2">else </span><span class="s1">{</span>
+            <span class="s2">throw new </span><span class="s1">error_1.WasiError(</span><span class="s0">'Unknown whence'</span><span class="s1">, types_1.WasiErrno.EIO);</span>
+        <span class="s1">}</span>
+        <span class="s2">return this</span><span class="s1">.pos;</span>
+    <span class="s1">}</span>
+<span class="s1">}</span>
+<span class="s1">exports.FileDescriptor = FileDescriptor;</span>
+<span class="s2">class </span><span class="s1">StandardOutput </span><span class="s2">extends </span><span class="s1">FileDescriptor {</span>
+    <span class="s1">constructor(log, id, fd, path, realPath, type, rightsBase, rightsInheriting, preopen) {</span>
+        <span class="s2">super</span><span class="s1">(id, fd, path, realPath, type, rightsBase, rightsInheriting, preopen);</span>
+        <span class="s2">this</span><span class="s1">._log = log;</span>
+        <span class="s2">this</span><span class="s1">._buf = </span><span class="s2">null</span><span class="s1">;</span>
+    <span class="s1">}</span>
+    <span class="s1">write(buffer) {</span>
+        <span class="s2">const </span><span class="s1">originalBuffer = buffer;</span>
+        <span class="s2">if </span><span class="s1">(</span><span class="s2">this</span><span class="s1">._buf) {</span>
+            <span class="s1">buffer = concatBuffer([</span><span class="s2">this</span><span class="s1">._buf, buffer]);</span>
+            <span class="s2">this</span><span class="s1">._buf = </span><span class="s2">null</span><span class="s1">;</span>
+        <span class="s1">}</span>
+        <span class="s2">if </span><span class="s1">(buffer.indexOf(</span><span class="s3">10</span><span class="s1">) === -</span><span class="s3">1</span><span class="s1">) {</span>
+            <span class="s2">this</span><span class="s1">._buf = buffer;</span>
+            <span class="s2">return </span><span class="s1">originalBuffer.byteLength;</span>
+        <span class="s1">}</span>
+        <span class="s2">let </span><span class="s1">written = </span><span class="s3">0</span><span class="s1">;</span>
+        <span class="s2">let </span><span class="s1">lastBegin = </span><span class="s3">0</span><span class="s1">;</span>
+        <span class="s2">let </span><span class="s1">index;</span>
+        <span class="s2">while </span><span class="s1">((index = buffer.indexOf(</span><span class="s3">10</span><span class="s1">, written)) !== -</span><span class="s3">1</span><span class="s1">) {</span>
+            <span class="s2">const </span><span class="s1">str = </span><span class="s2">new </span><span class="s1">TextDecoder().decode(buffer.subarray(lastBegin, index));</span>
+            <span class="s2">this</span><span class="s1">._log(str);</span>
+            <span class="s1">written += index - lastBegin + </span><span class="s3">1</span><span class="s1">;</span>
+            <span class="s1">lastBegin = index + </span><span class="s3">1</span><span class="s1">;</span>
+        <span class="s1">}</span>
+        <span class="s2">if </span><span class="s1">(written &lt; buffer.length) {</span>
+            <span class="s2">this</span><span class="s1">._buf = buffer.slice(written);</span>
+        <span class="s1">}</span>
+        <span class="s2">return </span><span class="s1">originalBuffer.byteLength;</span>
+    <span class="s1">}</span>
+<span class="s1">}</span>
+<span class="s1">exports.StandardOutput = StandardOutput;</span>
+<span class="s2">function </span><span class="s1">toFileType(stat) {</span>
+    <span class="s2">if </span><span class="s1">(stat.isBlockDevice())</span>
+        <span class="s2">return </span><span class="s1">types_1.WasiFileType.BLOCK_DEVICE;</span>
+    <span class="s2">if </span><span class="s1">(stat.isCharacterDevice())</span>
+        <span class="s2">return </span><span class="s1">types_1.WasiFileType.CHARACTER_DEVICE;</span>
+    <span class="s2">if </span><span class="s1">(stat.isDirectory())</span>
+        <span class="s2">return </span><span class="s1">types_1.WasiFileType.DIRECTORY;</span>
+    <span class="s2">if </span><span class="s1">(stat.isSocket())</span>
+        <span class="s2">return </span><span class="s1">types_1.WasiFileType.SOCKET_STREAM;</span>
+    <span class="s2">if </span><span class="s1">(stat.isFile())</span>
+        <span class="s2">return </span><span class="s1">types_1.WasiFileType.REGULAR_FILE;</span>
+    <span class="s2">if </span><span class="s1">(stat.isSymbolicLink())</span>
+        <span class="s2">return </span><span class="s1">types_1.WasiFileType.SYMBOLIC_LINK;</span>
+    <span class="s2">return </span><span class="s1">types_1.WasiFileType.UNKNOWN;</span>
+<span class="s1">}</span>
+<span class="s1">exports.toFileType = toFileType;</span>
+<span class="s2">function </span><span class="s1">toFileStat(view, buf, stat) {</span>
+    <span class="s1">view.setBigUint64(buf, stat.dev, </span><span class="s2">true</span><span class="s1">);</span>
+    <span class="s1">view.setBigUint64(buf + </span><span class="s3">8</span><span class="s1">, stat.ino, </span><span class="s2">true</span><span class="s1">);</span>
+    <span class="s1">view.setBigUint64(buf + </span><span class="s3">16</span><span class="s1">, BigInt(toFileType(stat)), </span><span class="s2">true</span><span class="s1">);</span>
+    <span class="s1">view.setBigUint64(buf + </span><span class="s3">24</span><span class="s1">, stat.nlink, </span><span class="s2">true</span><span class="s1">);</span>
+    <span class="s1">view.setBigUint64(buf + </span><span class="s3">32</span><span class="s1">, stat.size, </span><span class="s2">true</span><span class="s1">);</span>
+    <span class="s1">view.setBigUint64(buf + </span><span class="s3">40</span><span class="s1">, stat.atimeMs * BigInt(</span><span class="s3">1000000</span><span class="s1">), </span><span class="s2">true</span><span class="s1">);</span>
+    <span class="s1">view.setBigUint64(buf + </span><span class="s3">48</span><span class="s1">, stat.mtimeMs * BigInt(</span><span class="s3">1000000</span><span class="s1">), </span><span class="s2">true</span><span class="s1">);</span>
+    <span class="s1">view.setBigUint64(buf + </span><span class="s3">56</span><span class="s1">, stat.ctimeMs * BigInt(</span><span class="s3">1000000</span><span class="s1">), </span><span class="s2">true</span><span class="s1">);</span>
+<span class="s1">}</span>
+<span class="s1">exports.toFileStat = toFileStat;</span>
+<span class="s2">class </span><span class="s1">FileDescriptorTable {</span>
+    <span class="s1">constructor(options) {</span>
+        <span class="s2">this</span><span class="s1">.used = </span><span class="s3">0</span><span class="s1">;</span>
+        <span class="s2">this</span><span class="s1">.size = options.size;</span>
+        <span class="s2">this</span><span class="s1">.fds = Array(options.size);</span>
+        <span class="s2">this</span><span class="s1">.stdio = [options.in, options.out, options.err];</span>
+        <span class="s2">this</span><span class="s1">.print = options.print;</span>
+        <span class="s2">this</span><span class="s1">.printErr = options.printErr;</span>
+        <span class="s2">this</span><span class="s1">.insertStdio(options.in, </span><span class="s3">0</span><span class="s1">, </span><span class="s0">'&lt;stdin&gt;'</span><span class="s1">);</span>
+        <span class="s2">this</span><span class="s1">.insertStdio(options.out, </span><span class="s3">1</span><span class="s1">, </span><span class="s0">'&lt;stdout&gt;'</span><span class="s1">);</span>
+        <span class="s2">this</span><span class="s1">.insertStdio(options.err, </span><span class="s3">2</span><span class="s1">, </span><span class="s0">'&lt;stderr&gt;'</span><span class="s1">);</span>
+    <span class="s1">}</span>
+    <span class="s1">insertStdio(fd, expected, name) {</span>
+        <span class="s2">const </span><span class="s1">type = types_1.WasiFileType.CHARACTER_DEVICE;</span>
+        <span class="s2">const </span><span class="s1">{ base, inheriting } = (</span><span class="s3">0</span><span class="s1">, rights_1.getRights)(</span><span class="s2">this</span><span class="s1">.stdio, fd, types_1.FileControlFlag.O_RDWR, type);</span>
+        <span class="s2">const </span><span class="s1">wrap = </span><span class="s2">this</span><span class="s1">.insert(fd, name, name, type, base, inheriting, </span><span class="s3">0</span><span class="s1">);</span>
+        <span class="s2">if </span><span class="s1">(wrap.id !== expected) {</span>
+            <span class="s2">throw new </span><span class="s1">error_1.WasiError(</span><span class="s0">`id: </span><span class="s1">${wrap.id} </span><span class="s0">!== expected: </span><span class="s1">${expected}</span><span class="s0">`</span><span class="s1">, types_1.WasiErrno.EBADF);</span>
+        <span class="s1">}</span>
+        <span class="s2">return </span><span class="s1">wrap;</span>
+    <span class="s1">}</span>
+    <span class="s1">insert(fd, mappedPath, realPath, type, rightsBase, rightsInheriting, preopen) {</span>
+        <span class="s2">var </span><span class="s1">_a, _b;</span>
+        <span class="s2">let </span><span class="s1">index = -</span><span class="s3">1</span><span class="s1">;</span>
+        <span class="s2">if </span><span class="s1">(</span><span class="s2">this</span><span class="s1">.used &gt;= </span><span class="s2">this</span><span class="s1">.size) {</span>
+            <span class="s2">const </span><span class="s1">newSize = </span><span class="s2">this</span><span class="s1">.size * </span><span class="s3">2</span><span class="s1">;</span>
+            <span class="s2">this</span><span class="s1">.fds.length = newSize;</span>
+            <span class="s1">index = </span><span class="s2">this</span><span class="s1">.size;</span>
+            <span class="s2">this</span><span class="s1">.size = newSize;</span>
+        <span class="s1">}</span>
+        <span class="s2">else </span><span class="s1">{</span>
+            <span class="s2">for </span><span class="s1">(</span><span class="s2">let </span><span class="s1">i = </span><span class="s3">0</span><span class="s1">; i &lt; </span><span class="s2">this</span><span class="s1">.size; ++i) {</span>
+                <span class="s2">if </span><span class="s1">(</span><span class="s2">this</span><span class="s1">.fds[i] == </span><span class="s2">null</span><span class="s1">) {</span>
+                    <span class="s1">index = i;</span>
+                    <span class="s2">break</span><span class="s1">;</span>
+                <span class="s1">}</span>
+            <span class="s1">}</span>
+        <span class="s1">}</span>
+        <span class="s2">let </span><span class="s1">entry;</span>
+        <span class="s2">if </span><span class="s1">(mappedPath === </span><span class="s0">'&lt;stdout&gt;'</span><span class="s1">) {</span>
+            <span class="s1">entry = </span><span class="s2">new </span><span class="s1">StandardOutput((_a = </span><span class="s2">this</span><span class="s1">.print) !== </span><span class="s2">null </span><span class="s1">&amp;&amp; _a !== </span><span class="s2">void </span><span class="s3">0 </span><span class="s1">? _a : console.log, index, fd, mappedPath, realPath, type, rightsBase, rightsInheriting, preopen);</span>
+        <span class="s1">}</span>
+        <span class="s2">else if </span><span class="s1">(mappedPath === </span><span class="s0">'&lt;stderr&gt;'</span><span class="s1">) {</span>
+            <span class="s1">entry = </span><span class="s2">new </span><span class="s1">StandardOutput((_b = </span><span class="s2">this</span><span class="s1">.printErr) !== </span><span class="s2">null </span><span class="s1">&amp;&amp; _b !== </span><span class="s2">void </span><span class="s3">0 </span><span class="s1">? _b : console.error, index, fd, mappedPath, realPath, type, rightsBase, rightsInheriting, preopen);</span>
+        <span class="s1">}</span>
+        <span class="s2">else </span><span class="s1">{</span>
+            <span class="s1">entry = </span><span class="s2">new </span><span class="s1">FileDescriptor(index, fd, mappedPath, realPath, type, rightsBase, rightsInheriting, preopen);</span>
+        <span class="s1">}</span>
+        <span class="s2">this</span><span class="s1">.fds[index] = entry;</span>
+        <span class="s2">this</span><span class="s1">.used++;</span>
+        <span class="s2">return </span><span class="s1">entry;</span>
+    <span class="s1">}</span>
+    <span class="s1">get(id, base, inheriting) {</span>
+        <span class="s2">if </span><span class="s1">(id &gt;= </span><span class="s2">this</span><span class="s1">.size) {</span>
+            <span class="s2">throw new </span><span class="s1">error_1.WasiError(</span><span class="s0">'Invalid fd'</span><span class="s1">, types_1.WasiErrno.EBADF);</span>
+        <span class="s1">}</span>
+        <span class="s2">const </span><span class="s1">entry = </span><span class="s2">this</span><span class="s1">.fds[id];</span>
+        <span class="s2">if </span><span class="s1">(!entry || entry.id !== id) {</span>
+            <span class="s2">throw new </span><span class="s1">error_1.WasiError(</span><span class="s0">'Bad file descriptor'</span><span class="s1">, types_1.WasiErrno.EBADF);</span>
+        <span class="s1">}</span>
+        <span class="s4">/* Validate that the fd has the necessary rights. */</span>
+        <span class="s2">if </span><span class="s1">((~entry.rightsBase &amp; base) !== BigInt(</span><span class="s3">0</span><span class="s1">) || (~entry.rightsInheriting &amp; inheriting) !== BigInt(</span><span class="s3">0</span><span class="s1">)) {</span>
+            <span class="s2">throw new </span><span class="s1">error_1.WasiError(</span><span class="s0">'Capabilities insufficient'</span><span class="s1">, types_1.WasiErrno.ENOTCAPABLE);</span>
+        <span class="s1">}</span>
+        <span class="s2">return </span><span class="s1">entry;</span>
+    <span class="s1">}</span>
+    <span class="s1">remove(id) {</span>
+        <span class="s2">if </span><span class="s1">(id &gt;= </span><span class="s2">this</span><span class="s1">.size) {</span>
+            <span class="s2">throw new </span><span class="s1">error_1.WasiError(</span><span class="s0">'Invalid fd'</span><span class="s1">, types_1.WasiErrno.EBADF);</span>
+        <span class="s1">}</span>
+        <span class="s2">const </span><span class="s1">entry = </span><span class="s2">this</span><span class="s1">.fds[id];</span>
+        <span class="s2">if </span><span class="s1">(!entry || entry.id !== id) {</span>
+            <span class="s2">throw new </span><span class="s1">error_1.WasiError(</span><span class="s0">'Bad file descriptor'</span><span class="s1">, types_1.WasiErrno.EBADF);</span>
+        <span class="s1">}</span>
+        <span class="s2">this</span><span class="s1">.fds[id] = undefined;</span>
+        <span class="s2">this</span><span class="s1">.used--;</span>
+    <span class="s1">}</span>
+<span class="s1">}</span>
+<span class="s1">exports.FileDescriptorTable = FileDescriptorTable;</span>
+<span class="s2">class </span><span class="s1">SyncTable </span><span class="s2">extends </span><span class="s1">FileDescriptorTable {</span>
+    <span class="s1">constructor(options) {</span>
+        <span class="s2">super</span><span class="s1">(options);</span>
+        <span class="s2">this</span><span class="s1">.fs = options.fs;</span>
+    <span class="s1">}</span>
+    <span class="s1">getFileTypeByFd(fd) {</span>
+        <span class="s2">const </span><span class="s1">stats = </span><span class="s2">this</span><span class="s1">.fs.fstatSync(fd, { bigint: </span><span class="s2">true </span><span class="s1">});</span>
+        <span class="s2">return </span><span class="s1">toFileType(stats);</span>
+    <span class="s1">}</span>
+    <span class="s1">insertPreopen(fd, mappedPath, realPath) {</span>
+        <span class="s2">const </span><span class="s1">type = </span><span class="s2">this</span><span class="s1">.getFileTypeByFd(fd);</span>
+        <span class="s2">if </span><span class="s1">(type !== types_1.WasiFileType.DIRECTORY) {</span>
+            <span class="s2">throw new </span><span class="s1">error_1.WasiError(</span><span class="s0">`Preopen not dir: [&quot;</span><span class="s1">${mappedPath}</span><span class="s0">&quot;, &quot;</span><span class="s1">${realPath}</span><span class="s0">&quot;]`</span><span class="s1">, types_1.WasiErrno.ENOTDIR);</span>
+        <span class="s1">}</span>
+        <span class="s2">const </span><span class="s1">result = (</span><span class="s3">0</span><span class="s1">, rights_1.getRights)(</span><span class="s2">this</span><span class="s1">.stdio, fd, </span><span class="s3">0</span><span class="s1">, type);</span>
+        <span class="s2">return this</span><span class="s1">.insert(fd, mappedPath, realPath, type, result.base, result.inheriting, </span><span class="s3">1</span><span class="s1">);</span>
+    <span class="s1">}</span>
+    <span class="s1">renumber(dst, src) {</span>
+        <span class="s2">if </span><span class="s1">(dst === src)</span>
+            <span class="s2">return</span><span class="s1">;</span>
+        <span class="s2">if </span><span class="s1">(dst &gt;= </span><span class="s2">this</span><span class="s1">.size || src &gt;= </span><span class="s2">this</span><span class="s1">.size) {</span>
+            <span class="s2">throw new </span><span class="s1">error_1.WasiError(</span><span class="s0">'Invalid fd'</span><span class="s1">, types_1.WasiErrno.EBADF);</span>
+        <span class="s1">}</span>
+        <span class="s2">const </span><span class="s1">dstEntry = </span><span class="s2">this</span><span class="s1">.fds[dst];</span>
+        <span class="s2">const </span><span class="s1">srcEntry = </span><span class="s2">this</span><span class="s1">.fds[src];</span>
+        <span class="s2">if </span><span class="s1">(!dstEntry || !srcEntry || dstEntry.id !== dst || srcEntry.id !== src) {</span>
+            <span class="s2">throw new </span><span class="s1">error_1.WasiError(</span><span class="s0">'Invalid fd'</span><span class="s1">, types_1.WasiErrno.EBADF);</span>
+        <span class="s1">}</span>
+        <span class="s2">this</span><span class="s1">.fs.closeSync(dstEntry.fd);</span>
+        <span class="s2">this</span><span class="s1">.fds[dst] = </span><span class="s2">this</span><span class="s1">.fds[src];</span>
+        <span class="s2">this</span><span class="s1">.fds[dst].id = dst;</span>
+        <span class="s2">this</span><span class="s1">.fds[src] = undefined;</span>
+        <span class="s2">this</span><span class="s1">.used--;</span>
+    <span class="s1">}</span>
+<span class="s1">}</span>
+<span class="s1">exports.SyncTable = SyncTable;</span>
+<span class="s2">class </span><span class="s1">AsyncTable </span><span class="s2">extends </span><span class="s1">FileDescriptorTable {</span>
+    <span class="s4">// eslint-disable-next-line @typescript-eslint/no-useless-constructor</span>
+    <span class="s1">constructor(options) {</span>
+        <span class="s2">super</span><span class="s1">(options);</span>
+    <span class="s1">}</span>
+    <span class="s1">async getFileTypeByFd(fd) {</span>
+        <span class="s2">const </span><span class="s1">stats = </span><span class="s2">await </span><span class="s1">fd.stat({ bigint: </span><span class="s2">true </span><span class="s1">});</span>
+        <span class="s2">return </span><span class="s1">toFileType(stats);</span>
+    <span class="s1">}</span>
+    <span class="s1">async insertPreopen(fd, mappedPath, realPath) {</span>
+        <span class="s2">const </span><span class="s1">type = </span><span class="s2">await this</span><span class="s1">.getFileTypeByFd(fd);</span>
+        <span class="s2">if </span><span class="s1">(type !== types_1.WasiFileType.DIRECTORY) {</span>
+            <span class="s2">throw new </span><span class="s1">error_1.WasiError(</span><span class="s0">`Preopen not dir: [&quot;</span><span class="s1">${mappedPath}</span><span class="s0">&quot;, &quot;</span><span class="s1">${realPath}</span><span class="s0">&quot;]`</span><span class="s1">, types_1.WasiErrno.ENOTDIR);</span>
+        <span class="s1">}</span>
+        <span class="s2">const </span><span class="s1">result = (</span><span class="s3">0</span><span class="s1">, rights_1.getRights)(</span><span class="s2">this</span><span class="s1">.stdio, fd.fd, </span><span class="s3">0</span><span class="s1">, type);</span>
+        <span class="s2">return this</span><span class="s1">.insert(fd, mappedPath, realPath, type, result.base, result.inheriting, </span><span class="s3">1</span><span class="s1">);</span>
+    <span class="s1">}</span>
+    <span class="s1">async renumber(dst, src) {</span>
+        <span class="s2">if </span><span class="s1">(dst === src)</span>
+            <span class="s2">return</span><span class="s1">;</span>
+        <span class="s2">if </span><span class="s1">(dst &gt;= </span><span class="s2">this</span><span class="s1">.size || src &gt;= </span><span class="s2">this</span><span class="s1">.size) {</span>
+            <span class="s2">throw new </span><span class="s1">error_1.WasiError(</span><span class="s0">'Invalid fd'</span><span class="s1">, types_1.WasiErrno.EBADF);</span>
+        <span class="s1">}</span>
+        <span class="s2">const </span><span class="s1">dstEntry = </span><span class="s2">this</span><span class="s1">.fds[dst];</span>
+        <span class="s2">const </span><span class="s1">srcEntry = </span><span class="s2">this</span><span class="s1">.fds[src];</span>
+        <span class="s2">if </span><span class="s1">(!dstEntry || !srcEntry || dstEntry.id !== dst || srcEntry.id !== src) {</span>
+            <span class="s2">throw new </span><span class="s1">error_1.WasiError(</span><span class="s0">'Invalid fd'</span><span class="s1">, types_1.WasiErrno.EBADF);</span>
+        <span class="s1">}</span>
+        <span class="s2">await </span><span class="s1">dstEntry.fd.close();</span>
+        <span class="s2">this</span><span class="s1">.fds[dst] = </span><span class="s2">this</span><span class="s1">.fds[src];</span>
+        <span class="s2">this</span><span class="s1">.fds[dst].id = dst;</span>
+        <span class="s2">this</span><span class="s1">.fds[src] = undefined;</span>
+        <span class="s2">this</span><span class="s1">.used--;</span>
+    <span class="s1">}</span>
+<span class="s1">}</span>
+<span class="s1">exports.AsyncTable = AsyncTable;</span>
+<span class="s4">//# sourceMappingURL=fd.js.map</span></pre>
+</body>
+</html>

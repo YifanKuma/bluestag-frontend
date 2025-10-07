@@ -1,0 +1,210 @@
+<html>
+<head>
+<title>declaration.js</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #0033b3;}
+.s1 { color: #080808;}
+.s2 { color: #067d17;}
+.s3 { color: #8c8c8c; font-style: italic;}
+.s4 { color: #1750eb;}
+.s5 { color: #0037a6;}
+.s6 { color: #264eff;}
+</style>
+</head>
+<body bgcolor="#ffffff">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#c0c0c0" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+declaration.js</font>
+</center></td></tr></table>
+<pre><span class="s0">let </span><span class="s1">Browsers = require(</span><span class="s2">'./browsers'</span><span class="s1">)</span>
+<span class="s0">let </span><span class="s1">Prefixer = require(</span><span class="s2">'./prefixer'</span><span class="s1">)</span>
+<span class="s0">let </span><span class="s1">utils = require(</span><span class="s2">'./utils'</span><span class="s1">)</span>
+
+<span class="s0">class </span><span class="s1">Declaration </span><span class="s0">extends </span><span class="s1">Prefixer {</span>
+  <span class="s3">/**</span>
+   <span class="s3">* Clone and add prefixes for declaration</span>
+   <span class="s3">*/</span>
+  <span class="s1">add(decl, prefix, prefixes, result) {</span>
+    <span class="s0">let </span><span class="s1">prefixed = </span><span class="s0">this</span><span class="s1">.prefixed(decl.prop, prefix)</span>
+    <span class="s0">if </span><span class="s1">(</span>
+      <span class="s0">this</span><span class="s1">.isAlready(decl, prefixed) ||</span>
+      <span class="s0">this</span><span class="s1">.otherPrefixes(decl.value, prefix)</span>
+    <span class="s1">) {</span>
+      <span class="s0">return </span><span class="s1">undefined</span>
+    <span class="s1">}</span>
+    <span class="s0">return this</span><span class="s1">.insert(decl, prefix, prefixes, result)</span>
+  <span class="s1">}</span>
+
+  <span class="s3">/**</span>
+   <span class="s3">* Calculate indentation to create visual cascade</span>
+   <span class="s3">*/</span>
+  <span class="s1">calcBefore(prefixes, decl, prefix = </span><span class="s2">''</span><span class="s1">) {</span>
+    <span class="s0">let </span><span class="s1">max = </span><span class="s0">this</span><span class="s1">.maxPrefixed(prefixes, decl)</span>
+    <span class="s0">let </span><span class="s1">diff = max - utils.removeNote(prefix).length</span>
+
+    <span class="s0">let </span><span class="s1">before = decl.raw(</span><span class="s2">'before'</span><span class="s1">)</span>
+    <span class="s0">if </span><span class="s1">(diff &gt; </span><span class="s4">0</span><span class="s1">) {</span>
+      <span class="s1">before += Array(diff).fill(</span><span class="s2">' '</span><span class="s1">).join(</span><span class="s2">''</span><span class="s1">)</span>
+    <span class="s1">}</span>
+
+    <span class="s0">return </span><span class="s1">before</span>
+  <span class="s1">}</span>
+
+  <span class="s3">/**</span>
+   <span class="s3">* Always true, because we already get prefixer by property name</span>
+   <span class="s3">*/</span>
+  <span class="s1">check(</span><span class="s3">/* decl */</span><span class="s1">) {</span>
+    <span class="s0">return true</span>
+  <span class="s1">}</span>
+
+  <span class="s3">/**</span>
+   <span class="s3">* Clone and insert new declaration</span>
+   <span class="s3">*/</span>
+  <span class="s1">insert(decl, prefix, prefixes) {</span>
+    <span class="s0">let </span><span class="s1">cloned = </span><span class="s0">this</span><span class="s1">.set(</span><span class="s0">this</span><span class="s1">.clone(decl), prefix)</span>
+    <span class="s0">if </span><span class="s1">(!cloned) </span><span class="s0">return </span><span class="s1">undefined</span>
+
+    <span class="s0">let </span><span class="s1">already = decl.parent.some(</span>
+      <span class="s1">i =&gt; i.prop === cloned.prop &amp;&amp; i.value === cloned.value</span>
+    <span class="s1">)</span>
+    <span class="s0">if </span><span class="s1">(already) {</span>
+      <span class="s0">return </span><span class="s1">undefined</span>
+    <span class="s1">}</span>
+
+    <span class="s0">if </span><span class="s1">(</span><span class="s0">this</span><span class="s1">.needCascade(decl)) {</span>
+      <span class="s1">cloned.raws.before = </span><span class="s0">this</span><span class="s1">.calcBefore(prefixes, decl, prefix)</span>
+    <span class="s1">}</span>
+    <span class="s0">return </span><span class="s1">decl.parent.insertBefore(decl, cloned)</span>
+  <span class="s1">}</span>
+
+  <span class="s3">/**</span>
+   <span class="s3">* Did this declaration has this prefix above</span>
+   <span class="s3">*/</span>
+  <span class="s1">isAlready(decl, prefixed) {</span>
+    <span class="s0">let </span><span class="s1">already = </span><span class="s0">this</span><span class="s1">.all.group(decl).up(i =&gt; i.prop === prefixed)</span>
+    <span class="s0">if </span><span class="s1">(!already) {</span>
+      <span class="s1">already = </span><span class="s0">this</span><span class="s1">.all.group(decl).down(i =&gt; i.prop === prefixed)</span>
+    <span class="s1">}</span>
+    <span class="s0">return </span><span class="s1">already</span>
+  <span class="s1">}</span>
+
+  <span class="s3">/**</span>
+   <span class="s3">* Return maximum length of possible prefixed property</span>
+   <span class="s3">*/</span>
+  <span class="s1">maxPrefixed(prefixes, decl) {</span>
+    <span class="s0">if </span><span class="s1">(decl._autoprefixerMax) {</span>
+      <span class="s0">return </span><span class="s1">decl._autoprefixerMax</span>
+    <span class="s1">}</span>
+
+    <span class="s0">let </span><span class="s1">max = </span><span class="s4">0</span>
+    <span class="s0">for </span><span class="s1">(</span><span class="s0">let </span><span class="s1">prefix of prefixes) {</span>
+      <span class="s1">prefix = utils.removeNote(prefix)</span>
+      <span class="s0">if </span><span class="s1">(prefix.length &gt; max) {</span>
+        <span class="s1">max = prefix.length</span>
+      <span class="s1">}</span>
+    <span class="s1">}</span>
+    <span class="s1">decl._autoprefixerMax = max</span>
+
+    <span class="s0">return </span><span class="s1">decl._autoprefixerMax</span>
+  <span class="s1">}</span>
+
+  <span class="s3">/**</span>
+   <span class="s3">* Should we use visual cascade for prefixes</span>
+   <span class="s3">*/</span>
+  <span class="s1">needCascade(decl) {</span>
+    <span class="s0">if </span><span class="s1">(!decl._autoprefixerCascade) {</span>
+      <span class="s1">decl._autoprefixerCascade =</span>
+        <span class="s0">this</span><span class="s1">.all.options.cascade !== </span><span class="s0">false </span><span class="s1">&amp;&amp; decl.raw(</span><span class="s2">'before'</span><span class="s1">).includes(</span><span class="s2">'</span><span class="s5">\n</span><span class="s2">'</span><span class="s1">)</span>
+    <span class="s1">}</span>
+    <span class="s0">return </span><span class="s1">decl._autoprefixerCascade</span>
+  <span class="s1">}</span>
+
+  <span class="s3">/**</span>
+   <span class="s3">* Return unprefixed version of property</span>
+   <span class="s3">*/</span>
+  <span class="s1">normalize(prop) {</span>
+    <span class="s0">return </span><span class="s1">prop</span>
+  <span class="s1">}</span>
+
+  <span class="s3">/**</span>
+   <span class="s3">* Return list of prefixed properties to clean old prefixes</span>
+   <span class="s3">*/</span>
+  <span class="s1">old(prop, prefix) {</span>
+    <span class="s0">return </span><span class="s1">[</span><span class="s0">this</span><span class="s1">.prefixed(prop, prefix)]</span>
+  <span class="s1">}</span>
+
+  <span class="s3">/**</span>
+   <span class="s3">* Check `value`, that it contain other prefixes, rather than `prefix`</span>
+   <span class="s3">*/</span>
+  <span class="s1">otherPrefixes(value, prefix) {</span>
+    <span class="s0">for </span><span class="s1">(</span><span class="s0">let </span><span class="s1">other of Browsers.prefixes()) {</span>
+      <span class="s0">if </span><span class="s1">(other === prefix) {</span>
+        <span class="s0">continue</span>
+      <span class="s1">}</span>
+      <span class="s0">if </span><span class="s1">(value.includes(other)) {</span>
+        <span class="s0">return </span><span class="s1">value.replace(</span><span class="s6">/var\([^)]+\)/</span><span class="s1">, </span><span class="s2">''</span><span class="s1">).includes(other)</span>
+      <span class="s1">}</span>
+    <span class="s1">}</span>
+    <span class="s0">return false</span>
+  <span class="s1">}</span>
+
+  <span class="s3">/**</span>
+   <span class="s3">* Return prefixed version of property</span>
+   <span class="s3">*/</span>
+  <span class="s1">prefixed(prop, prefix) {</span>
+    <span class="s0">return </span><span class="s1">prefix + prop</span>
+  <span class="s1">}</span>
+
+  <span class="s3">/**</span>
+   <span class="s3">* Add spaces for visual cascade</span>
+   <span class="s3">*/</span>
+  <span class="s1">process(decl, result) {</span>
+    <span class="s0">if </span><span class="s1">(!</span><span class="s0">this</span><span class="s1">.needCascade(decl)) {</span>
+      <span class="s0">super</span><span class="s1">.process(decl, result)</span>
+      <span class="s0">return</span>
+    <span class="s1">}</span>
+
+    <span class="s0">let </span><span class="s1">prefixes = </span><span class="s0">super</span><span class="s1">.process(decl, result)</span>
+
+    <span class="s0">if </span><span class="s1">(!prefixes || !prefixes.length) {</span>
+      <span class="s0">return</span>
+    <span class="s1">}</span>
+
+    <span class="s0">this</span><span class="s1">.restoreBefore(decl)</span>
+    <span class="s1">decl.raws.before = </span><span class="s0">this</span><span class="s1">.calcBefore(prefixes, decl)</span>
+  <span class="s1">}</span>
+
+  <span class="s3">/**</span>
+   <span class="s3">* Remove visual cascade</span>
+   <span class="s3">*/</span>
+  <span class="s1">restoreBefore(decl) {</span>
+    <span class="s0">let </span><span class="s1">lines = decl.raw(</span><span class="s2">'before'</span><span class="s1">).split(</span><span class="s2">'</span><span class="s5">\n</span><span class="s2">'</span><span class="s1">)</span>
+    <span class="s0">let </span><span class="s1">min = lines[lines.length - </span><span class="s4">1</span><span class="s1">]</span>
+
+    <span class="s0">this</span><span class="s1">.all.group(decl).up(prefixed =&gt; {</span>
+      <span class="s0">let </span><span class="s1">array = prefixed.raw(</span><span class="s2">'before'</span><span class="s1">).split(</span><span class="s2">'</span><span class="s5">\n</span><span class="s2">'</span><span class="s1">)</span>
+      <span class="s0">let </span><span class="s1">last = array[array.length - </span><span class="s4">1</span><span class="s1">]</span>
+      <span class="s0">if </span><span class="s1">(last.length &lt; min.length) {</span>
+        <span class="s1">min = last</span>
+      <span class="s1">}</span>
+    <span class="s1">})</span>
+
+    <span class="s1">lines[lines.length - </span><span class="s4">1</span><span class="s1">] = min</span>
+    <span class="s1">decl.raws.before = lines.join(</span><span class="s2">'</span><span class="s5">\n</span><span class="s2">'</span><span class="s1">)</span>
+  <span class="s1">}</span>
+
+  <span class="s3">/**</span>
+   <span class="s3">* Set prefix to declaration</span>
+   <span class="s3">*/</span>
+  <span class="s1">set(decl, prefix) {</span>
+    <span class="s1">decl.prop = </span><span class="s0">this</span><span class="s1">.prefixed(decl.prop, prefix)</span>
+    <span class="s0">return </span><span class="s1">decl</span>
+  <span class="s1">}</span>
+<span class="s1">}</span>
+
+<span class="s1">module.exports = Declaration</span>
+</pre>
+</body>
+</html>

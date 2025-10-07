@@ -1,0 +1,114 @@
+<html>
+<head>
+<title>PhoneNumberMatcher.test.js</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #0033b3;}
+.s1 { color: #080808;}
+.s2 { color: #067d17;}
+.s3 { color: #1750eb;}
+.s4 { color: #8c8c8c; font-style: italic;}
+.s5 { color: #0037a6;}
+</style>
+</head>
+<body bgcolor="#ffffff">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#c0c0c0" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+PhoneNumberMatcher.test.js</font>
+</center></td></tr></table>
+<pre><span class="s0">import </span><span class="s1">PhoneNumberMatcher from </span><span class="s2">'./PhoneNumberMatcher.js'</span>
+<span class="s0">import </span><span class="s1">metadata from </span><span class="s2">'../metadata.min.json' </span><span class="s0">with </span><span class="s1">{ type: </span><span class="s2">'json' </span><span class="s1">}</span>
+
+<span class="s0">function </span><span class="s1">test(text, defaultCountry, expectedNumbers) {</span>
+	<span class="s0">if </span><span class="s1">(</span><span class="s0">typeof </span><span class="s1">expectedNumbers === </span><span class="s2">'string'</span><span class="s1">) {</span>
+		<span class="s1">expectedNumbers = [{</span>
+			<span class="s1">nationalNumber: expectedNumbers</span>
+		<span class="s1">}]</span>
+	<span class="s1">}</span>
+	<span class="s0">const </span><span class="s1">matcher = </span><span class="s0">new </span><span class="s1">PhoneNumberMatcher(text, { defaultCountry, v2: </span><span class="s0">true </span><span class="s1">}, metadata)</span>
+	<span class="s0">while </span><span class="s1">(matcher.hasNext()) {</span>
+		<span class="s0">const </span><span class="s1">number = matcher.next()</span>
+		<span class="s0">const </span><span class="s1">phoneNumber = expectedNumbers.shift()</span>
+		<span class="s0">if </span><span class="s1">(phoneNumber.startsAt !== undefined) {</span>
+			<span class="s1">expect(number.startsAt).to.equal(phoneNumber.startsAt)</span>
+		<span class="s1">}</span>
+		<span class="s0">if </span><span class="s1">(phoneNumber.endsAt !== undefined) {</span>
+			<span class="s1">expect(number.endsAt).to.equal(phoneNumber.endsAt)</span>
+		<span class="s1">}</span>
+		<span class="s1">expect(number.number.country).to.equal(phoneNumber.country || defaultCountry)</span>
+		<span class="s1">expect(number.number.nationalNumber).to.equal(phoneNumber.nationalNumber)</span>
+	<span class="s1">}</span>
+	<span class="s1">expect(expectedNumbers.length).to.equal(</span><span class="s3">0</span><span class="s1">)</span>
+<span class="s1">}</span>
+
+<span class="s1">describe(</span><span class="s2">'PhoneNumberMatcher'</span><span class="s1">, () =&gt; {</span>
+	<span class="s1">it(</span><span class="s2">'should find phone numbers'</span><span class="s1">, () =&gt; {</span>
+		<span class="s1">test(</span>
+			<span class="s2">'The number is +7 (800) 555-35-35 and not (213) 373-4253 as written in the document.'</span><span class="s1">,</span>
+			<span class="s2">'US'</span><span class="s1">,</span>
+			<span class="s1">[{</span>
+				<span class="s1">country: </span><span class="s2">'RU'</span><span class="s1">,</span>
+				<span class="s1">nationalNumber: </span><span class="s2">'8005553535'</span><span class="s1">,</span>
+				<span class="s1">startsAt: </span><span class="s3">14</span><span class="s1">,</span>
+				<span class="s1">endsAt: </span><span class="s3">32</span>
+			<span class="s1">}, {</span>
+				<span class="s1">country: </span><span class="s2">'US'</span><span class="s1">,</span>
+				<span class="s1">nationalNumber: </span><span class="s2">'2133734253'</span><span class="s1">,</span>
+				<span class="s1">startsAt: </span><span class="s3">41</span><span class="s1">,</span>
+				<span class="s1">endsAt: </span><span class="s3">55</span>
+			<span class="s1">}]</span>
+		<span class="s1">)</span>
+	<span class="s1">})</span>
+
+	<span class="s1">it(</span><span class="s2">'should find phone numbers from Mexico'</span><span class="s1">, () =&gt; {</span>
+		<span class="s4">// Test parsing fixed-line numbers of Mexico.</span>
+		<span class="s1">test(</span><span class="s2">'+52 (449)978-0001'</span><span class="s1">, </span><span class="s2">'MX'</span><span class="s1">, </span><span class="s2">'4499780001'</span><span class="s1">)</span>
+		<span class="s1">test(</span><span class="s2">'01 (449)978-0001'</span><span class="s1">, </span><span class="s2">'MX'</span><span class="s1">, </span><span class="s2">'4499780001'</span><span class="s1">)</span>
+		<span class="s1">test(</span><span class="s2">'(449)978-0001'</span><span class="s1">, </span><span class="s2">'MX'</span><span class="s1">, </span><span class="s2">'4499780001'</span><span class="s1">)</span>
+
+		<span class="s4">// &quot;Dialling tokens 01, 02, 044, 045 and 1 are removed as they are</span>
+		<span class="s4">//  no longer valid since August 2019.&quot;</span>
+		<span class="s4">// // Test parsing mobile numbers of Mexico.</span>
+		<span class="s4">// test('+52 1 33 1234-5678', 'MX', '3312345678')</span>
+		<span class="s4">// test('044 (33) 1234-5678', 'MX', '3312345678')</span>
+		<span class="s4">// test('045 33 1234-5678', 'MX', '3312345678')</span>
+	<span class="s1">})</span>
+
+	<span class="s1">it(</span><span class="s2">'should find phone numbers from Argentina'</span><span class="s1">, () =&gt; {</span>
+		<span class="s4">// Test parsing mobile numbers of Argentina.</span>
+		<span class="s1">test(</span><span class="s2">'+54 9 343 555 1212'</span><span class="s1">, </span><span class="s2">'AR'</span><span class="s1">, </span><span class="s2">'93435551212'</span><span class="s1">)</span>
+		<span class="s1">test(</span><span class="s2">'0343 15-555-1212'</span><span class="s1">, </span><span class="s2">'AR'</span><span class="s1">, </span><span class="s2">'93435551212'</span><span class="s1">)</span>
+
+		<span class="s1">test(</span><span class="s2">'+54 9 3715 65 4320'</span><span class="s1">, </span><span class="s2">'AR'</span><span class="s1">, </span><span class="s2">'93715654320'</span><span class="s1">)</span>
+		<span class="s1">test(</span><span class="s2">'03715 15 65 4320'</span><span class="s1">, </span><span class="s2">'AR'</span><span class="s1">, </span><span class="s2">'93715654320'</span><span class="s1">)</span>
+
+		<span class="s4">// Test parsing fixed-line numbers of Argentina.</span>
+		<span class="s1">test(</span><span class="s2">'+54 11 3797 0000'</span><span class="s1">, </span><span class="s2">'AR'</span><span class="s1">, </span><span class="s2">'1137970000'</span><span class="s1">)</span>
+		<span class="s1">test(</span><span class="s2">'011 3797 0000'</span><span class="s1">, </span><span class="s2">'AR'</span><span class="s1">, </span><span class="s2">'1137970000'</span><span class="s1">)</span>
+
+		<span class="s1">test(</span><span class="s2">'+54 3715 65 4321'</span><span class="s1">, </span><span class="s2">'AR'</span><span class="s1">, </span><span class="s2">'3715654321'</span><span class="s1">)</span>
+		<span class="s1">test(</span><span class="s2">'03715 65 4321'</span><span class="s1">, </span><span class="s2">'AR'</span><span class="s1">, </span><span class="s2">'3715654321'</span><span class="s1">)</span>
+
+		<span class="s1">test(</span><span class="s2">'+54 23 1234 0000'</span><span class="s1">, </span><span class="s2">'AR'</span><span class="s1">, </span><span class="s2">'2312340000'</span><span class="s1">)</span>
+		<span class="s1">test(</span><span class="s2">'023 1234 0000'</span><span class="s1">, </span><span class="s2">'AR'</span><span class="s1">, </span><span class="s2">'2312340000'</span><span class="s1">)</span>
+	<span class="s1">})</span>
+
+	<span class="s1">it(</span><span class="s2">'should only support the supported leniency values'</span><span class="s1">, </span><span class="s0">function</span><span class="s1">() {</span>
+		<span class="s1">expect(() =&gt; </span><span class="s0">new </span><span class="s1">PhoneNumberMatcher(</span><span class="s2">'+54 23 1234 0000'</span><span class="s1">, { leniency: </span><span class="s2">'STRICT_GROUPING'</span><span class="s1">, v2: </span><span class="s0">true </span><span class="s1">}, metadata)).to.throw(</span><span class="s2">'Supported values: &quot;POSSIBLE&quot;, &quot;VALID&quot;.'</span><span class="s1">)</span>
+	<span class="s1">})</span>
+
+	<span class="s1">it(</span><span class="s2">'should validate input parameters'</span><span class="s1">, </span><span class="s0">function</span><span class="s1">() {</span>
+		<span class="s4">// expect(() =&gt; new PhoneNumberMatcher('+54 23 1234 0000', { v2: true }, metadata)).to.throw('`leniency` is required')</span>
+		<span class="s1">expect(() =&gt; </span><span class="s0">new </span><span class="s1">PhoneNumberMatcher(</span><span class="s2">'+54 23 1234 0000'</span><span class="s1">, { leniency: </span><span class="s2">'???'</span><span class="s1">, v2: </span><span class="s0">true </span><span class="s1">}, metadata)).to.throw(</span><span class="s2">'Unknown leniency: &quot;???&quot;'</span><span class="s1">)</span>
+		<span class="s1">expect(() =&gt; </span><span class="s0">new </span><span class="s1">PhoneNumberMatcher(</span><span class="s2">'+54 23 1234 0000'</span><span class="s1">, { maxTries: -</span><span class="s3">1</span><span class="s1">, v2: </span><span class="s0">true </span><span class="s1">}, metadata)).to.throw(</span><span class="s2">'`maxTries` must be `&gt;= 0`'</span><span class="s1">)</span>
+	<span class="s1">})</span>
+
+	<span class="s1">it(</span><span class="s2">'should throw when calling `.next()` and there</span><span class="s5">\'</span><span class="s2">s no next match'</span><span class="s1">, </span><span class="s0">function</span><span class="s1">() {</span>
+		<span class="s0">const </span><span class="s1">matcher = </span><span class="s0">new </span><span class="s1">PhoneNumberMatcher(</span><span class="s2">'+54 23 1234 0000'</span><span class="s1">, { v2: </span><span class="s0">true </span><span class="s1">}, metadata)</span>
+		<span class="s1">matcher.next()</span>
+		<span class="s1">expect(() =&gt; matcher.next()).to.throw(</span><span class="s2">'No next element'</span><span class="s1">)</span>
+	<span class="s1">})</span>
+<span class="s1">})</span></pre>
+</body>
+</html>

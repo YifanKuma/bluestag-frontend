@@ -1,0 +1,577 @@
+<html>
+<head>
+<title>getPropLiteralValue-babelparser-test.js</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #8c8c8c; font-style: italic;}
+.s1 { color: #080808;}
+.s2 { color: #0033b3;}
+.s3 { color: #067d17;}
+.s4 { color: #1750eb;}
+</style>
+</head>
+<body bgcolor="#ffffff">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#c0c0c0" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+getPropLiteralValue-babelparser-test.js</font>
+</center></td></tr></table>
+<pre><span class="s0">/* eslint-env mocha */</span>
+<span class="s0">/* eslint no-template-curly-in-string: 0 */</span>
+<span class="s2">import </span><span class="s1">assert from </span><span class="s3">'assert'</span><span class="s1">;</span>
+<span class="s2">import </span><span class="s1">{</span>
+  <span class="s1">extractProp,</span>
+  <span class="s1">describeIfNotBabylon,</span>
+  <span class="s1">changePlugins,</span>
+  <span class="s1">setParserName,</span>
+  <span class="s1">setIsESM,</span>
+<span class="s1">} from </span><span class="s3">'../helper'</span><span class="s1">;</span>
+<span class="s2">import </span><span class="s1">{ getLiteralPropValue } from </span><span class="s3">'../../src/getPropValue'</span><span class="s1">;</span>
+
+<span class="s1">describe(</span><span class="s3">'getLiteralPropValue'</span><span class="s1">, () =&gt; {</span>
+  <span class="s1">beforeEach(() =&gt; {</span>
+    <span class="s1">setParserName(</span><span class="s3">'babel'</span><span class="s1">);</span>
+  <span class="s1">});</span>
+  <span class="s1">it(</span><span class="s3">'should export a function'</span><span class="s1">, () =&gt; {</span>
+    <span class="s2">const </span><span class="s1">expected = </span><span class="s3">'function'</span><span class="s1">;</span>
+    <span class="s2">const </span><span class="s1">actual = </span><span class="s2">typeof </span><span class="s1">getLiteralPropValue;</span>
+
+    <span class="s1">assert.equal(actual, expected);</span>
+  <span class="s1">});</span>
+
+  <span class="s1">it(</span><span class="s3">'should return undefined when not provided with a JSXAttribute'</span><span class="s1">, () =&gt; {</span>
+    <span class="s2">const </span><span class="s1">expected = undefined;</span>
+    <span class="s2">const </span><span class="s1">actual = getLiteralPropValue(</span><span class="s4">1</span><span class="s1">);</span>
+
+    <span class="s1">assert.equal(actual, expected);</span>
+  <span class="s1">});</span>
+
+  <span class="s1">it(</span><span class="s3">'should not throw error when trying to get value from unknown node type'</span><span class="s1">, () =&gt; {</span>
+    <span class="s2">const </span><span class="s1">prop = {</span>
+      <span class="s1">type: </span><span class="s3">'JSXAttribute'</span><span class="s1">,</span>
+      <span class="s1">value: {</span>
+        <span class="s1">type: </span><span class="s3">'JSXExpressionContainer'</span><span class="s1">,</span>
+      <span class="s1">},</span>
+    <span class="s1">};</span>
+    <span class="s2">let </span><span class="s1">counter = </span><span class="s4">0</span><span class="s1">;</span>
+    <span class="s0">// eslint-disable-next-line no-console</span>
+    <span class="s2">const </span><span class="s1">errorOrig = console.error;</span>
+    <span class="s0">// eslint-disable-next-line no-console</span>
+    <span class="s1">console.error = () =&gt; {</span>
+      <span class="s1">counter += </span><span class="s4">1</span><span class="s1">;</span>
+    <span class="s1">};</span>
+    <span class="s2">let </span><span class="s1">value;</span>
+    <span class="s1">assert.doesNotThrow(() =&gt; {</span>
+      <span class="s1">value = getLiteralPropValue(prop);</span>
+    <span class="s1">}, Error);</span>
+
+    <span class="s1">assert.equal(</span><span class="s2">null</span><span class="s1">, value);</span>
+    <span class="s1">assert.equal(counter, </span><span class="s4">1</span><span class="s1">);</span>
+    <span class="s0">// eslint-disable-next-line no-console</span>
+    <span class="s1">console.error = errorOrig;</span>
+  <span class="s1">});</span>
+
+  <span class="s1">describe(</span><span class="s3">'Null'</span><span class="s1">, () =&gt; {</span>
+    <span class="s1">it(</span><span class="s3">'should return true when no value is given'</span><span class="s1">, () =&gt; {</span>
+      <span class="s2">const </span><span class="s1">prop = extractProp(</span><span class="s3">'&lt;div foo /&gt;'</span><span class="s1">);</span>
+
+      <span class="s2">const </span><span class="s1">expected = </span><span class="s2">true</span><span class="s1">;</span>
+      <span class="s2">const </span><span class="s1">actual = getLiteralPropValue(prop);</span>
+
+      <span class="s1">assert.equal(actual, expected);</span>
+    <span class="s1">});</span>
+  <span class="s1">});</span>
+
+  <span class="s1">describe(</span><span class="s3">'Literal'</span><span class="s1">, () =&gt; {</span>
+    <span class="s1">it(</span><span class="s3">'should return correct string if value is a string'</span><span class="s1">, () =&gt; {</span>
+      <span class="s2">const </span><span class="s1">prop = extractProp(</span><span class="s3">'&lt;div foo=&quot;bar&quot; /&gt;'</span><span class="s1">);</span>
+
+      <span class="s2">const </span><span class="s1">expected = </span><span class="s3">'bar'</span><span class="s1">;</span>
+      <span class="s2">const </span><span class="s1">actual = getLiteralPropValue(prop);</span>
+
+      <span class="s1">assert.equal(actual, expected);</span>
+    <span class="s1">});</span>
+
+    <span class="s1">it(</span><span class="s3">'should return correct string if value is a string expression'</span><span class="s1">, () =&gt; {</span>
+      <span class="s2">const </span><span class="s1">prop = extractProp(</span><span class="s3">'&lt;div foo={&quot;bar&quot;} /&gt;'</span><span class="s1">);</span>
+
+      <span class="s2">const </span><span class="s1">expected = </span><span class="s3">'bar'</span><span class="s1">;</span>
+      <span class="s2">const </span><span class="s1">actual = getLiteralPropValue(prop);</span>
+
+      <span class="s1">assert.equal(actual, expected);</span>
+    <span class="s1">});</span>
+
+    <span class="s1">it(</span><span class="s3">'should return correct integer if value is a integer expression'</span><span class="s1">, () =&gt; {</span>
+      <span class="s2">const </span><span class="s1">prop = extractProp(</span><span class="s3">'&lt;div foo={1} /&gt;'</span><span class="s1">);</span>
+
+      <span class="s2">const </span><span class="s1">expected = </span><span class="s4">1</span><span class="s1">;</span>
+      <span class="s2">const </span><span class="s1">actual = getLiteralPropValue(prop);</span>
+
+      <span class="s1">assert.equal(actual, expected);</span>
+    <span class="s1">});</span>
+
+    <span class="s1">it(</span><span class="s3">'should convert &quot;true&quot; to boolean type'</span><span class="s1">, () =&gt; {</span>
+      <span class="s2">const </span><span class="s1">prop = extractProp(</span><span class="s3">'&lt;div foo=&quot;true&quot; /&gt;'</span><span class="s1">);</span>
+
+      <span class="s2">const </span><span class="s1">expected = </span><span class="s2">true</span><span class="s1">;</span>
+      <span class="s2">const </span><span class="s1">actual = getLiteralPropValue(prop);</span>
+
+      <span class="s1">assert.equal(actual, expected);</span>
+    <span class="s1">});</span>
+
+    <span class="s1">it(</span><span class="s3">'should convert &quot;TrUE&quot; to boolean type'</span><span class="s1">, () =&gt; {</span>
+      <span class="s2">const </span><span class="s1">prop = extractProp(</span><span class="s3">'&lt;div foo=&quot;TrUE&quot; /&gt;'</span><span class="s1">);</span>
+
+      <span class="s2">const </span><span class="s1">expected = </span><span class="s2">true</span><span class="s1">;</span>
+      <span class="s2">const </span><span class="s1">actual = getLiteralPropValue(prop);</span>
+
+      <span class="s1">assert.equal(actual, expected);</span>
+    <span class="s1">});</span>
+
+    <span class="s1">it(</span><span class="s3">'should convert &quot;false&quot; to boolean type'</span><span class="s1">, () =&gt; {</span>
+      <span class="s2">const </span><span class="s1">prop = extractProp(</span><span class="s3">'&lt;div foo=&quot;false&quot; /&gt;'</span><span class="s1">);</span>
+
+      <span class="s2">const </span><span class="s1">expected = </span><span class="s2">false</span><span class="s1">;</span>
+      <span class="s2">const </span><span class="s1">actual = getLiteralPropValue(prop);</span>
+
+      <span class="s1">assert.equal(actual, expected);</span>
+    <span class="s1">});</span>
+
+    <span class="s1">it(</span><span class="s3">'should convert &quot;FaLsE&quot; to boolean type'</span><span class="s1">, () =&gt; {</span>
+      <span class="s2">const </span><span class="s1">prop = extractProp(</span><span class="s3">'&lt;div foo=&quot;FaLsE&quot; /&gt;'</span><span class="s1">);</span>
+
+      <span class="s2">const </span><span class="s1">expected = </span><span class="s2">false</span><span class="s1">;</span>
+      <span class="s2">const </span><span class="s1">actual = getLiteralPropValue(prop);</span>
+
+      <span class="s1">assert.equal(actual, expected);</span>
+    <span class="s1">});</span>
+
+    <span class="s1">it(</span><span class="s3">'should return String null when value is null'</span><span class="s1">, () =&gt; {</span>
+      <span class="s2">const </span><span class="s1">prop = extractProp(</span><span class="s3">'&lt;div foo={null} /&gt;'</span><span class="s1">);</span>
+
+      <span class="s2">const </span><span class="s1">expected = </span><span class="s3">'null'</span><span class="s1">;</span>
+      <span class="s2">const </span><span class="s1">actual = getLiteralPropValue(prop);</span>
+
+      <span class="s1">assert.equal(actual, expected);</span>
+    <span class="s1">});</span>
+  <span class="s1">});</span>
+
+  <span class="s1">describe(</span><span class="s3">'JSXElement'</span><span class="s1">, () =&gt; {</span>
+    <span class="s1">it(</span><span class="s3">'should return null'</span><span class="s1">, () =&gt; {</span>
+      <span class="s2">const </span><span class="s1">prop = extractProp(</span><span class="s3">'&lt;div foo={&lt;bar /&gt;} /&gt;'</span><span class="s1">);</span>
+
+      <span class="s2">const </span><span class="s1">expected = </span><span class="s2">null</span><span class="s1">;</span>
+      <span class="s2">const </span><span class="s1">actual = getLiteralPropValue(prop);</span>
+
+      <span class="s1">assert.equal(actual, expected);</span>
+    <span class="s1">});</span>
+  <span class="s1">});</span>
+
+  <span class="s1">describe(</span><span class="s3">'Identifier'</span><span class="s1">, () =&gt; {</span>
+    <span class="s1">it(</span><span class="s3">'should return null'</span><span class="s1">, () =&gt; {</span>
+      <span class="s2">const </span><span class="s1">prop = extractProp(</span><span class="s3">'&lt;div foo={bar} /&gt;'</span><span class="s1">);</span>
+
+      <span class="s2">const </span><span class="s1">expected = </span><span class="s2">null</span><span class="s1">;</span>
+      <span class="s2">const </span><span class="s1">actual = getLiteralPropValue(prop);</span>
+
+      <span class="s1">assert.equal(actual, expected);</span>
+    <span class="s1">});</span>
+
+    <span class="s1">it(</span><span class="s3">'should return undefined when identifier is literally `undefined`'</span><span class="s1">, () =&gt; {</span>
+      <span class="s2">const </span><span class="s1">prop = extractProp(</span><span class="s3">'&lt;div foo={undefined} /&gt;'</span><span class="s1">);</span>
+
+      <span class="s2">const </span><span class="s1">expected = undefined;</span>
+      <span class="s2">const </span><span class="s1">actual = getLiteralPropValue(prop);</span>
+
+      <span class="s1">assert.equal(actual, expected);</span>
+    <span class="s1">});</span>
+  <span class="s1">});</span>
+
+  <span class="s1">describeIfNotBabylon(</span><span class="s3">'Chain Expression'</span><span class="s1">, () =&gt; {</span>
+    <span class="s1">it(</span><span class="s3">'should return null'</span><span class="s1">, () =&gt; {</span>
+      <span class="s2">const </span><span class="s1">prop = extractProp(</span><span class="s3">'&lt;div foo={abc?.def} /&gt;'</span><span class="s1">);</span>
+
+      <span class="s2">const </span><span class="s1">expected = </span><span class="s2">null</span><span class="s1">;</span>
+      <span class="s2">const </span><span class="s1">actual = getLiteralPropValue(prop);</span>
+
+      <span class="s1">assert.equal(actual, expected);</span>
+    <span class="s1">});</span>
+  <span class="s1">});</span>
+
+  <span class="s1">describe(</span><span class="s3">'Template literal'</span><span class="s1">, () =&gt; {</span>
+    <span class="s1">it(</span><span class="s3">'should return template literal with vars wrapped in curly braces'</span><span class="s1">, () =&gt; {</span>
+      <span class="s2">const </span><span class="s1">prop = extractProp(</span><span class="s3">'&lt;div foo={`bar ${baz}`} /&gt;'</span><span class="s1">);</span>
+
+      <span class="s2">const </span><span class="s1">expected = </span><span class="s3">'bar {baz}'</span><span class="s1">;</span>
+      <span class="s2">const </span><span class="s1">actual = getLiteralPropValue(prop);</span>
+
+      <span class="s1">assert.equal(actual, expected);</span>
+    <span class="s1">});</span>
+
+    <span class="s1">it(</span><span class="s3">'should return string &quot;undefined&quot; for expressions that evaluate to undefined'</span><span class="s1">, () =&gt; {</span>
+      <span class="s2">const </span><span class="s1">prop = extractProp(</span><span class="s3">'&lt;div foo={`bar ${undefined}`} /&gt;'</span><span class="s1">);</span>
+
+      <span class="s2">const </span><span class="s1">expected = </span><span class="s3">'bar undefined'</span><span class="s1">;</span>
+      <span class="s2">const </span><span class="s1">actual = getLiteralPropValue(prop);</span>
+
+      <span class="s1">assert.equal(actual, expected);</span>
+    <span class="s1">});</span>
+  <span class="s1">});</span>
+
+  <span class="s1">describe(</span><span class="s3">'Tagged Template literal'</span><span class="s1">, () =&gt; {</span>
+    <span class="s1">it(</span><span class="s3">'should return template literal with vars wrapped in curly braces'</span><span class="s1">, () =&gt; {</span>
+      <span class="s2">const </span><span class="s1">prop = extractProp(</span><span class="s3">'&lt;div foo={noop`bar ${baz}`} /&gt;'</span><span class="s1">);</span>
+
+      <span class="s2">const </span><span class="s1">expected = </span><span class="s3">'bar {baz}'</span><span class="s1">;</span>
+      <span class="s2">const </span><span class="s1">actual = getLiteralPropValue(prop);</span>
+
+      <span class="s1">assert.equal(actual, expected);</span>
+    <span class="s1">});</span>
+
+    <span class="s1">it(</span><span class="s3">'should return string &quot;undefined&quot; for expressions that evaluate to undefined'</span><span class="s1">, () =&gt; {</span>
+      <span class="s2">const </span><span class="s1">prop = extractProp(</span><span class="s3">'&lt;div foo={noop`bar ${undefined}`} /&gt;'</span><span class="s1">);</span>
+
+      <span class="s2">const </span><span class="s1">expected = </span><span class="s3">'bar undefined'</span><span class="s1">;</span>
+      <span class="s2">const </span><span class="s1">actual = getLiteralPropValue(prop);</span>
+
+      <span class="s1">assert.equal(actual, expected);</span>
+    <span class="s1">});</span>
+  <span class="s1">});</span>
+
+  <span class="s1">describe(</span><span class="s3">'Arrow function expression'</span><span class="s1">, () =&gt; {</span>
+    <span class="s1">it(</span><span class="s3">'should return null'</span><span class="s1">, () =&gt; {</span>
+      <span class="s2">const </span><span class="s1">prop = extractProp(</span><span class="s3">'&lt;div foo={ () =&gt; { return &quot;bar&quot;; }} /&gt;'</span><span class="s1">);</span>
+
+      <span class="s2">const </span><span class="s1">expected = </span><span class="s2">null</span><span class="s1">;</span>
+      <span class="s2">const </span><span class="s1">actual = getLiteralPropValue(prop);</span>
+
+      <span class="s1">assert.equal(actual, expected);</span>
+    <span class="s1">});</span>
+  <span class="s1">});</span>
+
+  <span class="s1">describe(</span><span class="s3">'Function expression'</span><span class="s1">, () =&gt; {</span>
+    <span class="s1">it(</span><span class="s3">'should return null'</span><span class="s1">, () =&gt; {</span>
+      <span class="s2">const </span><span class="s1">prop = extractProp(</span><span class="s3">'&lt;div foo={ function() { return &quot;bar&quot;; } } /&gt;'</span><span class="s1">);</span>
+
+      <span class="s2">const </span><span class="s1">expected = </span><span class="s2">null</span><span class="s1">;</span>
+      <span class="s2">const </span><span class="s1">actual = getLiteralPropValue(prop);</span>
+
+      <span class="s1">assert.equal(actual, expected);</span>
+    <span class="s1">});</span>
+  <span class="s1">});</span>
+
+  <span class="s1">describe(</span><span class="s3">'Logical expression'</span><span class="s1">, () =&gt; {</span>
+    <span class="s1">it(</span><span class="s3">'should return null for &amp;&amp; operator'</span><span class="s1">, () =&gt; {</span>
+      <span class="s2">const </span><span class="s1">prop = extractProp(</span><span class="s3">'&lt;div foo={bar &amp;&amp; baz} /&gt;'</span><span class="s1">);</span>
+
+      <span class="s2">const </span><span class="s1">expected = </span><span class="s2">null</span><span class="s1">;</span>
+      <span class="s2">const </span><span class="s1">actual = getLiteralPropValue(prop);</span>
+
+      <span class="s1">assert.equal(actual, expected);</span>
+    <span class="s1">});</span>
+
+    <span class="s1">it(</span><span class="s3">'should return null for || operator'</span><span class="s1">, () =&gt; {</span>
+      <span class="s2">const </span><span class="s1">prop = extractProp(</span><span class="s3">'&lt;div foo={bar || baz} /&gt;'</span><span class="s1">);</span>
+
+      <span class="s2">const </span><span class="s1">expected = </span><span class="s2">null</span><span class="s1">;</span>
+      <span class="s2">const </span><span class="s1">actual = getLiteralPropValue(prop);</span>
+
+      <span class="s1">assert.equal(actual, expected);</span>
+    <span class="s1">});</span>
+  <span class="s1">});</span>
+
+  <span class="s1">describe(</span><span class="s3">'Member expression'</span><span class="s1">, () =&gt; {</span>
+    <span class="s1">it(</span><span class="s3">'should return null'</span><span class="s1">, () =&gt; {</span>
+      <span class="s2">const </span><span class="s1">prop = extractProp(</span><span class="s3">'&lt;div foo={bar.baz} /&gt;'</span><span class="s1">);</span>
+
+      <span class="s2">const </span><span class="s1">expected = </span><span class="s2">null</span><span class="s1">;</span>
+      <span class="s2">const </span><span class="s1">actual = getLiteralPropValue(prop);</span>
+
+      <span class="s1">assert.equal(actual, expected);</span>
+    <span class="s1">});</span>
+  <span class="s1">});</span>
+
+  <span class="s1">describe(</span><span class="s3">'Call expression'</span><span class="s1">, () =&gt; {</span>
+    <span class="s1">it(</span><span class="s3">'should return null'</span><span class="s1">, () =&gt; {</span>
+      <span class="s2">const </span><span class="s1">prop = extractProp(</span><span class="s3">'&lt;div foo={bar()} /&gt;'</span><span class="s1">);</span>
+
+      <span class="s2">const </span><span class="s1">expected = </span><span class="s2">null</span><span class="s1">;</span>
+      <span class="s2">const </span><span class="s1">actual = getLiteralPropValue(prop);</span>
+
+      <span class="s1">assert.equal(actual, expected);</span>
+    <span class="s1">});</span>
+  <span class="s1">});</span>
+
+  <span class="s1">describe(</span><span class="s3">'Unary expression'</span><span class="s1">, () =&gt; {</span>
+    <span class="s1">it(</span><span class="s3">'should correctly evaluate an expression that prefixes with -'</span><span class="s1">, () =&gt; {</span>
+      <span class="s2">const </span><span class="s1">prop = extractProp(</span><span class="s3">'&lt;div foo={-bar} /&gt;'</span><span class="s1">);</span>
+
+      <span class="s0">// -&quot;bar&quot; =&gt; NaN</span>
+      <span class="s2">const </span><span class="s1">expected = </span><span class="s2">true</span><span class="s1">;</span>
+      <span class="s2">const </span><span class="s1">actual = Number.isNaN(getLiteralPropValue(prop));</span>
+
+      <span class="s1">assert.equal(actual, expected);</span>
+    <span class="s1">});</span>
+
+    <span class="s1">it(</span><span class="s3">'should correctly evaluate an expression that prefixes with -'</span><span class="s1">, () =&gt; {</span>
+      <span class="s2">const </span><span class="s1">prop = extractProp(</span><span class="s3">'&lt;div foo={-42} /&gt;'</span><span class="s1">);</span>
+
+      <span class="s2">const </span><span class="s1">expected = -</span><span class="s4">42</span><span class="s1">;</span>
+      <span class="s2">const </span><span class="s1">actual = getLiteralPropValue(prop);</span>
+
+      <span class="s1">assert.equal(actual, expected);</span>
+    <span class="s1">});</span>
+
+    <span class="s1">it(</span><span class="s3">'should correctly evaluate an expression that prefixes with +'</span><span class="s1">, () =&gt; {</span>
+      <span class="s2">const </span><span class="s1">prop = extractProp(</span><span class="s3">'&lt;div foo={+bar} /&gt;'</span><span class="s1">);</span>
+
+      <span class="s0">// +&quot;bar&quot; =&gt; NaN</span>
+      <span class="s2">const </span><span class="s1">expected = </span><span class="s2">true</span><span class="s1">;</span>
+      <span class="s2">const </span><span class="s1">actual = Number.isNaN(getLiteralPropValue(prop));</span>
+
+      <span class="s1">assert.equal(actual, expected);</span>
+    <span class="s1">});</span>
+
+    <span class="s1">it(</span><span class="s3">'should correctly evaluate an expression that prefixes with +'</span><span class="s1">, () =&gt; {</span>
+      <span class="s2">const </span><span class="s1">prop = extractProp(</span><span class="s3">'&lt;div foo={+42} /&gt;'</span><span class="s1">);</span>
+
+      <span class="s2">const </span><span class="s1">expected = </span><span class="s4">42</span><span class="s1">;</span>
+      <span class="s2">const </span><span class="s1">actual = getLiteralPropValue(prop);</span>
+
+      <span class="s1">assert.equal(actual, expected);</span>
+    <span class="s1">});</span>
+
+    <span class="s1">it(</span><span class="s3">'should correctly evaluate an expression that prefixes with !'</span><span class="s1">, () =&gt; {</span>
+      <span class="s2">const </span><span class="s1">prop = extractProp(</span><span class="s3">'&lt;div foo={!bar} /&gt;'</span><span class="s1">);</span>
+
+      <span class="s2">const </span><span class="s1">expected = </span><span class="s2">false</span><span class="s1">; </span><span class="s0">// !&quot;bar&quot; === false</span>
+      <span class="s2">const </span><span class="s1">actual = getLiteralPropValue(prop);</span>
+
+      <span class="s1">assert.equal(actual, expected);</span>
+    <span class="s1">});</span>
+
+    <span class="s1">it(</span><span class="s3">'should correctly evaluate an expression that prefixes with ~'</span><span class="s1">, () =&gt; {</span>
+      <span class="s2">const </span><span class="s1">prop = extractProp(</span><span class="s3">'&lt;div foo={~bar} /&gt;'</span><span class="s1">);</span>
+
+      <span class="s2">const </span><span class="s1">expected = -</span><span class="s4">1</span><span class="s1">; </span><span class="s0">// ~&quot;bar&quot; === -1</span>
+      <span class="s2">const </span><span class="s1">actual = getLiteralPropValue(prop);</span>
+
+      <span class="s1">assert.equal(actual, expected);</span>
+    <span class="s1">});</span>
+
+    <span class="s1">it(</span><span class="s3">'should return true when evaluating `delete foo`'</span><span class="s1">, () =&gt; {</span>
+      <span class="s2">const </span><span class="s1">prop = extractProp(</span><span class="s3">'&lt;div foo={delete x} /&gt;'</span><span class="s1">);</span>
+
+      <span class="s2">const </span><span class="s1">expected = </span><span class="s2">true</span><span class="s1">;</span>
+      <span class="s2">const </span><span class="s1">actual = getLiteralPropValue(prop);</span>
+
+      <span class="s1">assert.equal(actual, expected);</span>
+    <span class="s1">});</span>
+
+    <span class="s1">it(</span><span class="s3">'should return undefined when evaluating `void foo`'</span><span class="s1">, () =&gt; {</span>
+      <span class="s2">const </span><span class="s1">prop = extractProp(</span><span class="s3">'&lt;div foo={void x} /&gt;'</span><span class="s1">);</span>
+
+      <span class="s2">const </span><span class="s1">expected = undefined;</span>
+      <span class="s2">const </span><span class="s1">actual = getLiteralPropValue(prop);</span>
+
+      <span class="s1">assert.equal(actual, expected);</span>
+    <span class="s1">});</span>
+
+    <span class="s0">// TODO: We should fix this to check to see if we can evaluate it.</span>
+    <span class="s1">it(</span><span class="s3">'should return undefined when evaluating `typeof foo`'</span><span class="s1">, () =&gt; {</span>
+      <span class="s2">const </span><span class="s1">prop = extractProp(</span><span class="s3">'&lt;div foo={typeof x} /&gt;'</span><span class="s1">);</span>
+
+      <span class="s2">const </span><span class="s1">expected = undefined;</span>
+      <span class="s2">const </span><span class="s1">actual = getLiteralPropValue(prop);</span>
+
+      <span class="s1">assert.equal(actual, expected);</span>
+    <span class="s1">});</span>
+  <span class="s1">});</span>
+
+  <span class="s1">describe(</span><span class="s3">'Update expression'</span><span class="s1">, () =&gt; {</span>
+    <span class="s1">it(</span><span class="s3">'should correctly evaluate an expression that prefixes with ++'</span><span class="s1">, () =&gt; {</span>
+      <span class="s2">const </span><span class="s1">prop = extractProp(</span><span class="s3">'&lt;div foo={++bar} /&gt;'</span><span class="s1">);</span>
+
+      <span class="s0">// ++&quot;bar&quot; =&gt; NaN</span>
+      <span class="s2">const </span><span class="s1">expected = </span><span class="s2">true</span><span class="s1">;</span>
+      <span class="s2">const </span><span class="s1">actual = Number.isNaN(getLiteralPropValue(prop));</span>
+
+      <span class="s1">assert.equal(actual, expected);</span>
+    <span class="s1">});</span>
+
+    <span class="s1">it(</span><span class="s3">'should correctly evaluate an expression that prefixes with --'</span><span class="s1">, () =&gt; {</span>
+      <span class="s2">const </span><span class="s1">prop = extractProp(</span><span class="s3">'&lt;div foo={--bar} /&gt;'</span><span class="s1">);</span>
+
+      <span class="s0">// --&quot;bar&quot; =&gt; NaN</span>
+      <span class="s2">const </span><span class="s1">expected = </span><span class="s2">true</span><span class="s1">;</span>
+      <span class="s2">const </span><span class="s1">actual = Number.isNaN(getLiteralPropValue(prop));</span>
+
+      <span class="s1">assert.equal(actual, expected);</span>
+    <span class="s1">});</span>
+
+    <span class="s1">it(</span><span class="s3">'should correctly evaluate an expression that suffixes with ++'</span><span class="s1">, () =&gt; {</span>
+      <span class="s2">const </span><span class="s1">prop = extractProp(</span><span class="s3">'&lt;div foo={bar++} /&gt;'</span><span class="s1">);</span>
+
+      <span class="s0">// &quot;bar&quot;++ =&gt; NaN</span>
+      <span class="s2">const </span><span class="s1">expected = </span><span class="s2">true</span><span class="s1">;</span>
+      <span class="s2">const </span><span class="s1">actual = Number.isNaN(getLiteralPropValue(prop));</span>
+
+      <span class="s1">assert.equal(actual, expected);</span>
+    <span class="s1">});</span>
+
+    <span class="s1">it(</span><span class="s3">'should correctly evaluate an expression that suffixes with --'</span><span class="s1">, () =&gt; {</span>
+      <span class="s2">const </span><span class="s1">prop = extractProp(</span><span class="s3">'&lt;div foo={bar--} /&gt;'</span><span class="s1">);</span>
+
+      <span class="s0">// &quot;bar&quot;-- =&gt; NaN</span>
+      <span class="s2">const </span><span class="s1">expected = </span><span class="s2">true</span><span class="s1">;</span>
+      <span class="s2">const </span><span class="s1">actual = Number.isNaN(getLiteralPropValue(prop));</span>
+
+      <span class="s1">assert.equal(actual, expected);</span>
+    <span class="s1">});</span>
+  <span class="s1">});</span>
+
+  <span class="s1">describe(</span><span class="s3">'This expression'</span><span class="s1">, () =&gt; {</span>
+    <span class="s1">it(</span><span class="s3">'should return null'</span><span class="s1">, () =&gt; {</span>
+      <span class="s2">const </span><span class="s1">prop = extractProp(</span><span class="s3">'&lt;div foo={this} /&gt;'</span><span class="s1">);</span>
+
+      <span class="s2">const </span><span class="s1">expected = </span><span class="s2">null</span><span class="s1">;</span>
+      <span class="s2">const </span><span class="s1">actual = getLiteralPropValue(prop);</span>
+
+      <span class="s1">assert.equal(actual, expected);</span>
+    <span class="s1">});</span>
+  <span class="s1">});</span>
+
+  <span class="s1">describe(</span><span class="s3">'Conditional expression'</span><span class="s1">, () =&gt; {</span>
+    <span class="s1">it(</span><span class="s3">'should return null'</span><span class="s1">, () =&gt; {</span>
+      <span class="s2">const </span><span class="s1">prop = extractProp(</span><span class="s3">'&lt;div foo={bar ? baz : bam} /&gt;'</span><span class="s1">);</span>
+
+      <span class="s2">const </span><span class="s1">expected = </span><span class="s2">null</span><span class="s1">;</span>
+      <span class="s2">const </span><span class="s1">actual = getLiteralPropValue(prop);</span>
+
+      <span class="s1">assert.equal(actual, expected);</span>
+    <span class="s1">});</span>
+  <span class="s1">});</span>
+
+  <span class="s1">describe(</span><span class="s3">'Binary expression'</span><span class="s1">, () =&gt; {</span>
+    <span class="s1">it(</span><span class="s3">'should return null'</span><span class="s1">, () =&gt; {</span>
+      <span class="s2">const </span><span class="s1">prop = extractProp(</span><span class="s3">'&lt;div foo={1 == &quot;1&quot;} /&gt;'</span><span class="s1">);</span>
+
+      <span class="s2">const </span><span class="s1">expected = </span><span class="s2">null</span><span class="s1">;</span>
+      <span class="s2">const </span><span class="s1">actual = getLiteralPropValue(prop);</span>
+
+      <span class="s1">assert.equal(actual, expected);</span>
+    <span class="s1">});</span>
+  <span class="s1">});</span>
+
+  <span class="s1">describe(</span><span class="s3">'Object expression'</span><span class="s1">, () =&gt; {</span>
+    <span class="s1">it(</span><span class="s3">'should return null'</span><span class="s1">, () =&gt; {</span>
+      <span class="s2">const </span><span class="s1">prop = extractProp(</span><span class="s3">'&lt;div foo={ { bar: &quot;baz&quot; } } /&gt;'</span><span class="s1">);</span>
+
+      <span class="s2">const </span><span class="s1">expected = </span><span class="s2">null</span><span class="s1">;</span>
+      <span class="s2">const </span><span class="s1">actual = getLiteralPropValue(prop);</span>
+
+      <span class="s1">assert.deepEqual(actual, expected);</span>
+    <span class="s1">});</span>
+  <span class="s1">});</span>
+
+  <span class="s1">describe(</span><span class="s3">'New expression'</span><span class="s1">, () =&gt; {</span>
+    <span class="s1">it(</span><span class="s3">'should return null'</span><span class="s1">, () =&gt; {</span>
+      <span class="s2">const </span><span class="s1">prop = extractProp(</span><span class="s3">'&lt;div foo={new Bar()} /&gt;'</span><span class="s1">);</span>
+
+      <span class="s2">const </span><span class="s1">expected = </span><span class="s2">null</span><span class="s1">;</span>
+      <span class="s2">const </span><span class="s1">actual = getLiteralPropValue(prop);</span>
+
+      <span class="s1">assert.deepEqual(actual, expected);</span>
+    <span class="s1">});</span>
+  <span class="s1">});</span>
+
+  <span class="s1">describe(</span><span class="s3">'Array expression'</span><span class="s1">, () =&gt; {</span>
+    <span class="s1">it(</span><span class="s3">'should evaluate to correct representation of the the array in props'</span><span class="s1">, () =&gt; {</span>
+      <span class="s2">const </span><span class="s1">prop = extractProp(</span><span class="s3">'&lt;div foo={[&quot;bar&quot;, 42, null]} /&gt;'</span><span class="s1">);</span>
+
+      <span class="s2">const </span><span class="s1">expected = [</span><span class="s3">'bar'</span><span class="s1">, </span><span class="s4">42</span><span class="s1">];</span>
+      <span class="s2">const </span><span class="s1">actual = getLiteralPropValue(prop);</span>
+
+      <span class="s1">assert.deepEqual(actual, expected);</span>
+    <span class="s1">});</span>
+  <span class="s1">});</span>
+
+  <span class="s1">it(</span><span class="s3">'should return an empty array provided an empty array in props'</span><span class="s1">, () =&gt; {</span>
+    <span class="s2">const </span><span class="s1">prop = extractProp(</span><span class="s3">'&lt;div foo={[]} /&gt;'</span><span class="s1">);</span>
+
+    <span class="s2">const </span><span class="s1">expected = [];</span>
+    <span class="s2">const </span><span class="s1">actual = getLiteralPropValue(prop);</span>
+
+    <span class="s1">assert.deepEqual(actual, expected);</span>
+  <span class="s1">});</span>
+
+  <span class="s1">describe(</span><span class="s3">'Bind expression'</span><span class="s1">, () =&gt; {</span>
+    <span class="s1">it(</span><span class="s3">'should return null'</span><span class="s1">, () =&gt; {</span>
+      <span class="s2">const </span><span class="s1">prop = extractProp(</span><span class="s3">'&lt;div foo={::this.handleClick} /&gt;'</span><span class="s1">);</span>
+
+      <span class="s2">const </span><span class="s1">expected = </span><span class="s2">null</span><span class="s1">;</span>
+      <span class="s2">const </span><span class="s1">actual = getLiteralPropValue(prop);</span>
+
+      <span class="s1">assert.deepEqual(actual, expected);</span>
+    <span class="s1">});</span>
+  <span class="s1">});</span>
+
+  <span class="s1">describeIfNotBabylon(</span><span class="s3">'import.meta'</span><span class="s1">, () =&gt; {</span>
+    <span class="s1">beforeEach(() =&gt; {</span>
+      <span class="s1">setIsESM();</span>
+    <span class="s1">});</span>
+
+    <span class="s1">it(</span><span class="s3">'should return null'</span><span class="s1">, () =&gt; {</span>
+      <span class="s2">const </span><span class="s1">prop = extractProp(</span><span class="s3">'&lt;div foo={import.meta.env.whyIsThisNotOnProcess} /&gt;'</span><span class="s1">);</span>
+
+      <span class="s2">const </span><span class="s1">expected = </span><span class="s2">null</span><span class="s1">;</span>
+      <span class="s2">const </span><span class="s1">actual = getLiteralPropValue(prop);</span>
+
+      <span class="s1">assert.deepEqual(actual, expected);</span>
+    <span class="s1">});</span>
+  <span class="s1">});</span>
+
+  <span class="s1">describeIfNotBabylon(</span><span class="s3">'Typescript'</span><span class="s1">, () =&gt; {</span>
+    <span class="s1">beforeEach(() =&gt; {</span>
+      <span class="s1">changePlugins((pls) =&gt; [...pls, </span><span class="s3">'typescript'</span><span class="s1">]);</span>
+    <span class="s1">});</span>
+
+    <span class="s1">it(</span><span class="s3">'should return string representation of variable identifier wrapped in a Typescript non-null assertion'</span><span class="s1">, () =&gt; {</span>
+      <span class="s2">const </span><span class="s1">prop = extractProp(</span><span class="s3">'&lt;div foo={bar!} /&gt;'</span><span class="s1">);</span>
+
+      <span class="s2">const </span><span class="s1">expected = </span><span class="s2">null</span><span class="s1">;</span>
+      <span class="s2">const </span><span class="s1">actual = getLiteralPropValue(prop);</span>
+
+      <span class="s1">assert.equal(actual, expected);</span>
+    <span class="s1">});</span>
+
+    <span class="s1">it(</span><span class="s3">'should return string representation of variable identifier wrapped in a deep Typescript non-null assertion'</span><span class="s1">, () =&gt; {</span>
+      <span class="s2">const </span><span class="s1">prop = extractProp(</span><span class="s3">'&lt;div foo={(bar!)!} /&gt;'</span><span class="s1">);</span>
+
+      <span class="s2">const </span><span class="s1">expected = </span><span class="s2">null</span><span class="s1">;</span>
+      <span class="s2">const </span><span class="s1">actual = getLiteralPropValue(prop);</span>
+
+      <span class="s1">assert.equal(actual, expected);</span>
+    <span class="s1">});</span>
+
+    <span class="s1">it(</span><span class="s3">'should return string representation of variable identifier wrapped in a Typescript type coercion'</span><span class="s1">, () =&gt; {</span>
+      <span class="s1">changePlugins((pls) =&gt; [...pls, </span><span class="s3">'typescript'</span><span class="s1">]);</span>
+      <span class="s2">const </span><span class="s1">prop = extractProp(</span><span class="s3">'&lt;div foo={bar as any} /&gt;'</span><span class="s1">);</span>
+
+      <span class="s2">const </span><span class="s1">expected = </span><span class="s2">null</span><span class="s1">;</span>
+      <span class="s2">const </span><span class="s1">actual = getLiteralPropValue(prop);</span>
+
+      <span class="s1">assert.equal(actual, expected);</span>
+    <span class="s1">});</span>
+
+    <span class="s1">it(</span><span class="s3">'should work with a this.props value'</span><span class="s1">, () =&gt; {</span>
+      <span class="s2">const </span><span class="s1">prop = extractProp(</span><span class="s3">'&lt;a href={this.props.href!}&gt;Download&lt;/a&gt;'</span><span class="s1">, </span><span class="s3">'href'</span><span class="s1">);</span>
+      <span class="s2">const </span><span class="s1">expected = </span><span class="s2">null</span><span class="s1">;</span>
+      <span class="s2">const </span><span class="s1">actual = getLiteralPropValue(prop);</span>
+      <span class="s1">assert.equal(actual, expected);</span>
+    <span class="s1">});</span>
+  <span class="s1">});</span>
+<span class="s1">});</span>
+</pre>
+</body>
+</html>

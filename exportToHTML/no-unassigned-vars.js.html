@@ -1,0 +1,101 @@
+<html>
+<head>
+<title>no-unassigned-vars.js</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #8c8c8c; font-style: italic;}
+.s1 { color: #8c8c8c; font-style: italic;}
+.s2 { color: #080808;}
+.s3 { color: #067d17;}
+.s4 { color: #0033b3;}
+</style>
+</head>
+<body bgcolor="#ffffff">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#c0c0c0" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+no-unassigned-vars.js</font>
+</center></td></tr></table>
+<pre><span class="s0">/**</span>
+ <span class="s0">* </span><span class="s1">@fileoverview </span><span class="s0">Rule to flag variables that are never assigned</span>
+ <span class="s0">* </span><span class="s1">@author </span><span class="s0">Jacob Bandes-Storch &lt;https://github.com/jtbandes&gt;</span>
+ <span class="s0">*/</span>
+<span class="s3">&quot;use strict&quot;</span><span class="s2">;</span>
+
+<span class="s0">//------------------------------------------------------------------------------</span>
+<span class="s0">// Rule Definition</span>
+<span class="s0">//------------------------------------------------------------------------------</span>
+
+<span class="s0">/** </span><span class="s1">@type </span><span class="s0">{import('../types').Rule.RuleModule} */</span>
+<span class="s2">module.exports = {</span>
+	<span class="s2">meta: {</span>
+		<span class="s2">type: </span><span class="s3">&quot;problem&quot;</span><span class="s2">,</span>
+		<span class="s2">dialects: [</span><span class="s3">&quot;typescript&quot;</span><span class="s2">, </span><span class="s3">&quot;javascript&quot;</span><span class="s2">],</span>
+		<span class="s2">language: </span><span class="s3">&quot;javascript&quot;</span><span class="s2">,</span>
+
+		<span class="s2">docs: {</span>
+			<span class="s2">description:</span>
+				<span class="s3">&quot;Disallow `let` or `var` variables that are read but never assigned&quot;</span><span class="s2">,</span>
+			<span class="s2">recommended: </span><span class="s4">false</span><span class="s2">,</span>
+			<span class="s2">url: </span><span class="s3">&quot;https://eslint.org/docs/latest/rules/no-unassigned-vars&quot;</span><span class="s2">,</span>
+		<span class="s2">},</span>
+
+		<span class="s2">schema: [],</span>
+		<span class="s2">messages: {</span>
+			<span class="s2">unassigned:</span>
+				<span class="s3">&quot;'{{name}}' is always 'undefined' because it's never assigned.&quot;</span><span class="s2">,</span>
+		<span class="s2">},</span>
+	<span class="s2">},</span>
+
+	<span class="s2">create(context) {</span>
+		<span class="s4">const </span><span class="s2">sourceCode = context.sourceCode;</span>
+		<span class="s4">let </span><span class="s2">insideDeclareModule = </span><span class="s4">false</span><span class="s2">;</span>
+
+		<span class="s4">return </span><span class="s2">{</span>
+			<span class="s3">&quot;TSModuleDeclaration[declare=true]&quot;</span><span class="s2">() {</span>
+				<span class="s2">insideDeclareModule = </span><span class="s4">true</span><span class="s2">;</span>
+			<span class="s2">},</span>
+			<span class="s3">&quot;TSModuleDeclaration[declare=true]:exit&quot;</span><span class="s2">() {</span>
+				<span class="s2">insideDeclareModule = </span><span class="s4">false</span><span class="s2">;</span>
+			<span class="s2">},</span>
+			<span class="s2">VariableDeclarator(node) {</span>
+				<span class="s0">/** </span><span class="s1">@type </span><span class="s0">{import('estree').VariableDeclaration} */</span>
+				<span class="s4">const </span><span class="s2">declaration = node.parent;</span>
+				<span class="s4">const </span><span class="s2">shouldSkip =</span>
+					<span class="s2">node.init ||</span>
+					<span class="s2">node.id.type !== </span><span class="s3">&quot;Identifier&quot; </span><span class="s2">||</span>
+					<span class="s2">declaration.kind === </span><span class="s3">&quot;const&quot; </span><span class="s2">||</span>
+					<span class="s2">declaration.declare ||</span>
+					<span class="s2">insideDeclareModule;</span>
+				<span class="s4">if </span><span class="s2">(shouldSkip) {</span>
+					<span class="s4">return</span><span class="s2">;</span>
+				<span class="s2">}</span>
+				<span class="s4">const </span><span class="s2">[variable] = sourceCode.getDeclaredVariables(node);</span>
+				<span class="s4">if </span><span class="s2">(!variable) {</span>
+					<span class="s4">return</span><span class="s2">;</span>
+				<span class="s2">}</span>
+				<span class="s4">let </span><span class="s2">hasRead = </span><span class="s4">false</span><span class="s2">;</span>
+				<span class="s4">for </span><span class="s2">(</span><span class="s4">const </span><span class="s2">reference of variable.references) {</span>
+					<span class="s4">if </span><span class="s2">(reference.isWrite()) {</span>
+						<span class="s4">return</span><span class="s2">;</span>
+					<span class="s2">}</span>
+					<span class="s4">if </span><span class="s2">(reference.isRead()) {</span>
+						<span class="s2">hasRead = </span><span class="s4">true</span><span class="s2">;</span>
+					<span class="s2">}</span>
+				<span class="s2">}</span>
+				<span class="s4">if </span><span class="s2">(!hasRead) {</span>
+					<span class="s0">// Variables that are never read should be flagged by no-unused-vars instead</span>
+					<span class="s4">return</span><span class="s2">;</span>
+				<span class="s2">}</span>
+				<span class="s2">context.report({</span>
+					<span class="s2">node,</span>
+					<span class="s2">messageId: </span><span class="s3">&quot;unassigned&quot;</span><span class="s2">,</span>
+					<span class="s2">data: { name: node.id.name },</span>
+				<span class="s2">});</span>
+			<span class="s2">},</span>
+		<span class="s2">};</span>
+	<span class="s2">},</span>
+<span class="s2">};</span>
+</pre>
+</body>
+</html>

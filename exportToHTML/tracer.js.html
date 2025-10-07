@@ -1,0 +1,272 @@
+<html>
+<head>
+<title>tracer.js</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #067d17;}
+.s1 { color: #080808;}
+.s2 { color: #0033b3;}
+.s3 { color: #1750eb;}
+.s4 { color: #8c8c8c; font-style: italic;}
+.s5 { color: #264eff;}
+</style>
+</head>
+<body bgcolor="#ffffff">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#c0c0c0" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+tracer.js</font>
+</center></td></tr></table>
+<pre><span class="s0">&quot;use strict&quot;</span><span class="s1">;</span>
+<span class="s1">Object.defineProperty(exports, </span><span class="s0">&quot;__esModule&quot;</span><span class="s1">, {</span>
+    <span class="s1">value: </span><span class="s2">true</span>
+<span class="s1">});</span>
+<span class="s3">0 </span><span class="s1">&amp;&amp; (module.exports = {</span>
+    <span class="s1">BubbledError: </span><span class="s2">null</span><span class="s1">,</span>
+    <span class="s1">SpanKind: </span><span class="s2">null</span><span class="s1">,</span>
+    <span class="s1">SpanStatusCode: </span><span class="s2">null</span><span class="s1">,</span>
+    <span class="s1">getTracer: </span><span class="s2">null</span><span class="s1">,</span>
+    <span class="s1">isBubbledError: </span><span class="s2">null</span>
+<span class="s1">});</span>
+<span class="s2">function </span><span class="s1">_export(target, all) {</span>
+    <span class="s2">for</span><span class="s1">(</span><span class="s2">var </span><span class="s1">name </span><span class="s2">in </span><span class="s1">all)Object.defineProperty(target, name, {</span>
+        <span class="s1">enumerable: </span><span class="s2">true</span><span class="s1">,</span>
+        <span class="s1">get: all[name]</span>
+    <span class="s1">});</span>
+<span class="s1">}</span>
+<span class="s1">_export(exports, {</span>
+    <span class="s1">BubbledError: </span><span class="s2">function</span><span class="s1">() {</span>
+        <span class="s2">return </span><span class="s1">BubbledError;</span>
+    <span class="s1">},</span>
+    <span class="s1">SpanKind: </span><span class="s2">function</span><span class="s1">() {</span>
+        <span class="s2">return </span><span class="s1">SpanKind;</span>
+    <span class="s1">},</span>
+    <span class="s1">SpanStatusCode: </span><span class="s2">function</span><span class="s1">() {</span>
+        <span class="s2">return </span><span class="s1">SpanStatusCode;</span>
+    <span class="s1">},</span>
+    <span class="s1">getTracer: </span><span class="s2">function</span><span class="s1">() {</span>
+        <span class="s2">return </span><span class="s1">getTracer;</span>
+    <span class="s1">},</span>
+    <span class="s1">isBubbledError: </span><span class="s2">function</span><span class="s1">() {</span>
+        <span class="s2">return </span><span class="s1">isBubbledError;</span>
+    <span class="s1">}</span>
+<span class="s1">});</span>
+<span class="s2">const </span><span class="s1">_constants = require(</span><span class="s0">&quot;./constants&quot;</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">_isthenable = require(</span><span class="s0">&quot;../../../shared/lib/is-thenable&quot;</span><span class="s1">);</span>
+<span class="s2">let </span><span class="s1">api;</span>
+<span class="s4">// we want to allow users to use their own version of @opentelemetry/api if they</span>
+<span class="s4">// want to, so we try to require it first, and if it fails we fall back to the</span>
+<span class="s4">// version that is bundled with Next.js</span>
+<span class="s4">// this is because @opentelemetry/api has to be synced with the version of</span>
+<span class="s4">// @opentelemetry/tracing that is used, and we don't want to force users to use</span>
+<span class="s4">// the version that is bundled with Next.js.</span>
+<span class="s4">// the API is ~stable, so this should be fine</span>
+<span class="s2">if </span><span class="s1">(process.env.NEXT_RUNTIME === </span><span class="s0">'edge'</span><span class="s1">) {</span>
+    <span class="s1">api = require(</span><span class="s0">'@opentelemetry/api'</span><span class="s1">);</span>
+<span class="s1">} </span><span class="s2">else </span><span class="s1">{</span>
+    <span class="s2">try </span><span class="s1">{</span>
+        <span class="s1">api = require(</span><span class="s0">'@opentelemetry/api'</span><span class="s1">);</span>
+    <span class="s1">} </span><span class="s2">catch </span><span class="s1">(err) {</span>
+        <span class="s1">api = require(</span><span class="s0">'next/dist/compiled/@opentelemetry/api'</span><span class="s1">);</span>
+    <span class="s1">}</span>
+<span class="s1">}</span>
+<span class="s2">const </span><span class="s1">{ context, propagation, trace, SpanStatusCode, SpanKind, ROOT_CONTEXT } = api;</span>
+<span class="s2">class </span><span class="s1">BubbledError </span><span class="s2">extends </span><span class="s1">Error {</span>
+    <span class="s1">constructor(bubble, result){</span>
+        <span class="s2">super</span><span class="s1">(), </span><span class="s2">this</span><span class="s1">.bubble = bubble, </span><span class="s2">this</span><span class="s1">.result = result;</span>
+    <span class="s1">}</span>
+<span class="s1">}</span>
+<span class="s2">function </span><span class="s1">isBubbledError(error) {</span>
+    <span class="s2">if </span><span class="s1">(</span><span class="s2">typeof </span><span class="s1">error !== </span><span class="s0">'object' </span><span class="s1">|| error === </span><span class="s2">null</span><span class="s1">) </span><span class="s2">return false</span><span class="s1">;</span>
+    <span class="s2">return </span><span class="s1">error </span><span class="s2">instanceof </span><span class="s1">BubbledError;</span>
+<span class="s1">}</span>
+<span class="s2">const </span><span class="s1">closeSpanWithError = (span, error)=&gt;{</span>
+    <span class="s2">if </span><span class="s1">(isBubbledError(error) &amp;&amp; error.bubble) {</span>
+        <span class="s1">span.setAttribute(</span><span class="s0">'next.bubble'</span><span class="s1">, </span><span class="s2">true</span><span class="s1">);</span>
+    <span class="s1">} </span><span class="s2">else </span><span class="s1">{</span>
+        <span class="s2">if </span><span class="s1">(error) {</span>
+            <span class="s1">span.recordException(error);</span>
+            <span class="s1">span.setAttribute(</span><span class="s0">'error.type'</span><span class="s1">, error.name);</span>
+        <span class="s1">}</span>
+        <span class="s1">span.setStatus({</span>
+            <span class="s1">code: SpanStatusCode.ERROR,</span>
+            <span class="s1">message: error == </span><span class="s2">null </span><span class="s1">? </span><span class="s2">void </span><span class="s3">0 </span><span class="s1">: error.message</span>
+        <span class="s1">});</span>
+    <span class="s1">}</span>
+    <span class="s1">span.end();</span>
+<span class="s1">};</span>
+<span class="s4">/** we use this map to propagate attributes from nested spans to the top span */ </span><span class="s2">const </span><span class="s1">rootSpanAttributesStore = </span><span class="s2">new </span><span class="s1">Map();</span>
+<span class="s2">const </span><span class="s1">rootSpanIdKey = api.createContextKey(</span><span class="s0">'next.rootSpanId'</span><span class="s1">);</span>
+<span class="s2">let </span><span class="s1">lastSpanId = </span><span class="s3">0</span><span class="s1">;</span>
+<span class="s2">const </span><span class="s1">getSpanId = ()=&gt;lastSpanId++;</span>
+<span class="s2">const </span><span class="s1">clientTraceDataSetter = {</span>
+    <span class="s1">set (carrier, key, value) {</span>
+        <span class="s1">carrier.push({</span>
+            <span class="s1">key,</span>
+            <span class="s1">value</span>
+        <span class="s1">});</span>
+    <span class="s1">}</span>
+<span class="s1">};</span>
+<span class="s2">class </span><span class="s1">NextTracerImpl {</span>
+    <span class="s4">/**</span>
+   <span class="s4">* Returns an instance to the trace with configured name.</span>
+   <span class="s4">* Since wrap / trace can be defined in any place prior to actual trace subscriber initialization,</span>
+   <span class="s4">* This should be lazily evaluated.</span>
+   <span class="s4">*/ </span><span class="s1">getTracerInstance() {</span>
+        <span class="s2">return </span><span class="s1">trace.getTracer(</span><span class="s0">'next.js'</span><span class="s1">, </span><span class="s0">'0.0.1'</span><span class="s1">);</span>
+    <span class="s1">}</span>
+    <span class="s1">getContext() {</span>
+        <span class="s2">return </span><span class="s1">context;</span>
+    <span class="s1">}</span>
+    <span class="s1">getTracePropagationData() {</span>
+        <span class="s2">const </span><span class="s1">activeContext = context.active();</span>
+        <span class="s2">const </span><span class="s1">entries = [];</span>
+        <span class="s1">propagation.inject(activeContext, entries, clientTraceDataSetter);</span>
+        <span class="s2">return </span><span class="s1">entries;</span>
+    <span class="s1">}</span>
+    <span class="s1">getActiveScopeSpan() {</span>
+        <span class="s2">return </span><span class="s1">trace.getSpan(context == </span><span class="s2">null </span><span class="s1">? </span><span class="s2">void </span><span class="s3">0 </span><span class="s1">: context.active());</span>
+    <span class="s1">}</span>
+    <span class="s1">withPropagatedContext(carrier, fn, getter) {</span>
+        <span class="s2">const </span><span class="s1">activeContext = context.active();</span>
+        <span class="s2">if </span><span class="s1">(trace.getSpanContext(activeContext)) {</span>
+            <span class="s4">// Active span is already set, too late to propagate.</span>
+            <span class="s2">return </span><span class="s1">fn();</span>
+        <span class="s1">}</span>
+        <span class="s2">const </span><span class="s1">remoteContext = propagation.extract(activeContext, carrier, getter);</span>
+        <span class="s2">return </span><span class="s1">context.with(remoteContext, fn);</span>
+    <span class="s1">}</span>
+    <span class="s1">trace(...args) {</span>
+        <span class="s2">var </span><span class="s1">_trace_getSpanContext;</span>
+        <span class="s2">const </span><span class="s1">[type, fnOrOptions, fnOrEmpty] = args;</span>
+        <span class="s4">// coerce options form overload</span>
+        <span class="s2">const </span><span class="s1">{ fn, options } = </span><span class="s2">typeof </span><span class="s1">fnOrOptions === </span><span class="s0">'function' </span><span class="s1">? {</span>
+            <span class="s1">fn: fnOrOptions,</span>
+            <span class="s1">options: {}</span>
+        <span class="s1">} : {</span>
+            <span class="s1">fn: fnOrEmpty,</span>
+            <span class="s1">options: {</span>
+                <span class="s1">...fnOrOptions</span>
+            <span class="s1">}</span>
+        <span class="s1">};</span>
+        <span class="s2">const </span><span class="s1">spanName = options.spanName ?? type;</span>
+        <span class="s2">if </span><span class="s1">(!_constants.NextVanillaSpanAllowlist.includes(type) &amp;&amp; process.env.NEXT_OTEL_VERBOSE !== </span><span class="s0">'1' </span><span class="s1">|| options.hideSpan) {</span>
+            <span class="s2">return </span><span class="s1">fn();</span>
+        <span class="s1">}</span>
+        <span class="s4">// Trying to get active scoped span to assign parent. If option specifies parent span manually, will try to use it.</span>
+        <span class="s2">let </span><span class="s1">spanContext = </span><span class="s2">this</span><span class="s1">.getSpanContext((options == </span><span class="s2">null </span><span class="s1">? </span><span class="s2">void </span><span class="s3">0 </span><span class="s1">: options.parentSpan) ?? </span><span class="s2">this</span><span class="s1">.getActiveScopeSpan());</span>
+        <span class="s2">let </span><span class="s1">isRootSpan = </span><span class="s2">false</span><span class="s1">;</span>
+        <span class="s2">if </span><span class="s1">(!spanContext) {</span>
+            <span class="s1">spanContext = (context == </span><span class="s2">null </span><span class="s1">? </span><span class="s2">void </span><span class="s3">0 </span><span class="s1">: context.active()) ?? ROOT_CONTEXT;</span>
+            <span class="s1">isRootSpan = </span><span class="s2">true</span><span class="s1">;</span>
+        <span class="s1">} </span><span class="s2">else if </span><span class="s1">((_trace_getSpanContext = trace.getSpanContext(spanContext)) == </span><span class="s2">null </span><span class="s1">? </span><span class="s2">void </span><span class="s3">0 </span><span class="s1">: _trace_getSpanContext.isRemote) {</span>
+            <span class="s1">isRootSpan = </span><span class="s2">true</span><span class="s1">;</span>
+        <span class="s1">}</span>
+        <span class="s2">const </span><span class="s1">spanId = getSpanId();</span>
+        <span class="s1">options.attributes = {</span>
+            <span class="s0">'next.span_name'</span><span class="s1">: spanName,</span>
+            <span class="s0">'next.span_type'</span><span class="s1">: type,</span>
+            <span class="s1">...options.attributes</span>
+        <span class="s1">};</span>
+        <span class="s2">return </span><span class="s1">context.with(spanContext.setValue(rootSpanIdKey, spanId), ()=&gt;</span><span class="s2">this</span><span class="s1">.getTracerInstance().startActiveSpan(spanName, options, (span)=&gt;{</span>
+                <span class="s2">const </span><span class="s1">startTime = </span><span class="s0">'performance' </span><span class="s2">in </span><span class="s1">globalThis &amp;&amp; </span><span class="s0">'measure' </span><span class="s2">in </span><span class="s1">performance ? globalThis.performance.now() : undefined;</span>
+                <span class="s2">const </span><span class="s1">onCleanup = ()=&gt;{</span>
+                    <span class="s1">rootSpanAttributesStore.delete(spanId);</span>
+                    <span class="s2">if </span><span class="s1">(startTime &amp;&amp; process.env.NEXT_OTEL_PERFORMANCE_PREFIX &amp;&amp; _constants.LogSpanAllowList.includes(type || </span><span class="s0">''</span><span class="s1">)) {</span>
+                        <span class="s1">performance.measure(</span><span class="s0">`</span><span class="s1">${process.env.NEXT_OTEL_PERFORMANCE_PREFIX}</span><span class="s0">:next-</span><span class="s1">${(type.split(</span><span class="s0">'.'</span><span class="s1">).pop() || </span><span class="s0">''</span><span class="s1">).replace(</span><span class="s5">/[A-Z]/g</span><span class="s1">, (match)=&gt;</span><span class="s0">'-' </span><span class="s1">+ match.toLowerCase())}</span><span class="s0">`</span><span class="s1">, {</span>
+                            <span class="s1">start: startTime,</span>
+                            <span class="s1">end: performance.now()</span>
+                        <span class="s1">});</span>
+                    <span class="s1">}</span>
+                <span class="s1">};</span>
+                <span class="s2">if </span><span class="s1">(isRootSpan) {</span>
+                    <span class="s1">rootSpanAttributesStore.set(spanId, </span><span class="s2">new </span><span class="s1">Map(Object.entries(options.attributes ?? {})));</span>
+                <span class="s1">}</span>
+                <span class="s2">try </span><span class="s1">{</span>
+                    <span class="s2">if </span><span class="s1">(fn.length &gt; </span><span class="s3">1</span><span class="s1">) {</span>
+                        <span class="s2">return </span><span class="s1">fn(span, (err)=&gt;closeSpanWithError(span, err));</span>
+                    <span class="s1">}</span>
+                    <span class="s2">const </span><span class="s1">result = fn(span);</span>
+                    <span class="s2">if </span><span class="s1">((</span><span class="s3">0</span><span class="s1">, _isthenable.isThenable)(result)) {</span>
+                        <span class="s4">// If there's error make sure it throws</span>
+                        <span class="s2">return </span><span class="s1">result.then((res)=&gt;{</span>
+                            <span class="s1">span.end();</span>
+                            <span class="s4">// Need to pass down the promise result,</span>
+                            <span class="s4">// it could be react stream response with error { error, stream }</span>
+                            <span class="s2">return </span><span class="s1">res;</span>
+                        <span class="s1">}).catch((err)=&gt;{</span>
+                            <span class="s1">closeSpanWithError(span, err);</span>
+                            <span class="s2">throw </span><span class="s1">err;</span>
+                        <span class="s1">}).finally(onCleanup);</span>
+                    <span class="s1">} </span><span class="s2">else </span><span class="s1">{</span>
+                        <span class="s1">span.end();</span>
+                        <span class="s1">onCleanup();</span>
+                    <span class="s1">}</span>
+                    <span class="s2">return </span><span class="s1">result;</span>
+                <span class="s1">} </span><span class="s2">catch </span><span class="s1">(err) {</span>
+                    <span class="s1">closeSpanWithError(span, err);</span>
+                    <span class="s1">onCleanup();</span>
+                    <span class="s2">throw </span><span class="s1">err;</span>
+                <span class="s1">}</span>
+            <span class="s1">}));</span>
+    <span class="s1">}</span>
+    <span class="s1">wrap(...args) {</span>
+        <span class="s2">const </span><span class="s1">tracer = </span><span class="s2">this</span><span class="s1">;</span>
+        <span class="s2">const </span><span class="s1">[name, options, fn] = args.length === </span><span class="s3">3 </span><span class="s1">? args : [</span>
+            <span class="s1">args[</span><span class="s3">0</span><span class="s1">],</span>
+            <span class="s1">{},</span>
+            <span class="s1">args[</span><span class="s3">1</span><span class="s1">]</span>
+        <span class="s1">];</span>
+        <span class="s2">if </span><span class="s1">(!_constants.NextVanillaSpanAllowlist.includes(name) &amp;&amp; process.env.NEXT_OTEL_VERBOSE !== </span><span class="s0">'1'</span><span class="s1">) {</span>
+            <span class="s2">return </span><span class="s1">fn;</span>
+        <span class="s1">}</span>
+        <span class="s2">return function</span><span class="s1">() {</span>
+            <span class="s2">let </span><span class="s1">optionsObj = options;</span>
+            <span class="s2">if </span><span class="s1">(</span><span class="s2">typeof </span><span class="s1">optionsObj === </span><span class="s0">'function' </span><span class="s1">&amp;&amp; </span><span class="s2">typeof </span><span class="s1">fn === </span><span class="s0">'function'</span><span class="s1">) {</span>
+                <span class="s1">optionsObj = optionsObj.apply(</span><span class="s2">this</span><span class="s1">, arguments);</span>
+            <span class="s1">}</span>
+            <span class="s2">const </span><span class="s1">lastArgId = arguments.length - </span><span class="s3">1</span><span class="s1">;</span>
+            <span class="s2">const </span><span class="s1">cb = arguments[lastArgId];</span>
+            <span class="s2">if </span><span class="s1">(</span><span class="s2">typeof </span><span class="s1">cb === </span><span class="s0">'function'</span><span class="s1">) {</span>
+                <span class="s2">const </span><span class="s1">scopeBoundCb = tracer.getContext().bind(context.active(), cb);</span>
+                <span class="s2">return </span><span class="s1">tracer.trace(name, optionsObj, (_span, done)=&gt;{</span>
+                    <span class="s1">arguments[lastArgId] = </span><span class="s2">function</span><span class="s1">(err) {</span>
+                        <span class="s1">done == </span><span class="s2">null </span><span class="s1">? </span><span class="s2">void </span><span class="s3">0 </span><span class="s1">: done(err);</span>
+                        <span class="s2">return </span><span class="s1">scopeBoundCb.apply(</span><span class="s2">this</span><span class="s1">, arguments);</span>
+                    <span class="s1">};</span>
+                    <span class="s2">return </span><span class="s1">fn.apply(</span><span class="s2">this</span><span class="s1">, arguments);</span>
+                <span class="s1">});</span>
+            <span class="s1">} </span><span class="s2">else </span><span class="s1">{</span>
+                <span class="s2">return </span><span class="s1">tracer.trace(name, optionsObj, ()=&gt;fn.apply(</span><span class="s2">this</span><span class="s1">, arguments));</span>
+            <span class="s1">}</span>
+        <span class="s1">};</span>
+    <span class="s1">}</span>
+    <span class="s1">startSpan(...args) {</span>
+        <span class="s2">const </span><span class="s1">[type, options] = args;</span>
+        <span class="s2">const </span><span class="s1">spanContext = </span><span class="s2">this</span><span class="s1">.getSpanContext((options == </span><span class="s2">null </span><span class="s1">? </span><span class="s2">void </span><span class="s3">0 </span><span class="s1">: options.parentSpan) ?? </span><span class="s2">this</span><span class="s1">.getActiveScopeSpan());</span>
+        <span class="s2">return this</span><span class="s1">.getTracerInstance().startSpan(type, options, spanContext);</span>
+    <span class="s1">}</span>
+    <span class="s1">getSpanContext(parentSpan) {</span>
+        <span class="s2">const </span><span class="s1">spanContext = parentSpan ? trace.setSpan(context.active(), parentSpan) : undefined;</span>
+        <span class="s2">return </span><span class="s1">spanContext;</span>
+    <span class="s1">}</span>
+    <span class="s1">getRootSpanAttributes() {</span>
+        <span class="s2">const </span><span class="s1">spanId = context.active().getValue(rootSpanIdKey);</span>
+        <span class="s2">return </span><span class="s1">rootSpanAttributesStore.get(spanId);</span>
+    <span class="s1">}</span>
+    <span class="s1">setRootSpanAttribute(key, value) {</span>
+        <span class="s2">const </span><span class="s1">spanId = context.active().getValue(rootSpanIdKey);</span>
+        <span class="s2">const </span><span class="s1">attributes = rootSpanAttributesStore.get(spanId);</span>
+        <span class="s2">if </span><span class="s1">(attributes) {</span>
+            <span class="s1">attributes.set(key, value);</span>
+        <span class="s1">}</span>
+    <span class="s1">}</span>
+<span class="s1">}</span>
+<span class="s2">const </span><span class="s1">getTracer = (()=&gt;{</span>
+    <span class="s2">const </span><span class="s1">tracer = </span><span class="s2">new </span><span class="s1">NextTracerImpl();</span>
+    <span class="s2">return </span><span class="s1">()=&gt;tracer;</span>
+<span class="s1">})();</span>
+
+<span class="s4">//# sourceMappingURL=tracer.js.map</span></pre>
+</body>
+</html>

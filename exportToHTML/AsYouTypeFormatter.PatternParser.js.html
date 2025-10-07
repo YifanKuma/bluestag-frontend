@@ -1,0 +1,236 @@
+<html>
+<head>
+<title>AsYouTypeFormatter.PatternParser.js</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #0033b3;}
+.s1 { color: #080808;}
+.s2 { color: #1750eb;}
+.s3 { color: #067d17;}
+.s4 { color: #8c8c8c; font-style: italic;}
+.s5 { color: #264eff;}
+.s6 { color: #0037a6;}
+</style>
+</head>
+<body bgcolor="#ffffff">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#c0c0c0" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+AsYouTypeFormatter.PatternParser.js</font>
+</center></td></tr></table>
+<pre><span class="s0">export default class </span><span class="s1">PatternParser {</span>
+	<span class="s1">parse(pattern) {</span>
+		<span class="s0">this</span><span class="s1">.context = [{</span>
+			<span class="s1">or: </span><span class="s0">true</span><span class="s1">,</span>
+			<span class="s1">instructions: []</span>
+		<span class="s1">}]</span>
+
+		<span class="s0">this</span><span class="s1">.parsePattern(pattern)</span>
+
+		<span class="s0">if </span><span class="s1">(</span><span class="s0">this</span><span class="s1">.context.length !== </span><span class="s2">1</span><span class="s1">) {</span>
+			<span class="s0">throw new </span><span class="s1">Error(</span><span class="s3">'Non-finalized contexts left when pattern parse ended'</span><span class="s1">)</span>
+		<span class="s1">}</span>
+
+		<span class="s0">const </span><span class="s1">{ branches, instructions } = </span><span class="s0">this</span><span class="s1">.context[</span><span class="s2">0</span><span class="s1">]</span>
+
+		<span class="s0">if </span><span class="s1">(branches) {</span>
+			<span class="s0">return </span><span class="s1">{</span>
+				<span class="s1">op: </span><span class="s3">'|'</span><span class="s1">,</span>
+				<span class="s1">args: branches.concat([</span>
+					<span class="s1">expandSingleElementArray(instructions)</span>
+				<span class="s1">])</span>
+			<span class="s1">}</span>
+		<span class="s1">}</span>
+
+		<span class="s4">/* istanbul ignore if */</span>
+		<span class="s0">if </span><span class="s1">(instructions.length === </span><span class="s2">0</span><span class="s1">) {</span>
+			<span class="s0">throw new </span><span class="s1">Error(</span><span class="s3">'Pattern is required'</span><span class="s1">)</span>
+		<span class="s1">}</span>
+
+		<span class="s0">if </span><span class="s1">(instructions.length === </span><span class="s2">1</span><span class="s1">) {</span>
+			<span class="s0">return </span><span class="s1">instructions[</span><span class="s2">0</span><span class="s1">]</span>
+		<span class="s1">}</span>
+
+		<span class="s0">return </span><span class="s1">instructions</span>
+	<span class="s1">}</span>
+
+	<span class="s1">startContext(context) {</span>
+		<span class="s0">this</span><span class="s1">.context.push(context)</span>
+	<span class="s1">}</span>
+
+	<span class="s1">endContext() {</span>
+		<span class="s0">this</span><span class="s1">.context.pop()</span>
+	<span class="s1">}</span>
+
+	<span class="s1">getContext() {</span>
+		<span class="s0">return this</span><span class="s1">.context[</span><span class="s0">this</span><span class="s1">.context.length - </span><span class="s2">1</span><span class="s1">]</span>
+	<span class="s1">}</span>
+
+	<span class="s1">parsePattern(pattern) {</span>
+		<span class="s0">if </span><span class="s1">(!pattern) {</span>
+			<span class="s0">throw new </span><span class="s1">Error(</span><span class="s3">'Pattern is required'</span><span class="s1">)</span>
+		<span class="s1">}</span>
+
+		<span class="s0">const </span><span class="s1">match = pattern.match(OPERATOR)</span>
+		<span class="s0">if </span><span class="s1">(!match) {</span>
+			<span class="s0">if </span><span class="s1">(ILLEGAL_CHARACTER_REGEXP.test(pattern)) {</span>
+				<span class="s0">throw new </span><span class="s1">Error(</span><span class="s3">`Illegal characters found in a pattern: </span><span class="s1">${pattern}</span><span class="s3">`</span><span class="s1">)</span>
+			<span class="s1">}</span>
+			<span class="s0">this</span><span class="s1">.getContext().instructions = </span><span class="s0">this</span><span class="s1">.getContext().instructions.concat(</span>
+				<span class="s1">pattern.split(</span><span class="s3">''</span><span class="s1">)</span>
+			<span class="s1">)</span>
+			<span class="s0">return</span>
+		<span class="s1">}</span>
+
+		<span class="s0">const </span><span class="s1">operator = match[</span><span class="s2">1</span><span class="s1">]</span>
+		<span class="s0">const </span><span class="s1">before = pattern.slice(</span><span class="s2">0</span><span class="s1">, match.index)</span>
+		<span class="s0">const </span><span class="s1">rightPart = pattern.slice(match.index + operator.length)</span>
+
+		<span class="s0">switch </span><span class="s1">(operator) {</span>
+			<span class="s0">case </span><span class="s3">'(?:'</span><span class="s1">:</span>
+				<span class="s0">if </span><span class="s1">(before) {</span>
+					<span class="s0">this</span><span class="s1">.parsePattern(before)</span>
+				<span class="s1">}</span>
+				<span class="s0">this</span><span class="s1">.startContext({</span>
+					<span class="s1">or: </span><span class="s0">true</span><span class="s1">,</span>
+					<span class="s1">instructions: [],</span>
+					<span class="s1">branches: []</span>
+				<span class="s1">})</span>
+				<span class="s0">break</span>
+
+			<span class="s0">case </span><span class="s3">')'</span><span class="s1">:</span>
+				<span class="s0">if </span><span class="s1">(!</span><span class="s0">this</span><span class="s1">.getContext().or) {</span>
+					<span class="s0">throw new </span><span class="s1">Error(</span><span class="s3">'&quot;)&quot; operator must be preceded by &quot;(?:&quot; operator'</span><span class="s1">)</span>
+				<span class="s1">}</span>
+				<span class="s0">if </span><span class="s1">(before) {</span>
+					<span class="s0">this</span><span class="s1">.parsePattern(before)</span>
+				<span class="s1">}</span>
+				<span class="s0">if </span><span class="s1">(</span><span class="s0">this</span><span class="s1">.getContext().instructions.length === </span><span class="s2">0</span><span class="s1">) {</span>
+					<span class="s0">throw new </span><span class="s1">Error(</span><span class="s3">'No instructions found after &quot;|&quot; operator in an &quot;or&quot; group'</span><span class="s1">)</span>
+				<span class="s1">}</span>
+				<span class="s0">const </span><span class="s1">{ branches } = </span><span class="s0">this</span><span class="s1">.getContext()</span>
+				<span class="s1">branches.push(</span>
+					<span class="s1">expandSingleElementArray(</span>
+						<span class="s0">this</span><span class="s1">.getContext().instructions</span>
+					<span class="s1">)</span>
+				<span class="s1">)</span>
+				<span class="s0">this</span><span class="s1">.endContext()</span>
+				<span class="s0">this</span><span class="s1">.getContext().instructions.push({</span>
+					<span class="s1">op: </span><span class="s3">'|'</span><span class="s1">,</span>
+					<span class="s1">args: branches</span>
+				<span class="s1">})</span>
+				<span class="s0">break</span>
+
+			<span class="s0">case </span><span class="s3">'|'</span><span class="s1">:</span>
+				<span class="s0">if </span><span class="s1">(!</span><span class="s0">this</span><span class="s1">.getContext().or) {</span>
+					<span class="s0">throw new </span><span class="s1">Error(</span><span class="s3">'&quot;|&quot; operator can only be used inside &quot;or&quot; groups'</span><span class="s1">)</span>
+				<span class="s1">}</span>
+				<span class="s0">if </span><span class="s1">(before) {</span>
+					<span class="s0">this</span><span class="s1">.parsePattern(before)</span>
+				<span class="s1">}</span>
+				<span class="s4">// The top-level is an implicit &quot;or&quot; group, if required.</span>
+				<span class="s0">if </span><span class="s1">(!</span><span class="s0">this</span><span class="s1">.getContext().branches) {</span>
+					<span class="s4">// `branches` are not defined only for the root implicit &quot;or&quot; operator.</span>
+					<span class="s4">/* istanbul ignore else */</span>
+					<span class="s0">if </span><span class="s1">(</span><span class="s0">this</span><span class="s1">.context.length === </span><span class="s2">1</span><span class="s1">) {</span>
+						<span class="s0">this</span><span class="s1">.getContext().branches = []</span>
+					<span class="s1">} </span><span class="s0">else </span><span class="s1">{</span>
+						<span class="s0">throw new </span><span class="s1">Error(</span><span class="s3">'&quot;branches&quot; not found in an &quot;or&quot; group context'</span><span class="s1">)</span>
+					<span class="s1">}</span>
+				<span class="s1">}</span>
+				<span class="s0">this</span><span class="s1">.getContext().branches.push(</span>
+					<span class="s1">expandSingleElementArray(</span>
+						<span class="s0">this</span><span class="s1">.getContext().instructions</span>
+					<span class="s1">)</span>
+				<span class="s1">)</span>
+				<span class="s0">this</span><span class="s1">.getContext().instructions = []</span>
+				<span class="s0">break</span>
+
+			<span class="s0">case </span><span class="s3">'['</span><span class="s1">:</span>
+				<span class="s0">if </span><span class="s1">(before) {</span>
+					<span class="s0">this</span><span class="s1">.parsePattern(before)</span>
+				<span class="s1">}</span>
+				<span class="s0">this</span><span class="s1">.startContext({</span>
+					<span class="s1">oneOfSet: </span><span class="s0">true</span>
+				<span class="s1">})</span>
+				<span class="s0">break</span>
+
+			<span class="s0">case </span><span class="s3">']'</span><span class="s1">:</span>
+				<span class="s0">if </span><span class="s1">(!</span><span class="s0">this</span><span class="s1">.getContext().oneOfSet) {</span>
+					<span class="s0">throw new </span><span class="s1">Error(</span><span class="s3">'&quot;]&quot; operator must be preceded by &quot;[&quot; operator'</span><span class="s1">)</span>
+				<span class="s1">}</span>
+				<span class="s0">this</span><span class="s1">.endContext()</span>
+				<span class="s0">this</span><span class="s1">.getContext().instructions.push({</span>
+					<span class="s1">op: </span><span class="s3">'[]'</span><span class="s1">,</span>
+					<span class="s1">args: parseOneOfSet(before)</span>
+				<span class="s1">})</span>
+				<span class="s0">break</span>
+
+			<span class="s4">/* istanbul ignore next */</span>
+			<span class="s0">default</span><span class="s1">:</span>
+				<span class="s0">throw new </span><span class="s1">Error(</span><span class="s3">`Unknown operator: </span><span class="s1">${operator}</span><span class="s3">`</span><span class="s1">)</span>
+		<span class="s1">}</span>
+
+		<span class="s0">if </span><span class="s1">(rightPart) {</span>
+			<span class="s0">this</span><span class="s1">.parsePattern(rightPart)</span>
+		<span class="s1">}</span>
+	<span class="s1">}</span>
+<span class="s1">}</span>
+
+<span class="s0">function </span><span class="s1">parseOneOfSet(pattern) {</span>
+	<span class="s0">const </span><span class="s1">values = []</span>
+	<span class="s0">let </span><span class="s1">i = </span><span class="s2">0</span>
+	<span class="s0">while </span><span class="s1">(i &lt; pattern.length) {</span>
+		<span class="s0">if </span><span class="s1">(pattern[i] === </span><span class="s3">'-'</span><span class="s1">) {</span>
+			<span class="s0">if </span><span class="s1">(i === </span><span class="s2">0 </span><span class="s1">|| i === pattern.length - </span><span class="s2">1</span><span class="s1">) {</span>
+				<span class="s0">throw new </span><span class="s1">Error(</span><span class="s3">`Couldn't parse a one-of set pattern: </span><span class="s1">${pattern}</span><span class="s3">`</span><span class="s1">)</span>
+			<span class="s1">}</span>
+			<span class="s0">const </span><span class="s1">prevValue = pattern[i - </span><span class="s2">1</span><span class="s1">].charCodeAt(</span><span class="s2">0</span><span class="s1">) + </span><span class="s2">1</span>
+			<span class="s0">const </span><span class="s1">nextValue = pattern[i + </span><span class="s2">1</span><span class="s1">].charCodeAt(</span><span class="s2">0</span><span class="s1">) - </span><span class="s2">1</span>
+			<span class="s0">let </span><span class="s1">value = prevValue</span>
+			<span class="s0">while </span><span class="s1">(value &lt;= nextValue) {</span>
+				<span class="s1">values.push(String.fromCharCode(value))</span>
+				<span class="s1">value++</span>
+			<span class="s1">}</span>
+		<span class="s1">} </span><span class="s0">else </span><span class="s1">{</span>
+			<span class="s1">values.push(pattern[i])</span>
+		<span class="s1">}</span>
+		<span class="s1">i++</span>
+	<span class="s1">}</span>
+	<span class="s0">return </span><span class="s1">values</span>
+<span class="s1">}</span>
+
+<span class="s0">const </span><span class="s1">ILLEGAL_CHARACTER_REGEXP = </span><span class="s5">/[\(\)\[\]\?\:\|]/</span>
+
+<span class="s0">const </span><span class="s1">OPERATOR = </span><span class="s0">new </span><span class="s1">RegExp(</span>
+	<span class="s4">// any of:</span>
+	<span class="s3">'(' </span><span class="s1">+</span>
+		<span class="s4">// or operator</span>
+		<span class="s3">'</span><span class="s6">\\</span><span class="s3">|' </span><span class="s1">+</span>
+		<span class="s4">// or</span>
+		<span class="s3">'|' </span><span class="s1">+</span>
+		<span class="s4">// or group start</span>
+		<span class="s3">'</span><span class="s6">\\</span><span class="s3">(</span><span class="s6">\\</span><span class="s3">?</span><span class="s6">\\</span><span class="s3">:' </span><span class="s1">+</span>
+		<span class="s4">// or</span>
+		<span class="s3">'|' </span><span class="s1">+</span>
+		<span class="s4">// or group end</span>
+		<span class="s3">'</span><span class="s6">\\</span><span class="s3">)' </span><span class="s1">+</span>
+		<span class="s4">// or</span>
+		<span class="s3">'|' </span><span class="s1">+</span>
+		<span class="s4">// one-of set start</span>
+		<span class="s3">'</span><span class="s6">\\</span><span class="s3">[' </span><span class="s1">+</span>
+		<span class="s4">// or</span>
+		<span class="s3">'|' </span><span class="s1">+</span>
+		<span class="s4">// one-of set end</span>
+		<span class="s3">'</span><span class="s6">\\</span><span class="s3">]' </span><span class="s1">+</span>
+	<span class="s3">')'</span>
+<span class="s1">)</span>
+
+<span class="s0">function </span><span class="s1">expandSingleElementArray(array) {</span>
+	<span class="s0">if </span><span class="s1">(array.length === </span><span class="s2">1</span><span class="s1">) {</span>
+		<span class="s0">return </span><span class="s1">array[</span><span class="s2">0</span><span class="s1">]</span>
+	<span class="s1">}</span>
+	<span class="s0">return </span><span class="s1">array</span>
+<span class="s1">}</span></pre>
+</body>
+</html>

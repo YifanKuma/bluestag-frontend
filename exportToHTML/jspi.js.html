@@ -1,0 +1,67 @@
+<html>
+<head>
+<title>jspi.js</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #067d17;}
+.s1 { color: #080808;}
+.s2 { color: #0033b3;}
+.s3 { color: #1750eb;}
+.s4 { color: #8c8c8c; font-style: italic;}
+.s5 { color: #8c8c8c; font-style: italic;}
+</style>
+</head>
+<body bgcolor="#ffffff">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#c0c0c0" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+jspi.js</font>
+</center></td></tr></table>
+<pre><span class="s0">&quot;use strict&quot;</span><span class="s1">;</span>
+<span class="s1">Object.defineProperty(exports, </span><span class="s0">&quot;__esModule&quot;</span><span class="s1">, { value: </span><span class="s2">true </span><span class="s1">});</span>
+<span class="s1">exports.wrapExports = exports.wrapAsyncExport = exports.wrapAsyncImport = </span><span class="s2">void </span><span class="s3">0</span><span class="s1">;</span>
+<span class="s2">const </span><span class="s1">util_1 = require(</span><span class="s0">&quot;./wasi/util&quot;</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">webassembly_1 = require(</span><span class="s0">&quot;./webassembly&quot;</span><span class="s1">);</span>
+<span class="s2">function </span><span class="s1">checkWebAssemblyFunction() {</span>
+    <span class="s2">const </span><span class="s1">WebAssemblyFunction = webassembly_1._WebAssembly.Function;</span>
+    <span class="s2">if </span><span class="s1">(</span><span class="s2">typeof </span><span class="s1">WebAssemblyFunction !== </span><span class="s0">'function'</span><span class="s1">) {</span>
+        <span class="s2">throw new </span><span class="s1">Error(</span><span class="s0">'WebAssembly.Function is not supported in this environment.' </span><span class="s1">+</span>
+            <span class="s0">' If you are using V8 based browser like Chrome, try to specify' </span><span class="s1">+</span>
+            <span class="s0">' --js-flags=&quot;--wasm-staging --experimental-wasm-stack-switching&quot;'</span><span class="s1">);</span>
+    <span class="s1">}</span>
+    <span class="s2">return </span><span class="s1">WebAssemblyFunction;</span>
+<span class="s1">}</span>
+<span class="s4">/** </span><span class="s5">@public </span><span class="s4">*/</span>
+<span class="s2">function </span><span class="s1">wrapAsyncImport(f, parameterType, returnType) {</span>
+    <span class="s2">const </span><span class="s1">WebAssemblyFunction = checkWebAssemblyFunction();</span>
+    <span class="s2">if </span><span class="s1">(</span><span class="s2">typeof </span><span class="s1">f !== </span><span class="s0">'function'</span><span class="s1">) {</span>
+        <span class="s2">throw new </span><span class="s1">TypeError(</span><span class="s0">'Function required'</span><span class="s1">);</span>
+    <span class="s1">}</span>
+    <span class="s2">const </span><span class="s1">parameters = parameterType.slice(</span><span class="s3">0</span><span class="s1">);</span>
+    <span class="s1">parameters.unshift(</span><span class="s0">'externref'</span><span class="s1">);</span>
+    <span class="s2">return new </span><span class="s1">WebAssemblyFunction({ parameters, results: returnType }, f, { suspending: </span><span class="s0">'first' </span><span class="s1">});</span>
+<span class="s1">}</span>
+<span class="s1">exports.wrapAsyncImport = wrapAsyncImport;</span>
+<span class="s4">/** </span><span class="s5">@public </span><span class="s4">*/</span>
+<span class="s2">function </span><span class="s1">wrapAsyncExport(f) {</span>
+    <span class="s2">const </span><span class="s1">WebAssemblyFunction = checkWebAssemblyFunction();</span>
+    <span class="s2">if </span><span class="s1">(</span><span class="s2">typeof </span><span class="s1">f !== </span><span class="s0">'function'</span><span class="s1">) {</span>
+        <span class="s2">throw new </span><span class="s1">TypeError(</span><span class="s0">'Function required'</span><span class="s1">);</span>
+    <span class="s1">}</span>
+    <span class="s2">return new </span><span class="s1">WebAssemblyFunction({ parameters: [...WebAssemblyFunction.type(f).parameters.slice(</span><span class="s3">1</span><span class="s1">)], results: [</span><span class="s0">'externref'</span><span class="s1">] }, f, { promising: </span><span class="s0">'first' </span><span class="s1">});</span>
+<span class="s1">}</span>
+<span class="s1">exports.wrapAsyncExport = wrapAsyncExport;</span>
+<span class="s4">/** </span><span class="s5">@public </span><span class="s4">*/</span>
+<span class="s2">function </span><span class="s1">wrapExports(exports, needWrap) {</span>
+    <span class="s2">return </span><span class="s1">(</span><span class="s3">0</span><span class="s1">, util_1.wrapInstanceExports)(exports, (exportValue, name) =&gt; {</span>
+        <span class="s2">let </span><span class="s1">ignore = </span><span class="s2">typeof </span><span class="s1">exportValue !== </span><span class="s0">'function'</span><span class="s1">;</span>
+        <span class="s2">if </span><span class="s1">(Array.isArray(needWrap)) {</span>
+            <span class="s1">ignore = ignore || (needWrap.indexOf(name) === -</span><span class="s3">1</span><span class="s1">);</span>
+        <span class="s1">}</span>
+        <span class="s2">return </span><span class="s1">ignore ? exportValue : wrapAsyncExport(exportValue);</span>
+    <span class="s1">});</span>
+<span class="s1">}</span>
+<span class="s1">exports.wrapExports = wrapExports;</span>
+<span class="s4">//# sourceMappingURL=jspi.js.map</span></pre>
+</body>
+</html>

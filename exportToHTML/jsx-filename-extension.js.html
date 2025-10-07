@@ -1,0 +1,143 @@
+<html>
+<head>
+<title>jsx-filename-extension.js</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #8c8c8c; font-style: italic;}
+.s1 { color: #8c8c8c; font-style: italic;}
+.s2 { color: #080808;}
+.s3 { color: #067d17;}
+.s4 { color: #0033b3;}
+.s5 { color: #0037a6;}
+.s6 { color: #1750eb;}
+</style>
+</head>
+<body bgcolor="#ffffff">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#c0c0c0" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+jsx-filename-extension.js</font>
+</center></td></tr></table>
+<pre><span class="s0">/**</span>
+ <span class="s0">* </span><span class="s1">@fileoverview </span><span class="s0">Restrict file extensions that may contain JSX</span>
+ <span class="s0">* </span><span class="s1">@author </span><span class="s0">Joe Lencioni</span>
+ <span class="s0">*/</span>
+
+<span class="s3">'use strict'</span><span class="s2">;</span>
+
+<span class="s4">const </span><span class="s2">path = require(</span><span class="s3">'path'</span><span class="s2">);</span>
+<span class="s4">const </span><span class="s2">docsUrl = require(</span><span class="s3">'../util/docsUrl'</span><span class="s2">);</span>
+<span class="s4">const </span><span class="s2">report = require(</span><span class="s3">'../util/report'</span><span class="s2">);</span>
+
+<span class="s0">// ------------------------------------------------------------------------------</span>
+<span class="s0">// Constants</span>
+<span class="s0">// ------------------------------------------------------------------------------</span>
+
+<span class="s4">const </span><span class="s2">DEFAULTS = {</span>
+  <span class="s2">allow: </span><span class="s3">'always'</span><span class="s2">,</span>
+  <span class="s2">extensions: [</span><span class="s3">'.jsx'</span><span class="s2">],</span>
+  <span class="s2">ignoreFilesWithoutCode: </span><span class="s4">false</span><span class="s2">,</span>
+<span class="s2">};</span>
+
+<span class="s0">// ------------------------------------------------------------------------------</span>
+<span class="s0">// Rule Definition</span>
+<span class="s0">// ------------------------------------------------------------------------------</span>
+
+<span class="s4">const </span><span class="s2">messages = {</span>
+  <span class="s2">noJSXWithExtension: </span><span class="s3">'JSX not allowed in files with extension </span><span class="s5">\'</span><span class="s3">{{ext}}</span><span class="s5">\'</span><span class="s3">'</span><span class="s2">,</span>
+  <span class="s2">extensionOnlyForJSX: </span><span class="s3">'Only files containing JSX may use the extension </span><span class="s5">\'</span><span class="s3">{{ext}}</span><span class="s5">\'</span><span class="s3">'</span><span class="s2">,</span>
+<span class="s2">};</span>
+
+<span class="s0">/** </span><span class="s1">@type </span><span class="s0">{import('eslint').Rule.RuleModule} */</span>
+<span class="s2">module.exports = {</span>
+  <span class="s2">meta: {</span>
+    <span class="s2">docs: {</span>
+      <span class="s2">description: </span><span class="s3">'Disallow file extensions that may contain JSX'</span><span class="s2">,</span>
+      <span class="s2">category: </span><span class="s3">'Stylistic Issues'</span><span class="s2">,</span>
+      <span class="s2">recommended: </span><span class="s4">false</span><span class="s2">,</span>
+      <span class="s2">url: docsUrl(</span><span class="s3">'jsx-filename-extension'</span><span class="s2">),</span>
+    <span class="s2">},</span>
+
+    <span class="s2">messages,</span>
+
+    <span class="s2">schema: [{</span>
+      <span class="s2">type: </span><span class="s3">'object'</span><span class="s2">,</span>
+      <span class="s2">properties: {</span>
+        <span class="s2">allow: {</span>
+          <span class="s4">enum</span><span class="s2">: [</span><span class="s3">'always'</span><span class="s2">, </span><span class="s3">'as-needed'</span><span class="s2">],</span>
+        <span class="s2">},</span>
+        <span class="s2">extensions: {</span>
+          <span class="s2">type: </span><span class="s3">'array'</span><span class="s2">,</span>
+          <span class="s2">items: {</span>
+            <span class="s2">type: </span><span class="s3">'string'</span><span class="s2">,</span>
+          <span class="s2">},</span>
+        <span class="s2">},</span>
+        <span class="s2">ignoreFilesWithoutCode: {</span>
+          <span class="s2">type: </span><span class="s3">'boolean'</span><span class="s2">,</span>
+        <span class="s2">},</span>
+      <span class="s2">},</span>
+      <span class="s2">additionalProperties: </span><span class="s4">false</span><span class="s2">,</span>
+    <span class="s2">}],</span>
+  <span class="s2">},</span>
+
+  <span class="s2">create(context) {</span>
+    <span class="s4">const </span><span class="s2">filename = context.getFilename();</span>
+
+    <span class="s4">let </span><span class="s2">jsxNode;</span>
+
+    <span class="s4">if </span><span class="s2">(filename === </span><span class="s3">'&lt;text&gt;'</span><span class="s2">) {</span>
+      <span class="s0">// No need to traverse any nodes.</span>
+      <span class="s4">return </span><span class="s2">{};</span>
+    <span class="s2">}</span>
+
+    <span class="s4">const </span><span class="s2">allow = (context.options[</span><span class="s6">0</span><span class="s2">] &amp;&amp; context.options[</span><span class="s6">0</span><span class="s2">].allow) || DEFAULTS.allow;</span>
+    <span class="s4">const </span><span class="s2">allowedExtensions = (context.options[</span><span class="s6">0</span><span class="s2">] &amp;&amp; context.options[</span><span class="s6">0</span><span class="s2">].extensions) || DEFAULTS.extensions;</span>
+    <span class="s4">const </span><span class="s2">ignoreFilesWithoutCode = (context.options[</span><span class="s6">0</span><span class="s2">] &amp;&amp; context.options[</span><span class="s6">0</span><span class="s2">].ignoreFilesWithoutCode)</span>
+      <span class="s2">|| DEFAULTS.ignoreFilesWithoutCode;</span>
+    <span class="s4">const </span><span class="s2">isAllowedExtension = allowedExtensions.some((extension) =&gt; filename.slice(-extension.length) === extension);</span>
+
+    <span class="s4">function </span><span class="s2">handleJSX(node) {</span>
+      <span class="s4">if </span><span class="s2">(!jsxNode) {</span>
+        <span class="s2">jsxNode = node;</span>
+      <span class="s2">}</span>
+    <span class="s2">}</span>
+
+    <span class="s0">// --------------------------------------------------------------------------</span>
+    <span class="s0">// Public</span>
+    <span class="s0">// --------------------------------------------------------------------------</span>
+
+    <span class="s4">return </span><span class="s2">{</span>
+      <span class="s2">JSXElement: handleJSX,</span>
+      <span class="s2">JSXFragment: handleJSX,</span>
+
+      <span class="s3">'Program:exit'</span><span class="s2">(node) {</span>
+        <span class="s4">if </span><span class="s2">(jsxNode) {</span>
+          <span class="s4">if </span><span class="s2">(!isAllowedExtension) {</span>
+            <span class="s2">report(context, messages.noJSXWithExtension, </span><span class="s3">'noJSXWithExtension'</span><span class="s2">, {</span>
+              <span class="s2">node: jsxNode,</span>
+              <span class="s2">data: {</span>
+                <span class="s2">ext: path.extname(filename),</span>
+              <span class="s2">},</span>
+            <span class="s2">});</span>
+          <span class="s2">}</span>
+          <span class="s4">return</span><span class="s2">;</span>
+        <span class="s2">}</span>
+
+        <span class="s4">if </span><span class="s2">(isAllowedExtension &amp;&amp; allow === </span><span class="s3">'as-needed'</span><span class="s2">) {</span>
+          <span class="s4">if </span><span class="s2">(ignoreFilesWithoutCode &amp;&amp; node.body.length === </span><span class="s6">0</span><span class="s2">) {</span>
+            <span class="s4">return</span><span class="s2">;</span>
+          <span class="s2">}</span>
+          <span class="s2">report(context, messages.extensionOnlyForJSX, </span><span class="s3">'extensionOnlyForJSX'</span><span class="s2">, {</span>
+            <span class="s2">node,</span>
+            <span class="s2">data: {</span>
+              <span class="s2">ext: path.extname(filename),</span>
+            <span class="s2">},</span>
+          <span class="s2">});</span>
+        <span class="s2">}</span>
+      <span class="s2">},</span>
+    <span class="s2">};</span>
+  <span class="s2">},</span>
+<span class="s2">};</span>
+</pre>
+</body>
+</html>

@@ -1,0 +1,134 @@
+<html>
+<head>
+<title>inline-static-env.js</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #067d17;}
+.s1 { color: #080808;}
+.s2 { color: #0033b3;}
+.s3 { color: #8c8c8c; font-style: italic;}
+.s4 { color: #1750eb;}
+.s5 { color: #0037a6;}
+.s6 { color: #264eff;}
+</style>
+</head>
+<body bgcolor="#ffffff">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#c0c0c0" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+inline-static-env.js</font>
+</center></td></tr></table>
+<pre><span class="s0">&quot;use strict&quot;</span><span class="s1">;</span>
+<span class="s1">Object.defineProperty(exports, </span><span class="s0">&quot;__esModule&quot;</span><span class="s1">, {</span>
+    <span class="s1">value: </span><span class="s2">true</span>
+<span class="s1">});</span>
+<span class="s1">Object.defineProperty(exports, </span><span class="s0">&quot;inlineStaticEnv&quot;</span><span class="s1">, {</span>
+    <span class="s1">enumerable: </span><span class="s2">true</span><span class="s1">,</span>
+    <span class="s1">get: </span><span class="s2">function</span><span class="s1">() {</span>
+        <span class="s2">return </span><span class="s1">inlineStaticEnv;</span>
+    <span class="s1">}</span>
+<span class="s1">});</span>
+<span class="s2">const </span><span class="s1">_fs = </span><span class="s3">/*#__PURE__*/ </span><span class="s1">_interop_require_default(require(</span><span class="s0">&quot;fs&quot;</span><span class="s1">));</span>
+<span class="s2">const </span><span class="s1">_path = </span><span class="s3">/*#__PURE__*/ </span><span class="s1">_interop_require_default(require(</span><span class="s0">&quot;path&quot;</span><span class="s1">));</span>
+<span class="s2">const </span><span class="s1">_crypto = </span><span class="s3">/*#__PURE__*/ </span><span class="s1">_interop_require_default(require(</span><span class="s0">&quot;crypto&quot;</span><span class="s1">));</span>
+<span class="s2">const </span><span class="s1">_util = require(</span><span class="s0">&quot;util&quot;</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">_glob = </span><span class="s3">/*#__PURE__*/ </span><span class="s1">_interop_require_default(require(</span><span class="s0">&quot;next/dist/compiled/glob&quot;</span><span class="s1">));</span>
+<span class="s2">const </span><span class="s1">_asyncsema = require(</span><span class="s0">&quot;next/dist/compiled/async-sema&quot;</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">_staticenv = require(</span><span class="s0">&quot;./static-env&quot;</span><span class="s1">);</span>
+<span class="s2">function </span><span class="s1">_interop_require_default(obj) {</span>
+    <span class="s2">return </span><span class="s1">obj &amp;&amp; obj.__esModule ? obj : {</span>
+        <span class="s2">default</span><span class="s1">: obj</span>
+    <span class="s1">};</span>
+<span class="s1">}</span>
+<span class="s2">const </span><span class="s1">glob = (</span><span class="s4">0</span><span class="s1">, _util.promisify)(_glob.default);</span>
+<span class="s1">async </span><span class="s2">function </span><span class="s1">inlineStaticEnv({ distDir, config }) {</span>
+    <span class="s2">const </span><span class="s1">nextConfigEnv = (</span><span class="s4">0</span><span class="s1">, _staticenv.getNextConfigEnv)(config);</span>
+    <span class="s2">const </span><span class="s1">staticEnv = (</span><span class="s4">0</span><span class="s1">, _staticenv.getStaticEnv)(config);</span>
+    <span class="s2">const </span><span class="s1">serverDir = _path.default.join(distDir, </span><span class="s0">'server'</span><span class="s1">);</span>
+    <span class="s2">const </span><span class="s1">serverChunks = </span><span class="s2">await </span><span class="s1">glob(</span><span class="s0">'**/*.{js,json,js.map}'</span><span class="s1">, {</span>
+        <span class="s1">cwd: serverDir</span>
+    <span class="s1">});</span>
+    <span class="s2">const </span><span class="s1">clientDir = _path.default.join(distDir, </span><span class="s0">'static'</span><span class="s1">);</span>
+    <span class="s2">const </span><span class="s1">clientChunks = </span><span class="s2">await </span><span class="s1">glob(</span><span class="s0">'**/*.{js,json,js.map}'</span><span class="s1">, {</span>
+        <span class="s1">cwd: clientDir</span>
+    <span class="s1">});</span>
+    <span class="s2">const </span><span class="s1">manifestChunks = </span><span class="s2">await </span><span class="s1">glob(</span><span class="s0">'*.{js,json,js.map}'</span><span class="s1">, {</span>
+        <span class="s1">cwd: distDir</span>
+    <span class="s1">});</span>
+    <span class="s2">const </span><span class="s1">inlineSema = </span><span class="s2">new </span><span class="s1">_asyncsema.Sema(</span><span class="s4">8</span><span class="s1">);</span>
+    <span class="s2">const </span><span class="s1">nextConfigEnvKeys = Object.keys(nextConfigEnv).map((item)=&gt;item.split(</span><span class="s0">'process.env.'</span><span class="s1">).pop());</span>
+    <span class="s2">const </span><span class="s1">builtRegEx = </span><span class="s2">new </span><span class="s1">RegExp(</span><span class="s0">`[</span><span class="s5">\\</span><span class="s0">w]{1,}(</span><span class="s5">\\</span><span class="s0">.env)?</span><span class="s5">\\</span><span class="s0">.(?:NEXT_PUBLIC_[</span><span class="s5">\\</span><span class="s0">w]{1,}</span><span class="s1">${nextConfigEnvKeys.length ? </span><span class="s0">'|' </span><span class="s1">+ nextConfigEnvKeys.join(</span><span class="s0">'|'</span><span class="s1">) : </span><span class="s0">''</span><span class="s1">}</span><span class="s0">)`</span><span class="s1">, </span><span class="s0">'g'</span><span class="s1">);</span>
+    <span class="s2">const </span><span class="s1">changedClientFiles = [];</span>
+    <span class="s2">const </span><span class="s1">filesToCheck = </span><span class="s2">new </span><span class="s1">Set(manifestChunks.map((f)=&gt;_path.default.join(distDir, f)));</span>
+    <span class="s2">for </span><span class="s1">(</span><span class="s2">const </span><span class="s1">[parentDir, files] of [</span>
+        <span class="s1">[</span>
+            <span class="s1">serverDir,</span>
+            <span class="s1">serverChunks</span>
+        <span class="s1">],</span>
+        <span class="s1">[</span>
+            <span class="s1">clientDir,</span>
+            <span class="s1">clientChunks</span>
+        <span class="s1">]</span>
+    <span class="s1">]){</span>
+        <span class="s2">await </span><span class="s1">Promise.all(files.map(async (file)=&gt;{</span>
+            <span class="s2">await </span><span class="s1">inlineSema.acquire();</span>
+            <span class="s2">const </span><span class="s1">filepath = _path.default.join(parentDir, file);</span>
+            <span class="s2">const </span><span class="s1">content = </span><span class="s2">await </span><span class="s1">_fs.default.promises.readFile(filepath, </span><span class="s0">'utf8'</span><span class="s1">);</span>
+            <span class="s2">const </span><span class="s1">newContent = content.replace(builtRegEx, (match)=&gt;{</span>
+                <span class="s2">let </span><span class="s1">normalizedMatch = </span><span class="s0">`process.env.</span><span class="s1">${match.split(</span><span class="s0">'.'</span><span class="s1">).pop()}</span><span class="s0">`</span><span class="s1">;</span>
+                <span class="s2">if </span><span class="s1">(staticEnv[normalizedMatch]) {</span>
+                    <span class="s2">return </span><span class="s1">JSON.stringify(staticEnv[normalizedMatch]);</span>
+                <span class="s1">}</span>
+                <span class="s2">return </span><span class="s1">match;</span>
+            <span class="s1">});</span>
+            <span class="s2">await </span><span class="s1">_fs.default.promises.writeFile(filepath, newContent);</span>
+            <span class="s2">if </span><span class="s1">(content !== newContent &amp;&amp; parentDir === clientDir) {</span>
+                <span class="s1">changedClientFiles.push({</span>
+                    <span class="s1">file,</span>
+                    <span class="s1">content: newContent</span>
+                <span class="s1">});</span>
+            <span class="s1">}</span>
+            <span class="s1">filesToCheck.add(filepath);</span>
+            <span class="s1">inlineSema.release();</span>
+        <span class="s1">}));</span>
+    <span class="s1">}</span>
+    <span class="s2">const </span><span class="s1">hashChanges = [];</span>
+    <span class="s3">// hashes need updating for any changed client files</span>
+    <span class="s2">for </span><span class="s1">(</span><span class="s2">const </span><span class="s1">{ file, content } of changedClientFiles){</span>
+        <span class="s2">var </span><span class="s1">_file_match;</span>
+        <span class="s3">// hash is 16 chars currently for all client chunks</span>
+        <span class="s2">const </span><span class="s1">originalHash = ((_file_match = file.match(</span><span class="s6">/([a-z0-9]{16})\./</span><span class="s1">)) == </span><span class="s2">null </span><span class="s1">? </span><span class="s2">void </span><span class="s4">0 </span><span class="s1">: _file_match[</span><span class="s4">1</span><span class="s1">]) || </span><span class="s0">''</span><span class="s1">;</span>
+        <span class="s2">if </span><span class="s1">(!originalHash) {</span>
+            <span class="s2">throw </span><span class="s1">Object.defineProperty(</span><span class="s2">new </span><span class="s1">Error(</span><span class="s0">`Invariant: client chunk changed but failed to detect hash </span><span class="s1">${file}</span><span class="s0">`</span><span class="s1">), </span><span class="s0">&quot;__NEXT_ERROR_CODE&quot;</span><span class="s1">, {</span>
+                <span class="s1">value: </span><span class="s0">&quot;E663&quot;</span><span class="s1">,</span>
+                <span class="s1">enumerable: </span><span class="s2">false</span><span class="s1">,</span>
+                <span class="s1">configurable: </span><span class="s2">true</span>
+            <span class="s1">});</span>
+        <span class="s1">}</span>
+        <span class="s2">const </span><span class="s1">newHash = _crypto.default.createHash(</span><span class="s0">'sha256'</span><span class="s1">).update(content).digest(</span><span class="s0">'hex'</span><span class="s1">).substring(</span><span class="s4">0</span><span class="s1">, </span><span class="s4">16</span><span class="s1">);</span>
+        <span class="s1">hashChanges.push({</span>
+            <span class="s1">originalHash,</span>
+            <span class="s1">newHash</span>
+        <span class="s1">});</span>
+        <span class="s2">const </span><span class="s1">filepath = _path.default.join(clientDir, file);</span>
+        <span class="s2">const </span><span class="s1">newFilepath = filepath.replace(originalHash, newHash);</span>
+        <span class="s1">filesToCheck.delete(filepath);</span>
+        <span class="s1">filesToCheck.add(newFilepath);</span>
+        <span class="s2">await </span><span class="s1">_fs.default.promises.rename(filepath, newFilepath);</span>
+    <span class="s1">}</span>
+    <span class="s3">// update build-manifest and webpack-runtime with new hashes</span>
+    <span class="s2">for </span><span class="s1">(</span><span class="s2">let </span><span class="s1">file of filesToCheck){</span>
+        <span class="s2">const </span><span class="s1">content = </span><span class="s2">await </span><span class="s1">_fs.default.promises.readFile(file, </span><span class="s0">'utf-8'</span><span class="s1">);</span>
+        <span class="s2">let </span><span class="s1">newContent = content;</span>
+        <span class="s2">for </span><span class="s1">(</span><span class="s2">const </span><span class="s1">{ originalHash, newHash } of hashChanges){</span>
+            <span class="s1">newContent = newContent.replaceAll(originalHash, newHash);</span>
+        <span class="s1">}</span>
+        <span class="s2">if </span><span class="s1">(content !== newContent) {</span>
+            <span class="s2">await </span><span class="s1">_fs.default.promises.writeFile(file, newContent);</span>
+        <span class="s1">}</span>
+    <span class="s1">}</span>
+<span class="s1">}</span>
+
+<span class="s3">//# sourceMappingURL=inline-static-env.js.map</span></pre>
+</body>
+</html>

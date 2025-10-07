@@ -1,0 +1,209 @@
+<html>
+<head>
+<title>no-implicit-globals.js</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #8c8c8c; font-style: italic;}
+.s1 { color: #8c8c8c; font-style: italic;}
+.s2 { color: #080808;}
+.s3 { color: #067d17;}
+.s4 { color: #0033b3;}
+.s5 { color: #1750eb;}
+</style>
+</head>
+<body bgcolor="#ffffff">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#c0c0c0" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+no-implicit-globals.js</font>
+</center></td></tr></table>
+<pre><span class="s0">/**</span>
+ <span class="s0">* </span><span class="s1">@fileoverview </span><span class="s0">Rule to check for implicit global variables, functions and classes.</span>
+ <span class="s0">* </span><span class="s1">@author </span><span class="s0">Joshua Peek</span>
+ <span class="s0">*/</span>
+
+<span class="s3">&quot;use strict&quot;</span><span class="s2">;</span>
+
+<span class="s4">const </span><span class="s2">ASSIGNMENT_NODES = </span><span class="s4">new </span><span class="s2">Set([</span>
+	<span class="s3">&quot;AssignmentExpression&quot;</span><span class="s2">,</span>
+	<span class="s3">&quot;ForInStatement&quot;</span><span class="s2">,</span>
+	<span class="s3">&quot;ForOfStatement&quot;</span><span class="s2">,</span>
+<span class="s2">]);</span>
+
+<span class="s0">//------------------------------------------------------------------------------</span>
+<span class="s0">// Rule Definition</span>
+<span class="s0">//------------------------------------------------------------------------------</span>
+
+<span class="s0">/** </span><span class="s1">@type </span><span class="s0">{import('../types').Rule.RuleModule} */</span>
+<span class="s2">module.exports = {</span>
+	<span class="s2">meta: {</span>
+		<span class="s2">type: </span><span class="s3">&quot;suggestion&quot;</span><span class="s2">,</span>
+
+		<span class="s2">defaultOptions: [</span>
+			<span class="s2">{</span>
+				<span class="s2">lexicalBindings: </span><span class="s4">false</span><span class="s2">,</span>
+			<span class="s2">},</span>
+		<span class="s2">],</span>
+
+		<span class="s2">docs: {</span>
+			<span class="s2">description: </span><span class="s3">&quot;Disallow declarations in the global scope&quot;</span><span class="s2">,</span>
+			<span class="s2">recommended: </span><span class="s4">false</span><span class="s2">,</span>
+			<span class="s2">url: </span><span class="s3">&quot;https://eslint.org/docs/latest/rules/no-implicit-globals&quot;</span><span class="s2">,</span>
+		<span class="s2">},</span>
+
+		<span class="s2">schema: [</span>
+			<span class="s2">{</span>
+				<span class="s2">type: </span><span class="s3">&quot;object&quot;</span><span class="s2">,</span>
+				<span class="s2">properties: {</span>
+					<span class="s2">lexicalBindings: {</span>
+						<span class="s2">type: </span><span class="s3">&quot;boolean&quot;</span><span class="s2">,</span>
+					<span class="s2">},</span>
+				<span class="s2">},</span>
+				<span class="s2">additionalProperties: </span><span class="s4">false</span><span class="s2">,</span>
+			<span class="s2">},</span>
+		<span class="s2">],</span>
+
+		<span class="s2">messages: {</span>
+			<span class="s2">globalNonLexicalBinding:</span>
+				<span class="s3">&quot;Unexpected {{kind}} declaration in the global scope, wrap in an IIFE for a local variable, assign as global property for a global variable.&quot;</span><span class="s2">,</span>
+			<span class="s2">globalLexicalBinding:</span>
+				<span class="s3">&quot;Unexpected {{kind}} declaration in the global scope, wrap in a block or in an IIFE.&quot;</span><span class="s2">,</span>
+			<span class="s2">globalVariableLeak:</span>
+				<span class="s3">&quot;Global variable leak, declare the variable if it is intended to be local.&quot;</span><span class="s2">,</span>
+			<span class="s2">assignmentToReadonlyGlobal:</span>
+				<span class="s3">&quot;Unexpected assignment to read-only global variable.&quot;</span><span class="s2">,</span>
+			<span class="s2">redeclarationOfReadonlyGlobal:</span>
+				<span class="s3">&quot;Unexpected redeclaration of read-only global variable.&quot;</span><span class="s2">,</span>
+		<span class="s2">},</span>
+	<span class="s2">},</span>
+
+	<span class="s2">create(context) {</span>
+		<span class="s4">const </span><span class="s2">[{ lexicalBindings: checkLexicalBindings }] = context.options;</span>
+		<span class="s4">const </span><span class="s2">sourceCode = context.sourceCode;</span>
+
+		<span class="s0">/**</span>
+		 <span class="s0">* Reports the node.</span>
+		 <span class="s0">* </span><span class="s1">@param </span><span class="s0">{ASTNode} node Node to report.</span>
+		 <span class="s0">* </span><span class="s1">@param </span><span class="s0">{string} messageId Id of the message to report.</span>
+		 <span class="s0">* </span><span class="s1">@param </span><span class="s0">{string|undefined} kind Declaration kind, can be 'var', 'const', 'let', function or class.</span>
+		 <span class="s0">* </span><span class="s1">@returns </span><span class="s0">{void}</span>
+		 <span class="s0">*/</span>
+		<span class="s4">function </span><span class="s2">report(node, messageId, kind) {</span>
+			<span class="s2">context.report({</span>
+				<span class="s2">node,</span>
+				<span class="s2">messageId,</span>
+				<span class="s2">data: {</span>
+					<span class="s2">kind,</span>
+				<span class="s2">},</span>
+			<span class="s2">});</span>
+		<span class="s2">}</span>
+
+		<span class="s4">return </span><span class="s2">{</span>
+			<span class="s2">Program(node) {</span>
+				<span class="s4">const </span><span class="s2">scope = sourceCode.getScope(node);</span>
+
+				<span class="s2">scope.variables.forEach(variable =&gt; {</span>
+					<span class="s0">// Only ESLint global variables have the `writable` key.</span>
+					<span class="s4">const </span><span class="s2">isReadonlyEslintGlobalVariable =</span>
+						<span class="s2">variable.writeable === </span><span class="s4">false</span><span class="s2">;</span>
+					<span class="s4">const </span><span class="s2">isWritableEslintGlobalVariable =</span>
+						<span class="s2">variable.writeable === </span><span class="s4">true</span><span class="s2">;</span>
+
+					<span class="s4">if </span><span class="s2">(isWritableEslintGlobalVariable) {</span>
+						<span class="s0">// Everything is allowed with writable ESLint global variables.</span>
+						<span class="s4">return</span><span class="s2">;</span>
+					<span class="s2">}</span>
+
+					<span class="s0">// Variables exported by &quot;exported&quot; block comments</span>
+					<span class="s4">if </span><span class="s2">(variable.eslintExported) {</span>
+						<span class="s4">return</span><span class="s2">;</span>
+					<span class="s2">}</span>
+
+					<span class="s2">variable.defs.forEach(def =&gt; {</span>
+						<span class="s4">const </span><span class="s2">defNode = def.node;</span>
+
+						<span class="s4">if </span><span class="s2">(</span>
+							<span class="s2">def.type === </span><span class="s3">&quot;FunctionName&quot; </span><span class="s2">||</span>
+							<span class="s2">(def.type === </span><span class="s3">&quot;Variable&quot; </span><span class="s2">&amp;&amp;</span>
+								<span class="s2">def.parent.kind === </span><span class="s3">&quot;var&quot;</span><span class="s2">)</span>
+						<span class="s2">) {</span>
+							<span class="s4">if </span><span class="s2">(isReadonlyEslintGlobalVariable) {</span>
+								<span class="s2">report(</span>
+									<span class="s2">defNode,</span>
+									<span class="s3">&quot;redeclarationOfReadonlyGlobal&quot;</span><span class="s2">,</span>
+								<span class="s2">);</span>
+							<span class="s2">} </span><span class="s4">else </span><span class="s2">{</span>
+								<span class="s2">report(</span>
+									<span class="s2">defNode,</span>
+									<span class="s3">&quot;globalNonLexicalBinding&quot;</span><span class="s2">,</span>
+									<span class="s2">def.type === </span><span class="s3">&quot;FunctionName&quot;</span>
+										<span class="s2">? </span><span class="s3">&quot;function&quot;</span>
+										<span class="s2">: </span><span class="s3">`'</span><span class="s2">${def.parent.kind}</span><span class="s3">'`</span><span class="s2">,</span>
+								<span class="s2">);</span>
+							<span class="s2">}</span>
+						<span class="s2">}</span>
+
+						<span class="s4">if </span><span class="s2">(checkLexicalBindings) {</span>
+							<span class="s4">if </span><span class="s2">(</span>
+								<span class="s2">def.type === </span><span class="s3">&quot;ClassName&quot; </span><span class="s2">||</span>
+								<span class="s2">(def.type === </span><span class="s3">&quot;Variable&quot; </span><span class="s2">&amp;&amp;</span>
+									<span class="s2">(def.parent.kind === </span><span class="s3">&quot;let&quot; </span><span class="s2">||</span>
+										<span class="s2">def.parent.kind === </span><span class="s3">&quot;const&quot;</span><span class="s2">))</span>
+							<span class="s2">) {</span>
+								<span class="s4">if </span><span class="s2">(isReadonlyEslintGlobalVariable) {</span>
+									<span class="s2">report(</span>
+										<span class="s2">defNode,</span>
+										<span class="s3">&quot;redeclarationOfReadonlyGlobal&quot;</span><span class="s2">,</span>
+									<span class="s2">);</span>
+								<span class="s2">} </span><span class="s4">else </span><span class="s2">{</span>
+									<span class="s2">report(</span>
+										<span class="s2">defNode,</span>
+										<span class="s3">&quot;globalLexicalBinding&quot;</span><span class="s2">,</span>
+										<span class="s2">def.type === </span><span class="s3">&quot;ClassName&quot;</span>
+											<span class="s2">? </span><span class="s3">&quot;class&quot;</span>
+											<span class="s2">: </span><span class="s3">`'</span><span class="s2">${def.parent.kind}</span><span class="s3">'`</span><span class="s2">,</span>
+									<span class="s2">);</span>
+								<span class="s2">}</span>
+							<span class="s2">}</span>
+						<span class="s2">}</span>
+					<span class="s2">});</span>
+
+					<span class="s4">if </span><span class="s2">(</span>
+						<span class="s2">isReadonlyEslintGlobalVariable &amp;&amp;</span>
+						<span class="s2">variable.defs.length === </span><span class="s5">0</span>
+					<span class="s2">) {</span>
+						<span class="s2">variable.references.forEach(reference =&gt; {</span>
+							<span class="s4">if </span><span class="s2">(reference.isWrite() &amp;&amp; !reference.isRead()) {</span>
+								<span class="s4">let </span><span class="s2">assignmentParent =</span>
+									<span class="s2">reference.identifier.parent;</span>
+
+								<span class="s4">while </span><span class="s2">(</span>
+									<span class="s2">assignmentParent &amp;&amp;</span>
+									<span class="s2">!ASSIGNMENT_NODES.has(assignmentParent.type)</span>
+								<span class="s2">) {</span>
+									<span class="s2">assignmentParent = assignmentParent.parent;</span>
+								<span class="s2">}</span>
+
+								<span class="s2">report(</span>
+									<span class="s2">assignmentParent ?? reference.identifier,</span>
+									<span class="s3">&quot;assignmentToReadonlyGlobal&quot;</span><span class="s2">,</span>
+								<span class="s2">);</span>
+							<span class="s2">}</span>
+						<span class="s2">});</span>
+					<span class="s2">}</span>
+				<span class="s2">});</span>
+
+				<span class="s0">// Undeclared assigned variables.</span>
+				<span class="s2">scope.implicit.variables.forEach(variable =&gt; {</span>
+					<span class="s0">// def.node is an AssignmentExpression, ForInStatement or ForOfStatement.</span>
+					<span class="s2">variable.defs.forEach(def =&gt; {</span>
+						<span class="s2">report(def.node, </span><span class="s3">&quot;globalVariableLeak&quot;</span><span class="s2">);</span>
+					<span class="s2">});</span>
+				<span class="s2">});</span>
+			<span class="s2">},</span>
+		<span class="s2">};</span>
+	<span class="s2">},</span>
+<span class="s2">};</span>
+</pre>
+</body>
+</html>

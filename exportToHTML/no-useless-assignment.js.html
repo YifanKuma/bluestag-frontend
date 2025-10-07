@@ -1,0 +1,676 @@
+<html>
+<head>
+<title>no-useless-assignment.js</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #8c8c8c; font-style: italic;}
+.s1 { color: #8c8c8c; font-style: italic;}
+.s2 { color: #080808;}
+.s3 { color: #067d17;}
+.s4 { color: #0033b3;}
+.s5 { color: #1750eb;}
+</style>
+</head>
+<body bgcolor="#ffffff">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#c0c0c0" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+no-useless-assignment.js</font>
+</center></td></tr></table>
+<pre><span class="s0">/**</span>
+ <span class="s0">* </span><span class="s1">@fileoverview </span><span class="s0">A rule to disallow unnecessary assignments`.</span>
+ <span class="s0">* </span><span class="s1">@author </span><span class="s0">Yosuke Ota</span>
+ <span class="s0">*/</span>
+
+<span class="s3">&quot;use strict&quot;</span><span class="s2">;</span>
+
+<span class="s4">const </span><span class="s2">{ findVariable } = require(</span><span class="s3">&quot;@eslint-community/eslint-utils&quot;</span><span class="s2">);</span>
+
+<span class="s0">//------------------------------------------------------------------------------</span>
+<span class="s0">// Types</span>
+<span class="s0">//------------------------------------------------------------------------------</span>
+
+<span class="s0">/** </span><span class="s1">@typedef </span><span class="s0">{import(&quot;estree&quot;).Node} ASTNode */</span>
+<span class="s0">/** </span><span class="s1">@typedef </span><span class="s0">{import(&quot;estree&quot;).Pattern} Pattern */</span>
+<span class="s0">/** </span><span class="s1">@typedef </span><span class="s0">{import(&quot;estree&quot;).Identifier} Identifier */</span>
+<span class="s0">/** </span><span class="s1">@typedef </span><span class="s0">{import(&quot;estree&quot;).VariableDeclarator} VariableDeclarator */</span>
+<span class="s0">/** </span><span class="s1">@typedef </span><span class="s0">{import(&quot;estree&quot;).AssignmentExpression} AssignmentExpression */</span>
+<span class="s0">/** </span><span class="s1">@typedef </span><span class="s0">{import(&quot;estree&quot;).UpdateExpression} UpdateExpression */</span>
+<span class="s0">/** </span><span class="s1">@typedef </span><span class="s0">{import(&quot;estree&quot;).Expression} Expression */</span>
+<span class="s0">/** </span><span class="s1">@typedef </span><span class="s0">{import(&quot;eslint-scope&quot;).Scope} Scope */</span>
+<span class="s0">/** </span><span class="s1">@typedef </span><span class="s0">{import(&quot;eslint-scope&quot;).Variable} Variable */</span>
+<span class="s0">/** </span><span class="s1">@typedef </span><span class="s0">{import(&quot;../linter/code-path-analysis/code-path&quot;)} CodePath */</span>
+<span class="s0">/** </span><span class="s1">@typedef </span><span class="s0">{import(&quot;../linter/code-path-analysis/code-path-segment&quot;)} CodePathSegment */</span>
+
+<span class="s0">//------------------------------------------------------------------------------</span>
+<span class="s0">// Helpers</span>
+<span class="s0">//------------------------------------------------------------------------------</span>
+
+<span class="s0">/**</span>
+ <span class="s0">* Extract identifier from the given pattern node used on the left-hand side of the assignment.</span>
+ <span class="s0">* </span><span class="s1">@param </span><span class="s0">{Pattern} pattern The pattern node to extract identifier</span>
+ <span class="s0">* </span><span class="s1">@returns </span><span class="s0">{Iterable&lt;Identifier&gt;} The extracted identifier</span>
+ <span class="s0">*/</span>
+<span class="s4">function</span><span class="s2">* extractIdentifiersFromPattern(pattern) {</span>
+	<span class="s4">switch </span><span class="s2">(pattern.type) {</span>
+		<span class="s4">case </span><span class="s3">&quot;Identifier&quot;</span><span class="s2">:</span>
+			<span class="s4">yield </span><span class="s2">pattern;</span>
+			<span class="s4">return</span><span class="s2">;</span>
+		<span class="s4">case </span><span class="s3">&quot;ObjectPattern&quot;</span><span class="s2">:</span>
+			<span class="s4">for </span><span class="s2">(</span><span class="s4">const </span><span class="s2">property of pattern.properties) {</span>
+				<span class="s4">yield</span><span class="s2">* extractIdentifiersFromPattern(</span>
+					<span class="s2">property.type === </span><span class="s3">&quot;Property&quot; </span><span class="s2">? property.value : property,</span>
+				<span class="s2">);</span>
+			<span class="s2">}</span>
+			<span class="s4">return</span><span class="s2">;</span>
+		<span class="s4">case </span><span class="s3">&quot;ArrayPattern&quot;</span><span class="s2">:</span>
+			<span class="s4">for </span><span class="s2">(</span><span class="s4">const </span><span class="s2">element of pattern.elements) {</span>
+				<span class="s4">if </span><span class="s2">(!element) {</span>
+					<span class="s4">continue</span><span class="s2">;</span>
+				<span class="s2">}</span>
+				<span class="s4">yield</span><span class="s2">* extractIdentifiersFromPattern(element);</span>
+			<span class="s2">}</span>
+			<span class="s4">return</span><span class="s2">;</span>
+		<span class="s4">case </span><span class="s3">&quot;RestElement&quot;</span><span class="s2">:</span>
+			<span class="s4">yield</span><span class="s2">* extractIdentifiersFromPattern(pattern.argument);</span>
+			<span class="s4">return</span><span class="s2">;</span>
+		<span class="s4">case </span><span class="s3">&quot;AssignmentPattern&quot;</span><span class="s2">:</span>
+			<span class="s4">yield</span><span class="s2">* extractIdentifiersFromPattern(pattern.left);</span>
+
+		<span class="s0">// no default</span>
+	<span class="s2">}</span>
+<span class="s2">}</span>
+
+<span class="s0">/**</span>
+ <span class="s0">* Checks whether the given identifier node is evaluated after the assignment identifier.</span>
+ <span class="s0">* </span><span class="s1">@param </span><span class="s0">{AssignmentInfo} assignment The assignment info.</span>
+ <span class="s0">* </span><span class="s1">@param </span><span class="s0">{Identifier} identifier The identifier to check.</span>
+ <span class="s0">* </span><span class="s1">@returns </span><span class="s0">{boolean} `true` if the given identifier node is evaluated after the assignment identifier.</span>
+ <span class="s0">*/</span>
+<span class="s4">function </span><span class="s2">isIdentifierEvaluatedAfterAssignment(assignment, identifier) {</span>
+	<span class="s4">if </span><span class="s2">(identifier.range[</span><span class="s5">0</span><span class="s2">] &lt; assignment.identifier.range[</span><span class="s5">1</span><span class="s2">]) {</span>
+		<span class="s4">return false</span><span class="s2">;</span>
+	<span class="s2">}</span>
+	<span class="s4">if </span><span class="s2">(</span>
+		<span class="s2">assignment.expression &amp;&amp;</span>
+		<span class="s2">assignment.expression.range[</span><span class="s5">0</span><span class="s2">] &lt;= identifier.range[</span><span class="s5">0</span><span class="s2">] &amp;&amp;</span>
+		<span class="s2">identifier.range[</span><span class="s5">1</span><span class="s2">] &lt;= assignment.expression.range[</span><span class="s5">1</span><span class="s2">]</span>
+	<span class="s2">) {</span>
+		<span class="s0">/* 
+         * The identifier node is in an expression that is evaluated before the assignment. 
+         * e.g. x = id; 
+         *          ^^ identifier to check 
+         *      ^      assignment identifier 
+         */</span>
+		<span class="s4">return false</span><span class="s2">;</span>
+	<span class="s2">}</span>
+
+	<span class="s0">/* 
+     * e.g. 
+     *      x = 42; id; 
+     *              ^^ identifier to check 
+     *      ^          assignment identifier 
+     *      let { x, y = id } = obj; 
+     *                   ^^  identifier to check 
+     *            ^          assignment identifier 
+     */</span>
+	<span class="s4">return true</span><span class="s2">;</span>
+<span class="s2">}</span>
+
+<span class="s0">/**</span>
+ <span class="s0">* Checks whether the given identifier node is used between the assigned identifier and the equal sign.</span>
+ <span class="s0">*</span>
+ <span class="s0">* e.g. let { x, y = x } = obj;</span>
+ <span class="s0">*                   ^   identifier to check</span>
+ <span class="s0">*            ^          assigned identifier</span>
+ <span class="s0">* </span><span class="s1">@param </span><span class="s0">{AssignmentInfo} assignment The assignment info.</span>
+ <span class="s0">* </span><span class="s1">@param </span><span class="s0">{Identifier} identifier The identifier to check.</span>
+ <span class="s0">* </span><span class="s1">@returns </span><span class="s0">{boolean} `true` if the given identifier node is used between the assigned identifier and the equal sign.</span>
+ <span class="s0">*/</span>
+<span class="s4">function </span><span class="s2">isIdentifierUsedBetweenAssignedAndEqualSign(assignment, identifier) {</span>
+	<span class="s4">if </span><span class="s2">(!assignment.expression) {</span>
+		<span class="s4">return false</span><span class="s2">;</span>
+	<span class="s2">}</span>
+	<span class="s4">return </span><span class="s2">(</span>
+		<span class="s2">assignment.identifier.range[</span><span class="s5">1</span><span class="s2">] &lt;= identifier.range[</span><span class="s5">0</span><span class="s2">] &amp;&amp;</span>
+		<span class="s2">identifier.range[</span><span class="s5">1</span><span class="s2">] &lt;= assignment.expression.range[</span><span class="s5">0</span><span class="s2">]</span>
+	<span class="s2">);</span>
+<span class="s2">}</span>
+
+<span class="s0">//------------------------------------------------------------------------------</span>
+<span class="s0">// Rule Definition</span>
+<span class="s0">//------------------------------------------------------------------------------</span>
+
+<span class="s0">/** </span><span class="s1">@type </span><span class="s0">{import('../types').Rule.RuleModule} */</span>
+<span class="s2">module.exports = {</span>
+	<span class="s2">meta: {</span>
+		<span class="s2">type: </span><span class="s3">&quot;problem&quot;</span><span class="s2">,</span>
+
+		<span class="s2">docs: {</span>
+			<span class="s2">description:</span>
+				<span class="s3">&quot;Disallow variable assignments when the value is not used&quot;</span><span class="s2">,</span>
+			<span class="s2">recommended: </span><span class="s4">false</span><span class="s2">,</span>
+			<span class="s2">url: </span><span class="s3">&quot;https://eslint.org/docs/latest/rules/no-useless-assignment&quot;</span><span class="s2">,</span>
+		<span class="s2">},</span>
+
+		<span class="s2">schema: [],</span>
+
+		<span class="s2">messages: {</span>
+			<span class="s2">unnecessaryAssignment:</span>
+				<span class="s3">&quot;This assigned value is not used in subsequent statements.&quot;</span><span class="s2">,</span>
+		<span class="s2">},</span>
+	<span class="s2">},</span>
+
+	<span class="s2">create(context) {</span>
+		<span class="s4">const </span><span class="s2">sourceCode = context.sourceCode;</span>
+
+		<span class="s0">/**</span>
+		 <span class="s0">* </span><span class="s1">@typedef </span><span class="s0">{Object} ScopeStack</span>
+		 <span class="s0">* </span><span class="s1">@property </span><span class="s0">{CodePath} codePath The code path of this scope stack.</span>
+		 <span class="s0">* </span><span class="s1">@property </span><span class="s0">{Scope} scope The scope of this scope stack.</span>
+		 <span class="s0">* </span><span class="s1">@property </span><span class="s0">{ScopeStack} upper The upper scope stack.</span>
+		 <span class="s0">* </span><span class="s1">@property </span><span class="s0">{Record&lt;string, ScopeStackSegmentInfo&gt;} segments The map of ScopeStackSegmentInfo.</span>
+		 <span class="s0">* </span><span class="s1">@property </span><span class="s0">{Set&lt;CodePathSegment&gt;} currentSegments The current CodePathSegments.</span>
+		 <span class="s0">* </span><span class="s1">@property </span><span class="s0">{Map&lt;Variable, AssignmentInfo[]&gt;} assignments The map of list of AssignmentInfo for each variable.</span>
+		 <span class="s0">* </span><span class="s1">@property </span><span class="s0">{Array} tryStatementBlocks The array of TryStatement block nodes in this scope stack.</span>
+		 <span class="s0">*/</span>
+		<span class="s0">/**</span>
+		 <span class="s0">* </span><span class="s1">@typedef </span><span class="s0">{Object} ScopeStackSegmentInfo</span>
+		 <span class="s0">* </span><span class="s1">@property </span><span class="s0">{CodePathSegment} segment The code path segment.</span>
+		 <span class="s0">* </span><span class="s1">@property </span><span class="s0">{Identifier|null} first The first identifier that appears within the segment.</span>
+		 <span class="s0">* </span><span class="s1">@property </span><span class="s0">{Identifier|null} last The last identifier that appears within the segment.</span>
+		 <span class="s0">* `first` and `last` are used to determine whether an identifier exists within the segment position range.</span>
+		 <span class="s0">* Since it is used as a range of segments, we should originally hold all nodes, not just identifiers,</span>
+		 <span class="s0">* but since the only nodes to be judged are identifiers, it is sufficient to have a range of identifiers.</span>
+		 <span class="s0">*/</span>
+		<span class="s0">/**</span>
+		 <span class="s0">* </span><span class="s1">@typedef </span><span class="s0">{Object} AssignmentInfo</span>
+		 <span class="s0">* </span><span class="s1">@property </span><span class="s0">{Variable} variable The variable that is assigned.</span>
+		 <span class="s0">* </span><span class="s1">@property </span><span class="s0">{Identifier} identifier The identifier that is assigned.</span>
+		 <span class="s0">* </span><span class="s1">@property </span><span class="s0">{VariableDeclarator|AssignmentExpression|UpdateExpression} node The node where the variable was updated.</span>
+		 <span class="s0">* </span><span class="s1">@property </span><span class="s0">{Expression|null} expression The expression that is evaluated before the assignment.</span>
+		 <span class="s0">* </span><span class="s1">@property </span><span class="s0">{CodePathSegment[]} segments The code path segments where the assignment was made.</span>
+		 <span class="s0">*/</span>
+
+		<span class="s0">/** </span><span class="s1">@type </span><span class="s0">{ScopeStack} */</span>
+		<span class="s4">let </span><span class="s2">scopeStack = </span><span class="s4">null</span><span class="s2">;</span>
+
+		<span class="s0">/** </span><span class="s1">@type </span><span class="s0">{Set&lt;Scope&gt;} */</span>
+		<span class="s4">const </span><span class="s2">codePathStartScopes = </span><span class="s4">new </span><span class="s2">Set();</span>
+
+		<span class="s0">/**</span>
+		 <span class="s0">* Gets the scope of code path start from given scope</span>
+		 <span class="s0">* </span><span class="s1">@param </span><span class="s0">{Scope} scope The initial scope</span>
+		 <span class="s0">* </span><span class="s1">@returns </span><span class="s0">{Scope} The scope of code path start</span>
+		 <span class="s0">* </span><span class="s1">@throws </span><span class="s0">{Error} Unexpected error</span>
+		 <span class="s0">*/</span>
+		<span class="s4">function </span><span class="s2">getCodePathStartScope(scope) {</span>
+			<span class="s4">let </span><span class="s2">target = scope;</span>
+
+			<span class="s4">while </span><span class="s2">(target) {</span>
+				<span class="s4">if </span><span class="s2">(codePathStartScopes.has(target)) {</span>
+					<span class="s4">return </span><span class="s2">target;</span>
+				<span class="s2">}</span>
+				<span class="s2">target = target.upper;</span>
+			<span class="s2">}</span>
+
+			<span class="s0">// Should be unreachable</span>
+			<span class="s4">return null</span><span class="s2">;</span>
+		<span class="s2">}</span>
+
+		<span class="s0">/**</span>
+		 <span class="s0">* Verify the given scope stack.</span>
+		 <span class="s0">* </span><span class="s1">@param </span><span class="s0">{ScopeStack} target The scope stack to verify.</span>
+		 <span class="s0">* </span><span class="s1">@returns </span><span class="s0">{void}</span>
+		 <span class="s0">*/</span>
+		<span class="s4">function </span><span class="s2">verify(target) {</span>
+			<span class="s0">/**</span>
+			 <span class="s0">* Checks whether the given identifier is used in the segment.</span>
+			 <span class="s0">* </span><span class="s1">@param </span><span class="s0">{CodePathSegment} segment The code path segment.</span>
+			 <span class="s0">* </span><span class="s1">@param </span><span class="s0">{Identifier} identifier The identifier to check.</span>
+			 <span class="s0">* </span><span class="s1">@returns </span><span class="s0">{boolean} `true` if the identifier is used in the segment.</span>
+			 <span class="s0">*/</span>
+			<span class="s4">function </span><span class="s2">isIdentifierUsedInSegment(segment, identifier) {</span>
+				<span class="s4">const </span><span class="s2">segmentInfo = target.segments[segment.id];</span>
+
+				<span class="s4">return </span><span class="s2">(</span>
+					<span class="s2">segmentInfo.first &amp;&amp;</span>
+					<span class="s2">segmentInfo.last &amp;&amp;</span>
+					<span class="s2">segmentInfo.first.range[</span><span class="s5">0</span><span class="s2">] &lt;= identifier.range[</span><span class="s5">0</span><span class="s2">] &amp;&amp;</span>
+					<span class="s2">identifier.range[</span><span class="s5">1</span><span class="s2">] &lt;= segmentInfo.last.range[</span><span class="s5">1</span><span class="s2">]</span>
+				<span class="s2">);</span>
+			<span class="s2">}</span>
+
+			<span class="s0">/**</span>
+			 <span class="s0">* Verifies whether the given assignment info is an used assignment.</span>
+			 <span class="s0">* Report if it is an unused assignment.</span>
+			 <span class="s0">* </span><span class="s1">@param </span><span class="s0">{AssignmentInfo} targetAssignment The assignment info to verify.</span>
+			 <span class="s0">* </span><span class="s1">@param </span><span class="s0">{AssignmentInfo[]} allAssignments The list of all assignment info for variables.</span>
+			 <span class="s0">* </span><span class="s1">@returns </span><span class="s0">{void}</span>
+			 <span class="s0">*/</span>
+			<span class="s4">function </span><span class="s2">verifyAssignmentIsUsed(targetAssignment, allAssignments) {</span>
+				<span class="s0">// Skip assignment if it is in a try block.</span>
+				<span class="s4">const </span><span class="s2">isAssignmentInTryBlock = target.tryStatementBlocks.some(</span>
+					<span class="s2">tryBlock =&gt;</span>
+						<span class="s2">tryBlock.range[</span><span class="s5">0</span><span class="s2">] &lt;=</span>
+							<span class="s2">targetAssignment.identifier.range[</span><span class="s5">0</span><span class="s2">] &amp;&amp;</span>
+						<span class="s2">targetAssignment.identifier.range[</span><span class="s5">1</span><span class="s2">] &lt;=</span>
+							<span class="s2">tryBlock.range[</span><span class="s5">1</span><span class="s2">],</span>
+				<span class="s2">);</span>
+
+				<span class="s4">if </span><span class="s2">(isAssignmentInTryBlock) {</span>
+					<span class="s4">return</span><span class="s2">;</span>
+				<span class="s2">}</span>
+
+				<span class="s0">/**</span>
+				 <span class="s0">* </span><span class="s1">@typedef </span><span class="s0">{Object} SubsequentSegmentData</span>
+				 <span class="s0">* </span><span class="s1">@property </span><span class="s0">{CodePathSegment} segment The code path segment</span>
+				 <span class="s0">* </span><span class="s1">@property </span><span class="s0">{AssignmentInfo} [assignment] The first occurrence of the assignment within the segment.</span>
+				 <span class="s0">* There is no need to check if the variable is used after this assignment,</span>
+				 <span class="s0">* as the value it was assigned will be used.</span>
+				 <span class="s0">*/</span>
+
+				<span class="s0">/**</span>
+				 <span class="s0">* Information used in `getSubsequentSegments()`.</span>
+				 <span class="s0">* To avoid unnecessary iterations, cache information that has already been iterated over,</span>
+				 <span class="s0">* and if additional iterations are needed, start iterating from the retained position.</span>
+				 <span class="s0">*/</span>
+				<span class="s4">const </span><span class="s2">subsequentSegmentData = {</span>
+					<span class="s0">/**</span>
+					 <span class="s0">* Cache of subsequent segment information list that have already been iterated.</span>
+					 <span class="s0">* </span><span class="s1">@type </span><span class="s0">{SubsequentSegmentData[]}</span>
+					 <span class="s0">*/</span>
+					<span class="s2">results: [],</span>
+
+					<span class="s0">/**</span>
+					 <span class="s0">* Subsequent segments that have already been iterated on. Used to avoid infinite loops.</span>
+					 <span class="s0">* </span><span class="s1">@type </span><span class="s0">{Set&lt;CodePathSegment&gt;}</span>
+					 <span class="s0">*/</span>
+					<span class="s2">subsequentSegments: </span><span class="s4">new </span><span class="s2">Set(),</span>
+
+					<span class="s0">/**</span>
+					 <span class="s0">* Unexplored code path segment.</span>
+					 <span class="s0">* If additional iterations are needed, consume this information and iterate.</span>
+					 <span class="s0">* </span><span class="s1">@type </span><span class="s0">{CodePathSegment[]}</span>
+					 <span class="s0">*/</span>
+					<span class="s2">queueSegments: targetAssignment.segments.flatMap(</span>
+						<span class="s2">segment =&gt; segment.nextSegments,</span>
+					<span class="s2">),</span>
+				<span class="s2">};</span>
+
+				<span class="s0">/**</span>
+				 <span class="s0">* Gets the subsequent segments from the segment of</span>
+				 <span class="s0">* the assignment currently being validated (targetAssignment).</span>
+				 <span class="s0">* </span><span class="s1">@returns </span><span class="s0">{Iterable&lt;SubsequentSegmentData&gt;} the subsequent segments</span>
+				 <span class="s0">*/</span>
+				<span class="s4">function</span><span class="s2">* getSubsequentSegments() {</span>
+					<span class="s4">yield</span><span class="s2">* subsequentSegmentData.results;</span>
+
+					<span class="s4">while </span><span class="s2">(subsequentSegmentData.queueSegments.length &gt; </span><span class="s5">0</span><span class="s2">) {</span>
+						<span class="s4">const </span><span class="s2">nextSegment =</span>
+							<span class="s2">subsequentSegmentData.queueSegments.shift();</span>
+
+						<span class="s4">if </span><span class="s2">(</span>
+							<span class="s2">subsequentSegmentData.subsequentSegments.has(</span>
+								<span class="s2">nextSegment,</span>
+							<span class="s2">)</span>
+						<span class="s2">) {</span>
+							<span class="s4">continue</span><span class="s2">;</span>
+						<span class="s2">}</span>
+						<span class="s2">subsequentSegmentData.subsequentSegments.add(</span>
+							<span class="s2">nextSegment,</span>
+						<span class="s2">);</span>
+
+						<span class="s4">const </span><span class="s2">assignmentInSegment = allAssignments.find(</span>
+							<span class="s2">otherAssignment =&gt;</span>
+								<span class="s2">otherAssignment.segments.includes(</span>
+									<span class="s2">nextSegment,</span>
+								<span class="s2">) &amp;&amp;</span>
+								<span class="s2">!isIdentifierUsedBetweenAssignedAndEqualSign(</span>
+									<span class="s2">otherAssignment,</span>
+									<span class="s2">targetAssignment.identifier,</span>
+								<span class="s2">),</span>
+						<span class="s2">);</span>
+
+						<span class="s4">if </span><span class="s2">(!assignmentInSegment) {</span>
+							<span class="s0">/* 
+                             * Stores the next segment to explore. 
+                             * If `assignmentInSegment` exists, 
+                             * we are guarding it because we don't need to explore the next segment. 
+                             */</span>
+							<span class="s2">subsequentSegmentData.queueSegments.push(</span>
+								<span class="s2">...nextSegment.nextSegments,</span>
+							<span class="s2">);</span>
+						<span class="s2">}</span>
+
+						<span class="s0">/** </span><span class="s1">@type </span><span class="s0">{SubsequentSegmentData} */</span>
+						<span class="s4">const </span><span class="s2">result = {</span>
+							<span class="s2">segment: nextSegment,</span>
+							<span class="s2">assignment: assignmentInSegment,</span>
+						<span class="s2">};</span>
+
+						<span class="s2">subsequentSegmentData.results.push(result);</span>
+						<span class="s4">yield </span><span class="s2">result;</span>
+					<span class="s2">}</span>
+				<span class="s2">}</span>
+
+				<span class="s4">if </span><span class="s2">(</span>
+					<span class="s2">targetAssignment.variable.references.some(</span>
+						<span class="s2">ref =&gt; ref.identifier.type !== </span><span class="s3">&quot;Identifier&quot;</span><span class="s2">,</span>
+					<span class="s2">)</span>
+				<span class="s2">) {</span>
+					<span class="s0">/**</span>
+					 <span class="s0">* Skip checking for a variable that has at least one non-identifier reference.</span>
+					 <span class="s0">* It's generated by plugins and cannot be handled reliably in the core rule.</span>
+					 <span class="s0">*/</span>
+					<span class="s4">return</span><span class="s2">;</span>
+				<span class="s2">}</span>
+
+				<span class="s4">const </span><span class="s2">readReferences =</span>
+					<span class="s2">targetAssignment.variable.references.filter(reference =&gt;</span>
+						<span class="s2">reference.isRead(),</span>
+					<span class="s2">);</span>
+
+				<span class="s4">if </span><span class="s2">(!readReferences.length) {</span>
+					<span class="s0">/* 
+                     * It is not just an unnecessary assignment, but an unnecessary (unused) variable 
+                     * and thus should not be reported by this rule because it is reported by `no-unused-vars`. 
+                     */</span>
+					<span class="s4">return</span><span class="s2">;</span>
+				<span class="s2">}</span>
+
+				<span class="s0">/**</span>
+				 <span class="s0">* Other assignment on the current segment and after current assignment.</span>
+				 <span class="s0">*/</span>
+				<span class="s4">const </span><span class="s2">otherAssignmentAfterTargetAssignment =</span>
+					<span class="s2">allAssignments.find(assignment =&gt; {</span>
+						<span class="s4">if </span><span class="s2">(</span>
+							<span class="s2">assignment === targetAssignment ||</span>
+							<span class="s2">(assignment.segments.length &amp;&amp;</span>
+								<span class="s2">assignment.segments.every(</span>
+									<span class="s2">segment =&gt;</span>
+										<span class="s2">!targetAssignment.segments.includes(</span>
+											<span class="s2">segment,</span>
+										<span class="s2">),</span>
+								<span class="s2">))</span>
+						<span class="s2">) {</span>
+							<span class="s4">return false</span><span class="s2">;</span>
+						<span class="s2">}</span>
+						<span class="s4">if </span><span class="s2">(</span>
+							<span class="s2">isIdentifierEvaluatedAfterAssignment(</span>
+								<span class="s2">targetAssignment,</span>
+								<span class="s2">assignment.identifier,</span>
+							<span class="s2">)</span>
+						<span class="s2">) {</span>
+							<span class="s4">return true</span><span class="s2">;</span>
+						<span class="s2">}</span>
+						<span class="s4">if </span><span class="s2">(</span>
+							<span class="s2">assignment.expression &amp;&amp;</span>
+							<span class="s2">assignment.expression.range[</span><span class="s5">0</span><span class="s2">] &lt;=</span>
+								<span class="s2">targetAssignment.identifier.range[</span><span class="s5">0</span><span class="s2">] &amp;&amp;</span>
+							<span class="s2">targetAssignment.identifier.range[</span><span class="s5">1</span><span class="s2">] &lt;=</span>
+								<span class="s2">assignment.expression.range[</span><span class="s5">1</span><span class="s2">]</span>
+						<span class="s2">) {</span>
+							<span class="s0">/* 
+                             * The target assignment is in an expression that is evaluated before the assignment. 
+                             * e.g. x=(x=1); 
+                             *         ^^^ targetAssignment 
+                             *      ^^^^^^^ assignment 
+                             */</span>
+							<span class="s4">return true</span><span class="s2">;</span>
+						<span class="s2">}</span>
+
+						<span class="s4">return false</span><span class="s2">;</span>
+					<span class="s2">});</span>
+
+				<span class="s4">for </span><span class="s2">(</span><span class="s4">const </span><span class="s2">reference of readReferences) {</span>
+					<span class="s0">/* 
+                     * If the scope of the reference is outside the current code path scope, 
+                     * we cannot track whether this assignment is not used. 
+                     * For example, it can also be called asynchronously. 
+                     */</span>
+					<span class="s4">if </span><span class="s2">(</span>
+						<span class="s2">target.scope !== getCodePathStartScope(reference.from)</span>
+					<span class="s2">) {</span>
+						<span class="s4">return</span><span class="s2">;</span>
+					<span class="s2">}</span>
+
+					<span class="s0">// Checks if it is used in the same segment as the target assignment.</span>
+					<span class="s4">if </span><span class="s2">(</span>
+						<span class="s2">isIdentifierEvaluatedAfterAssignment(</span>
+							<span class="s2">targetAssignment,</span>
+							<span class="s2">reference.identifier,</span>
+						<span class="s2">) &amp;&amp;</span>
+						<span class="s2">(isIdentifierUsedBetweenAssignedAndEqualSign(</span>
+							<span class="s2">targetAssignment,</span>
+							<span class="s2">reference.identifier,</span>
+						<span class="s2">) ||</span>
+							<span class="s2">targetAssignment.segments.some(segment =&gt;</span>
+								<span class="s2">isIdentifierUsedInSegment(</span>
+									<span class="s2">segment,</span>
+									<span class="s2">reference.identifier,</span>
+								<span class="s2">),</span>
+							<span class="s2">))</span>
+					<span class="s2">) {</span>
+						<span class="s4">if </span><span class="s2">(</span>
+							<span class="s2">otherAssignmentAfterTargetAssignment &amp;&amp;</span>
+							<span class="s2">isIdentifierEvaluatedAfterAssignment(</span>
+								<span class="s2">otherAssignmentAfterTargetAssignment,</span>
+								<span class="s2">reference.identifier,</span>
+							<span class="s2">)</span>
+						<span class="s2">) {</span>
+							<span class="s0">// There was another assignment before the reference. Therefore, it has not been used yet.</span>
+							<span class="s4">continue</span><span class="s2">;</span>
+						<span class="s2">}</span>
+
+						<span class="s0">// Uses in statements after the written identifier.</span>
+						<span class="s4">return</span><span class="s2">;</span>
+					<span class="s2">}</span>
+
+					<span class="s4">if </span><span class="s2">(otherAssignmentAfterTargetAssignment) {</span>
+						<span class="s0">/* 
+                         * The assignment was followed by another assignment in the same segment. 
+                         * Therefore, there is no need to check the next segment. 
+                         */</span>
+						<span class="s4">continue</span><span class="s2">;</span>
+					<span class="s2">}</span>
+
+					<span class="s0">// Check subsequent segments.</span>
+					<span class="s4">for </span><span class="s2">(</span><span class="s4">const </span><span class="s2">subsequentSegment of getSubsequentSegments()) {</span>
+						<span class="s4">if </span><span class="s2">(</span>
+							<span class="s2">isIdentifierUsedInSegment(</span>
+								<span class="s2">subsequentSegment.segment,</span>
+								<span class="s2">reference.identifier,</span>
+							<span class="s2">)</span>
+						<span class="s2">) {</span>
+							<span class="s4">if </span><span class="s2">(</span>
+								<span class="s2">subsequentSegment.assignment &amp;&amp;</span>
+								<span class="s2">isIdentifierEvaluatedAfterAssignment(</span>
+									<span class="s2">subsequentSegment.assignment,</span>
+									<span class="s2">reference.identifier,</span>
+								<span class="s2">)</span>
+							<span class="s2">) {</span>
+								<span class="s0">// There was another assignment before the reference. Therefore, it has not been used yet.</span>
+								<span class="s4">continue</span><span class="s2">;</span>
+							<span class="s2">}</span>
+
+							<span class="s0">// It is used</span>
+							<span class="s4">return</span><span class="s2">;</span>
+						<span class="s2">}</span>
+					<span class="s2">}</span>
+				<span class="s2">}</span>
+				<span class="s2">context.report({</span>
+					<span class="s2">node: targetAssignment.identifier,</span>
+					<span class="s2">messageId: </span><span class="s3">&quot;unnecessaryAssignment&quot;</span><span class="s2">,</span>
+				<span class="s2">});</span>
+			<span class="s2">}</span>
+
+			<span class="s0">// Verify that each assignment in the code path is used.</span>
+			<span class="s4">for </span><span class="s2">(</span><span class="s4">const </span><span class="s2">assignments of target.assignments.values()) {</span>
+				<span class="s2">assignments.sort(</span>
+					<span class="s2">(a, b) =&gt; a.identifier.range[</span><span class="s5">0</span><span class="s2">] - b.identifier.range[</span><span class="s5">0</span><span class="s2">],</span>
+				<span class="s2">);</span>
+				<span class="s4">for </span><span class="s2">(</span><span class="s4">const </span><span class="s2">assignment of assignments) {</span>
+					<span class="s2">verifyAssignmentIsUsed(assignment, assignments);</span>
+				<span class="s2">}</span>
+			<span class="s2">}</span>
+		<span class="s2">}</span>
+
+		<span class="s4">return </span><span class="s2">{</span>
+			<span class="s2">onCodePathStart(codePath, node) {</span>
+				<span class="s4">const </span><span class="s2">scope = sourceCode.getScope(node);</span>
+
+				<span class="s2">scopeStack = {</span>
+					<span class="s2">upper: scopeStack,</span>
+					<span class="s2">codePath,</span>
+					<span class="s2">scope,</span>
+					<span class="s2">segments: Object.create(</span><span class="s4">null</span><span class="s2">),</span>
+					<span class="s2">currentSegments: </span><span class="s4">new </span><span class="s2">Set(),</span>
+					<span class="s2">assignments: </span><span class="s4">new </span><span class="s2">Map(),</span>
+					<span class="s2">tryStatementBlocks: [],</span>
+				<span class="s2">};</span>
+				<span class="s2">codePathStartScopes.add(scopeStack.scope);</span>
+			<span class="s2">},</span>
+			<span class="s2">onCodePathEnd() {</span>
+				<span class="s2">verify(scopeStack);</span>
+
+				<span class="s2">scopeStack = scopeStack.upper;</span>
+			<span class="s2">},</span>
+			<span class="s2">onCodePathSegmentStart(segment) {</span>
+				<span class="s4">const </span><span class="s2">segmentInfo = { segment, first: </span><span class="s4">null</span><span class="s2">, last: </span><span class="s4">null </span><span class="s2">};</span>
+
+				<span class="s2">scopeStack.segments[segment.id] = segmentInfo;</span>
+				<span class="s2">scopeStack.currentSegments.add(segment);</span>
+			<span class="s2">},</span>
+			<span class="s2">onCodePathSegmentEnd(segment) {</span>
+				<span class="s2">scopeStack.currentSegments.delete(segment);</span>
+			<span class="s2">},</span>
+			<span class="s2">TryStatement(node) {</span>
+				<span class="s2">scopeStack.tryStatementBlocks.push(node.block);</span>
+			<span class="s2">},</span>
+			<span class="s2">Identifier(node) {</span>
+				<span class="s4">for </span><span class="s2">(</span><span class="s4">const </span><span class="s2">segment of scopeStack.currentSegments) {</span>
+					<span class="s4">const </span><span class="s2">segmentInfo = scopeStack.segments[segment.id];</span>
+
+					<span class="s4">if </span><span class="s2">(!segmentInfo.first) {</span>
+						<span class="s2">segmentInfo.first = node;</span>
+					<span class="s2">}</span>
+					<span class="s2">segmentInfo.last = node;</span>
+				<span class="s2">}</span>
+			<span class="s2">},</span>
+			<span class="s3">&quot;:matches(VariableDeclarator[init!=null], AssignmentExpression, UpdateExpression):exit&quot;</span><span class="s2">(</span>
+				<span class="s2">node,</span>
+			<span class="s2">) {</span>
+				<span class="s4">if </span><span class="s2">(scopeStack.currentSegments.size === </span><span class="s5">0</span><span class="s2">) {</span>
+					<span class="s0">// Ignore unreachable segments</span>
+					<span class="s4">return</span><span class="s2">;</span>
+				<span class="s2">}</span>
+
+				<span class="s4">const </span><span class="s2">assignments = scopeStack.assignments;</span>
+
+				<span class="s4">let </span><span class="s2">pattern;</span>
+				<span class="s4">let </span><span class="s2">expression = </span><span class="s4">null</span><span class="s2">;</span>
+
+				<span class="s4">if </span><span class="s2">(node.type === </span><span class="s3">&quot;VariableDeclarator&quot;</span><span class="s2">) {</span>
+					<span class="s2">pattern = node.id;</span>
+					<span class="s2">expression = node.init;</span>
+				<span class="s2">} </span><span class="s4">else if </span><span class="s2">(node.type === </span><span class="s3">&quot;AssignmentExpression&quot;</span><span class="s2">) {</span>
+					<span class="s2">pattern = node.left;</span>
+					<span class="s2">expression = node.right;</span>
+				<span class="s2">} </span><span class="s4">else </span><span class="s2">{</span>
+					<span class="s0">// UpdateExpression</span>
+					<span class="s2">pattern = node.argument;</span>
+				<span class="s2">}</span>
+
+				<span class="s4">for </span><span class="s2">(</span><span class="s4">const </span><span class="s2">identifier of extractIdentifiersFromPattern(</span>
+					<span class="s2">pattern,</span>
+				<span class="s2">)) {</span>
+					<span class="s4">const </span><span class="s2">scope = sourceCode.getScope(identifier);</span>
+
+					<span class="s0">/** </span><span class="s1">@type </span><span class="s0">{Variable} */</span>
+					<span class="s4">const </span><span class="s2">variable = findVariable(scope, identifier);</span>
+
+					<span class="s4">if </span><span class="s2">(!variable) {</span>
+						<span class="s4">continue</span><span class="s2">;</span>
+					<span class="s2">}</span>
+
+					<span class="s0">// We don't know where global variables are used.</span>
+					<span class="s4">if </span><span class="s2">(</span>
+						<span class="s2">variable.scope.type === </span><span class="s3">&quot;global&quot; </span><span class="s2">&amp;&amp;</span>
+						<span class="s2">variable.defs.length === </span><span class="s5">0</span>
+					<span class="s2">) {</span>
+						<span class="s4">continue</span><span class="s2">;</span>
+					<span class="s2">}</span>
+
+					<span class="s0">/* 
+                     * If the scope of the variable is outside the current code path scope, 
+                     * we cannot track whether this assignment is not used. 
+                     */</span>
+					<span class="s4">if </span><span class="s2">(</span>
+						<span class="s2">scopeStack.scope !==</span>
+						<span class="s2">getCodePathStartScope(variable.scope)</span>
+					<span class="s2">) {</span>
+						<span class="s4">continue</span><span class="s2">;</span>
+					<span class="s2">}</span>
+
+					<span class="s0">// Variables marked by `markVariableAsUsed()` or</span>
+					<span class="s0">// exported by &quot;exported&quot; block comment.</span>
+					<span class="s4">if </span><span class="s2">(variable.eslintUsed) {</span>
+						<span class="s4">continue</span><span class="s2">;</span>
+					<span class="s2">}</span>
+
+					<span class="s0">// Variables exported by ESM export syntax</span>
+					<span class="s4">if </span><span class="s2">(variable.scope.type === </span><span class="s3">&quot;module&quot;</span><span class="s2">) {</span>
+						<span class="s4">if </span><span class="s2">(</span>
+							<span class="s2">variable.defs.some(</span>
+								<span class="s2">def =&gt;</span>
+									<span class="s2">(def.type === </span><span class="s3">&quot;Variable&quot; </span><span class="s2">&amp;&amp;</span>
+										<span class="s2">def.parent.parent.type ===</span>
+											<span class="s3">&quot;ExportNamedDeclaration&quot;</span><span class="s2">) ||</span>
+									<span class="s2">(def.type === </span><span class="s3">&quot;FunctionName&quot; </span><span class="s2">&amp;&amp;</span>
+										<span class="s2">(def.node.parent.type ===</span>
+											<span class="s3">&quot;ExportNamedDeclaration&quot; </span><span class="s2">||</span>
+											<span class="s2">def.node.parent.type ===</span>
+												<span class="s3">&quot;ExportDefaultDeclaration&quot;</span><span class="s2">)) ||</span>
+									<span class="s2">(def.type === </span><span class="s3">&quot;ClassName&quot; </span><span class="s2">&amp;&amp;</span>
+										<span class="s2">(def.node.parent.type ===</span>
+											<span class="s3">&quot;ExportNamedDeclaration&quot; </span><span class="s2">||</span>
+											<span class="s2">def.node.parent.type ===</span>
+												<span class="s3">&quot;ExportDefaultDeclaration&quot;</span><span class="s2">)),</span>
+							<span class="s2">)</span>
+						<span class="s2">) {</span>
+							<span class="s4">continue</span><span class="s2">;</span>
+						<span class="s2">}</span>
+						<span class="s4">if </span><span class="s2">(</span>
+							<span class="s2">variable.references.some(</span>
+								<span class="s2">reference =&gt;</span>
+									<span class="s2">reference.identifier.parent.type ===</span>
+									<span class="s3">&quot;ExportSpecifier&quot;</span><span class="s2">,</span>
+							<span class="s2">)</span>
+						<span class="s2">) {</span>
+							<span class="s0">// It have `export { ... }` reference.</span>
+							<span class="s4">continue</span><span class="s2">;</span>
+						<span class="s2">}</span>
+					<span class="s2">}</span>
+
+					<span class="s4">let </span><span class="s2">list = assignments.get(variable);</span>
+
+					<span class="s4">if </span><span class="s2">(!list) {</span>
+						<span class="s2">list = [];</span>
+						<span class="s2">assignments.set(variable, list);</span>
+					<span class="s2">}</span>
+					<span class="s2">list.push({</span>
+						<span class="s2">variable,</span>
+						<span class="s2">identifier,</span>
+						<span class="s2">node,</span>
+						<span class="s2">expression,</span>
+						<span class="s2">segments: [...scopeStack.currentSegments],</span>
+					<span class="s2">});</span>
+				<span class="s2">}</span>
+			<span class="s2">},</span>
+		<span class="s2">};</span>
+	<span class="s2">},</span>
+<span class="s2">};</span>
+</pre>
+</body>
+</html>

@@ -1,0 +1,160 @@
+<html>
+<head>
+<title>use-visual-element.mjs</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #067d17;}
+.s1 { color: #080808;}
+.s2 { color: #0033b3;}
+.s3 { color: #8c8c8c; font-style: italic;}
+</style>
+</head>
+<body bgcolor="#ffffff">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#c0c0c0" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+use-visual-element.mjs</font>
+</center></td></tr></table>
+<pre><span class="s0">&quot;use client&quot;</span><span class="s1">;</span>
+<span class="s2">import </span><span class="s1">{ useContext, useRef, useInsertionEffect, useEffect } from </span><span class="s0">'react'</span><span class="s1">;</span>
+<span class="s2">import </span><span class="s1">{ optimizedAppearDataAttribute } from </span><span class="s0">'../../animation/optimized-appear/data-id.mjs'</span><span class="s1">;</span>
+<span class="s2">import </span><span class="s1">{ LazyContext } from </span><span class="s0">'../../context/LazyContext.mjs'</span><span class="s1">;</span>
+<span class="s2">import </span><span class="s1">{ MotionConfigContext } from </span><span class="s0">'../../context/MotionConfigContext.mjs'</span><span class="s1">;</span>
+<span class="s2">import </span><span class="s1">{ MotionContext } from </span><span class="s0">'../../context/MotionContext/index.mjs'</span><span class="s1">;</span>
+<span class="s2">import </span><span class="s1">{ PresenceContext } from </span><span class="s0">'../../context/PresenceContext.mjs'</span><span class="s1">;</span>
+<span class="s2">import </span><span class="s1">{ SwitchLayoutGroupContext } from </span><span class="s0">'../../context/SwitchLayoutGroupContext.mjs'</span><span class="s1">;</span>
+<span class="s2">import </span><span class="s1">{ isRefObject } from </span><span class="s0">'../../utils/is-ref-object.mjs'</span><span class="s1">;</span>
+<span class="s2">import </span><span class="s1">{ useIsomorphicLayoutEffect } from </span><span class="s0">'../../utils/use-isomorphic-effect.mjs'</span><span class="s1">;</span>
+
+<span class="s2">function </span><span class="s1">useVisualElement(Component, visualState, props, createVisualElement, ProjectionNodeConstructor) {</span>
+    <span class="s2">const </span><span class="s1">{ visualElement: parent } = useContext(MotionContext);</span>
+    <span class="s2">const </span><span class="s1">lazyContext = useContext(LazyContext);</span>
+    <span class="s2">const </span><span class="s1">presenceContext = useContext(PresenceContext);</span>
+    <span class="s2">const </span><span class="s1">reducedMotionConfig = useContext(MotionConfigContext).reducedMotion;</span>
+    <span class="s2">const </span><span class="s1">visualElementRef = useRef(</span><span class="s2">null</span><span class="s1">);</span>
+    <span class="s3">/**</span>
+     <span class="s3">* If we haven't preloaded a renderer, check to see if we have one lazy-loaded</span>
+     <span class="s3">*/</span>
+    <span class="s1">createVisualElement =</span>
+        <span class="s1">createVisualElement ||</span>
+            <span class="s1">lazyContext.renderer;</span>
+    <span class="s2">if </span><span class="s1">(!visualElementRef.current &amp;&amp; createVisualElement) {</span>
+        <span class="s1">visualElementRef.current = createVisualElement(Component, {</span>
+            <span class="s1">visualState,</span>
+            <span class="s1">parent,</span>
+            <span class="s1">props,</span>
+            <span class="s1">presenceContext,</span>
+            <span class="s1">blockInitialAnimation: presenceContext</span>
+                <span class="s1">? presenceContext.initial === </span><span class="s2">false</span>
+                <span class="s1">: </span><span class="s2">false</span><span class="s1">,</span>
+            <span class="s1">reducedMotionConfig,</span>
+        <span class="s1">});</span>
+    <span class="s1">}</span>
+    <span class="s2">const </span><span class="s1">visualElement = visualElementRef.current;</span>
+    <span class="s3">/**</span>
+     <span class="s3">* Load Motion gesture and animation features. These are rendered as renderless</span>
+     <span class="s3">* components so each feature can optionally make use of React lifecycle methods.</span>
+     <span class="s3">*/</span>
+    <span class="s2">const </span><span class="s1">initialLayoutGroupConfig = useContext(SwitchLayoutGroupContext);</span>
+    <span class="s2">if </span><span class="s1">(visualElement &amp;&amp;</span>
+        <span class="s1">!visualElement.projection &amp;&amp;</span>
+        <span class="s1">ProjectionNodeConstructor &amp;&amp;</span>
+        <span class="s1">(visualElement.type === </span><span class="s0">&quot;html&quot; </span><span class="s1">|| visualElement.type === </span><span class="s0">&quot;svg&quot;</span><span class="s1">)) {</span>
+        <span class="s1">createProjectionNode(visualElementRef.current, props, ProjectionNodeConstructor, initialLayoutGroupConfig);</span>
+    <span class="s1">}</span>
+    <span class="s2">const </span><span class="s1">isMounted = useRef(</span><span class="s2">false</span><span class="s1">);</span>
+    <span class="s1">useInsertionEffect(() =&gt; {</span>
+        <span class="s3">/**</span>
+         <span class="s3">* Check the component has already mounted before calling</span>
+         <span class="s3">* `update` unnecessarily. This ensures we skip the initial update.</span>
+         <span class="s3">*/</span>
+        <span class="s2">if </span><span class="s1">(visualElement &amp;&amp; isMounted.current) {</span>
+            <span class="s1">visualElement.update(props, presenceContext);</span>
+        <span class="s1">}</span>
+    <span class="s1">});</span>
+    <span class="s3">/**</span>
+     <span class="s3">* Cache this value as we want to know whether HandoffAppearAnimations</span>
+     <span class="s3">* was present on initial render - it will be deleted after this.</span>
+     <span class="s3">*/</span>
+    <span class="s2">const </span><span class="s1">optimisedAppearId = props[optimizedAppearDataAttribute];</span>
+    <span class="s2">const </span><span class="s1">wantsHandoff = useRef(Boolean(optimisedAppearId) &amp;&amp;</span>
+        <span class="s1">!window.MotionHandoffIsComplete?.(optimisedAppearId) &amp;&amp;</span>
+        <span class="s1">window.MotionHasOptimisedAnimation?.(optimisedAppearId));</span>
+    <span class="s1">useIsomorphicLayoutEffect(() =&gt; {</span>
+        <span class="s2">if </span><span class="s1">(!visualElement)</span>
+            <span class="s2">return</span><span class="s1">;</span>
+        <span class="s1">isMounted.current = </span><span class="s2">true</span><span class="s1">;</span>
+        <span class="s1">window.MotionIsMounted = </span><span class="s2">true</span><span class="s1">;</span>
+        <span class="s1">visualElement.updateFeatures();</span>
+        <span class="s1">visualElement.scheduleRenderMicrotask();</span>
+        <span class="s3">/**</span>
+         <span class="s3">* Ideally this function would always run in a useEffect.</span>
+         <span class="s3">*</span>
+         <span class="s3">* However, if we have optimised appear animations to handoff from,</span>
+         <span class="s3">* it needs to happen synchronously to ensure there's no flash of</span>
+         <span class="s3">* incorrect styles in the event of a hydration error.</span>
+         <span class="s3">*</span>
+         <span class="s3">* So if we detect a situtation where optimised appear animations</span>
+         <span class="s3">* are running, we use useLayoutEffect to trigger animations.</span>
+         <span class="s3">*/</span>
+        <span class="s2">if </span><span class="s1">(wantsHandoff.current &amp;&amp; visualElement.animationState) {</span>
+            <span class="s1">visualElement.animationState.animateChanges();</span>
+        <span class="s1">}</span>
+    <span class="s1">});</span>
+    <span class="s1">useEffect(() =&gt; {</span>
+        <span class="s2">if </span><span class="s1">(!visualElement)</span>
+            <span class="s2">return</span><span class="s1">;</span>
+        <span class="s2">if </span><span class="s1">(!wantsHandoff.current &amp;&amp; visualElement.animationState) {</span>
+            <span class="s1">visualElement.animationState.animateChanges();</span>
+        <span class="s1">}</span>
+        <span class="s2">if </span><span class="s1">(wantsHandoff.current) {</span>
+            <span class="s3">// This ensures all future calls to animateChanges() in this component will run in useEffect</span>
+            <span class="s1">queueMicrotask(() =&gt; {</span>
+                <span class="s1">window.MotionHandoffMarkAsComplete?.(optimisedAppearId);</span>
+            <span class="s1">});</span>
+            <span class="s1">wantsHandoff.current = </span><span class="s2">false</span><span class="s1">;</span>
+        <span class="s1">}</span>
+        <span class="s3">/**</span>
+         <span class="s3">* Now we've finished triggering animations for this element we</span>
+         <span class="s3">* can wipe the enteringChildren set for the next render.</span>
+         <span class="s3">*/</span>
+        <span class="s1">visualElement.enteringChildren = undefined;</span>
+    <span class="s1">});</span>
+    <span class="s2">return </span><span class="s1">visualElement;</span>
+<span class="s1">}</span>
+<span class="s2">function </span><span class="s1">createProjectionNode(visualElement, props, ProjectionNodeConstructor, initialPromotionConfig) {</span>
+    <span class="s2">const </span><span class="s1">{ layoutId, layout, drag, dragConstraints, layoutScroll, layoutRoot, layoutCrossfade, } = props;</span>
+    <span class="s1">visualElement.projection = </span><span class="s2">new </span><span class="s1">ProjectionNodeConstructor(visualElement.latestValues, props[</span><span class="s0">&quot;data-framer-portal-id&quot;</span><span class="s1">]</span>
+        <span class="s1">? undefined</span>
+        <span class="s1">: getClosestProjectingNode(visualElement.parent));</span>
+    <span class="s1">visualElement.projection.setOptions({</span>
+        <span class="s1">layoutId,</span>
+        <span class="s1">layout,</span>
+        <span class="s1">alwaysMeasureLayout: Boolean(drag) || (dragConstraints &amp;&amp; isRefObject(dragConstraints)),</span>
+        <span class="s1">visualElement,</span>
+        <span class="s3">/**</span>
+         <span class="s3">* TODO: Update options in an effect. This could be tricky as it'll be too late</span>
+         <span class="s3">* to update by the time layout animations run.</span>
+         <span class="s3">* We also need to fix this safeToRemove by linking it up to the one returned by usePresence,</span>
+         <span class="s3">* ensuring it gets called if there's no potential layout animations.</span>
+         <span class="s3">*</span>
+         <span class="s3">*/</span>
+        <span class="s1">animationType: </span><span class="s2">typeof </span><span class="s1">layout === </span><span class="s0">&quot;string&quot; </span><span class="s1">? layout : </span><span class="s0">&quot;both&quot;</span><span class="s1">,</span>
+        <span class="s1">initialPromotionConfig,</span>
+        <span class="s1">crossfade: layoutCrossfade,</span>
+        <span class="s1">layoutScroll,</span>
+        <span class="s1">layoutRoot,</span>
+    <span class="s1">});</span>
+<span class="s1">}</span>
+<span class="s2">function </span><span class="s1">getClosestProjectingNode(visualElement) {</span>
+    <span class="s2">if </span><span class="s1">(!visualElement)</span>
+        <span class="s2">return </span><span class="s1">undefined;</span>
+    <span class="s2">return </span><span class="s1">visualElement.options.allowProjection !== </span><span class="s2">false</span>
+        <span class="s1">? visualElement.projection</span>
+        <span class="s1">: getClosestProjectingNode(visualElement.parent);</span>
+<span class="s1">}</span>
+
+<span class="s2">export </span><span class="s1">{ useVisualElement };</span>
+</pre>
+</body>
+</html>

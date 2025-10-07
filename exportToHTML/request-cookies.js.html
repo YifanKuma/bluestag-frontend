@@ -1,0 +1,230 @@
+<html>
+<head>
+<title>request-cookies.js</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #067d17;}
+.s1 { color: #080808;}
+.s2 { color: #0033b3;}
+.s3 { color: #1750eb;}
+.s4 { color: #8c8c8c; font-style: italic;}
+</style>
+</head>
+<body bgcolor="#ffffff">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#c0c0c0" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+request-cookies.js</font>
+</center></td></tr></table>
+<pre><span class="s0">&quot;use strict&quot;</span><span class="s1">;</span>
+<span class="s1">Object.defineProperty(exports, </span><span class="s0">&quot;__esModule&quot;</span><span class="s1">, {</span>
+    <span class="s1">value: </span><span class="s2">true</span>
+<span class="s1">});</span>
+<span class="s3">0 </span><span class="s1">&amp;&amp; (module.exports = {</span>
+    <span class="s1">MutableRequestCookiesAdapter: </span><span class="s2">null</span><span class="s1">,</span>
+    <span class="s1">ReadonlyRequestCookiesError: </span><span class="s2">null</span><span class="s1">,</span>
+    <span class="s1">RequestCookiesAdapter: </span><span class="s2">null</span><span class="s1">,</span>
+    <span class="s1">appendMutableCookies: </span><span class="s2">null</span><span class="s1">,</span>
+    <span class="s1">areCookiesMutableInCurrentPhase: </span><span class="s2">null</span><span class="s1">,</span>
+    <span class="s1">createCookiesWithMutableAccessCheck: </span><span class="s2">null</span><span class="s1">,</span>
+    <span class="s1">getModifiedCookieValues: </span><span class="s2">null</span><span class="s1">,</span>
+    <span class="s1">responseCookiesToRequestCookies: </span><span class="s2">null</span>
+<span class="s1">});</span>
+<span class="s2">function </span><span class="s1">_export(target, all) {</span>
+    <span class="s2">for</span><span class="s1">(</span><span class="s2">var </span><span class="s1">name </span><span class="s2">in </span><span class="s1">all)Object.defineProperty(target, name, {</span>
+        <span class="s1">enumerable: </span><span class="s2">true</span><span class="s1">,</span>
+        <span class="s1">get: all[name]</span>
+    <span class="s1">});</span>
+<span class="s1">}</span>
+<span class="s1">_export(exports, {</span>
+    <span class="s1">MutableRequestCookiesAdapter: </span><span class="s2">function</span><span class="s1">() {</span>
+        <span class="s2">return </span><span class="s1">MutableRequestCookiesAdapter;</span>
+    <span class="s1">},</span>
+    <span class="s1">ReadonlyRequestCookiesError: </span><span class="s2">function</span><span class="s1">() {</span>
+        <span class="s2">return </span><span class="s1">ReadonlyRequestCookiesError;</span>
+    <span class="s1">},</span>
+    <span class="s1">RequestCookiesAdapter: </span><span class="s2">function</span><span class="s1">() {</span>
+        <span class="s2">return </span><span class="s1">RequestCookiesAdapter;</span>
+    <span class="s1">},</span>
+    <span class="s1">appendMutableCookies: </span><span class="s2">function</span><span class="s1">() {</span>
+        <span class="s2">return </span><span class="s1">appendMutableCookies;</span>
+    <span class="s1">},</span>
+    <span class="s1">areCookiesMutableInCurrentPhase: </span><span class="s2">function</span><span class="s1">() {</span>
+        <span class="s2">return </span><span class="s1">areCookiesMutableInCurrentPhase;</span>
+    <span class="s1">},</span>
+    <span class="s1">createCookiesWithMutableAccessCheck: </span><span class="s2">function</span><span class="s1">() {</span>
+        <span class="s2">return </span><span class="s1">createCookiesWithMutableAccessCheck;</span>
+    <span class="s1">},</span>
+    <span class="s1">getModifiedCookieValues: </span><span class="s2">function</span><span class="s1">() {</span>
+        <span class="s2">return </span><span class="s1">getModifiedCookieValues;</span>
+    <span class="s1">},</span>
+    <span class="s1">responseCookiesToRequestCookies: </span><span class="s2">function</span><span class="s1">() {</span>
+        <span class="s2">return </span><span class="s1">responseCookiesToRequestCookies;</span>
+    <span class="s1">}</span>
+<span class="s1">});</span>
+<span class="s2">const </span><span class="s1">_cookies = require(</span><span class="s0">&quot;../cookies&quot;</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">_reflect = require(</span><span class="s0">&quot;./reflect&quot;</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">_workasyncstorageexternal = require(</span><span class="s0">&quot;../../../app-render/work-async-storage.external&quot;</span><span class="s1">);</span>
+<span class="s2">class </span><span class="s1">ReadonlyRequestCookiesError </span><span class="s2">extends </span><span class="s1">Error {</span>
+    <span class="s1">constructor(){</span>
+        <span class="s2">super</span><span class="s1">(</span><span class="s0">'Cookies can only be modified in a Server Action or Route Handler. Read more: https://nextjs.org/docs/app/api-reference/functions/cookies#options'</span><span class="s1">);</span>
+    <span class="s1">}</span>
+    <span class="s2">static </span><span class="s1">callable() {</span>
+        <span class="s2">throw new </span><span class="s1">ReadonlyRequestCookiesError();</span>
+    <span class="s1">}</span>
+<span class="s1">}</span>
+<span class="s2">class </span><span class="s1">RequestCookiesAdapter {</span>
+    <span class="s2">static </span><span class="s1">seal(cookies) {</span>
+        <span class="s2">return new </span><span class="s1">Proxy(cookies, {</span>
+            <span class="s1">get (target, prop, receiver) {</span>
+                <span class="s2">switch</span><span class="s1">(prop){</span>
+                    <span class="s2">case </span><span class="s0">'clear'</span><span class="s1">:</span>
+                    <span class="s2">case </span><span class="s0">'delete'</span><span class="s1">:</span>
+                    <span class="s2">case </span><span class="s0">'set'</span><span class="s1">:</span>
+                        <span class="s2">return </span><span class="s1">ReadonlyRequestCookiesError.callable;</span>
+                    <span class="s2">default</span><span class="s1">:</span>
+                        <span class="s2">return </span><span class="s1">_reflect.ReflectAdapter.get(target, prop, receiver);</span>
+                <span class="s1">}</span>
+            <span class="s1">}</span>
+        <span class="s1">});</span>
+    <span class="s1">}</span>
+<span class="s1">}</span>
+<span class="s2">const </span><span class="s1">SYMBOL_MODIFY_COOKIE_VALUES = Symbol.for(</span><span class="s0">'next.mutated.cookies'</span><span class="s1">);</span>
+<span class="s2">function </span><span class="s1">getModifiedCookieValues(cookies) {</span>
+    <span class="s2">const </span><span class="s1">modified = cookies[SYMBOL_MODIFY_COOKIE_VALUES];</span>
+    <span class="s2">if </span><span class="s1">(!modified || !Array.isArray(modified) || modified.length === </span><span class="s3">0</span><span class="s1">) {</span>
+        <span class="s2">return </span><span class="s1">[];</span>
+    <span class="s1">}</span>
+    <span class="s2">return </span><span class="s1">modified;</span>
+<span class="s1">}</span>
+<span class="s2">function </span><span class="s1">appendMutableCookies(headers, mutableCookies) {</span>
+    <span class="s2">const </span><span class="s1">modifiedCookieValues = getModifiedCookieValues(mutableCookies);</span>
+    <span class="s2">if </span><span class="s1">(modifiedCookieValues.length === </span><span class="s3">0</span><span class="s1">) {</span>
+        <span class="s2">return false</span><span class="s1">;</span>
+    <span class="s1">}</span>
+    <span class="s4">// Return a new response that extends the response with</span>
+    <span class="s4">// the modified cookies as fallbacks. `res` cookies</span>
+    <span class="s4">// will still take precedence.</span>
+    <span class="s2">const </span><span class="s1">resCookies = </span><span class="s2">new </span><span class="s1">_cookies.ResponseCookies(headers);</span>
+    <span class="s2">const </span><span class="s1">returnedCookies = resCookies.getAll();</span>
+    <span class="s4">// Set the modified cookies as fallbacks.</span>
+    <span class="s2">for </span><span class="s1">(</span><span class="s2">const </span><span class="s1">cookie of modifiedCookieValues){</span>
+        <span class="s1">resCookies.set(cookie);</span>
+    <span class="s1">}</span>
+    <span class="s4">// Set the original cookies as the final values.</span>
+    <span class="s2">for </span><span class="s1">(</span><span class="s2">const </span><span class="s1">cookie of returnedCookies){</span>
+        <span class="s1">resCookies.set(cookie);</span>
+    <span class="s1">}</span>
+    <span class="s2">return true</span><span class="s1">;</span>
+<span class="s1">}</span>
+<span class="s2">class </span><span class="s1">MutableRequestCookiesAdapter {</span>
+    <span class="s2">static </span><span class="s1">wrap(cookies, onUpdateCookies) {</span>
+        <span class="s2">const </span><span class="s1">responseCookies = </span><span class="s2">new </span><span class="s1">_cookies.ResponseCookies(</span><span class="s2">new </span><span class="s1">Headers());</span>
+        <span class="s2">for </span><span class="s1">(</span><span class="s2">const </span><span class="s1">cookie of cookies.getAll()){</span>
+            <span class="s1">responseCookies.set(cookie);</span>
+        <span class="s1">}</span>
+        <span class="s2">let </span><span class="s1">modifiedValues = [];</span>
+        <span class="s2">const </span><span class="s1">modifiedCookies = </span><span class="s2">new </span><span class="s1">Set();</span>
+        <span class="s2">const </span><span class="s1">updateResponseCookies = ()=&gt;{</span>
+            <span class="s4">// TODO-APP: change method of getting workStore</span>
+            <span class="s2">const </span><span class="s1">workStore = _workasyncstorageexternal.workAsyncStorage.getStore();</span>
+            <span class="s2">if </span><span class="s1">(workStore) {</span>
+                <span class="s1">workStore.pathWasRevalidated = </span><span class="s2">true</span><span class="s1">;</span>
+            <span class="s1">}</span>
+            <span class="s2">const </span><span class="s1">allCookies = responseCookies.getAll();</span>
+            <span class="s1">modifiedValues = allCookies.filter((c)=&gt;modifiedCookies.has(c.name));</span>
+            <span class="s2">if </span><span class="s1">(onUpdateCookies) {</span>
+                <span class="s2">const </span><span class="s1">serializedCookies = [];</span>
+                <span class="s2">for </span><span class="s1">(</span><span class="s2">const </span><span class="s1">cookie of modifiedValues){</span>
+                    <span class="s2">const </span><span class="s1">tempCookies = </span><span class="s2">new </span><span class="s1">_cookies.ResponseCookies(</span><span class="s2">new </span><span class="s1">Headers());</span>
+                    <span class="s1">tempCookies.set(cookie);</span>
+                    <span class="s1">serializedCookies.push(tempCookies.toString());</span>
+                <span class="s1">}</span>
+                <span class="s1">onUpdateCookies(serializedCookies);</span>
+            <span class="s1">}</span>
+        <span class="s1">};</span>
+        <span class="s2">const </span><span class="s1">wrappedCookies = </span><span class="s2">new </span><span class="s1">Proxy(responseCookies, {</span>
+            <span class="s1">get (target, prop, receiver) {</span>
+                <span class="s2">switch</span><span class="s1">(prop){</span>
+                    <span class="s4">// A special symbol to get the modified cookie values</span>
+                    <span class="s2">case </span><span class="s1">SYMBOL_MODIFY_COOKIE_VALUES:</span>
+                        <span class="s2">return </span><span class="s1">modifiedValues;</span>
+                    <span class="s4">// TODO: Throw error if trying to set a cookie after the response</span>
+                    <span class="s4">// headers have been set.</span>
+                    <span class="s2">case </span><span class="s0">'delete'</span><span class="s1">:</span>
+                        <span class="s2">return function</span><span class="s1">(...args) {</span>
+                            <span class="s1">modifiedCookies.add(</span><span class="s2">typeof </span><span class="s1">args[</span><span class="s3">0</span><span class="s1">] === </span><span class="s0">'string' </span><span class="s1">? args[</span><span class="s3">0</span><span class="s1">] : args[</span><span class="s3">0</span><span class="s1">].name);</span>
+                            <span class="s2">try </span><span class="s1">{</span>
+                                <span class="s1">target.delete(...args);</span>
+                                <span class="s2">return </span><span class="s1">wrappedCookies;</span>
+                            <span class="s1">} </span><span class="s2">finally</span><span class="s1">{</span>
+                                <span class="s1">updateResponseCookies();</span>
+                            <span class="s1">}</span>
+                        <span class="s1">};</span>
+                    <span class="s2">case </span><span class="s0">'set'</span><span class="s1">:</span>
+                        <span class="s2">return function</span><span class="s1">(...args) {</span>
+                            <span class="s1">modifiedCookies.add(</span><span class="s2">typeof </span><span class="s1">args[</span><span class="s3">0</span><span class="s1">] === </span><span class="s0">'string' </span><span class="s1">? args[</span><span class="s3">0</span><span class="s1">] : args[</span><span class="s3">0</span><span class="s1">].name);</span>
+                            <span class="s2">try </span><span class="s1">{</span>
+                                <span class="s1">target.set(...args);</span>
+                                <span class="s2">return </span><span class="s1">wrappedCookies;</span>
+                            <span class="s1">} </span><span class="s2">finally</span><span class="s1">{</span>
+                                <span class="s1">updateResponseCookies();</span>
+                            <span class="s1">}</span>
+                        <span class="s1">};</span>
+                    <span class="s2">default</span><span class="s1">:</span>
+                        <span class="s2">return </span><span class="s1">_reflect.ReflectAdapter.get(target, prop, receiver);</span>
+                <span class="s1">}</span>
+            <span class="s1">}</span>
+        <span class="s1">});</span>
+        <span class="s2">return </span><span class="s1">wrappedCookies;</span>
+    <span class="s1">}</span>
+<span class="s1">}</span>
+<span class="s2">function </span><span class="s1">createCookiesWithMutableAccessCheck(requestStore) {</span>
+    <span class="s2">const </span><span class="s1">wrappedCookies = </span><span class="s2">new </span><span class="s1">Proxy(requestStore.mutableCookies, {</span>
+        <span class="s1">get (target, prop, receiver) {</span>
+            <span class="s2">switch</span><span class="s1">(prop){</span>
+                <span class="s2">case </span><span class="s0">'delete'</span><span class="s1">:</span>
+                    <span class="s2">return function</span><span class="s1">(...args) {</span>
+                        <span class="s1">ensureCookiesAreStillMutable(requestStore, </span><span class="s0">'cookies().delete'</span><span class="s1">);</span>
+                        <span class="s1">target.delete(...args);</span>
+                        <span class="s2">return </span><span class="s1">wrappedCookies;</span>
+                    <span class="s1">};</span>
+                <span class="s2">case </span><span class="s0">'set'</span><span class="s1">:</span>
+                    <span class="s2">return function</span><span class="s1">(...args) {</span>
+                        <span class="s1">ensureCookiesAreStillMutable(requestStore, </span><span class="s0">'cookies().set'</span><span class="s1">);</span>
+                        <span class="s1">target.set(...args);</span>
+                        <span class="s2">return </span><span class="s1">wrappedCookies;</span>
+                    <span class="s1">};</span>
+                <span class="s2">default</span><span class="s1">:</span>
+                    <span class="s2">return </span><span class="s1">_reflect.ReflectAdapter.get(target, prop, receiver);</span>
+            <span class="s1">}</span>
+        <span class="s1">}</span>
+    <span class="s1">});</span>
+    <span class="s2">return </span><span class="s1">wrappedCookies;</span>
+<span class="s1">}</span>
+<span class="s2">function </span><span class="s1">areCookiesMutableInCurrentPhase(requestStore) {</span>
+    <span class="s2">return </span><span class="s1">requestStore.phase === </span><span class="s0">'action'</span><span class="s1">;</span>
+<span class="s1">}</span>
+<span class="s4">/** Ensure that cookies() starts throwing on mutation</span>
+ <span class="s4">* if we changed phases and can no longer mutate.</span>
+ <span class="s4">*</span>
+ <span class="s4">* This can happen when going:</span>
+ <span class="s4">*   'render' -&gt; 'after'</span>
+ <span class="s4">*   'action' -&gt; 'render'</span>
+ <span class="s4">* */ </span><span class="s2">function </span><span class="s1">ensureCookiesAreStillMutable(requestStore, _callingExpression) {</span>
+    <span class="s2">if </span><span class="s1">(!areCookiesMutableInCurrentPhase(requestStore)) {</span>
+        <span class="s4">// TODO: maybe we can give a more precise error message based on callingExpression?</span>
+        <span class="s2">throw new </span><span class="s1">ReadonlyRequestCookiesError();</span>
+    <span class="s1">}</span>
+<span class="s1">}</span>
+<span class="s2">function </span><span class="s1">responseCookiesToRequestCookies(responseCookies) {</span>
+    <span class="s2">const </span><span class="s1">requestCookies = </span><span class="s2">new </span><span class="s1">_cookies.RequestCookies(</span><span class="s2">new </span><span class="s1">Headers());</span>
+    <span class="s2">for </span><span class="s1">(</span><span class="s2">const </span><span class="s1">cookie of responseCookies.getAll()){</span>
+        <span class="s1">requestCookies.set(cookie);</span>
+    <span class="s1">}</span>
+    <span class="s2">return </span><span class="s1">requestCookies;</span>
+<span class="s1">}</span>
+
+<span class="s4">//# sourceMappingURL=request-cookies.js.map</span></pre>
+</body>
+</html>

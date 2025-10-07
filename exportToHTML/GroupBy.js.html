@@ -1,0 +1,97 @@
+<html>
+<head>
+<title>GroupBy.js</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #067d17;}
+.s1 { color: #080808;}
+.s2 { color: #0033b3;}
+.s3 { color: #8c8c8c; font-style: italic;}
+.s4 { color: #1750eb;}
+</style>
+</head>
+<body bgcolor="#ffffff">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#c0c0c0" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+GroupBy.js</font>
+</center></td></tr></table>
+<pre><span class="s0">'use strict'</span><span class="s1">;</span>
+
+<span class="s2">var </span><span class="s1">$TypeError = require(</span><span class="s0">'es-errors/type'</span><span class="s1">);</span>
+
+<span class="s2">var </span><span class="s1">AddValueToKeyedGroup = require(</span><span class="s0">'./AddValueToKeyedGroup'</span><span class="s1">);</span>
+<span class="s2">var </span><span class="s1">Call = require(</span><span class="s0">'./Call'</span><span class="s1">);</span>
+<span class="s2">var </span><span class="s1">CanonicalizeKeyedCollectionKey = require(</span><span class="s0">'./CanonicalizeKeyedCollectionKey'</span><span class="s1">);</span>
+<span class="s2">var </span><span class="s1">GetIterator = require(</span><span class="s0">'./GetIterator'</span><span class="s1">);</span>
+<span class="s2">var </span><span class="s1">IfAbruptCloseIterator = require(</span><span class="s0">'./IfAbruptCloseIterator'</span><span class="s1">);</span>
+<span class="s2">var </span><span class="s1">IsCallable = require(</span><span class="s0">'./IsCallable'</span><span class="s1">);</span>
+<span class="s2">var </span><span class="s1">IteratorClose = require(</span><span class="s0">'./IteratorClose'</span><span class="s1">);</span>
+<span class="s2">var </span><span class="s1">IteratorStep = require(</span><span class="s0">'./IteratorStep'</span><span class="s1">);</span>
+<span class="s2">var </span><span class="s1">IteratorValue = require(</span><span class="s0">'./IteratorValue'</span><span class="s1">);</span>
+<span class="s2">var </span><span class="s1">RequireObjectCoercible = require(</span><span class="s0">'./RequireObjectCoercible'</span><span class="s1">);</span>
+<span class="s2">var </span><span class="s1">ThrowCompletion = require(</span><span class="s0">'./ThrowCompletion'</span><span class="s1">);</span>
+<span class="s2">var </span><span class="s1">ToPropertyKey = require(</span><span class="s0">'./ToPropertyKey'</span><span class="s1">);</span>
+
+<span class="s2">var </span><span class="s1">maxSafeInteger = require(</span><span class="s0">'../helpers/maxSafeInteger'</span><span class="s1">);</span>
+
+<span class="s3">// https://262.ecma-international.org/16.0/#sec-groupby</span>
+
+<span class="s1">module.exports = </span><span class="s2">function </span><span class="s1">GroupBy(items, callbackfn, keyCoercion) {</span>
+	<span class="s2">if </span><span class="s1">(keyCoercion !== </span><span class="s0">'PROPERTY' </span><span class="s1">&amp;&amp; keyCoercion !== </span><span class="s0">'COLLECTION'</span><span class="s1">) {</span>
+		<span class="s2">throw new </span><span class="s1">$TypeError(</span><span class="s0">'Assertion failed: `keyCoercion` must be `&quot;PROPERTY&quot;` or `&quot;COLLECTION&quot;`'</span><span class="s1">);</span>
+	<span class="s1">}</span>
+
+	<span class="s1">RequireObjectCoercible(items); </span><span class="s3">// step 1</span>
+
+	<span class="s2">if </span><span class="s1">(!IsCallable(callbackfn)) {</span>
+		<span class="s2">throw new </span><span class="s1">$TypeError(</span><span class="s0">'callbackfn must be callable'</span><span class="s1">); </span><span class="s3">// step 2</span>
+	<span class="s1">}</span>
+
+	<span class="s2">var </span><span class="s1">groups = []; </span><span class="s3">// step 3</span>
+
+	<span class="s2">var </span><span class="s1">iteratorRecord = GetIterator(items, </span><span class="s0">'SYNC'</span><span class="s1">); </span><span class="s3">// step 4</span>
+
+	<span class="s2">var </span><span class="s1">k = </span><span class="s4">0</span><span class="s1">; </span><span class="s3">// step 5</span>
+
+	<span class="s3">// eslint-disable-next-line no-constant-condition</span>
+	<span class="s2">while </span><span class="s1">(</span><span class="s2">true</span><span class="s1">) { </span><span class="s3">// step 6</span>
+		<span class="s2">if </span><span class="s1">(k &gt;= maxSafeInteger) { </span><span class="s3">// step 6.a</span>
+			<span class="s2">var </span><span class="s1">error = ThrowCompletion(</span><span class="s2">new </span><span class="s1">$TypeError(</span><span class="s0">'k must be less than 2 ** 53 - 1'</span><span class="s1">)); </span><span class="s3">// step 6.a.i</span>
+			<span class="s2">return </span><span class="s1">IteratorClose(iteratorRecord, error); </span><span class="s3">// step 6.a.ii</span>
+		<span class="s1">}</span>
+		<span class="s2">var </span><span class="s1">next = IteratorStep(iteratorRecord); </span><span class="s3">// step 6.b</span>
+		<span class="s2">if </span><span class="s1">(!next) { </span><span class="s3">// step 6.c</span>
+			<span class="s2">return </span><span class="s1">groups; </span><span class="s3">// step 6.c.i</span>
+		<span class="s1">}</span>
+
+		<span class="s2">var </span><span class="s1">value = IteratorValue(next); </span><span class="s3">// step 6.dv</span>
+
+		<span class="s2">var </span><span class="s1">key;</span>
+		<span class="s2">try </span><span class="s1">{</span>
+			<span class="s1">key = Call(callbackfn, undefined, [value, k]); </span><span class="s3">// step 6.e</span>
+		<span class="s1">} </span><span class="s2">catch </span><span class="s1">(e) {</span>
+			<span class="s1">IfAbruptCloseIterator(ThrowCompletion(e), iteratorRecord); </span><span class="s3">// step 6.f</span>
+		<span class="s1">}</span>
+
+		<span class="s2">if </span><span class="s1">(keyCoercion === </span><span class="s0">'PROPERTY'</span><span class="s1">) { </span><span class="s3">// step 6.g</span>
+			<span class="s2">try </span><span class="s1">{</span>
+				<span class="s1">key = ToPropertyKey(key); </span><span class="s3">// step 6.g.i</span>
+			<span class="s1">} </span><span class="s2">catch </span><span class="s1">(e) {</span>
+				<span class="s1">IfAbruptCloseIterator(ThrowCompletion(e), iteratorRecord); </span><span class="s3">// step 6.g.ii</span>
+			<span class="s1">}</span>
+		<span class="s1">} </span><span class="s2">else </span><span class="s1">{ </span><span class="s3">// step 6.h</span>
+			<span class="s2">if </span><span class="s1">(keyCoercion !== </span><span class="s0">'COLLECTION'</span><span class="s1">) {</span>
+				<span class="s2">throw new </span><span class="s1">$TypeError(</span><span class="s0">'keyCoercion must be ~PROPERTY~ or ~COLLECTION~'</span><span class="s1">); </span><span class="s3">// step 6.h.i</span>
+			<span class="s1">}</span>
+			<span class="s1">key = CanonicalizeKeyedCollectionKey(key); </span><span class="s3">// step 6.h.ii</span>
+		<span class="s1">}</span>
+
+		<span class="s1">AddValueToKeyedGroup(groups, key, value); </span><span class="s3">// step 6.i</span>
+
+		<span class="s1">k += </span><span class="s4">1</span><span class="s1">; </span><span class="s3">// step 6.j</span>
+	<span class="s1">}</span>
+<span class="s1">};</span>
+</pre>
+</body>
+</html>

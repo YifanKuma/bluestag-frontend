@@ -1,0 +1,419 @@
+<html>
+<head>
+<title>prefer-stateless-function.js</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #8c8c8c; font-style: italic;}
+.s1 { color: #8c8c8c; font-style: italic;}
+.s2 { color: #080808;}
+.s3 { color: #067d17;}
+.s4 { color: #0033b3;}
+.s5 { color: #1750eb;}
+</style>
+</head>
+<body bgcolor="#ffffff">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#c0c0c0" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+prefer-stateless-function.js</font>
+</center></td></tr></table>
+<pre><span class="s0">/**</span>
+ <span class="s0">* </span><span class="s1">@fileoverview </span><span class="s0">Enforce stateless components to be written as a pure function</span>
+ <span class="s0">* </span><span class="s1">@author </span><span class="s0">Yannick Croissant</span>
+ <span class="s0">* </span><span class="s1">@author </span><span class="s0">Alberto Rodríguez</span>
+ <span class="s0">* </span><span class="s1">@copyright </span><span class="s0">2015 Alberto Rodríguez. All rights reserved.</span>
+ <span class="s0">*/</span>
+
+<span class="s3">'use strict'</span><span class="s2">;</span>
+
+<span class="s4">const </span><span class="s2">values = require(</span><span class="s3">'object.values'</span><span class="s2">);</span>
+
+<span class="s4">const </span><span class="s2">Components = require(</span><span class="s3">'../util/Components'</span><span class="s2">);</span>
+<span class="s4">const </span><span class="s2">testReactVersion = require(</span><span class="s3">'../util/version'</span><span class="s2">).testReactVersion;</span>
+<span class="s4">const </span><span class="s2">astUtil = require(</span><span class="s3">'../util/ast'</span><span class="s2">);</span>
+<span class="s4">const </span><span class="s2">componentUtil = require(</span><span class="s3">'../util/componentUtil'</span><span class="s2">);</span>
+<span class="s4">const </span><span class="s2">docsUrl = require(</span><span class="s3">'../util/docsUrl'</span><span class="s2">);</span>
+<span class="s4">const </span><span class="s2">report = require(</span><span class="s3">'../util/report'</span><span class="s2">);</span>
+<span class="s4">const </span><span class="s2">eslintUtil = require(</span><span class="s3">'../util/eslint'</span><span class="s2">);</span>
+
+<span class="s4">const </span><span class="s2">getScope = eslintUtil.getScope;</span>
+<span class="s4">const </span><span class="s2">getText = eslintUtil.getText;</span>
+
+<span class="s0">// ------------------------------------------------------------------------------</span>
+<span class="s0">// Rule Definition</span>
+<span class="s0">// ------------------------------------------------------------------------------</span>
+
+<span class="s4">const </span><span class="s2">messages = {</span>
+  <span class="s2">componentShouldBePure: </span><span class="s3">'Component should be written as a pure function'</span><span class="s2">,</span>
+<span class="s2">};</span>
+
+<span class="s0">/** </span><span class="s1">@type </span><span class="s0">{import('eslint').Rule.RuleModule} */</span>
+<span class="s2">module.exports = {</span>
+  <span class="s2">meta: {</span>
+    <span class="s2">docs: {</span>
+      <span class="s2">description: </span><span class="s3">'Enforce stateless components to be written as a pure function'</span><span class="s2">,</span>
+      <span class="s2">category: </span><span class="s3">'Stylistic Issues'</span><span class="s2">,</span>
+      <span class="s2">recommended: </span><span class="s4">false</span><span class="s2">,</span>
+      <span class="s2">url: docsUrl(</span><span class="s3">'prefer-stateless-function'</span><span class="s2">),</span>
+    <span class="s2">},</span>
+
+    <span class="s2">messages,</span>
+
+    <span class="s2">schema: [{</span>
+      <span class="s2">type: </span><span class="s3">'object'</span><span class="s2">,</span>
+      <span class="s2">properties: {</span>
+        <span class="s2">ignorePureComponents: {</span>
+          <span class="s4">default</span><span class="s2">: </span><span class="s4">false</span><span class="s2">,</span>
+          <span class="s2">type: </span><span class="s3">'boolean'</span><span class="s2">,</span>
+        <span class="s2">},</span>
+      <span class="s2">},</span>
+      <span class="s2">additionalProperties: </span><span class="s4">false</span><span class="s2">,</span>
+    <span class="s2">}],</span>
+  <span class="s2">},</span>
+
+  <span class="s2">create: Components.detect((context, components, utils) =&gt; {</span>
+    <span class="s4">const </span><span class="s2">configuration = context.options[</span><span class="s5">0</span><span class="s2">] || {};</span>
+    <span class="s4">const </span><span class="s2">ignorePureComponents = configuration.ignorePureComponents || </span><span class="s4">false</span><span class="s2">;</span>
+
+    <span class="s0">// --------------------------------------------------------------------------</span>
+    <span class="s0">// Public</span>
+    <span class="s0">// --------------------------------------------------------------------------</span>
+
+    <span class="s0">/**</span>
+     <span class="s0">* Checks whether a given array of statements is a single call of `super`.</span>
+     <span class="s0">* </span><span class="s1">@see </span><span class="s0">eslint no-useless-constructor rule</span>
+     <span class="s0">* </span><span class="s1">@param </span><span class="s0">{ASTNode[]} body - An array of statements to check.</span>
+     <span class="s0">* </span><span class="s1">@returns </span><span class="s0">{boolean} `true` if the body is a single call of `super`.</span>
+     <span class="s0">*/</span>
+    <span class="s4">function </span><span class="s2">isSingleSuperCall(body) {</span>
+      <span class="s4">return </span><span class="s2">(</span>
+        <span class="s2">body.length === </span><span class="s5">1</span>
+        <span class="s2">&amp;&amp; body[</span><span class="s5">0</span><span class="s2">].type === </span><span class="s3">'ExpressionStatement'</span>
+        <span class="s2">&amp;&amp; astUtil.isCallExpression(body[</span><span class="s5">0</span><span class="s2">].expression)</span>
+        <span class="s2">&amp;&amp; body[</span><span class="s5">0</span><span class="s2">].expression.callee.type === </span><span class="s3">'Super'</span>
+      <span class="s2">);</span>
+    <span class="s2">}</span>
+
+    <span class="s0">/**</span>
+     <span class="s0">* Checks whether a given node is a pattern which doesn't have any side effects.</span>
+     <span class="s0">* Default parameters and Destructuring parameters can have side effects.</span>
+     <span class="s0">* </span><span class="s1">@see </span><span class="s0">eslint no-useless-constructor rule</span>
+     <span class="s0">* </span><span class="s1">@param </span><span class="s0">{ASTNode} node - A pattern node.</span>
+     <span class="s0">* </span><span class="s1">@returns </span><span class="s0">{boolean} `true` if the node doesn't have any side effects.</span>
+     <span class="s0">*/</span>
+    <span class="s4">function </span><span class="s2">isSimple(node) {</span>
+      <span class="s4">return </span><span class="s2">node.type === </span><span class="s3">'Identifier' </span><span class="s2">|| node.type === </span><span class="s3">'RestElement'</span><span class="s2">;</span>
+    <span class="s2">}</span>
+
+    <span class="s0">/**</span>
+     <span class="s0">* Checks whether a given array of expressions is `...arguments` or not.</span>
+     <span class="s0">* `super(...arguments)` passes all arguments through.</span>
+     <span class="s0">* </span><span class="s1">@see </span><span class="s0">eslint no-useless-constructor rule</span>
+     <span class="s0">* </span><span class="s1">@param </span><span class="s0">{ASTNode[]} superArgs - An array of expressions to check.</span>
+     <span class="s0">* </span><span class="s1">@returns </span><span class="s0">{boolean} `true` if the superArgs is `...arguments`.</span>
+     <span class="s0">*/</span>
+    <span class="s4">function </span><span class="s2">isSpreadArguments(superArgs) {</span>
+      <span class="s4">return </span><span class="s2">(</span>
+        <span class="s2">superArgs.length === </span><span class="s5">1</span>
+        <span class="s2">&amp;&amp; superArgs[</span><span class="s5">0</span><span class="s2">].type === </span><span class="s3">'SpreadElement'</span>
+        <span class="s2">&amp;&amp; superArgs[</span><span class="s5">0</span><span class="s2">].argument.type === </span><span class="s3">'Identifier'</span>
+        <span class="s2">&amp;&amp; superArgs[</span><span class="s5">0</span><span class="s2">].argument.name === </span><span class="s3">'arguments'</span>
+      <span class="s2">);</span>
+    <span class="s2">}</span>
+
+    <span class="s0">/**</span>
+     <span class="s0">* Checks whether given 2 nodes are identifiers which have the same name or not.</span>
+     <span class="s0">* </span><span class="s1">@see </span><span class="s0">eslint no-useless-constructor rule</span>
+     <span class="s0">* </span><span class="s1">@param </span><span class="s0">{ASTNode} ctorParam - A node to check.</span>
+     <span class="s0">* </span><span class="s1">@param </span><span class="s0">{ASTNode} superArg - A node to check.</span>
+     <span class="s0">* </span><span class="s1">@returns </span><span class="s0">{boolean} `true` if the nodes are identifiers which have the same</span>
+     <span class="s0">*      name.</span>
+     <span class="s0">*/</span>
+    <span class="s4">function </span><span class="s2">isValidIdentifierPair(ctorParam, superArg) {</span>
+      <span class="s4">return </span><span class="s2">(</span>
+        <span class="s2">ctorParam.type === </span><span class="s3">'Identifier'</span>
+        <span class="s2">&amp;&amp; superArg.type === </span><span class="s3">'Identifier'</span>
+        <span class="s2">&amp;&amp; ctorParam.name === superArg.name</span>
+      <span class="s2">);</span>
+    <span class="s2">}</span>
+
+    <span class="s0">/**</span>
+     <span class="s0">* Checks whether given 2 nodes are a rest/spread pair which has the same values.</span>
+     <span class="s0">* </span><span class="s1">@see </span><span class="s0">eslint no-useless-constructor rule</span>
+     <span class="s0">* </span><span class="s1">@param </span><span class="s0">{ASTNode} ctorParam - A node to check.</span>
+     <span class="s0">* </span><span class="s1">@param </span><span class="s0">{ASTNode} superArg - A node to check.</span>
+     <span class="s0">* </span><span class="s1">@returns </span><span class="s0">{boolean} `true` if the nodes are a rest/spread pair which has the</span>
+     <span class="s0">*      same values.</span>
+     <span class="s0">*/</span>
+    <span class="s4">function </span><span class="s2">isValidRestSpreadPair(ctorParam, superArg) {</span>
+      <span class="s4">return </span><span class="s2">(</span>
+        <span class="s2">ctorParam.type === </span><span class="s3">'RestElement'</span>
+        <span class="s2">&amp;&amp; superArg.type === </span><span class="s3">'SpreadElement'</span>
+        <span class="s2">&amp;&amp; isValidIdentifierPair(ctorParam.argument, superArg.argument)</span>
+      <span class="s2">);</span>
+    <span class="s2">}</span>
+
+    <span class="s0">/**</span>
+     <span class="s0">* Checks whether given 2 nodes have the same value or not.</span>
+     <span class="s0">* </span><span class="s1">@see </span><span class="s0">eslint no-useless-constructor rule</span>
+     <span class="s0">* </span><span class="s1">@param </span><span class="s0">{ASTNode} ctorParam - A node to check.</span>
+     <span class="s0">* </span><span class="s1">@param </span><span class="s0">{ASTNode} superArg - A node to check.</span>
+     <span class="s0">* </span><span class="s1">@returns </span><span class="s0">{boolean} `true` if the nodes have the same value or not.</span>
+     <span class="s0">*/</span>
+    <span class="s4">function </span><span class="s2">isValidPair(ctorParam, superArg) {</span>
+      <span class="s4">return </span><span class="s2">(</span>
+        <span class="s2">isValidIdentifierPair(ctorParam, superArg)</span>
+        <span class="s2">|| isValidRestSpreadPair(ctorParam, superArg)</span>
+      <span class="s2">);</span>
+    <span class="s2">}</span>
+
+    <span class="s0">/**</span>
+     <span class="s0">* Checks whether the parameters of a constructor and the arguments of `super()`</span>
+     <span class="s0">* have the same values or not.</span>
+     <span class="s0">* </span><span class="s1">@see </span><span class="s0">eslint no-useless-constructor rule</span>
+     <span class="s0">* </span><span class="s1">@param </span><span class="s0">{ASTNode[]} ctorParams - The parameters of a constructor to check.</span>
+     <span class="s0">* </span><span class="s1">@param </span><span class="s0">{ASTNode} superArgs - The arguments of `super()` to check.</span>
+     <span class="s0">* </span><span class="s1">@returns </span><span class="s0">{boolean} `true` if those have the same values.</span>
+     <span class="s0">*/</span>
+    <span class="s4">function </span><span class="s2">isPassingThrough(ctorParams, superArgs) {</span>
+      <span class="s4">if </span><span class="s2">(ctorParams.length !== superArgs.length) {</span>
+        <span class="s4">return false</span><span class="s2">;</span>
+      <span class="s2">}</span>
+
+      <span class="s4">for </span><span class="s2">(</span><span class="s4">let </span><span class="s2">i = </span><span class="s5">0</span><span class="s2">; i &lt; ctorParams.length; ++i) {</span>
+        <span class="s4">if </span><span class="s2">(!isValidPair(ctorParams[i], superArgs[i])) {</span>
+          <span class="s4">return false</span><span class="s2">;</span>
+        <span class="s2">}</span>
+      <span class="s2">}</span>
+
+      <span class="s4">return true</span><span class="s2">;</span>
+    <span class="s2">}</span>
+
+    <span class="s0">/**</span>
+     <span class="s0">* Checks whether the constructor body is a redundant super call.</span>
+     <span class="s0">* </span><span class="s1">@see </span><span class="s0">eslint no-useless-constructor rule</span>
+     <span class="s0">* </span><span class="s1">@param </span><span class="s0">{Array} body - constructor body content.</span>
+     <span class="s0">* </span><span class="s1">@param </span><span class="s0">{Array} ctorParams - The params to check against super call.</span>
+     <span class="s0">* </span><span class="s1">@returns </span><span class="s0">{boolean} true if the constructor body is redundant</span>
+     <span class="s0">*/</span>
+    <span class="s4">function </span><span class="s2">isRedundantSuperCall(body, ctorParams) {</span>
+      <span class="s4">return </span><span class="s2">(</span>
+        <span class="s2">isSingleSuperCall(body)</span>
+        <span class="s2">&amp;&amp; ctorParams.every(isSimple)</span>
+        <span class="s2">&amp;&amp; (</span>
+          <span class="s2">isSpreadArguments(body[</span><span class="s5">0</span><span class="s2">].expression.arguments)</span>
+          <span class="s2">|| isPassingThrough(ctorParams, body[</span><span class="s5">0</span><span class="s2">].expression.arguments)</span>
+        <span class="s2">)</span>
+      <span class="s2">);</span>
+    <span class="s2">}</span>
+
+    <span class="s0">/**</span>
+     <span class="s0">* Check if a given AST node have any other properties the ones available in stateless components</span>
+     <span class="s0">* </span><span class="s1">@param </span><span class="s0">{ASTNode} node The AST node being checked.</span>
+     <span class="s0">* </span><span class="s1">@returns </span><span class="s0">{boolean} True if the node has at least one other property, false if not.</span>
+     <span class="s0">*/</span>
+    <span class="s4">function </span><span class="s2">hasOtherProperties(node) {</span>
+      <span class="s4">const </span><span class="s2">properties = astUtil.getComponentProperties(node);</span>
+      <span class="s4">return </span><span class="s2">properties.some((property) =&gt; {</span>
+        <span class="s4">const </span><span class="s2">name = astUtil.getPropertyName(property);</span>
+        <span class="s4">const </span><span class="s2">isDisplayName = name === </span><span class="s3">'displayName'</span><span class="s2">;</span>
+        <span class="s4">const </span><span class="s2">isPropTypes = name === </span><span class="s3">'propTypes' </span><span class="s2">|| ((name === </span><span class="s3">'props'</span><span class="s2">) &amp;&amp; property.typeAnnotation);</span>
+        <span class="s4">const </span><span class="s2">contextTypes = name === </span><span class="s3">'contextTypes'</span><span class="s2">;</span>
+        <span class="s4">const </span><span class="s2">defaultProps = name === </span><span class="s3">'defaultProps'</span><span class="s2">;</span>
+        <span class="s4">const </span><span class="s2">isUselessConstructor = property.kind === </span><span class="s3">'constructor'</span>
+          <span class="s2">&amp;&amp; !!property.value.body</span>
+          <span class="s2">&amp;&amp; isRedundantSuperCall(property.value.body.body, property.value.params);</span>
+        <span class="s4">const </span><span class="s2">isRender = name === </span><span class="s3">'render'</span><span class="s2">;</span>
+        <span class="s4">return </span><span class="s2">!isDisplayName &amp;&amp; !isPropTypes &amp;&amp; !contextTypes &amp;&amp; !defaultProps &amp;&amp; !isUselessConstructor &amp;&amp; !isRender;</span>
+      <span class="s2">});</span>
+    <span class="s2">}</span>
+
+    <span class="s0">/**</span>
+     <span class="s0">* Mark component as pure as declared</span>
+     <span class="s0">* </span><span class="s1">@param </span><span class="s0">{ASTNode} node The AST node being checked.</span>
+     <span class="s0">*/</span>
+    <span class="s4">function </span><span class="s2">markSCUAsDeclared(node) {</span>
+      <span class="s2">components.set(node, {</span>
+        <span class="s2">hasSCU: </span><span class="s4">true</span><span class="s2">,</span>
+      <span class="s2">});</span>
+    <span class="s2">}</span>
+
+    <span class="s0">/**</span>
+     <span class="s0">* Mark childContextTypes as declared</span>
+     <span class="s0">* </span><span class="s1">@param </span><span class="s0">{ASTNode} node The AST node being checked.</span>
+     <span class="s0">*/</span>
+    <span class="s4">function </span><span class="s2">markChildContextTypesAsDeclared(node) {</span>
+      <span class="s2">components.set(node, {</span>
+        <span class="s2">hasChildContextTypes: </span><span class="s4">true</span><span class="s2">,</span>
+      <span class="s2">});</span>
+    <span class="s2">}</span>
+
+    <span class="s0">/**</span>
+     <span class="s0">* Mark a setState as used</span>
+     <span class="s0">* </span><span class="s1">@param </span><span class="s0">{ASTNode} node The AST node being checked.</span>
+     <span class="s0">*/</span>
+    <span class="s4">function </span><span class="s2">markThisAsUsed(node) {</span>
+      <span class="s2">components.set(node, {</span>
+        <span class="s2">useThis: </span><span class="s4">true</span><span class="s2">,</span>
+      <span class="s2">});</span>
+    <span class="s2">}</span>
+
+    <span class="s0">/**</span>
+     <span class="s0">* Mark a props or context as used</span>
+     <span class="s0">* </span><span class="s1">@param </span><span class="s0">{ASTNode} node The AST node being checked.</span>
+     <span class="s0">*/</span>
+    <span class="s4">function </span><span class="s2">markPropsOrContextAsUsed(node) {</span>
+      <span class="s2">components.set(node, {</span>
+        <span class="s2">usePropsOrContext: </span><span class="s4">true</span><span class="s2">,</span>
+      <span class="s2">});</span>
+    <span class="s2">}</span>
+
+    <span class="s0">/**</span>
+     <span class="s0">* Mark a ref as used</span>
+     <span class="s0">* </span><span class="s1">@param </span><span class="s0">{ASTNode} node The AST node being checked.</span>
+     <span class="s0">*/</span>
+    <span class="s4">function </span><span class="s2">markRefAsUsed(node) {</span>
+      <span class="s2">components.set(node, {</span>
+        <span class="s2">useRef: </span><span class="s4">true</span><span class="s2">,</span>
+      <span class="s2">});</span>
+    <span class="s2">}</span>
+
+    <span class="s0">/**</span>
+     <span class="s0">* Mark return as invalid</span>
+     <span class="s0">* </span><span class="s1">@param </span><span class="s0">{ASTNode} node The AST node being checked.</span>
+     <span class="s0">*/</span>
+    <span class="s4">function </span><span class="s2">markReturnAsInvalid(node) {</span>
+      <span class="s2">components.set(node, {</span>
+        <span class="s2">invalidReturn: </span><span class="s4">true</span><span class="s2">,</span>
+      <span class="s2">});</span>
+    <span class="s2">}</span>
+
+    <span class="s0">/**</span>
+     <span class="s0">* Mark a ClassDeclaration as having used decorators</span>
+     <span class="s0">* </span><span class="s1">@param </span><span class="s0">{ASTNode} node The AST node being checked.</span>
+     <span class="s0">*/</span>
+    <span class="s4">function </span><span class="s2">markDecoratorsAsUsed(node) {</span>
+      <span class="s2">components.set(node, {</span>
+        <span class="s2">useDecorators: </span><span class="s4">true</span><span class="s2">,</span>
+      <span class="s2">});</span>
+    <span class="s2">}</span>
+
+    <span class="s4">function </span><span class="s2">visitClass(node) {</span>
+      <span class="s4">if </span><span class="s2">(ignorePureComponents &amp;&amp; componentUtil.isPureComponent(node, context)) {</span>
+        <span class="s2">markSCUAsDeclared(node);</span>
+      <span class="s2">}</span>
+
+      <span class="s4">if </span><span class="s2">(node.decorators &amp;&amp; node.decorators.length) {</span>
+        <span class="s2">markDecoratorsAsUsed(node);</span>
+      <span class="s2">}</span>
+    <span class="s2">}</span>
+
+    <span class="s4">return </span><span class="s2">{</span>
+      <span class="s2">ClassDeclaration: visitClass,</span>
+      <span class="s2">ClassExpression: visitClass,</span>
+
+      <span class="s0">// Mark `this` destructuring as a usage of `this`</span>
+      <span class="s2">VariableDeclarator(node) {</span>
+        <span class="s0">// Ignore destructuring on other than `this`</span>
+        <span class="s4">if </span><span class="s2">(!node.id || node.id.type !== </span><span class="s3">'ObjectPattern' </span><span class="s2">|| !node.init || node.init.type !== </span><span class="s3">'ThisExpression'</span><span class="s2">) {</span>
+          <span class="s4">return</span><span class="s2">;</span>
+        <span class="s2">}</span>
+        <span class="s0">// Ignore `props` and `context`</span>
+        <span class="s4">const </span><span class="s2">useThis = node.id.properties.some((property) =&gt; {</span>
+          <span class="s4">const </span><span class="s2">name = astUtil.getPropertyName(property);</span>
+          <span class="s4">return </span><span class="s2">name !== </span><span class="s3">'props' </span><span class="s2">&amp;&amp; name !== </span><span class="s3">'context'</span><span class="s2">;</span>
+        <span class="s2">});</span>
+        <span class="s4">if </span><span class="s2">(!useThis) {</span>
+          <span class="s2">markPropsOrContextAsUsed(node);</span>
+          <span class="s4">return</span><span class="s2">;</span>
+        <span class="s2">}</span>
+        <span class="s2">markThisAsUsed(node);</span>
+      <span class="s2">},</span>
+
+      <span class="s0">// Mark `this` usage</span>
+      <span class="s2">MemberExpression(node) {</span>
+        <span class="s4">if </span><span class="s2">(node.object.type !== </span><span class="s3">'ThisExpression'</span><span class="s2">) {</span>
+          <span class="s4">if </span><span class="s2">(node.property &amp;&amp; node.property.name === </span><span class="s3">'childContextTypes'</span><span class="s2">) {</span>
+            <span class="s4">const </span><span class="s2">component = utils.getRelatedComponent(node);</span>
+            <span class="s4">if </span><span class="s2">(!component) {</span>
+              <span class="s4">return</span><span class="s2">;</span>
+            <span class="s2">}</span>
+            <span class="s2">markChildContextTypesAsDeclared(component.node);</span>
+          <span class="s2">}</span>
+          <span class="s4">return</span><span class="s2">;</span>
+        <span class="s0">// Ignore calls to `this.props` and `this.context`</span>
+        <span class="s2">}</span>
+        <span class="s4">if </span><span class="s2">(</span>
+          <span class="s2">(node.property.name || node.property.value) === </span><span class="s3">'props'</span>
+          <span class="s2">|| (node.property.name || node.property.value) === </span><span class="s3">'context'</span>
+        <span class="s2">) {</span>
+          <span class="s2">markPropsOrContextAsUsed(node);</span>
+          <span class="s4">return</span><span class="s2">;</span>
+        <span class="s2">}</span>
+        <span class="s2">markThisAsUsed(node);</span>
+      <span class="s2">},</span>
+
+      <span class="s0">// Mark `ref` usage</span>
+      <span class="s2">JSXAttribute(node) {</span>
+        <span class="s4">const </span><span class="s2">name = getText(context, node.name);</span>
+        <span class="s4">if </span><span class="s2">(name !== </span><span class="s3">'ref'</span><span class="s2">) {</span>
+          <span class="s4">return</span><span class="s2">;</span>
+        <span class="s2">}</span>
+        <span class="s2">markRefAsUsed(node);</span>
+      <span class="s2">},</span>
+
+      <span class="s0">// Mark `render` that do not return some JSX</span>
+      <span class="s2">ReturnStatement(node) {</span>
+        <span class="s4">let </span><span class="s2">blockNode;</span>
+        <span class="s4">let </span><span class="s2">scope = getScope(context, node);</span>
+        <span class="s4">while </span><span class="s2">(scope) {</span>
+          <span class="s2">blockNode = scope.block &amp;&amp; scope.block.parent;</span>
+          <span class="s4">if </span><span class="s2">(blockNode &amp;&amp; (blockNode.type === </span><span class="s3">'MethodDefinition' </span><span class="s2">|| blockNode.type === </span><span class="s3">'Property'</span><span class="s2">)) {</span>
+            <span class="s4">break</span><span class="s2">;</span>
+          <span class="s2">}</span>
+          <span class="s2">scope = scope.upper;</span>
+        <span class="s2">}</span>
+        <span class="s4">const </span><span class="s2">isRender = blockNode</span>
+          <span class="s2">&amp;&amp; blockNode.key</span>
+          <span class="s2">&amp;&amp; blockNode.key.name === </span><span class="s3">'render'</span><span class="s2">;</span>
+        <span class="s4">const </span><span class="s2">allowNull = testReactVersion(context, </span><span class="s3">'&gt;= 15.0.0'</span><span class="s2">); </span><span class="s0">// Stateless components can return null since React 15</span>
+        <span class="s4">const </span><span class="s2">isReturningJSX = utils.isReturningJSX(node, !allowNull);</span>
+        <span class="s4">const </span><span class="s2">isReturningNull = node.argument &amp;&amp; (node.argument.value === </span><span class="s4">null </span><span class="s2">|| node.argument.value === </span><span class="s4">false</span><span class="s2">);</span>
+        <span class="s4">if </span><span class="s2">(</span>
+          <span class="s2">!isRender</span>
+          <span class="s2">|| (allowNull &amp;&amp; (isReturningJSX || isReturningNull))</span>
+          <span class="s2">|| (!allowNull &amp;&amp; isReturningJSX)</span>
+        <span class="s2">) {</span>
+          <span class="s4">return</span><span class="s2">;</span>
+        <span class="s2">}</span>
+        <span class="s2">markReturnAsInvalid(node);</span>
+      <span class="s2">},</span>
+
+      <span class="s3">'Program:exit'</span><span class="s2">() {</span>
+        <span class="s4">const </span><span class="s2">list = components.list();</span>
+        <span class="s2">values(list)</span>
+          <span class="s2">.filter((component) =&gt; (</span>
+            <span class="s2">!hasOtherProperties(component.node)</span>
+            <span class="s2">&amp;&amp; !component.useThis</span>
+            <span class="s2">&amp;&amp; !component.useRef</span>
+            <span class="s2">&amp;&amp; !component.invalidReturn</span>
+            <span class="s2">&amp;&amp; !component.hasChildContextTypes</span>
+            <span class="s2">&amp;&amp; !component.useDecorators</span>
+            <span class="s2">&amp;&amp; !component.hasSCU</span>
+            <span class="s2">&amp;&amp; (</span>
+              <span class="s2">componentUtil.isES5Component(component.node, context)</span>
+              <span class="s2">|| componentUtil.isES6Component(component.node, context)</span>
+            <span class="s2">)</span>
+          <span class="s2">))</span>
+          <span class="s2">.forEach((component) =&gt; {</span>
+            <span class="s2">report(context, messages.componentShouldBePure, </span><span class="s3">'componentShouldBePure'</span><span class="s2">, {</span>
+              <span class="s2">node: component.node,</span>
+            <span class="s2">});</span>
+          <span class="s2">});</span>
+      <span class="s2">},</span>
+    <span class="s2">};</span>
+  <span class="s2">}),</span>
+<span class="s2">};</span>
+</pre>
+</body>
+</html>

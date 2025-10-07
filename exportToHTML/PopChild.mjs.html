@@ -1,0 +1,111 @@
+<html>
+<head>
+<title>PopChild.mjs</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #067d17;}
+.s1 { color: #080808;}
+.s2 { color: #0033b3;}
+.s3 { color: #8c8c8c; font-style: italic;}
+.s4 { color: #1750eb;}
+</style>
+</head>
+<body bgcolor="#ffffff">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#c0c0c0" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+PopChild.mjs</font>
+</center></td></tr></table>
+<pre><span class="s0">&quot;use client&quot;</span><span class="s1">;</span>
+<span class="s2">import </span><span class="s1">{ jsx } from </span><span class="s0">'react/jsx-runtime'</span><span class="s1">;</span>
+<span class="s2">import </span><span class="s1">{ isHTMLElement } from </span><span class="s0">'motion-dom'</span><span class="s1">;</span>
+<span class="s2">import </span><span class="s1">* as React from </span><span class="s0">'react'</span><span class="s1">;</span>
+<span class="s2">import </span><span class="s1">{ useId, useRef, useContext, useInsertionEffect } from </span><span class="s0">'react'</span><span class="s1">;</span>
+<span class="s2">import </span><span class="s1">{ MotionConfigContext } from </span><span class="s0">'../../context/MotionConfigContext.mjs'</span><span class="s1">;</span>
+<span class="s2">import </span><span class="s1">{ useComposedRefs } from </span><span class="s0">'../../utils/use-composed-ref.mjs'</span><span class="s1">;</span>
+
+<span class="s3">/**</span>
+ <span class="s3">* Measurement functionality has to be within a separate component</span>
+ <span class="s3">* to leverage snapshot lifecycle.</span>
+ <span class="s3">*/</span>
+<span class="s2">class </span><span class="s1">PopChildMeasure </span><span class="s2">extends </span><span class="s1">React.Component {</span>
+    <span class="s1">getSnapshotBeforeUpdate(prevProps) {</span>
+        <span class="s2">const </span><span class="s1">element = </span><span class="s2">this</span><span class="s1">.props.childRef.current;</span>
+        <span class="s2">if </span><span class="s1">(element &amp;&amp; prevProps.isPresent &amp;&amp; !</span><span class="s2">this</span><span class="s1">.props.isPresent) {</span>
+            <span class="s2">const </span><span class="s1">parent = element.offsetParent;</span>
+            <span class="s2">const </span><span class="s1">parentWidth = isHTMLElement(parent)</span>
+                <span class="s1">? parent.offsetWidth || </span><span class="s4">0</span>
+                <span class="s1">: </span><span class="s4">0</span><span class="s1">;</span>
+            <span class="s2">const </span><span class="s1">size = </span><span class="s2">this</span><span class="s1">.props.sizeRef.current;</span>
+            <span class="s1">size.height = element.offsetHeight || </span><span class="s4">0</span><span class="s1">;</span>
+            <span class="s1">size.width = element.offsetWidth || </span><span class="s4">0</span><span class="s1">;</span>
+            <span class="s1">size.top = element.offsetTop;</span>
+            <span class="s1">size.left = element.offsetLeft;</span>
+            <span class="s1">size.right = parentWidth - size.width - size.left;</span>
+        <span class="s1">}</span>
+        <span class="s2">return null</span><span class="s1">;</span>
+    <span class="s1">}</span>
+    <span class="s3">/**</span>
+     <span class="s3">* Required with getSnapshotBeforeUpdate to stop React complaining.</span>
+     <span class="s3">*/</span>
+    <span class="s1">componentDidUpdate() { }</span>
+    <span class="s1">render() {</span>
+        <span class="s2">return this</span><span class="s1">.props.children;</span>
+    <span class="s1">}</span>
+<span class="s1">}</span>
+<span class="s2">function </span><span class="s1">PopChild({ children, isPresent, anchorX, root }) {</span>
+    <span class="s2">const </span><span class="s1">id = useId();</span>
+    <span class="s2">const </span><span class="s1">ref = useRef(</span><span class="s2">null</span><span class="s1">);</span>
+    <span class="s2">const </span><span class="s1">size = useRef({</span>
+        <span class="s1">width: </span><span class="s4">0</span><span class="s1">,</span>
+        <span class="s1">height: </span><span class="s4">0</span><span class="s1">,</span>
+        <span class="s1">top: </span><span class="s4">0</span><span class="s1">,</span>
+        <span class="s1">left: </span><span class="s4">0</span><span class="s1">,</span>
+        <span class="s1">right: </span><span class="s4">0</span><span class="s1">,</span>
+    <span class="s1">});</span>
+    <span class="s2">const </span><span class="s1">{ nonce } = useContext(MotionConfigContext);</span>
+    <span class="s2">const </span><span class="s1">composedRef = useComposedRefs(ref, children?.ref);</span>
+    <span class="s3">/**</span>
+     <span class="s3">* We create and inject a style block so we can apply this explicit</span>
+     <span class="s3">* sizing in a non-destructive manner by just deleting the style block.</span>
+     <span class="s3">*</span>
+     <span class="s3">* We can't apply size via render as the measurement happens</span>
+     <span class="s3">* in getSnapshotBeforeUpdate (post-render), likewise if we apply the</span>
+     <span class="s3">* styles directly on the DOM node, we might be overwriting</span>
+     <span class="s3">* styles set via the style prop.</span>
+     <span class="s3">*/</span>
+    <span class="s1">useInsertionEffect(() =&gt; {</span>
+        <span class="s2">const </span><span class="s1">{ width, height, top, left, right } = size.current;</span>
+        <span class="s2">if </span><span class="s1">(isPresent || !ref.current || !width || !height)</span>
+            <span class="s2">return</span><span class="s1">;</span>
+        <span class="s2">const </span><span class="s1">x = anchorX === </span><span class="s0">&quot;left&quot; </span><span class="s1">? </span><span class="s0">`left: </span><span class="s1">${left}</span><span class="s0">` </span><span class="s1">: </span><span class="s0">`right: </span><span class="s1">${right}</span><span class="s0">`</span><span class="s1">;</span>
+        <span class="s1">ref.current.dataset.motionPopId = id;</span>
+        <span class="s2">const </span><span class="s1">style = document.createElement(</span><span class="s0">&quot;style&quot;</span><span class="s1">);</span>
+        <span class="s2">if </span><span class="s1">(nonce)</span>
+            <span class="s1">style.nonce = nonce;</span>
+        <span class="s2">const </span><span class="s1">parent = root ?? document.head;</span>
+        <span class="s1">parent.appendChild(style);</span>
+        <span class="s2">if </span><span class="s1">(style.sheet) {</span>
+            <span class="s1">style.sheet.insertRule(</span><span class="s0">`</span>
+          <span class="s0">[data-motion-pop-id=&quot;</span><span class="s1">${id}</span><span class="s0">&quot;] { 
+            position: absolute !important; 
+            width: </span><span class="s1">${width}</span><span class="s0">px !important; 
+            height: </span><span class="s1">${height}</span><span class="s0">px !important; 
+            </span><span class="s1">${x}</span><span class="s0">px !important; 
+            top: </span><span class="s1">${top}</span><span class="s0">px !important; 
+          } 
+        `</span><span class="s1">);</span>
+        <span class="s1">}</span>
+        <span class="s2">return </span><span class="s1">() =&gt; {</span>
+            <span class="s2">if </span><span class="s1">(parent.contains(style)) {</span>
+                <span class="s1">parent.removeChild(style);</span>
+            <span class="s1">}</span>
+        <span class="s1">};</span>
+    <span class="s1">}, [isPresent]);</span>
+    <span class="s2">return </span><span class="s1">(jsx(PopChildMeasure, { isPresent: isPresent, childRef: ref, sizeRef: size, children: React.cloneElement(children, { ref: composedRef }) }));</span>
+<span class="s1">}</span>
+
+<span class="s2">export </span><span class="s1">{ PopChild };</span>
+</pre>
+</body>
+</html>

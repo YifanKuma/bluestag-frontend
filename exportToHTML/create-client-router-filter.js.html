@@ -1,0 +1,87 @@
+<html>
+<head>
+<title>create-client-router-filter.js</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #067d17;}
+.s1 { color: #080808;}
+.s2 { color: #0033b3;}
+.s3 { color: #1750eb;}
+.s4 { color: #8c8c8c; font-style: italic;}
+</style>
+</head>
+<body bgcolor="#ffffff">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#c0c0c0" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+create-client-router-filter.js</font>
+</center></td></tr></table>
+<pre><span class="s0">&quot;use strict&quot;</span><span class="s1">;</span>
+<span class="s1">Object.defineProperty(exports, </span><span class="s0">&quot;__esModule&quot;</span><span class="s1">, {</span>
+    <span class="s1">value: </span><span class="s2">true</span>
+<span class="s1">});</span>
+<span class="s1">Object.defineProperty(exports, </span><span class="s0">&quot;createClientRouterFilter&quot;</span><span class="s1">, {</span>
+    <span class="s1">enumerable: </span><span class="s2">true</span><span class="s1">,</span>
+    <span class="s1">get: </span><span class="s2">function</span><span class="s1">() {</span>
+        <span class="s2">return </span><span class="s1">createClientRouterFilter;</span>
+    <span class="s1">}</span>
+<span class="s1">});</span>
+<span class="s2">const </span><span class="s1">_bloomfilter = require(</span><span class="s0">&quot;../shared/lib/bloom-filter&quot;</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">_utils = require(</span><span class="s0">&quot;../shared/lib/router/utils&quot;</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">_removetrailingslash = require(</span><span class="s0">&quot;../shared/lib/router/utils/remove-trailing-slash&quot;</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">_trytoparsepath = require(</span><span class="s0">&quot;./try-to-parse-path&quot;</span><span class="s1">);</span>
+<span class="s2">const </span><span class="s1">_interceptionroutes = require(</span><span class="s0">&quot;../shared/lib/router/utils/interception-routes&quot;</span><span class="s1">);</span>
+<span class="s2">function </span><span class="s1">createClientRouterFilter(paths, redirects, allowedErrorRate) {</span>
+    <span class="s2">const </span><span class="s1">staticPaths = </span><span class="s2">new </span><span class="s1">Set();</span>
+    <span class="s2">const </span><span class="s1">dynamicPaths = </span><span class="s2">new </span><span class="s1">Set();</span>
+    <span class="s2">for </span><span class="s1">(</span><span class="s2">let </span><span class="s1">path of paths){</span>
+        <span class="s2">if </span><span class="s1">((</span><span class="s3">0</span><span class="s1">, _utils.isDynamicRoute)(path)) {</span>
+            <span class="s2">if </span><span class="s1">((</span><span class="s3">0</span><span class="s1">, _interceptionroutes.isInterceptionRouteAppPath)(path)) {</span>
+                <span class="s1">path = (</span><span class="s3">0</span><span class="s1">, _interceptionroutes.extractInterceptionRouteInformation)(path).interceptedRoute;</span>
+            <span class="s1">}</span>
+            <span class="s2">let </span><span class="s1">subPath = </span><span class="s0">''</span><span class="s1">;</span>
+            <span class="s2">const </span><span class="s1">pathParts = path.split(</span><span class="s0">'/'</span><span class="s1">);</span>
+            <span class="s4">// start at 1 since we split on '/' and the path starts</span>
+            <span class="s4">// with this so the first entry is an empty string</span>
+            <span class="s2">for</span><span class="s1">(</span><span class="s2">let </span><span class="s1">i = </span><span class="s3">1</span><span class="s1">; i &lt; pathParts.length; i++){</span>
+                <span class="s2">const </span><span class="s1">curPart = pathParts[i];</span>
+                <span class="s2">if </span><span class="s1">(curPart.startsWith(</span><span class="s0">'['</span><span class="s1">)) {</span>
+                    <span class="s2">break</span><span class="s1">;</span>
+                <span class="s1">}</span>
+                <span class="s1">subPath = </span><span class="s0">`</span><span class="s1">${subPath}</span><span class="s0">/</span><span class="s1">${curPart}</span><span class="s0">`</span><span class="s1">;</span>
+            <span class="s1">}</span>
+            <span class="s2">if </span><span class="s1">(subPath) {</span>
+                <span class="s1">dynamicPaths.add(subPath);</span>
+            <span class="s1">}</span>
+        <span class="s1">} </span><span class="s2">else </span><span class="s1">{</span>
+            <span class="s1">staticPaths.add(path);</span>
+        <span class="s1">}</span>
+    <span class="s1">}</span>
+    <span class="s2">for </span><span class="s1">(</span><span class="s2">const </span><span class="s1">redirect of redirects){</span>
+        <span class="s2">const </span><span class="s1">{ source } = redirect;</span>
+        <span class="s2">const </span><span class="s1">path = (</span><span class="s3">0</span><span class="s1">, _removetrailingslash.removeTrailingSlash)(source);</span>
+        <span class="s2">let </span><span class="s1">tokens = [];</span>
+        <span class="s2">try </span><span class="s1">{</span>
+            <span class="s1">tokens = (</span><span class="s3">0</span><span class="s1">, _trytoparsepath.tryToParsePath)(source).tokens || [];</span>
+        <span class="s1">} </span><span class="s2">catch  </span><span class="s1">{}</span>
+        <span class="s2">if </span><span class="s1">(tokens.every((token)=&gt;</span><span class="s2">typeof </span><span class="s1">token === </span><span class="s0">'string'</span><span class="s1">)) {</span>
+            <span class="s4">// only include static redirects initially</span>
+            <span class="s1">staticPaths.add(path);</span>
+        <span class="s1">}</span>
+    <span class="s1">}</span>
+    <span class="s2">const </span><span class="s1">staticFilter = _bloomfilter.BloomFilter.from([</span>
+        <span class="s1">...staticPaths</span>
+    <span class="s1">], allowedErrorRate);</span>
+    <span class="s2">const </span><span class="s1">dynamicFilter = _bloomfilter.BloomFilter.from([</span>
+        <span class="s1">...dynamicPaths</span>
+    <span class="s1">], allowedErrorRate);</span>
+    <span class="s2">const </span><span class="s1">data = {</span>
+        <span class="s1">staticFilter: staticFilter.export(),</span>
+        <span class="s1">dynamicFilter: dynamicFilter.export()</span>
+    <span class="s1">};</span>
+    <span class="s2">return </span><span class="s1">data;</span>
+<span class="s1">}</span>
+
+<span class="s4">//# sourceMappingURL=create-client-router-filter.js.map</span></pre>
+</body>
+</html>

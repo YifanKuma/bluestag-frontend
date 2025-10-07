@@ -1,0 +1,283 @@
+<html>
+<head>
+<title>no-typos.js</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #8c8c8c; font-style: italic;}
+.s1 { color: #8c8c8c; font-style: italic;}
+.s2 { color: #080808;}
+.s3 { color: #067d17;}
+.s4 { color: #0033b3;}
+.s5 { color: #0037a6;}
+.s6 { color: #1750eb;}
+</style>
+</head>
+<body bgcolor="#ffffff">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#c0c0c0" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+no-typos.js</font>
+</center></td></tr></table>
+<pre><span class="s0">/**</span>
+ <span class="s0">* </span><span class="s1">@fileoverview </span><span class="s0">Prevent common casing typos</span>
+ <span class="s0">*/</span>
+
+<span class="s3">'use strict'</span><span class="s2">;</span>
+
+<span class="s4">const </span><span class="s2">PROP_TYPES = Object.keys(require(</span><span class="s3">'prop-types'</span><span class="s2">));</span>
+<span class="s4">const </span><span class="s2">Components = require(</span><span class="s3">'../util/Components'</span><span class="s2">);</span>
+<span class="s4">const </span><span class="s2">docsUrl = require(</span><span class="s3">'../util/docsUrl'</span><span class="s2">);</span>
+<span class="s4">const </span><span class="s2">astUtil = require(</span><span class="s3">'../util/ast'</span><span class="s2">);</span>
+<span class="s4">const </span><span class="s2">componentUtil = require(</span><span class="s3">'../util/componentUtil'</span><span class="s2">);</span>
+<span class="s4">const </span><span class="s2">report = require(</span><span class="s3">'../util/report'</span><span class="s2">);</span>
+<span class="s4">const </span><span class="s2">lifecycleMethods = require(</span><span class="s3">'../util/lifecycleMethods'</span><span class="s2">);</span>
+
+<span class="s0">// ------------------------------------------------------------------------------</span>
+<span class="s0">// Rule Definition</span>
+<span class="s0">// ------------------------------------------------------------------------------</span>
+
+<span class="s4">const </span><span class="s2">STATIC_CLASS_PROPERTIES = [</span><span class="s3">'propTypes'</span><span class="s2">, </span><span class="s3">'contextTypes'</span><span class="s2">, </span><span class="s3">'childContextTypes'</span><span class="s2">, </span><span class="s3">'defaultProps'</span><span class="s2">];</span>
+
+<span class="s4">const </span><span class="s2">messages = {</span>
+  <span class="s2">typoPropTypeChain: </span><span class="s3">'Typo in prop type chain qualifier: {{name}}'</span><span class="s2">,</span>
+  <span class="s2">typoPropType: </span><span class="s3">'Typo in declared prop type: {{name}}'</span><span class="s2">,</span>
+  <span class="s2">typoStaticClassProp: </span><span class="s3">'Typo in static class property declaration'</span><span class="s2">,</span>
+  <span class="s2">typoPropDeclaration: </span><span class="s3">'Typo in property declaration'</span><span class="s2">,</span>
+  <span class="s2">typoLifecycleMethod: </span><span class="s3">'Typo in component lifecycle method declaration: {{actual}} should be {{expected}}'</span><span class="s2">,</span>
+  <span class="s2">staticLifecycleMethod: </span><span class="s3">'Lifecycle method should be static: {{method}}'</span><span class="s2">,</span>
+  <span class="s2">noPropTypesBinding: </span><span class="s3">'`</span><span class="s5">\'</span><span class="s3">prop-types</span><span class="s5">\'</span><span class="s3">` imported without a local `PropTypes` binding.'</span><span class="s2">,</span>
+  <span class="s2">noReactBinding: </span><span class="s3">'`</span><span class="s5">\'</span><span class="s3">react</span><span class="s5">\'</span><span class="s3">` imported without a local `React` binding.'</span><span class="s2">,</span>
+<span class="s2">};</span>
+
+<span class="s0">/** </span><span class="s1">@type </span><span class="s0">{import('eslint').Rule.RuleModule} */</span>
+<span class="s2">module.exports = {</span>
+  <span class="s2">meta: {</span>
+    <span class="s2">docs: {</span>
+      <span class="s2">description: </span><span class="s3">'Disallow common typos'</span><span class="s2">,</span>
+      <span class="s2">category: </span><span class="s3">'Stylistic Issues'</span><span class="s2">,</span>
+      <span class="s2">recommended: </span><span class="s4">false</span><span class="s2">,</span>
+      <span class="s2">url: docsUrl(</span><span class="s3">'no-typos'</span><span class="s2">),</span>
+    <span class="s2">},</span>
+
+    <span class="s2">messages,</span>
+
+    <span class="s2">schema: [],</span>
+  <span class="s2">},</span>
+
+  <span class="s2">create: Components.detect((context, components, utils) =&gt; {</span>
+    <span class="s4">let </span><span class="s2">propTypesPackageName = </span><span class="s4">null</span><span class="s2">;</span>
+    <span class="s4">let </span><span class="s2">reactPackageName = </span><span class="s4">null</span><span class="s2">;</span>
+
+    <span class="s4">function </span><span class="s2">checkValidPropTypeQualifier(node) {</span>
+      <span class="s4">if </span><span class="s2">(node.name !== </span><span class="s3">'isRequired'</span><span class="s2">) {</span>
+        <span class="s2">report(context, messages.typoPropTypeChain, </span><span class="s3">'typoPropTypeChain'</span><span class="s2">, {</span>
+          <span class="s2">node,</span>
+          <span class="s2">data: { name: node.name },</span>
+        <span class="s2">});</span>
+      <span class="s2">}</span>
+    <span class="s2">}</span>
+
+    <span class="s4">function </span><span class="s2">checkValidPropType(node) {</span>
+      <span class="s4">if </span><span class="s2">(node.name &amp;&amp; !PROP_TYPES.some((propTypeName) =&gt; propTypeName === node.name)) {</span>
+        <span class="s2">report(context, messages.typoPropType, </span><span class="s3">'typoPropType'</span><span class="s2">, {</span>
+          <span class="s2">node,</span>
+          <span class="s2">data: { name: node.name },</span>
+        <span class="s2">});</span>
+      <span class="s2">}</span>
+    <span class="s2">}</span>
+
+    <span class="s4">function </span><span class="s2">isPropTypesPackage(node) {</span>
+      <span class="s4">return </span><span class="s2">(</span>
+        <span class="s2">node.type === </span><span class="s3">'Identifier'</span>
+        <span class="s2">&amp;&amp; node.name === propTypesPackageName</span>
+      <span class="s2">) || (</span>
+        <span class="s2">node.type === </span><span class="s3">'MemberExpression'</span>
+        <span class="s2">&amp;&amp; node.property.name === </span><span class="s3">'PropTypes'</span>
+        <span class="s2">&amp;&amp; node.object.name === reactPackageName</span>
+      <span class="s2">);</span>
+    <span class="s2">}</span>
+
+    <span class="s0">/* eslint-disable no-use-before-define */</span>
+
+    <span class="s4">function </span><span class="s2">checkValidCallExpression(node) {</span>
+      <span class="s4">const </span><span class="s2">callee = node.callee;</span>
+      <span class="s4">if </span><span class="s2">(callee.type === </span><span class="s3">'MemberExpression' </span><span class="s2">&amp;&amp; callee.property.name === </span><span class="s3">'shape'</span><span class="s2">) {</span>
+        <span class="s2">checkValidPropObject(node.arguments[</span><span class="s6">0</span><span class="s2">]);</span>
+      <span class="s2">} </span><span class="s4">else if </span><span class="s2">(callee.type === </span><span class="s3">'MemberExpression' </span><span class="s2">&amp;&amp; callee.property.name === </span><span class="s3">'oneOfType'</span><span class="s2">) {</span>
+        <span class="s4">const </span><span class="s2">args = node.arguments[</span><span class="s6">0</span><span class="s2">];</span>
+        <span class="s4">if </span><span class="s2">(args &amp;&amp; args.type === </span><span class="s3">'ArrayExpression'</span><span class="s2">) {</span>
+          <span class="s2">args.elements.forEach((el) =&gt; {</span>
+            <span class="s2">checkValidProp(el);</span>
+          <span class="s2">});</span>
+        <span class="s2">}</span>
+      <span class="s2">}</span>
+    <span class="s2">}</span>
+
+    <span class="s4">function </span><span class="s2">checkValidProp(node) {</span>
+      <span class="s4">if </span><span class="s2">((!propTypesPackageName &amp;&amp; !reactPackageName) || !node) {</span>
+        <span class="s4">return</span><span class="s2">;</span>
+      <span class="s2">}</span>
+
+      <span class="s4">if </span><span class="s2">(node.type === </span><span class="s3">'MemberExpression'</span><span class="s2">) {</span>
+        <span class="s4">if </span><span class="s2">(</span>
+          <span class="s2">node.object.type === </span><span class="s3">'MemberExpression'</span>
+          <span class="s2">&amp;&amp; isPropTypesPackage(node.object.object)</span>
+        <span class="s2">) { </span><span class="s0">// PropTypes.myProp.isRequired</span>
+          <span class="s2">checkValidPropType(node.object.property);</span>
+          <span class="s2">checkValidPropTypeQualifier(node.property);</span>
+        <span class="s2">} </span><span class="s4">else if </span><span class="s2">(</span>
+          <span class="s2">isPropTypesPackage(node.object)</span>
+          <span class="s2">&amp;&amp; node.property.name !== </span><span class="s3">'isRequired'</span>
+        <span class="s2">) { </span><span class="s0">// PropTypes.myProp</span>
+          <span class="s2">checkValidPropType(node.property);</span>
+        <span class="s2">} </span><span class="s4">else if </span><span class="s2">(astUtil.isCallExpression(node.object)) {</span>
+          <span class="s2">checkValidPropTypeQualifier(node.property);</span>
+          <span class="s2">checkValidCallExpression(node.object);</span>
+        <span class="s2">}</span>
+      <span class="s2">} </span><span class="s4">else if </span><span class="s2">(astUtil.isCallExpression(node)) {</span>
+        <span class="s2">checkValidCallExpression(node);</span>
+      <span class="s2">}</span>
+    <span class="s2">}</span>
+
+    <span class="s0">/* eslint-enable no-use-before-define */</span>
+
+    <span class="s4">function </span><span class="s2">checkValidPropObject(node) {</span>
+      <span class="s4">if </span><span class="s2">(node &amp;&amp; node.type === </span><span class="s3">'ObjectExpression'</span><span class="s2">) {</span>
+        <span class="s2">node.properties.forEach((prop) =&gt; checkValidProp(prop.value));</span>
+      <span class="s2">}</span>
+    <span class="s2">}</span>
+
+    <span class="s4">function </span><span class="s2">reportErrorIfPropertyCasingTypo(propertyValue, propertyKey, isClassProperty) {</span>
+      <span class="s4">const </span><span class="s2">propertyName = propertyKey.name;</span>
+      <span class="s4">if </span><span class="s2">(propertyName === </span><span class="s3">'propTypes' </span><span class="s2">|| propertyName === </span><span class="s3">'contextTypes' </span><span class="s2">|| propertyName === </span><span class="s3">'childContextTypes'</span><span class="s2">) {</span>
+        <span class="s2">checkValidPropObject(propertyValue);</span>
+      <span class="s2">}</span>
+      <span class="s2">STATIC_CLASS_PROPERTIES.forEach((CLASS_PROP) =&gt; {</span>
+        <span class="s4">if </span><span class="s2">(propertyName &amp;&amp; CLASS_PROP.toLowerCase() === propertyName.toLowerCase() &amp;&amp; CLASS_PROP !== propertyName) {</span>
+          <span class="s4">const </span><span class="s2">messageId = isClassProperty</span>
+            <span class="s2">? </span><span class="s3">'typoStaticClassProp'</span>
+            <span class="s2">: </span><span class="s3">'typoPropDeclaration'</span><span class="s2">;</span>
+          <span class="s2">report(context, messages[messageId], messageId, {</span>
+            <span class="s2">node: propertyKey,</span>
+          <span class="s2">});</span>
+        <span class="s2">}</span>
+      <span class="s2">});</span>
+    <span class="s2">}</span>
+
+    <span class="s4">function </span><span class="s2">reportErrorIfLifecycleMethodCasingTypo(node) {</span>
+      <span class="s4">const </span><span class="s2">key = node.key;</span>
+      <span class="s4">let </span><span class="s2">nodeKeyName = key.name;</span>
+      <span class="s4">if </span><span class="s2">(key.type === </span><span class="s3">'Literal'</span><span class="s2">) {</span>
+        <span class="s2">nodeKeyName = key.value;</span>
+      <span class="s2">}</span>
+      <span class="s4">if </span><span class="s2">(key.type === </span><span class="s3">'PrivateName' </span><span class="s2">|| (node.computed &amp;&amp; </span><span class="s4">typeof </span><span class="s2">nodeKeyName !== </span><span class="s3">'string'</span><span class="s2">)) {</span>
+        <span class="s4">return</span><span class="s2">;</span>
+      <span class="s2">}</span>
+
+      <span class="s2">lifecycleMethods.static.forEach((method) =&gt; {</span>
+        <span class="s4">if </span><span class="s2">(!node.static &amp;&amp; nodeKeyName &amp;&amp; nodeKeyName.toLowerCase() === method.toLowerCase()) {</span>
+          <span class="s2">report(context, messages.staticLifecycleMethod, </span><span class="s3">'staticLifecycleMethod'</span><span class="s2">, {</span>
+            <span class="s2">node,</span>
+            <span class="s2">data: {</span>
+              <span class="s2">method: nodeKeyName,</span>
+            <span class="s2">},</span>
+          <span class="s2">});</span>
+        <span class="s2">}</span>
+      <span class="s2">});</span>
+
+      <span class="s2">lifecycleMethods.instance.concat(lifecycleMethods.static).forEach((method) =&gt; {</span>
+        <span class="s4">if </span><span class="s2">(nodeKeyName &amp;&amp; method.toLowerCase() === nodeKeyName.toLowerCase() &amp;&amp; method !== nodeKeyName) {</span>
+          <span class="s2">report(context, messages.typoLifecycleMethod, </span><span class="s3">'typoLifecycleMethod'</span><span class="s2">, {</span>
+            <span class="s2">node,</span>
+            <span class="s2">data: { actual: nodeKeyName, expected: method },</span>
+          <span class="s2">});</span>
+        <span class="s2">}</span>
+      <span class="s2">});</span>
+    <span class="s2">}</span>
+
+    <span class="s4">return </span><span class="s2">{</span>
+      <span class="s2">ImportDeclaration(node) {</span>
+        <span class="s4">if </span><span class="s2">(node.source &amp;&amp; node.source.value === </span><span class="s3">'prop-types'</span><span class="s2">) { </span><span class="s0">// import PropType from &quot;prop-types&quot;</span>
+          <span class="s4">if </span><span class="s2">(node.specifiers.length &gt; </span><span class="s6">0</span><span class="s2">) {</span>
+            <span class="s2">propTypesPackageName = node.specifiers[</span><span class="s6">0</span><span class="s2">].local.name;</span>
+          <span class="s2">} </span><span class="s4">else </span><span class="s2">{</span>
+            <span class="s2">report(context, messages.noPropTypesBinding, </span><span class="s3">'noPropTypesBinding'</span><span class="s2">, {</span>
+              <span class="s2">node,</span>
+            <span class="s2">});</span>
+          <span class="s2">}</span>
+        <span class="s2">} </span><span class="s4">else if </span><span class="s2">(node.source &amp;&amp; node.source.value === </span><span class="s3">'react'</span><span class="s2">) { </span><span class="s0">// import { PropTypes } from &quot;react&quot;</span>
+          <span class="s4">if </span><span class="s2">(node.specifiers.length &gt; </span><span class="s6">0</span><span class="s2">) {</span>
+            <span class="s2">reactPackageName = node.specifiers[</span><span class="s6">0</span><span class="s2">].local.name; </span><span class="s0">// guard against accidental anonymous `import &quot;react&quot;`</span>
+          <span class="s2">} </span><span class="s4">else </span><span class="s2">{</span>
+            <span class="s2">report(context, messages.noReactBinding, </span><span class="s3">'noReactBinding'</span><span class="s2">, {</span>
+              <span class="s2">node,</span>
+            <span class="s2">});</span>
+          <span class="s2">}</span>
+          <span class="s4">if </span><span class="s2">(node.specifiers.length &gt;= </span><span class="s6">1</span><span class="s2">) {</span>
+            <span class="s4">const </span><span class="s2">propTypesSpecifier = node.specifiers.find((specifier) =&gt; (</span>
+              <span class="s2">specifier.imported</span>
+              <span class="s2">&amp;&amp; specifier.imported.name === </span><span class="s3">'PropTypes'</span>
+            <span class="s2">));</span>
+            <span class="s4">if </span><span class="s2">(propTypesSpecifier) {</span>
+              <span class="s2">propTypesPackageName = propTypesSpecifier.local.name;</span>
+            <span class="s2">}</span>
+          <span class="s2">}</span>
+        <span class="s2">}</span>
+      <span class="s2">},</span>
+
+      <span class="s3">'ClassProperty, PropertyDefinition'</span><span class="s2">(node) {</span>
+        <span class="s4">if </span><span class="s2">(!node.static || !componentUtil.isES6Component(node.parent.parent, context)) {</span>
+          <span class="s4">return</span><span class="s2">;</span>
+        <span class="s2">}</span>
+
+        <span class="s2">reportErrorIfPropertyCasingTypo(node.value, node.key, </span><span class="s4">true</span><span class="s2">);</span>
+      <span class="s2">},</span>
+
+      <span class="s2">MemberExpression(node) {</span>
+        <span class="s4">const </span><span class="s2">propertyName = node.property.name;</span>
+
+        <span class="s4">if </span><span class="s2">(</span>
+          <span class="s2">!propertyName</span>
+          <span class="s2">|| STATIC_CLASS_PROPERTIES.map((prop) =&gt; prop.toLocaleLowerCase()).indexOf(propertyName.toLowerCase()) === -</span><span class="s6">1</span>
+        <span class="s2">) {</span>
+          <span class="s4">return</span><span class="s2">;</span>
+        <span class="s2">}</span>
+
+        <span class="s4">const </span><span class="s2">relatedComponent = utils.getRelatedComponent(node);</span>
+
+        <span class="s4">if </span><span class="s2">(</span>
+          <span class="s2">relatedComponent</span>
+            <span class="s2">&amp;&amp; (componentUtil.isES6Component(relatedComponent.node, context) || (</span>
+              <span class="s2">relatedComponent.node.type !== </span><span class="s3">'ClassDeclaration' </span><span class="s2">&amp;&amp; utils.isReturningJSX(relatedComponent.node)))</span>
+            <span class="s2">&amp;&amp; (node.parent &amp;&amp; node.parent.type === </span><span class="s3">'AssignmentExpression' </span><span class="s2">&amp;&amp; node.parent.right)</span>
+        <span class="s2">) {</span>
+          <span class="s2">reportErrorIfPropertyCasingTypo(node.parent.right, node.property, </span><span class="s4">true</span><span class="s2">);</span>
+        <span class="s2">}</span>
+      <span class="s2">},</span>
+
+      <span class="s2">MethodDefinition(node) {</span>
+        <span class="s4">if </span><span class="s2">(!componentUtil.isES6Component(node.parent.parent, context)) {</span>
+          <span class="s4">return</span><span class="s2">;</span>
+        <span class="s2">}</span>
+
+        <span class="s2">reportErrorIfLifecycleMethodCasingTypo(node);</span>
+      <span class="s2">},</span>
+
+      <span class="s2">ObjectExpression(node) {</span>
+        <span class="s4">const </span><span class="s2">component = componentUtil.isES5Component(node, context) &amp;&amp; components.get(node);</span>
+
+        <span class="s4">if </span><span class="s2">(!component) {</span>
+          <span class="s4">return</span><span class="s2">;</span>
+        <span class="s2">}</span>
+
+        <span class="s2">node.properties.filter((property) =&gt; property.type !== </span><span class="s3">'SpreadElement'</span><span class="s2">).forEach((property) =&gt; {</span>
+          <span class="s2">reportErrorIfPropertyCasingTypo(property.value, property.key, </span><span class="s4">false</span><span class="s2">);</span>
+          <span class="s2">reportErrorIfLifecycleMethodCasingTypo(property);</span>
+        <span class="s2">});</span>
+      <span class="s2">},</span>
+    <span class="s2">};</span>
+  <span class="s2">}),</span>
+<span class="s2">};</span>
+</pre>
+</body>
+</html>

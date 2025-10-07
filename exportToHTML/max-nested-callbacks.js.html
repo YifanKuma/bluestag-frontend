@@ -1,0 +1,137 @@
+<html>
+<head>
+<title>max-nested-callbacks.js</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #8c8c8c; font-style: italic;}
+.s1 { color: #8c8c8c; font-style: italic;}
+.s2 { color: #080808;}
+.s3 { color: #067d17;}
+.s4 { color: #0033b3;}
+.s5 { color: #1750eb;}
+</style>
+</head>
+<body bgcolor="#ffffff">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#c0c0c0" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+max-nested-callbacks.js</font>
+</center></td></tr></table>
+<pre><span class="s0">/**</span>
+ <span class="s0">* </span><span class="s1">@fileoverview </span><span class="s0">Rule to enforce a maximum number of nested callbacks.</span>
+ <span class="s0">* </span><span class="s1">@author </span><span class="s0">Ian Christian Myers</span>
+ <span class="s0">*/</span>
+
+<span class="s3">&quot;use strict&quot;</span><span class="s2">;</span>
+
+<span class="s0">//------------------------------------------------------------------------------</span>
+<span class="s0">// Rule Definition</span>
+<span class="s0">//------------------------------------------------------------------------------</span>
+
+<span class="s0">/** </span><span class="s1">@type </span><span class="s0">{import('../types').Rule.RuleModule} */</span>
+<span class="s2">module.exports = {</span>
+	<span class="s2">meta: {</span>
+		<span class="s2">type: </span><span class="s3">&quot;suggestion&quot;</span><span class="s2">,</span>
+
+		<span class="s2">docs: {</span>
+			<span class="s2">description: </span><span class="s3">&quot;Enforce a maximum depth that callbacks can be nested&quot;</span><span class="s2">,</span>
+			<span class="s2">recommended: </span><span class="s4">false</span><span class="s2">,</span>
+			<span class="s2">url: </span><span class="s3">&quot;https://eslint.org/docs/latest/rules/max-nested-callbacks&quot;</span><span class="s2">,</span>
+		<span class="s2">},</span>
+
+		<span class="s2">schema: [</span>
+			<span class="s2">{</span>
+				<span class="s2">oneOf: [</span>
+					<span class="s2">{</span>
+						<span class="s2">type: </span><span class="s3">&quot;integer&quot;</span><span class="s2">,</span>
+						<span class="s2">minimum: </span><span class="s5">0</span><span class="s2">,</span>
+					<span class="s2">},</span>
+					<span class="s2">{</span>
+						<span class="s2">type: </span><span class="s3">&quot;object&quot;</span><span class="s2">,</span>
+						<span class="s2">properties: {</span>
+							<span class="s2">maximum: {</span>
+								<span class="s2">type: </span><span class="s3">&quot;integer&quot;</span><span class="s2">,</span>
+								<span class="s2">minimum: </span><span class="s5">0</span><span class="s2">,</span>
+							<span class="s2">},</span>
+							<span class="s2">max: {</span>
+								<span class="s2">type: </span><span class="s3">&quot;integer&quot;</span><span class="s2">,</span>
+								<span class="s2">minimum: </span><span class="s5">0</span><span class="s2">,</span>
+							<span class="s2">},</span>
+						<span class="s2">},</span>
+						<span class="s2">additionalProperties: </span><span class="s4">false</span><span class="s2">,</span>
+					<span class="s2">},</span>
+				<span class="s2">],</span>
+			<span class="s2">},</span>
+		<span class="s2">],</span>
+		<span class="s2">messages: {</span>
+			<span class="s2">exceed: </span><span class="s3">&quot;Too many nested callbacks ({{num}}). Maximum allowed is {{max}}.&quot;</span><span class="s2">,</span>
+		<span class="s2">},</span>
+	<span class="s2">},</span>
+
+	<span class="s2">create(context) {</span>
+		<span class="s0">//--------------------------------------------------------------------------</span>
+		<span class="s0">// Constants</span>
+		<span class="s0">//--------------------------------------------------------------------------</span>
+		<span class="s4">const </span><span class="s2">option = context.options[</span><span class="s5">0</span><span class="s2">];</span>
+		<span class="s4">let </span><span class="s2">THRESHOLD = </span><span class="s5">10</span><span class="s2">;</span>
+
+		<span class="s4">if </span><span class="s2">(</span>
+			<span class="s4">typeof </span><span class="s2">option === </span><span class="s3">&quot;object&quot; </span><span class="s2">&amp;&amp;</span>
+			<span class="s2">(Object.hasOwn(option, </span><span class="s3">&quot;maximum&quot;</span><span class="s2">) || Object.hasOwn(option, </span><span class="s3">&quot;max&quot;</span><span class="s2">))</span>
+		<span class="s2">) {</span>
+			<span class="s2">THRESHOLD = option.maximum || option.max;</span>
+		<span class="s2">} </span><span class="s4">else if </span><span class="s2">(</span><span class="s4">typeof </span><span class="s2">option === </span><span class="s3">&quot;number&quot;</span><span class="s2">) {</span>
+			<span class="s2">THRESHOLD = option;</span>
+		<span class="s2">}</span>
+
+		<span class="s0">//--------------------------------------------------------------------------</span>
+		<span class="s0">// Helpers</span>
+		<span class="s0">//--------------------------------------------------------------------------</span>
+
+		<span class="s4">const </span><span class="s2">callbackStack = [];</span>
+
+		<span class="s0">/**</span>
+		 <span class="s0">* Checks a given function node for too many callbacks.</span>
+		 <span class="s0">* </span><span class="s1">@param </span><span class="s0">{ASTNode} node The node to check.</span>
+		 <span class="s0">* </span><span class="s1">@returns </span><span class="s0">{void}</span>
+		 <span class="s0">* </span><span class="s1">@private</span>
+		 <span class="s0">*/</span>
+		<span class="s4">function </span><span class="s2">checkFunction(node) {</span>
+			<span class="s4">const </span><span class="s2">parent = node.parent;</span>
+
+			<span class="s4">if </span><span class="s2">(parent.type === </span><span class="s3">&quot;CallExpression&quot;</span><span class="s2">) {</span>
+				<span class="s2">callbackStack.push(node);</span>
+			<span class="s2">}</span>
+
+			<span class="s4">if </span><span class="s2">(callbackStack.length &gt; THRESHOLD) {</span>
+				<span class="s4">const </span><span class="s2">opts = { num: callbackStack.length, max: THRESHOLD };</span>
+
+				<span class="s2">context.report({ node, messageId: </span><span class="s3">&quot;exceed&quot;</span><span class="s2">, data: opts });</span>
+			<span class="s2">}</span>
+		<span class="s2">}</span>
+
+		<span class="s0">/**</span>
+		 <span class="s0">* Pops the call stack.</span>
+		 <span class="s0">* </span><span class="s1">@returns </span><span class="s0">{void}</span>
+		 <span class="s0">* </span><span class="s1">@private</span>
+		 <span class="s0">*/</span>
+		<span class="s4">function </span><span class="s2">popStack() {</span>
+			<span class="s2">callbackStack.pop();</span>
+		<span class="s2">}</span>
+
+		<span class="s0">//--------------------------------------------------------------------------</span>
+		<span class="s0">// Public API</span>
+		<span class="s0">//--------------------------------------------------------------------------</span>
+
+		<span class="s4">return </span><span class="s2">{</span>
+			<span class="s2">ArrowFunctionExpression: checkFunction,</span>
+			<span class="s3">&quot;ArrowFunctionExpression:exit&quot;</span><span class="s2">: popStack,</span>
+
+			<span class="s2">FunctionExpression: checkFunction,</span>
+			<span class="s3">&quot;FunctionExpression:exit&quot;</span><span class="s2">: popStack,</span>
+		<span class="s2">};</span>
+	<span class="s2">},</span>
+<span class="s2">};</span>
+</pre>
+</body>
+</html>

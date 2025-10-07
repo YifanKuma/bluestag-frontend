@@ -1,0 +1,283 @@
+<html>
+<head>
+<title>jsx-no-useless-fragment.js</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #8c8c8c; font-style: italic;}
+.s1 { color: #8c8c8c; font-style: italic;}
+.s2 { color: #080808;}
+.s3 { color: #067d17;}
+.s4 { color: #0033b3;}
+.s5 { color: #1750eb;}
+.s6 { color: #264eff;}
+.s7 { color: #0037a6;}
+</style>
+</head>
+<body bgcolor="#ffffff">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#c0c0c0" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+jsx-no-useless-fragment.js</font>
+</center></td></tr></table>
+<pre><span class="s0">/**</span>
+ <span class="s0">* </span><span class="s1">@fileoverview </span><span class="s0">Disallow useless fragments</span>
+ <span class="s0">*/</span>
+
+<span class="s3">'use strict'</span><span class="s2">;</span>
+
+<span class="s4">const </span><span class="s2">arrayIncludes = require(</span><span class="s3">'array-includes'</span><span class="s2">);</span>
+
+<span class="s4">const </span><span class="s2">pragmaUtil = require(</span><span class="s3">'../util/pragma'</span><span class="s2">);</span>
+<span class="s4">const </span><span class="s2">astUtil = require(</span><span class="s3">'../util/ast'</span><span class="s2">);</span>
+<span class="s4">const </span><span class="s2">jsxUtil = require(</span><span class="s3">'../util/jsx'</span><span class="s2">);</span>
+<span class="s4">const </span><span class="s2">docsUrl = require(</span><span class="s3">'../util/docsUrl'</span><span class="s2">);</span>
+<span class="s4">const </span><span class="s2">report = require(</span><span class="s3">'../util/report'</span><span class="s2">);</span>
+<span class="s4">const </span><span class="s2">getText = require(</span><span class="s3">'../util/eslint'</span><span class="s2">).getText;</span>
+
+<span class="s4">function </span><span class="s2">isJSXText(node) {</span>
+  <span class="s4">return </span><span class="s2">!!node &amp;&amp; (node.type === </span><span class="s3">'JSXText' </span><span class="s2">|| node.type === </span><span class="s3">'Literal'</span><span class="s2">);</span>
+<span class="s2">}</span>
+
+<span class="s0">/**</span>
+ <span class="s0">* </span><span class="s1">@param </span><span class="s0">{string} text</span>
+ <span class="s0">* </span><span class="s1">@returns </span><span class="s0">{boolean}</span>
+ <span class="s0">*/</span>
+<span class="s4">function </span><span class="s2">isOnlyWhitespace(text) {</span>
+  <span class="s4">return </span><span class="s2">text.trim().length === </span><span class="s5">0</span><span class="s2">;</span>
+<span class="s2">}</span>
+
+<span class="s0">/**</span>
+ <span class="s0">* </span><span class="s1">@param </span><span class="s0">{ASTNode} node</span>
+ <span class="s0">* </span><span class="s1">@returns </span><span class="s0">{boolean}</span>
+ <span class="s0">*/</span>
+<span class="s4">function </span><span class="s2">isNonspaceJSXTextOrJSXCurly(node) {</span>
+  <span class="s4">return </span><span class="s2">(isJSXText(node) &amp;&amp; !isOnlyWhitespace(node.raw)) || node.type === </span><span class="s3">'JSXExpressionContainer'</span><span class="s2">;</span>
+<span class="s2">}</span>
+
+<span class="s0">/**</span>
+ <span class="s0">* Somehow fragment like this is useful: &lt;Foo content={&lt;&gt;ee eeee eeee ...&lt;/&gt;} /&gt;</span>
+ <span class="s0">* </span><span class="s1">@param </span><span class="s0">{ASTNode} node</span>
+ <span class="s0">* </span><span class="s1">@returns </span><span class="s0">{boolean}</span>
+ <span class="s0">*/</span>
+<span class="s4">function </span><span class="s2">isFragmentWithOnlyTextAndIsNotChild(node) {</span>
+  <span class="s4">return </span><span class="s2">node.children.length === </span><span class="s5">1</span>
+    <span class="s2">&amp;&amp; isJSXText(node.children[</span><span class="s5">0</span><span class="s2">])</span>
+    <span class="s2">&amp;&amp; !(node.parent.type === </span><span class="s3">'JSXElement' </span><span class="s2">|| node.parent.type === </span><span class="s3">'JSXFragment'</span><span class="s2">);</span>
+<span class="s2">}</span>
+
+<span class="s0">/**</span>
+ <span class="s0">* </span><span class="s1">@param </span><span class="s0">{string} text</span>
+ <span class="s0">* </span><span class="s1">@returns </span><span class="s0">{string}</span>
+ <span class="s0">*/</span>
+<span class="s4">function </span><span class="s2">trimLikeReact(text) {</span>
+  <span class="s4">const </span><span class="s2">leadingSpaces = </span><span class="s6">/^\s*/</span><span class="s2">.exec(text)[</span><span class="s5">0</span><span class="s2">];</span>
+  <span class="s4">const </span><span class="s2">trailingSpaces = </span><span class="s6">/\s*$/</span><span class="s2">.exec(text)[</span><span class="s5">0</span><span class="s2">];</span>
+
+  <span class="s4">const </span><span class="s2">start = arrayIncludes(leadingSpaces, </span><span class="s3">'</span><span class="s7">\n</span><span class="s3">'</span><span class="s2">) ? leadingSpaces.length : </span><span class="s5">0</span><span class="s2">;</span>
+  <span class="s4">const </span><span class="s2">end = arrayIncludes(trailingSpaces, </span><span class="s3">'</span><span class="s7">\n</span><span class="s3">'</span><span class="s2">) ? text.length - trailingSpaces.length : text.length;</span>
+
+  <span class="s4">return </span><span class="s2">text.slice(start, end);</span>
+<span class="s2">}</span>
+
+<span class="s0">/**</span>
+ <span class="s0">* Test if node is like `&lt;Fragment key={_}&gt;_&lt;/Fragment&gt;`</span>
+ <span class="s0">* </span><span class="s1">@param </span><span class="s0">{JSXElement} node</span>
+ <span class="s0">* </span><span class="s1">@returns </span><span class="s0">{boolean}</span>
+ <span class="s0">*/</span>
+<span class="s4">function </span><span class="s2">isKeyedElement(node) {</span>
+  <span class="s4">return </span><span class="s2">node.type === </span><span class="s3">'JSXElement'</span>
+    <span class="s2">&amp;&amp; node.openingElement.attributes</span>
+    <span class="s2">&amp;&amp; node.openingElement.attributes.some(jsxUtil.isJSXAttributeKey);</span>
+<span class="s2">}</span>
+
+<span class="s0">/**</span>
+ <span class="s0">* </span><span class="s1">@param </span><span class="s0">{ASTNode} node</span>
+ <span class="s0">* </span><span class="s1">@returns </span><span class="s0">{boolean}</span>
+ <span class="s0">*/</span>
+<span class="s4">function </span><span class="s2">containsCallExpression(node) {</span>
+  <span class="s4">return </span><span class="s2">node</span>
+    <span class="s2">&amp;&amp; node.type === </span><span class="s3">'JSXExpressionContainer'</span>
+    <span class="s2">&amp;&amp; astUtil.isCallExpression(node.expression);</span>
+<span class="s2">}</span>
+
+<span class="s4">const </span><span class="s2">messages = {</span>
+  <span class="s2">NeedsMoreChildren: </span><span class="s3">'Fragments should contain more than one child - otherwise, there’s no need for a Fragment at all.'</span><span class="s2">,</span>
+  <span class="s2">ChildOfHtmlElement: </span><span class="s3">'Passing a fragment to an HTML element is useless.'</span><span class="s2">,</span>
+<span class="s2">};</span>
+
+<span class="s0">/** </span><span class="s1">@type </span><span class="s0">{import('eslint').Rule.RuleModule} */</span>
+<span class="s2">module.exports = {</span>
+  <span class="s2">meta: {</span>
+    <span class="s2">type: </span><span class="s3">'suggestion'</span><span class="s2">,</span>
+    <span class="s2">fixable: </span><span class="s3">'code'</span><span class="s2">,</span>
+    <span class="s2">docs: {</span>
+      <span class="s2">description: </span><span class="s3">'Disallow unnecessary fragments'</span><span class="s2">,</span>
+      <span class="s2">category: </span><span class="s3">'Possible Errors'</span><span class="s2">,</span>
+      <span class="s2">recommended: </span><span class="s4">false</span><span class="s2">,</span>
+      <span class="s2">url: docsUrl(</span><span class="s3">'jsx-no-useless-fragment'</span><span class="s2">),</span>
+    <span class="s2">},</span>
+    <span class="s2">messages,</span>
+    <span class="s2">schema: [{</span>
+      <span class="s2">type: </span><span class="s3">'object'</span><span class="s2">,</span>
+      <span class="s2">properties: {</span>
+        <span class="s2">allowExpressions: {</span>
+          <span class="s2">type: </span><span class="s3">'boolean'</span><span class="s2">,</span>
+        <span class="s2">},</span>
+      <span class="s2">},</span>
+    <span class="s2">}],</span>
+  <span class="s2">},</span>
+
+  <span class="s2">create(context) {</span>
+    <span class="s4">const </span><span class="s2">config = context.options[</span><span class="s5">0</span><span class="s2">] || {};</span>
+    <span class="s4">const </span><span class="s2">allowExpressions = config.allowExpressions || </span><span class="s4">false</span><span class="s2">;</span>
+
+    <span class="s4">const </span><span class="s2">reactPragma = pragmaUtil.getFromContext(context);</span>
+    <span class="s4">const </span><span class="s2">fragmentPragma = pragmaUtil.getFragmentFromContext(context);</span>
+
+    <span class="s0">/**</span>
+     <span class="s0">* Test whether a node is an padding spaces trimmed by react runtime.</span>
+     <span class="s0">* </span><span class="s1">@param </span><span class="s0">{ASTNode} node</span>
+     <span class="s0">* </span><span class="s1">@returns </span><span class="s0">{boolean}</span>
+     <span class="s0">*/</span>
+    <span class="s4">function </span><span class="s2">isPaddingSpaces(node) {</span>
+      <span class="s4">return </span><span class="s2">isJSXText(node)</span>
+        <span class="s2">&amp;&amp; isOnlyWhitespace(node.raw)</span>
+        <span class="s2">&amp;&amp; arrayIncludes(node.raw, </span><span class="s3">'</span><span class="s7">\n</span><span class="s3">'</span><span class="s2">);</span>
+    <span class="s2">}</span>
+
+    <span class="s4">function </span><span class="s2">isFragmentWithSingleExpression(node) {</span>
+      <span class="s4">const </span><span class="s2">children = node &amp;&amp; node.children.filter((child) =&gt; !isPaddingSpaces(child));</span>
+      <span class="s4">return </span><span class="s2">(</span>
+        <span class="s2">children</span>
+        <span class="s2">&amp;&amp; children.length === </span><span class="s5">1</span>
+        <span class="s2">&amp;&amp; children[</span><span class="s5">0</span><span class="s2">].type === </span><span class="s3">'JSXExpressionContainer'</span>
+      <span class="s2">);</span>
+    <span class="s2">}</span>
+
+    <span class="s0">/**</span>
+     <span class="s0">* Test whether a JSXElement has less than two children, excluding paddings spaces.</span>
+     <span class="s0">* </span><span class="s1">@param </span><span class="s0">{JSXElement|JSXFragment} node</span>
+     <span class="s0">* </span><span class="s1">@returns </span><span class="s0">{boolean}</span>
+     <span class="s0">*/</span>
+    <span class="s4">function </span><span class="s2">hasLessThanTwoChildren(node) {</span>
+      <span class="s4">if </span><span class="s2">(!node || !node.children) {</span>
+        <span class="s4">return true</span><span class="s2">;</span>
+      <span class="s2">}</span>
+
+      <span class="s0">/** </span><span class="s1">@type </span><span class="s0">{ASTNode[]} */</span>
+      <span class="s4">const </span><span class="s2">nonPaddingChildren = node.children.filter(</span>
+        <span class="s2">(child) =&gt; !isPaddingSpaces(child)</span>
+      <span class="s2">);</span>
+
+      <span class="s4">if </span><span class="s2">(nonPaddingChildren.length &lt; </span><span class="s5">2</span><span class="s2">) {</span>
+        <span class="s4">return </span><span class="s2">!containsCallExpression(nonPaddingChildren[</span><span class="s5">0</span><span class="s2">]);</span>
+      <span class="s2">}</span>
+    <span class="s2">}</span>
+
+    <span class="s0">/**</span>
+     <span class="s0">* </span><span class="s1">@param </span><span class="s0">{JSXElement|JSXFragment} node</span>
+     <span class="s0">* </span><span class="s1">@returns </span><span class="s0">{boolean}</span>
+     <span class="s0">*/</span>
+    <span class="s4">function </span><span class="s2">isChildOfHtmlElement(node) {</span>
+      <span class="s4">return </span><span class="s2">node.parent.type === </span><span class="s3">'JSXElement'</span>
+        <span class="s2">&amp;&amp; node.parent.openingElement.name.type === </span><span class="s3">'JSXIdentifier'</span>
+        <span class="s2">&amp;&amp; </span><span class="s6">/^[a-z]+$/</span><span class="s2">.test(node.parent.openingElement.name.name);</span>
+    <span class="s2">}</span>
+
+    <span class="s0">/**</span>
+     <span class="s0">* </span><span class="s1">@param </span><span class="s0">{JSXElement|JSXFragment} node</span>
+     <span class="s0">* </span><span class="s1">@return </span><span class="s0">{boolean}</span>
+     <span class="s0">*/</span>
+    <span class="s4">function </span><span class="s2">isChildOfComponentElement(node) {</span>
+      <span class="s4">return </span><span class="s2">node.parent.type === </span><span class="s3">'JSXElement'</span>
+        <span class="s2">&amp;&amp; !isChildOfHtmlElement(node)</span>
+        <span class="s2">&amp;&amp; !jsxUtil.isFragment(node.parent, reactPragma, fragmentPragma);</span>
+    <span class="s2">}</span>
+
+    <span class="s0">/**</span>
+     <span class="s0">* </span><span class="s1">@param </span><span class="s0">{ASTNode} node</span>
+     <span class="s0">* </span><span class="s1">@returns </span><span class="s0">{boolean}</span>
+     <span class="s0">*/</span>
+    <span class="s4">function </span><span class="s2">canFix(node) {</span>
+      <span class="s0">// Not safe to fix fragments without a jsx parent.</span>
+      <span class="s4">if </span><span class="s2">(!(node.parent.type === </span><span class="s3">'JSXElement' </span><span class="s2">|| node.parent.type === </span><span class="s3">'JSXFragment'</span><span class="s2">)) {</span>
+        <span class="s0">// const a = &lt;&gt;&lt;/&gt;</span>
+        <span class="s4">if </span><span class="s2">(node.children.length === </span><span class="s5">0</span><span class="s2">) {</span>
+          <span class="s4">return false</span><span class="s2">;</span>
+        <span class="s2">}</span>
+
+        <span class="s0">// const a = &lt;&gt;cat {meow}&lt;/&gt;</span>
+        <span class="s4">if </span><span class="s2">(node.children.some(isNonspaceJSXTextOrJSXCurly)) {</span>
+          <span class="s4">return false</span><span class="s2">;</span>
+        <span class="s2">}</span>
+      <span class="s2">}</span>
+
+      <span class="s0">// Not safe to fix `&lt;Eeee&gt;&lt;&gt;foo&lt;/&gt;&lt;/Eeee&gt;` because `Eeee` might require its children be a ReactElement.</span>
+      <span class="s4">if </span><span class="s2">(isChildOfComponentElement(node)) {</span>
+        <span class="s4">return false</span><span class="s2">;</span>
+      <span class="s2">}</span>
+
+      <span class="s0">// old TS parser can't handle this one</span>
+      <span class="s4">if </span><span class="s2">(node.type === </span><span class="s3">'JSXFragment' </span><span class="s2">&amp;&amp; (!node.openingFragment || !node.closingFragment)) {</span>
+        <span class="s4">return false</span><span class="s2">;</span>
+      <span class="s2">}</span>
+
+      <span class="s4">return true</span><span class="s2">;</span>
+    <span class="s2">}</span>
+
+    <span class="s0">/**</span>
+     <span class="s0">* </span><span class="s1">@param </span><span class="s0">{ASTNode} node</span>
+     <span class="s0">* </span><span class="s1">@returns </span><span class="s0">{Function | undefined}</span>
+     <span class="s0">*/</span>
+    <span class="s4">function </span><span class="s2">getFix(node) {</span>
+      <span class="s4">if </span><span class="s2">(!canFix(node)) {</span>
+        <span class="s4">return </span><span class="s2">undefined;</span>
+      <span class="s2">}</span>
+
+      <span class="s4">return function </span><span class="s2">fix(fixer) {</span>
+        <span class="s4">const </span><span class="s2">opener = node.type === </span><span class="s3">'JSXFragment' </span><span class="s2">? node.openingFragment : node.openingElement;</span>
+        <span class="s4">const </span><span class="s2">closer = node.type === </span><span class="s3">'JSXFragment' </span><span class="s2">? node.closingFragment : node.closingElement;</span>
+
+        <span class="s4">const </span><span class="s2">childrenText = opener.selfClosing ? </span><span class="s3">'' </span><span class="s2">: getText(context).slice(opener.range[</span><span class="s5">1</span><span class="s2">], closer.range[</span><span class="s5">0</span><span class="s2">]);</span>
+
+        <span class="s4">return </span><span class="s2">fixer.replaceText(node, trimLikeReact(childrenText));</span>
+      <span class="s2">};</span>
+    <span class="s2">}</span>
+
+    <span class="s4">function </span><span class="s2">checkNode(node) {</span>
+      <span class="s4">if </span><span class="s2">(isKeyedElement(node)) {</span>
+        <span class="s4">return</span><span class="s2">;</span>
+      <span class="s2">}</span>
+
+      <span class="s4">if </span><span class="s2">(</span>
+        <span class="s2">hasLessThanTwoChildren(node)</span>
+        <span class="s2">&amp;&amp; !isFragmentWithOnlyTextAndIsNotChild(node)</span>
+        <span class="s2">&amp;&amp; !(allowExpressions &amp;&amp; isFragmentWithSingleExpression(node))</span>
+      <span class="s2">) {</span>
+        <span class="s2">report(context, messages.NeedsMoreChildren, </span><span class="s3">'NeedsMoreChildren'</span><span class="s2">, {</span>
+          <span class="s2">node,</span>
+          <span class="s2">fix: getFix(node),</span>
+        <span class="s2">});</span>
+      <span class="s2">}</span>
+
+      <span class="s4">if </span><span class="s2">(isChildOfHtmlElement(node)) {</span>
+        <span class="s2">report(context, messages.ChildOfHtmlElement, </span><span class="s3">'ChildOfHtmlElement'</span><span class="s2">, {</span>
+          <span class="s2">node,</span>
+          <span class="s2">fix: getFix(node),</span>
+        <span class="s2">});</span>
+      <span class="s2">}</span>
+    <span class="s2">}</span>
+
+    <span class="s4">return </span><span class="s2">{</span>
+      <span class="s2">JSXElement(node) {</span>
+        <span class="s4">if </span><span class="s2">(jsxUtil.isFragment(node, reactPragma, fragmentPragma)) {</span>
+          <span class="s2">checkNode(node);</span>
+        <span class="s2">}</span>
+      <span class="s2">},</span>
+      <span class="s2">JSXFragment: checkNode,</span>
+    <span class="s2">};</span>
+  <span class="s2">},</span>
+<span class="s2">};</span>
+</pre>
+</body>
+</html>

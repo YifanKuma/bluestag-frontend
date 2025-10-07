@@ -1,0 +1,77 @@
+<html>
+<head>
+<title>SetIntegrityLevel.js</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #067d17;}
+.s1 { color: #080808;}
+.s2 { color: #0033b3;}
+.s3 { color: #8c8c8c; font-style: italic;}
+</style>
+</head>
+<body bgcolor="#ffffff">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#c0c0c0" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+SetIntegrityLevel.js</font>
+</center></td></tr></table>
+<pre><span class="s0">'use strict'</span><span class="s1">;</span>
+
+<span class="s2">var </span><span class="s1">GetIntrinsic = require(</span><span class="s0">'get-intrinsic'</span><span class="s1">);</span>
+
+<span class="s2">var </span><span class="s1">$SyntaxError = require(</span><span class="s0">'es-errors/syntax'</span><span class="s1">);</span>
+<span class="s2">var </span><span class="s1">$TypeError = require(</span><span class="s0">'es-errors/type'</span><span class="s1">);</span>
+<span class="s2">var </span><span class="s1">isObject = require(</span><span class="s0">'es-object-atoms/isObject'</span><span class="s1">);</span>
+<span class="s2">var </span><span class="s1">$gOPD = require(</span><span class="s0">'gopd'</span><span class="s1">);</span>
+<span class="s2">var </span><span class="s1">$preventExtensions = GetIntrinsic(</span><span class="s0">'%Object.preventExtensions%'</span><span class="s1">, </span><span class="s2">true</span><span class="s1">);</span>
+<span class="s2">var </span><span class="s1">$gOPN = GetIntrinsic(</span><span class="s0">'%Object.getOwnPropertyNames%'</span><span class="s1">, </span><span class="s2">true</span><span class="s1">);</span>
+
+<span class="s2">var </span><span class="s1">forEach = require(</span><span class="s0">'../helpers/forEach'</span><span class="s1">);</span>
+
+<span class="s2">var </span><span class="s1">DefinePropertyOrThrow = require(</span><span class="s0">'./DefinePropertyOrThrow'</span><span class="s1">);</span>
+<span class="s2">var </span><span class="s1">IsAccessorDescriptor = require(</span><span class="s0">'./IsAccessorDescriptor'</span><span class="s1">);</span>
+<span class="s2">var </span><span class="s1">ToPropertyDescriptor = require(</span><span class="s0">'./ToPropertyDescriptor'</span><span class="s1">);</span>
+
+<span class="s3">// https://262.ecma-international.org/6.0/#sec-setintegritylevel</span>
+
+<span class="s1">module.exports = </span><span class="s2">function </span><span class="s1">SetIntegrityLevel(O, level) {</span>
+	<span class="s2">if </span><span class="s1">(!isObject(O)) {</span>
+		<span class="s2">throw new </span><span class="s1">$TypeError(</span><span class="s0">'Assertion failed: Type(O) is not Object'</span><span class="s1">);</span>
+	<span class="s1">}</span>
+	<span class="s2">if </span><span class="s1">(level !== </span><span class="s0">'sealed' </span><span class="s1">&amp;&amp; level !== </span><span class="s0">'frozen'</span><span class="s1">) {</span>
+		<span class="s2">throw new </span><span class="s1">$TypeError(</span><span class="s0">'Assertion failed: `level` must be `&quot;sealed&quot;` or `&quot;frozen&quot;`'</span><span class="s1">);</span>
+	<span class="s1">}</span>
+	<span class="s2">if </span><span class="s1">(!$preventExtensions) {</span>
+		<span class="s2">throw new </span><span class="s1">$SyntaxError(</span><span class="s0">'SetIntegrityLevel requires native `Object.preventExtensions` support'</span><span class="s1">);</span>
+	<span class="s1">}</span>
+	<span class="s2">var </span><span class="s1">status = $preventExtensions(O);</span>
+	<span class="s2">if </span><span class="s1">(!status) {</span>
+		<span class="s2">return false</span><span class="s1">;</span>
+	<span class="s1">}</span>
+	<span class="s2">if </span><span class="s1">(!$gOPN) {</span>
+		<span class="s2">throw new </span><span class="s1">$SyntaxError(</span><span class="s0">'SetIntegrityLevel requires native `Object.getOwnPropertyNames` support'</span><span class="s1">);</span>
+	<span class="s1">}</span>
+	<span class="s2">var </span><span class="s1">theKeys = $gOPN(O);</span>
+	<span class="s2">if </span><span class="s1">(level === </span><span class="s0">'sealed'</span><span class="s1">) {</span>
+		<span class="s1">forEach(theKeys, </span><span class="s2">function </span><span class="s1">(k) {</span>
+			<span class="s1">DefinePropertyOrThrow(O, k, { configurable: </span><span class="s2">false </span><span class="s1">});</span>
+		<span class="s1">});</span>
+	<span class="s1">} </span><span class="s2">else if </span><span class="s1">(level === </span><span class="s0">'frozen'</span><span class="s1">) {</span>
+		<span class="s1">forEach(theKeys, </span><span class="s2">function </span><span class="s1">(k) {</span>
+			<span class="s2">var </span><span class="s1">currentDesc = $gOPD(O, k);</span>
+			<span class="s2">if </span><span class="s1">(</span><span class="s2">typeof </span><span class="s1">currentDesc !== </span><span class="s0">'undefined'</span><span class="s1">) {</span>
+				<span class="s2">var </span><span class="s1">desc;</span>
+				<span class="s2">if </span><span class="s1">(IsAccessorDescriptor(ToPropertyDescriptor(currentDesc))) {</span>
+					<span class="s1">desc = { configurable: </span><span class="s2">false </span><span class="s1">};</span>
+				<span class="s1">} </span><span class="s2">else </span><span class="s1">{</span>
+					<span class="s1">desc = { configurable: </span><span class="s2">false</span><span class="s1">, writable: </span><span class="s2">false </span><span class="s1">};</span>
+				<span class="s1">}</span>
+				<span class="s1">DefinePropertyOrThrow(O, k, desc);</span>
+			<span class="s1">}</span>
+		<span class="s1">});</span>
+	<span class="s1">}</span>
+	<span class="s2">return true</span><span class="s1">;</span>
+<span class="s1">};</span>
+</pre>
+</body>
+</html>

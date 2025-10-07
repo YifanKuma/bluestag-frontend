@@ -1,0 +1,63 @@
+<html>
+<head>
+<title>bytesAsFloat64.js</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #067d17;}
+.s1 { color: #080808;}
+.s2 { color: #0033b3;}
+.s3 { color: #8c8c8c; font-style: italic;}
+.s4 { color: #1750eb;}
+</style>
+</head>
+<body bgcolor="#ffffff">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#c0c0c0" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+bytesAsFloat64.js</font>
+</center></td></tr></table>
+<pre><span class="s0">'use strict'</span><span class="s1">;</span>
+
+<span class="s2">var </span><span class="s1">$pow = require(</span><span class="s0">'math-intrinsics/pow'</span><span class="s1">);</span>
+
+<span class="s1">module.exports = </span><span class="s2">function </span><span class="s1">bytesAsFloat64(rawBytes) {</span>
+	<span class="s3">// return new $Float64Array(new $Uint8Array(rawBytes).buffer)[0];</span>
+
+	<span class="s3">/* 
+    Let value be the byte elements of rawBytes concatenated and interpreted as a little-endian bit string encoding of an IEEE 754-2008 binary64 value. 
+If value is an IEEE 754-2008 binary64 NaN value, return the NaN Number value. 
+Return the Number value that corresponds to value. 
+    */</span>
+	<span class="s2">var </span><span class="s1">sign = rawBytes[</span><span class="s4">7</span><span class="s1">] &amp; </span><span class="s4">0x80 </span><span class="s1">? -</span><span class="s4">1 </span><span class="s1">: </span><span class="s4">1</span><span class="s1">; </span><span class="s3">// first bit</span>
+	<span class="s2">var </span><span class="s1">exponent = ((rawBytes[</span><span class="s4">7</span><span class="s1">] &amp; </span><span class="s4">0x7F</span><span class="s1">) &lt;&lt; </span><span class="s4">4</span><span class="s1">) </span><span class="s3">// 7 bits from index 7</span>
+        <span class="s1">| ((rawBytes[</span><span class="s4">6</span><span class="s1">] &amp; </span><span class="s4">0xF0</span><span class="s1">) &gt;&gt; </span><span class="s4">4</span><span class="s1">); </span><span class="s3">// 4 bits from index 6</span>
+	<span class="s2">var </span><span class="s1">mantissa = ((rawBytes[</span><span class="s4">6</span><span class="s1">] &amp; </span><span class="s4">0x0F</span><span class="s1">) * </span><span class="s4">0x1000000000000</span><span class="s1">) </span><span class="s3">// 4 bits from index 6</span>
+        <span class="s1">+ (rawBytes[</span><span class="s4">5</span><span class="s1">] * </span><span class="s4">0x10000000000</span><span class="s1">) </span><span class="s3">// 8 bits from index 5</span>
+        <span class="s1">+ (rawBytes[</span><span class="s4">4</span><span class="s1">] * </span><span class="s4">0x100000000</span><span class="s1">) </span><span class="s3">// 8 bits from index 4</span>
+        <span class="s1">+ (rawBytes[</span><span class="s4">3</span><span class="s1">] * </span><span class="s4">0x1000000</span><span class="s1">) </span><span class="s3">// 8 bits from index 3</span>
+        <span class="s1">+ (rawBytes[</span><span class="s4">2</span><span class="s1">] * </span><span class="s4">0x10000</span><span class="s1">) </span><span class="s3">// 8 bits from index 2</span>
+        <span class="s1">+ (rawBytes[</span><span class="s4">1</span><span class="s1">] * </span><span class="s4">0x100</span><span class="s1">) </span><span class="s3">// 8 bits from index 1</span>
+        <span class="s1">+ rawBytes[</span><span class="s4">0</span><span class="s1">]; </span><span class="s3">// 8 bits from index 0</span>
+
+	<span class="s2">if </span><span class="s1">(exponent === </span><span class="s4">0 </span><span class="s1">&amp;&amp; mantissa === </span><span class="s4">0</span><span class="s1">) {</span>
+		<span class="s2">return </span><span class="s1">sign * </span><span class="s4">0</span><span class="s1">;</span>
+	<span class="s1">}</span>
+	<span class="s2">if </span><span class="s1">(exponent === </span><span class="s4">0x7FF </span><span class="s1">&amp;&amp; mantissa !== </span><span class="s4">0</span><span class="s1">) {</span>
+		<span class="s2">return </span><span class="s1">NaN;</span>
+	<span class="s1">}</span>
+	<span class="s2">if </span><span class="s1">(exponent === </span><span class="s4">0x7FF </span><span class="s1">&amp;&amp; mantissa === </span><span class="s4">0</span><span class="s1">) {</span>
+		<span class="s2">return </span><span class="s1">sign * Infinity;</span>
+	<span class="s1">}</span>
+
+	<span class="s1">exponent -= </span><span class="s4">1023</span><span class="s1">; </span><span class="s3">// subtract the bias</span>
+
+	<span class="s3">// Handle subnormal numbers</span>
+	<span class="s2">if </span><span class="s1">(exponent === -</span><span class="s4">1023</span><span class="s1">) {</span>
+		<span class="s2">return </span><span class="s1">sign * mantissa * </span><span class="s4">5e-324</span><span class="s1">; </span><span class="s3">// $pow(2, -1022 - 52)</span>
+	<span class="s1">}</span>
+
+	<span class="s2">return </span><span class="s1">sign * (</span><span class="s4">1 </span><span class="s1">+ (mantissa / </span><span class="s4">0x10000000000000</span><span class="s1">)) * $pow(</span><span class="s4">2</span><span class="s1">, exponent);</span>
+<span class="s1">};</span>
+</pre>
+</body>
+</html>

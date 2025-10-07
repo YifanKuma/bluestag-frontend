@@ -1,0 +1,243 @@
+<html>
+<head>
+<title>basic.js</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #0033b3;}
+.s1 { color: #080808;}
+.s2 { color: #067d17;}
+.s3 { color: #0037a6;}
+.s4 { color: #1750eb;}
+.s5 { color: #8c8c8c; font-style: italic;}
+</style>
+</head>
+<body bgcolor="#ffffff">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#c0c0c0" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+basic.js</font>
+</center></td></tr></table>
+<pre><span class="s0">var </span><span class="s1">t = require(</span><span class="s2">'tap'</span><span class="s1">)</span>
+<span class="s0">var </span><span class="s1">fs = require(</span><span class="s2">'fs'</span><span class="s1">)</span>
+<span class="s0">var </span><span class="s1">path = require(</span><span class="s2">'path'</span><span class="s1">)</span>
+<span class="s0">var </span><span class="s1">fixture = path.resolve(__dirname, </span><span class="s2">'fixtures'</span><span class="s1">)</span>
+<span class="s0">var </span><span class="s1">meow = fixture + </span><span class="s2">'/meow.cat'</span>
+<span class="s0">var </span><span class="s1">mine = fixture + </span><span class="s2">'/mine.cat'</span>
+<span class="s0">var </span><span class="s1">ours = fixture + </span><span class="s2">'/ours.cat'</span>
+<span class="s0">var </span><span class="s1">fail = fixture + </span><span class="s2">'/fail.false'</span>
+<span class="s0">var </span><span class="s1">noent = fixture + </span><span class="s2">'/enoent.exe'</span>
+<span class="s0">var </span><span class="s1">mkdirp = require(</span><span class="s2">'mkdirp'</span><span class="s1">)</span>
+<span class="s0">var </span><span class="s1">rimraf = require(</span><span class="s2">'rimraf'</span><span class="s1">)</span>
+
+<span class="s0">var </span><span class="s1">isWindows = process.platform === </span><span class="s2">'win32'</span>
+<span class="s0">var </span><span class="s1">hasAccess = </span><span class="s0">typeof </span><span class="s1">fs.access === </span><span class="s2">'function'</span>
+<span class="s0">var </span><span class="s1">winSkip = isWindows &amp;&amp; </span><span class="s2">'windows'</span>
+<span class="s0">var </span><span class="s1">accessSkip = !hasAccess &amp;&amp; </span><span class="s2">'no fs.access function'</span>
+<span class="s0">var </span><span class="s1">hasPromise = </span><span class="s0">typeof </span><span class="s1">Promise === </span><span class="s2">'function'</span>
+<span class="s0">var </span><span class="s1">promiseSkip = !hasPromise &amp;&amp; </span><span class="s2">'no global Promise'</span>
+
+<span class="s0">function </span><span class="s1">reset () {</span>
+  <span class="s0">delete </span><span class="s1">require.cache[require.resolve(</span><span class="s2">'../'</span><span class="s1">)]</span>
+  <span class="s0">return </span><span class="s1">require(</span><span class="s2">'../'</span><span class="s1">)</span>
+<span class="s1">}</span>
+
+<span class="s1">t.test(</span><span class="s2">'setup fixtures'</span><span class="s1">, </span><span class="s0">function </span><span class="s1">(t) {</span>
+  <span class="s1">rimraf.sync(fixture)</span>
+  <span class="s1">mkdirp.sync(fixture)</span>
+  <span class="s1">fs.writeFileSync(meow, </span><span class="s2">'#!/usr/bin/env cat</span><span class="s3">\n</span><span class="s2">meow</span><span class="s3">\n</span><span class="s2">'</span><span class="s1">)</span>
+  <span class="s1">fs.chmodSync(meow, parseInt(</span><span class="s2">'0755'</span><span class="s1">, </span><span class="s4">8</span><span class="s1">))</span>
+  <span class="s1">fs.writeFileSync(fail, </span><span class="s2">'#!/usr/bin/env false</span><span class="s3">\n</span><span class="s2">'</span><span class="s1">)</span>
+  <span class="s1">fs.chmodSync(fail, parseInt(</span><span class="s2">'0644'</span><span class="s1">, </span><span class="s4">8</span><span class="s1">))</span>
+  <span class="s1">fs.writeFileSync(mine, </span><span class="s2">'#!/usr/bin/env cat</span><span class="s3">\n</span><span class="s2">mine</span><span class="s3">\n</span><span class="s2">'</span><span class="s1">)</span>
+  <span class="s1">fs.chmodSync(mine, parseInt(</span><span class="s2">'0744'</span><span class="s1">, </span><span class="s4">8</span><span class="s1">))</span>
+  <span class="s1">fs.writeFileSync(ours, </span><span class="s2">'#!/usr/bin/env cat</span><span class="s3">\n</span><span class="s2">ours</span><span class="s3">\n</span><span class="s2">'</span><span class="s1">)</span>
+  <span class="s1">fs.chmodSync(ours, parseInt(</span><span class="s2">'0754'</span><span class="s1">, </span><span class="s4">8</span><span class="s1">))</span>
+  <span class="s1">t.end()</span>
+<span class="s1">})</span>
+
+<span class="s1">t.test(</span><span class="s2">'promise'</span><span class="s1">, { skip: promiseSkip }, </span><span class="s0">function </span><span class="s1">(t) {</span>
+  <span class="s0">var </span><span class="s1">isexe = reset()</span>
+  <span class="s1">t.test(</span><span class="s2">'meow async'</span><span class="s1">, </span><span class="s0">function </span><span class="s1">(t) {</span>
+    <span class="s1">isexe(meow).then(</span><span class="s0">function </span><span class="s1">(is) {</span>
+      <span class="s1">t.ok(is)</span>
+      <span class="s1">t.end()</span>
+    <span class="s1">})</span>
+  <span class="s1">})</span>
+  <span class="s1">t.test(</span><span class="s2">'fail async'</span><span class="s1">, </span><span class="s0">function </span><span class="s1">(t) {</span>
+    <span class="s1">isexe(fail).then(</span><span class="s0">function </span><span class="s1">(is) {</span>
+      <span class="s1">t.notOk(is)</span>
+      <span class="s1">t.end()</span>
+    <span class="s1">})</span>
+  <span class="s1">})</span>
+  <span class="s1">t.test(</span><span class="s2">'noent async'</span><span class="s1">, </span><span class="s0">function </span><span class="s1">(t) {</span>
+    <span class="s1">isexe(noent).catch(</span><span class="s0">function </span><span class="s1">(er) {</span>
+      <span class="s1">t.ok(er)</span>
+      <span class="s1">t.end()</span>
+    <span class="s1">})</span>
+  <span class="s1">})</span>
+  <span class="s1">t.test(</span><span class="s2">'noent ignore async'</span><span class="s1">, </span><span class="s0">function </span><span class="s1">(t) {</span>
+    <span class="s1">isexe(noent, { ignoreErrors: </span><span class="s0">true </span><span class="s1">}).then(</span><span class="s0">function </span><span class="s1">(is) {</span>
+      <span class="s1">t.notOk(is)</span>
+      <span class="s1">t.end()</span>
+    <span class="s1">})</span>
+  <span class="s1">})</span>
+  <span class="s1">t.end()</span>
+<span class="s1">})</span>
+
+<span class="s1">t.test(</span><span class="s2">'no promise'</span><span class="s1">, </span><span class="s0">function </span><span class="s1">(t) {</span>
+  <span class="s1">global.Promise = </span><span class="s0">null</span>
+  <span class="s0">var </span><span class="s1">isexe = reset()</span>
+  <span class="s1">t.throws(</span><span class="s2">'try to meow a promise'</span><span class="s1">, </span><span class="s0">function </span><span class="s1">() {</span>
+    <span class="s1">isexe(meow)</span>
+  <span class="s1">})</span>
+  <span class="s1">t.end()</span>
+<span class="s1">})</span>
+
+<span class="s1">t.test(</span><span class="s2">'access'</span><span class="s1">, { skip: accessSkip || winSkip }, </span><span class="s0">function </span><span class="s1">(t) {</span>
+  <span class="s1">runTest(t)</span>
+<span class="s1">})</span>
+
+<span class="s1">t.test(</span><span class="s2">'mode'</span><span class="s1">, { skip: winSkip }, </span><span class="s0">function </span><span class="s1">(t) {</span>
+  <span class="s0">delete </span><span class="s1">fs.access</span>
+  <span class="s0">delete </span><span class="s1">fs.accessSync</span>
+  <span class="s0">var </span><span class="s1">isexe = reset()</span>
+  <span class="s1">t.ok(isexe.sync(ours, { uid: </span><span class="s4">0</span><span class="s1">, gid: </span><span class="s4">0 </span><span class="s1">}))</span>
+  <span class="s1">t.ok(isexe.sync(mine, { uid: </span><span class="s4">0</span><span class="s1">, gid: </span><span class="s4">0 </span><span class="s1">}))</span>
+  <span class="s1">runTest(t)</span>
+<span class="s1">})</span>
+
+<span class="s1">t.test(</span><span class="s2">'windows'</span><span class="s1">, </span><span class="s0">function </span><span class="s1">(t) {</span>
+  <span class="s1">global.TESTING_WINDOWS = </span><span class="s0">true</span>
+  <span class="s0">var </span><span class="s1">pathExt = </span><span class="s2">'.EXE;.CAT;.CMD;.COM'</span>
+  <span class="s1">t.test(</span><span class="s2">'pathExt option'</span><span class="s1">, </span><span class="s0">function </span><span class="s1">(t) {</span>
+    <span class="s1">runTest(t, { pathExt: </span><span class="s2">'.EXE;.CAT;.CMD;.COM' </span><span class="s1">})</span>
+  <span class="s1">})</span>
+  <span class="s1">t.test(</span><span class="s2">'pathExt env'</span><span class="s1">, </span><span class="s0">function </span><span class="s1">(t) {</span>
+    <span class="s1">process.env.PATHEXT = pathExt</span>
+    <span class="s1">runTest(t)</span>
+  <span class="s1">})</span>
+  <span class="s1">t.test(</span><span class="s2">'no pathExt'</span><span class="s1">, </span><span class="s0">function </span><span class="s1">(t) {</span>
+    <span class="s5">// with a pathExt of '', any filename is fine.</span>
+    <span class="s5">// so the &quot;fail&quot; one would still pass.</span>
+    <span class="s1">runTest(t, { pathExt: </span><span class="s2">''</span><span class="s1">, skipFail: </span><span class="s0">true </span><span class="s1">})</span>
+  <span class="s1">})</span>
+  <span class="s1">t.test(</span><span class="s2">'pathext with empty entry'</span><span class="s1">, </span><span class="s0">function </span><span class="s1">(t) {</span>
+    <span class="s5">// with a pathExt of '', any filename is fine.</span>
+    <span class="s5">// so the &quot;fail&quot; one would still pass.</span>
+    <span class="s1">runTest(t, { pathExt: </span><span class="s2">';' </span><span class="s1">+ pathExt, skipFail: </span><span class="s0">true </span><span class="s1">})</span>
+  <span class="s1">})</span>
+  <span class="s1">t.end()</span>
+<span class="s1">})</span>
+
+<span class="s1">t.test(</span><span class="s2">'cleanup'</span><span class="s1">, </span><span class="s0">function </span><span class="s1">(t) {</span>
+  <span class="s1">rimraf.sync(fixture)</span>
+  <span class="s1">t.end()</span>
+<span class="s1">})</span>
+
+<span class="s0">function </span><span class="s1">runTest (t, options) {</span>
+  <span class="s0">var </span><span class="s1">isexe = reset()</span>
+
+  <span class="s0">var </span><span class="s1">optionsIgnore = Object.create(options || {})</span>
+  <span class="s1">optionsIgnore.ignoreErrors = </span><span class="s0">true</span>
+
+  <span class="s0">if </span><span class="s1">(!options || !options.skipFail) {</span>
+    <span class="s1">t.notOk(isexe.sync(fail, options))</span>
+  <span class="s1">}</span>
+  <span class="s1">t.notOk(isexe.sync(noent, optionsIgnore))</span>
+  <span class="s0">if </span><span class="s1">(!options) {</span>
+    <span class="s1">t.ok(isexe.sync(meow))</span>
+  <span class="s1">} </span><span class="s0">else </span><span class="s1">{</span>
+    <span class="s1">t.ok(isexe.sync(meow, options))</span>
+  <span class="s1">}</span>
+
+  <span class="s1">t.ok(isexe.sync(mine, options))</span>
+  <span class="s1">t.ok(isexe.sync(ours, options))</span>
+  <span class="s1">t.throws(</span><span class="s0">function </span><span class="s1">() {</span>
+    <span class="s1">isexe.sync(noent, options)</span>
+  <span class="s1">})</span>
+
+  <span class="s1">t.test(</span><span class="s2">'meow async'</span><span class="s1">, </span><span class="s0">function </span><span class="s1">(t) {</span>
+    <span class="s0">if </span><span class="s1">(!options) {</span>
+      <span class="s1">isexe(meow, </span><span class="s0">function </span><span class="s1">(er, is) {</span>
+        <span class="s0">if </span><span class="s1">(er) {</span>
+          <span class="s0">throw </span><span class="s1">er</span>
+        <span class="s1">}</span>
+        <span class="s1">t.ok(is)</span>
+        <span class="s1">t.end()</span>
+      <span class="s1">})</span>
+    <span class="s1">} </span><span class="s0">else </span><span class="s1">{</span>
+      <span class="s1">isexe(meow, options, </span><span class="s0">function </span><span class="s1">(er, is) {</span>
+        <span class="s0">if </span><span class="s1">(er) {</span>
+          <span class="s0">throw </span><span class="s1">er</span>
+        <span class="s1">}</span>
+        <span class="s1">t.ok(is)</span>
+        <span class="s1">t.end()</span>
+      <span class="s1">})</span>
+    <span class="s1">}</span>
+  <span class="s1">})</span>
+
+  <span class="s1">t.test(</span><span class="s2">'mine async'</span><span class="s1">, </span><span class="s0">function </span><span class="s1">(t) {</span>
+    <span class="s1">isexe(mine, options, </span><span class="s0">function </span><span class="s1">(er, is) {</span>
+      <span class="s0">if </span><span class="s1">(er) {</span>
+        <span class="s0">throw </span><span class="s1">er</span>
+      <span class="s1">}</span>
+      <span class="s1">t.ok(is)</span>
+      <span class="s1">t.end()</span>
+    <span class="s1">})</span>
+  <span class="s1">})</span>
+
+  <span class="s1">t.test(</span><span class="s2">'ours async'</span><span class="s1">, </span><span class="s0">function </span><span class="s1">(t) {</span>
+    <span class="s1">isexe(ours, options, </span><span class="s0">function </span><span class="s1">(er, is) {</span>
+      <span class="s0">if </span><span class="s1">(er) {</span>
+        <span class="s0">throw </span><span class="s1">er</span>
+      <span class="s1">}</span>
+      <span class="s1">t.ok(is)</span>
+      <span class="s1">t.end()</span>
+    <span class="s1">})</span>
+  <span class="s1">})</span>
+
+  <span class="s0">if </span><span class="s1">(!options || !options.skipFail) {</span>
+    <span class="s1">t.test(</span><span class="s2">'fail async'</span><span class="s1">, </span><span class="s0">function </span><span class="s1">(t) {</span>
+      <span class="s1">isexe(fail, options, </span><span class="s0">function </span><span class="s1">(er, is) {</span>
+        <span class="s0">if </span><span class="s1">(er) {</span>
+          <span class="s0">throw </span><span class="s1">er</span>
+        <span class="s1">}</span>
+        <span class="s1">t.notOk(is)</span>
+        <span class="s1">t.end()</span>
+      <span class="s1">})</span>
+    <span class="s1">})</span>
+  <span class="s1">}</span>
+
+  <span class="s1">t.test(</span><span class="s2">'noent async'</span><span class="s1">, </span><span class="s0">function </span><span class="s1">(t) {</span>
+    <span class="s1">isexe(noent, options, </span><span class="s0">function </span><span class="s1">(er, is) {</span>
+      <span class="s1">t.ok(er)</span>
+      <span class="s1">t.notOk(is)</span>
+      <span class="s1">t.end()</span>
+    <span class="s1">})</span>
+  <span class="s1">})</span>
+
+  <span class="s1">t.test(</span><span class="s2">'noent ignore async'</span><span class="s1">, </span><span class="s0">function </span><span class="s1">(t) {</span>
+    <span class="s1">isexe(noent, optionsIgnore, </span><span class="s0">function </span><span class="s1">(er, is) {</span>
+      <span class="s0">if </span><span class="s1">(er) {</span>
+        <span class="s0">throw </span><span class="s1">er</span>
+      <span class="s1">}</span>
+      <span class="s1">t.notOk(is)</span>
+      <span class="s1">t.end()</span>
+    <span class="s1">})</span>
+  <span class="s1">})</span>
+
+  <span class="s1">t.test(</span><span class="s2">'directory is not executable'</span><span class="s1">, </span><span class="s0">function </span><span class="s1">(t) {</span>
+    <span class="s1">isexe(__dirname, options, </span><span class="s0">function </span><span class="s1">(er, is) {</span>
+      <span class="s0">if </span><span class="s1">(er) {</span>
+        <span class="s0">throw </span><span class="s1">er</span>
+      <span class="s1">}</span>
+      <span class="s1">t.notOk(is)</span>
+      <span class="s1">t.end()</span>
+    <span class="s1">})</span>
+  <span class="s1">})</span>
+
+  <span class="s1">t.end()</span>
+<span class="s1">}</span>
+</pre>
+</body>
+</html>
