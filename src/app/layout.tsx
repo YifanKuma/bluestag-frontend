@@ -1,29 +1,19 @@
-// app/layout.tsx
-import type {Metadata, Viewport} from "next";
+// app/layout.tsx  (server component is fine)
+import type {ReactNode} from "react";
 import "./globals.css";
-import {Inter} from "next/font/google";
+import BackgroundSwitcher from "@/components/BackgroundSwitcher";
+import BlueGlowBackground from "@/components/BlueGlowBackground";
 
-const inter = Inter({subsets: ["latin"], variable: "--font-inter"});
-
-export const metadata: Metadata = {
-    title: "BLUESTAG.AI — Voice AI for Aussie SMBs",
-    description:
-        "Modern Voice AI for Australian small businesses: sales, payments, customer service, and more.",
-};
-
-export const viewport: Viewport = {
-    themeColor: "#0b1020",
-};
-
-export default function RootLayout({
-                                       children,
-                                   }: {
-    children: React.ReactNode;
-}) {
+export default function RootLayout({children}: { children: ReactNode }) {
     return (
-        <html lang="en" className="h-full">
-        <body className={`${inter.variable} min-h-screen antialiased`}>
-        {children}
+        <html lang="en">
+        <body className="min-h-screen text-white">
+        {/* Fixed, site-wide backgrounds */}
+        <BackgroundSwitcher/>
+        <BlueGlowBackground/>
+
+        {/* All pages render above the backgrounds */}
+        <div className="relative z-10">{children}</div>
         </body>
         </html>
     );
