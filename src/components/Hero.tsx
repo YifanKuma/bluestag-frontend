@@ -44,37 +44,31 @@ export default function Hero() {
                 </motion.h1>
 
                 <p className="mt-5 max-w-2xl mx-auto text-white/70">
-                    Purpose-built for Australian small businesses. Automate calls — sales,
-                    payments, customer support, and even real estate lead qualification.
+                    Automate calls — sales, payments, customer support, and even real estate lead qualification.
+                    Purpose-built for Australian small businesses.
                 </p>
 
                 {/* CTA Buttons */}
                 <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
                     <a
-                        href="#demo"
+                        href="contact"
                         className="group inline-flex items-center gap-2 rounded-xl bg-cyan-500 px-5 py-3 text-sm font-semibold text-slate-900 hover:bg-cyan-400 transition"
                     >
-                        Try an instant demo
+                        Talk to us for demo
                         <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5"/>
-                    </a>
-                    <a
-                        href="#contact"
-                        className="inline-flex items-center gap-2 rounded-xl border border-white/20 px-5 py-3 text-sm font-semibold hover:bg-white/5 transition"
-                    >
-                        Talk to us
                     </a>
                 </div>
 
                 {/* KPI Strip */}
                 <div className="mt-12 grid w-full max-w-4xl mx-auto grid-cols-2 gap-3 sm:grid-cols-4">
                     {[
-                        {kpi: "3M+", label: "Calls handled"},
-                        {kpi: "5x", label: "Faster response"},
-                        {kpi: "83%", label: "Queries resolved"},
-                        {kpi: "99.9%", label: "Uptime"},
+                        {kpi: "Human-Free", label: "Fully automated voice workflows"},
+                        {kpi: "High Performance", label: "Fast, reliable, and scalable AI operations"},
+                        {kpi: "Secure", label: "Enterprise-grade data protection & privacy"},
+                        {kpi: "Better Service", label: "Consistent, 24/7 customer engagement"},
                     ].map((s) => (
                         <GlassCard key={s.label} className="p-4 text-center">
-                            <p className="text-2xl font-extrabold">{s.kpi}</p>
+                            <p className="text-lg sm:text-xl font-extrabold">{s.kpi}</p>
                             <p className="mt-1 text-xs text-white/70">{s.label}</p>
                         </GlassCard>
                     ))}

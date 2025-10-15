@@ -1,45 +1,30 @@
-import Section from "@/components/Section";
+"use client";
+import {useState} from "react";
+import Navbar from "@/components/Navbar";
+import Footer from "@/components/Footer";
+import {plans} from "@/data/pricing";
+import PricingHero from "@/app/pricing/PricingHero";
+import PlansGrid from "@/app/pricing/PlansGrid";
+import ComparisonTable from "@/app/pricing/ComparisonTable";
+import AddonsGrid from "@/app/pricing/AddonsGrid";
+import FAQ from "@/app/pricing/FAQ";
 
 export default function PricingPage() {
-    const plans = [
-        {
-            name: "Starter",
-            price: "$99",
-            period: "/mo",
-            bullets: ["1 Voice Agent", "100 calls/mo", "Basic analytics"],
-        },
-        {
-            name: "Growth",
-            price: "$249",
-            period: "/mo",
-            bullets: ["3 Voice Agents", "300 calls/mo", "Multi-call (up to 5)", "Integrations"],
-        },
-        {
-            name: "Pro",
-            price: "Custom",
-            period: "",
-            bullets: ["5+ concurrent calls", "Priority support", "Advanced analytics"],
-        },
-    ];
+    const [annual, setAnnual] = useState(true);
+
+    const onSelectPlanAction = (id: (typeof plans)[number]["id"]) => {
+        window.location.href = "/contact";
+    };
+
     return (
-        <Section eyebrow="Pricing" title="Simple, scalable plans">
-            <div className="grid md:grid-cols-3 gap-6">
-                {plans.map((p) => (
-                    <div key={p.name} className="rounded-2xl border border-gray-200 p-6">
-                        <h3 className="font-semibold">{p.name}</h3>
-                        <p className="mt-2 text-3xl font-extrabold">
-                            {p.price} <span className="text-base font-normal">{p.period}</span>
-                        </p>
-                        <ul className="mt-4 text-sm grid gap-2">
-                            {p.bullets.map((b) => <li key={b}>• {b}</li>)}
-                        </ul>
-                        <button
-                            className="mt-6 w-full rounded-xl bg-sky-700 text-white py-2.5 font-semibold hover:opacity-90">
-                            Choose {p.name}
-                        </button>
-                    </div>
-                ))}
-            </div>
-        </Section>
+        <main className="relative min-h-screen overflow-hidden text-white pt-16">
+            <Navbar/>
+            <PricingHero annual={annual} onToggleAction={setAnnual}/> {/* ✅ */}
+            <PlansGrid annual={annual} onSelectAction={onSelectPlanAction}/> {/* ✅ */}
+            <ComparisonTable/>
+            <AddonsGrid/>
+            <FAQ/>
+            <Footer/>
+        </main>
     );
 }

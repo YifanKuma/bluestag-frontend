@@ -55,7 +55,7 @@ export default function WhyChooseBluestag() {
         <Section id="why-bluestag" variant="tall">
             <h2 className="text-2xl md:text-3xl font-bold">Why choose Bluestag AI</h2>
             <p className="mt-2 text-white/70 max-w-2xl">
-                Real-time voice intelligence, automation, and personalization—wrapped in a modern glass UI.
+                Real-time voice intelligence, automation, and personalization
             </p>
 
             <div className="mt-8 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">

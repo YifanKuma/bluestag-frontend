@@ -2,13 +2,13 @@
 
 import {motion, useMotionValue, useSpring, useTransform} from "framer-motion";
 import type {MotionValue} from "framer-motion";
-import {useEffect, useMemo, useState} from "react";
+import {useEffect, useState} from "react";
 
 type Light = {
     id: string;
     size: number;
-    x: number; // %
-    y: number; // %
+    x: number;   // %
+    y: number;   // %
     duration: number;
     delay: number;
     parallax: number; // px drift
@@ -35,8 +35,8 @@ function ParallaxBlob({
     sx: MotionValue<number>;
     sy: MotionValue<number>;
 }) {
-    const driftX = useTransform(sx, (v: number) => v * light.parallax);
-    const driftY = useTransform(sy, (v: number) => v * light.parallax);
+    const driftX = useTransform(sx, (v) => v * light.parallax);
+    const driftY = useTransform(sy, (v) => v * light.parallax);
 
     return (
         <motion.div
@@ -64,7 +64,7 @@ function ParallaxBlob({
                     delay: light.delay,
                     repeat: Infinity,
                     repeatType: "mirror",
-                    ease: "easeInOut"
+                    ease: "easeInOut",
                 }}
             />
         </motion.div>
@@ -74,12 +74,11 @@ function ParallaxBlob({
 export default function BlueGlowBackground() {
     // Create lights only on client (prevents SSR/CSR mismatch)
     const [lights, setLights] = useState<Light[] | null>(null);
-
     useEffect(() => {
         setLights(generateLights(6));
     }, []);
 
-    // mouse normalized -1..1
+    // Mouse normalized -1..1
     const mx = useMotionValue(0);
     const my = useMotionValue(0);
     const sx = useSpring(mx, {stiffness: 40, damping: 12, mass: 0.6});
@@ -100,11 +99,10 @@ export default function BlueGlowBackground() {
         return () => window.removeEventListener("mousemove", onMove);
     }, [mx, my]);
 
-    // Until mounted, render nothing inside to avoid hydration diff
-// top-level wrapper
+    // Layer sits at z-0 (below logo, below cursor glow, above gradients)
     return (
-        <div className="pointer-events-none fixed inset-0 -z-10 overflow-hidden" aria-hidden>
-            {lights?.map((l) => <ParallaxBlob key={l.id} light={l} sx={sx} sy={sy} />)}
+        <div className="pointer-events-none fixed inset-0 z-0 overflow-hidden" aria-hidden>
+            {lights?.map((l) => <ParallaxBlob key={l.id} light={l} sx={sx} sy={sy}/>)}
         </div>
     );
 }
