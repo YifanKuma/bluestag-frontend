@@ -1,9 +1,10 @@
 "use client";
+
 import {motion, AnimatePresence, useMotionValue, useTransform} from "framer-motion";
 import {useState, useRef} from "react";
 import Link from "next/link";
 import DemoFlow from "./DemoFlow";
-import type {Industry} from "./data";
+import type {Industry} from "../../data/industries";
 
 export default function IndustryDetail({ind}: { ind: Industry }) {
     const [open, setOpen] = useState(false);
@@ -23,14 +24,16 @@ export default function IndustryDetail({ind}: { ind: Industry }) {
 
     return (
         <motion.div
-            id={ind.id}
+            id="industry-detail"                 // ✅ anchor for hash links
+            data-industry={ind.id}               // ✅ keep which industry is shown
             ref={ref}
             onMouseMove={handleMouseMove}
             initial={{opacity: 0, y: 40}}
             whileInView={{opacity: 1, y: 0}}
             viewport={{once: true, margin: "-80px"}}
             transition={{duration: 0.7, ease: "easeOut"}}
-            className="relative overflow-hidden group bg-white/5 border border-white/10 rounded-3xl p-8 backdrop-blur-xl shadow-lg hover:shadow-sky-500/20"
+            className="relative overflow-hidden group bg-white/5 border border-white/10 rounded-3xl p-8 backdrop-blur-xl shadow-lg hover:shadow-sky-500/20 scroll-mt-24" // ✅ scroll offset for fixed navbar
+            tabIndex={-1}                         // ♿ allows focus when jumping
         >
             {/* Glow effect following mouse */}
             <motion.div
@@ -103,24 +106,12 @@ export default function IndustryDetail({ind}: { ind: Industry }) {
                             >
                                 <div
                                     className="mt-3 text-xs text-gray-400 space-y-2 bg-black/30 border border-white/10 rounded-xl p-4">
-                                    <p>
-                    <span className="font-semibold text-gray-300">
-                      How it works:
-                    </span>{" "}
-                                        ASR → NLU → Policy Engine → Tool Calls → TTS.
-                                    </p>
-                                    <p>
-                    <span className="font-semibold text-gray-300">
-                      Integrations:
-                    </span>{" "}
-                                        Calendars, CRMs, SMS/email, payments, and more.
-                                    </p>
-                                    <p>
-                    <span className="font-semibold text-gray-300">
-                      Controls:
-                    </span>{" "}
-                                        Guardrails and hand-off for sensitive actions.
-                                    </p>
+                                    <p><span className="font-semibold text-gray-300">How it works:</span> ASR → NLU →
+                                        Policy Engine → Tool Calls → TTS.</p>
+                                    <p><span className="font-semibold text-gray-300">Integrations:</span> Calendars,
+                                        CRMs, SMS/email, payments, and more.</p>
+                                    <p><span className="font-semibold text-gray-300">Controls:</span> Guardrails and
+                                        hand-off for sensitive actions.</p>
                                 </div>
                             </motion.div>
                         )}

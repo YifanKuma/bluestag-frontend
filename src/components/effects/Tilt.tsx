@@ -1,6 +1,6 @@
 "use client";
 import {motion, useMotionValue, useTransform} from "framer-motion";
-import {ReactNode} from "react";
+import {ReactNode, CSSProperties} from "react";
 
 export default function Tilt({children}: { children: ReactNode }) {
     const x = useMotionValue(0);
@@ -19,7 +19,11 @@ export default function Tilt({children}: { children: ReactNode }) {
                 x.set(0);
                 y.set(0);
             }}
-            style={{rotateX, rotateY, transformStyle: "preserve-3d" as any}}
+            style={{
+                rotateX,
+                rotateY,
+                transformStyle: "preserve-3d" as CSSProperties["transformStyle"], // ✅ properly typed
+            }}
             className="will-change-transform"
         >
             {children}

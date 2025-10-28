@@ -2,7 +2,7 @@
 
 import {motion} from "framer-motion";
 import {Check, ArrowRight} from "lucide-react";
-import type {Plan} from "@/data/pricing";
+import type {Plan} from "@/data/planfeatures";
 
 type Props = {
     plan: Plan;
@@ -61,7 +61,7 @@ export default function PlanCard({plan, annual, onSelectAction}: Props) {
             {/* 🔹 Minutes & concurrency */}
             <div className="mt-2 text-sm text-white/70">
                 Includes <b>{plan.callMinutesIncluded.toLocaleString("en-AU")} mins</b> ·{" "}
-                <b>{plan.parallelCalls}x concurrent</b>
+                <b>Up to {plan.parallelCalls} <strong>X</strong> concurrent</b>
             </div>
 
             {/* 🔹 Feature list */}

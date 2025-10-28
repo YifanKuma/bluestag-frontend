@@ -3,44 +3,31 @@
 import {useMemo, useState} from "react";
 import Section from "./Section";
 import GlassCard from "./GlassCard";
-import {Globe, Search, Check} from "lucide-react";
+import {Globe, Search, Check, Megaphone} from "lucide-react";
 
 type Lang = { code: string; name: string; native: string; flag?: string };
 
+// ✅ Alphabetical, unique codes
 const LANGUAGES: Lang[] = [
-    {code: "en", name: "English", native: "English", flag: "🇬🇧"},
-    {code: "zh-CN", name: "Chinese (Simplified)", native: "简体中文", flag: "🇨🇳"},
-    {code: "zh-TW", name: "Chinese (Traditional)", native: "繁體中文", flag: "🇹🇼"},
-    {code: "es", name: "Spanish", native: "Español", flag: "🇪🇸"},
-    {code: "hi", name: "Hindi", native: "हिंदी", flag: "🇮🇳"},
-    {code: "ar", name: "Arabic", native: "العربية", flag: "🇸🇦"},
-    {code: "pt", name: "Portuguese", native: "Português", flag: "🇵🇹"},
-    {code: "bn", name: "Bengali", native: "বাংলা", flag: "🇧🇩"},
-    {code: "ru", name: "Russian", native: "Русский", flag: "🇷🇺"},
-    {code: "ja", name: "Japanese", native: "日本語", flag: "🇯🇵"},
-    {code: "de", name: "German", native: "Deutsch", flag: "🇩🇪"},
-    {code: "fr", name: "French", native: "Français", flag: "🇫🇷"},
-    {code: "ko", name: "Korean", native: "한국어", flag: "🇰🇷"},
-    {code: "it", name: "Italian", native: "Italiano", flag: "🇮🇹"},
-    {code: "tr", name: "Turkish", native: "Türkçe", flag: "🇹🇷"},
-    {code: "vi", name: "Vietnamese", native: "Tiếng Việt", flag: "🇻🇳"},
-    {code: "ur", name: "Urdu", native: "اردو", flag: "🇵🇰"},
-    {code: "id", name: "Indonesian", native: "Bahasa Indonesia", flag: "🇮🇩"},
-    {code: "pl", name: "Polish", native: "Polski", flag: "🇵🇱"},
-    {code: "nl", name: "Dutch", native: "Nederlands", flag: "🇳🇱"},
-    {code: "th", name: "Thai", native: "ไทย", flag: "🇹🇭"},
-    {code: "el", name: "Greek", native: "Ελληνικά", flag: "🇬🇷"},
-    {code: "he", name: "Hebrew", native: "עברית", flag: "🇮🇱"},
-    {code: "sv", name: "Swedish", native: "Svenska", flag: "🇸🇪"},
-    {code: "da", name: "Danish", native: "Dansk", flag: "🇩🇰"},
-    {code: "no", name: "Norwegian", native: "Norsk", flag: "🇳🇴"},
-    {code: "fi", name: "Finnish", native: "Suomi", flag: "🇫🇮"},
+    {code: "bg", name: "Bulgarian", native: "Български", flag: "🇧🇬"},
+    {code: "zh", name: "Chinese", native: "中文", flag: "🇨🇳"},
     {code: "cs", name: "Czech", native: "Čeština", flag: "🇨🇿"},
-    {code: "ro", name: "Romanian", native: "Română", flag: "🇷🇴"},
+    {code: "da", name: "Danish", native: "Dansk", flag: "🇩🇰"},
+    {code: "nl", name: "Dutch", native: "Nederlands", flag: "🇳🇱"},
+    {code: "en-US", name: "English (US)", native: "English (US)", flag: "🇺🇸"},
+    {code: "fi", name: "Finnish", native: "Suomi", flag: "🇫🇮"},
+    {code: "fr", name: "French", native: "Français", flag: "🇫🇷"},
+    {code: "de", name: "German", native: "Deutsch", flag: "🇩🇪"},
+    {code: "el", name: "Greek", native: "Ελληνικά", flag: "🇬🇷"},
     {code: "hu", name: "Hungarian", native: "Magyar", flag: "🇭🇺"},
-    {code: "ms", name: "Malay", native: "Bahasa Melayu", flag: "🇲🇾"},
-    {code: "tl", name: "Filipino", native: "Filipino", flag: "🇵🇭"},
-    {code: "uk", name: "Ukrainian", native: "Українська", flag: "🇺🇦"},
+    {code: "it", name: "Italian", native: "Italiano", flag: "🇮🇹"},
+    {code: "ja", name: "Japanese", native: "日本語", flag: "🇯🇵"},
+    {code: "pl", name: "Polish", native: "Polski", flag: "🇵🇱"},
+    {code: "pt", name: "Portuguese", native: "Português", flag: "🇵🇹"},
+    {code: "ro", name: "Romanian", native: "Română", flag: "🇷🇴"},
+    {code: "sk", name: "Slovak", native: "Slovenčina", flag: "🇸🇰"},
+    {code: "es", name: "Spanish", native: "Español", flag: "🇪🇸"},
+    {code: "vi", name: "Vietnamese", native: "Tiếng Việt", flag: "🇻🇳"},
 ];
 
 export default function Languages() {
@@ -63,9 +50,9 @@ export default function Languages() {
     return (
         <Section id="languages" variant="tall" className="relative">
             <div className="max-w-3xl">
-                <h2 className="text-2xl md:text-3xl font-bold">Global language support</h2>
+                <h2 className="text-2xl md:text-3xl font-bold">Supported languages</h2>
                 <p className="mt-2 text-white/70">
-                    30+ languages for real-time voice and chat. Native accents, fast latency.
+                    {LANGUAGES.length}+ languages with native accents and dialects — more on the way.
                 </p>
             </div>
 
@@ -82,7 +69,11 @@ export default function Languages() {
                 </div>
                 <div
                     className="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs text-white/80">
-                    <Globe className="h-4 w-4"/> More than 20 major languages
+                    <Globe className="h-4 w-4"/> {LANGUAGES.length} languages today
+                </div>
+                <div
+                    className="inline-flex items-center gap-2 rounded-xl border border-cyan-400/30 bg-cyan-400/10 px-3 py-2 text-xs text-cyan-200">
+                    <Megaphone className="h-4 w-4"/> More languages are coming soon
                 </div>
             </div>
 

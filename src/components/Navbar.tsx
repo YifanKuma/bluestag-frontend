@@ -18,10 +18,10 @@ export default function Navbar() {
 
     const navItems: Array<[string, string]> = [
         ["Home", "/"],
+        ["About", "/about"],
         ["Services", "/ai-services"],
         ["Industries", "/industries"],
         ["Pricing", "/pricing"],
-        ["About", "/about"],
         ["Contact", "/contact"],
     ];
 

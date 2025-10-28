@@ -1,21 +1,14 @@
 import type {Metadata} from "next";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
-import BackgroundSwitcher from "@/components/BackgroundSwitcher";
-import BlueGlowBackground from "@/components/BlueGlowBackground";
-import CursorGlow from "@/components/CursorGlow";
-
-import AboutHero from "@/app/about/AboutHero";
 import OurStory from "@/app/about/OurStory";
-import MissionVision from "@/app/about/MissionVision";
-import TeamSection from "@/app/about/TeamSection";
-import Partners from "@/app/about/Partners";
+import OurVision from "@/app/about/OurVision";
 import ContactCTA from "@/app/about/ContactCTA";
 
 export const metadata: Metadata = {
     title: "About Us | Bluestag AI",
     description:
-        "Learn how Bluestag AI started, our mission & vision, the team, and our partners.",
+        "Learn how Bluestag AI started and where we’re headed next.",
 };
 
 export default function AboutPage() {
@@ -25,14 +18,10 @@ export default function AboutPage() {
             <Navbar/>
 
             {/* 📖 content */}
-            <section id="about" className="relative z-10 pt-16 md:pt-20">
-                {/* ✅ unified container + spacing */}
-                <div className="max-w-6xl mx-auto px-6 space-y-16 md:space-y-24">
-                    <AboutHero/>
-                    <OurStory/>
-                    <MissionVision/>
-                    <TeamSection/>
-                    <Partners/>
+            <section id="about" className="relative z-10 pt-32 pb-24">
+                <div className="mx-auto max-w-6xl px-6 space-y-24">
+                    <OurStory imageSrc="/about-image.png"/>
+                    <OurVision/>
                     <ContactCTA/>
                 </div>
             </section>

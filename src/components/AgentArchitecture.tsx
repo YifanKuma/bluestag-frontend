@@ -132,7 +132,7 @@ export default function AgentArchitecture() {
                 viewport={{once: true}}
             >
                 <h4 className="text-2xl md:text-3xl font-bold mb-4">
-                    Agentic AI <span className="text-cyan-400">vs</span> Generative AI
+                    Generative AI <span className="text-cyan-400">vs</span> Agentic AI
                 </h4>
                 <p className="text-white/70 mb-10 max-w-2xl mx-auto">
                     Generative AI creates — Agentic AI executes.

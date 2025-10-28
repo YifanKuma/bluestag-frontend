@@ -1,3 +1,4 @@
+// src/data/planfeatures.ts
 import {
     LucideIcon,
     PhoneCall,
@@ -7,13 +8,13 @@ import {
     Database,
     LayoutDashboard,
     Link2,
-    Contact
+    Contact,
 } from "lucide-react";
 
 export type Feature = {
     label: string;
     tooltip?: string;
-    included?: boolean;
+    included?: boolean; // when used in comparison rows
 };
 
 export type Plan = {
@@ -21,8 +22,8 @@ export type Plan = {
     name: string;
     tagline: string;
     monthlyPriceAud: number; // billed monthly
-    yearlyPriceAud: number;  // billed yearly (with 15% discount)
-    callMinutesIncluded: number;
+    yearlyPriceAud: number; // billed yearly (with discount)
+    callMinutesIncluded: number; // per month
     parallelCalls: number;
     ctaLabel?: string;
     popular?: boolean;
@@ -32,22 +33,19 @@ export type Plan = {
 
 export const currency = "AUD";
 
-// 🧮 Helper: apply 15% off for yearly billing
-const yearlyPrice = (monthly: number) => Math.round(monthly * 12 * 0.85);
-
 export const plans: Plan[] = [
     {
         id: "starter",
         name: "Starter",
         tagline: "Billed monthly • 1 AI agent",
         monthlyPriceAud: 1499,
-        yearlyPriceAud: yearlyPrice(1499),
+        yearlyPriceAud: 17988, // yearly discounted price
         callMinutesIncluded: 500,
         parallelCalls: 5,
         icon: PhoneCall,
         bullets: [
             {label: "1 AI voice agent"},
-            {label: "Includes 500 mins · up to 5 concurrent"},
+            {label: "Includes 500 mins · Up to 5 concurrent"},
             {label: "Call recordings & transcripts"},
             {label: "DeskApp dashboard"},
             {label: "WhatsApp messages $0.10 / msg"},
@@ -61,14 +59,14 @@ export const plans: Plan[] = [
         name: "Growth",
         tagline: "Billed monthly • 2 AI agents",
         monthlyPriceAud: 2599,
-        yearlyPriceAud: yearlyPrice(2599),
+        yearlyPriceAud: 31188, // yearly discounted price
         callMinutesIncluded: 1000,
         parallelCalls: 10,
         icon: Headphones,
         popular: true,
         bullets: [
             {label: "Up to 2 AI voice agents"},
-            {label: "Includes 1,000 mins · up to 10 concurrent"},
+            {label: "Includes 1,000 mins · Up to 10 concurrent"},
             {label: "Call recordings & transcripts"},
             {label: "DeskApp dashboard"},
             {label: "Payment links", tooltip: "Collect payments in-call or via secure link", included: true},
@@ -88,13 +86,13 @@ export const plans: Plan[] = [
         name: "Premium",
         tagline: "Billed monthly • 3 AI agents",
         monthlyPriceAud: 3499,
-        yearlyPriceAud: yearlyPrice(3499),
+        yearlyPriceAud: 41988, // yearly discounted price
         callMinutesIncluded: 1500,
         parallelCalls: 15,
         icon: ShieldCheck,
         bullets: [
             {label: "Up to 3 AI voice agents"},
-            {label: "Includes 1,500 mins · up to 15 concurrent"},
+            {label: "Includes 1,500 mins · Up to 15 concurrent"},
             {label: "Call recordings & transcripts"},
             {label: "DeskApp dashboard"},
             {label: "Payment links", tooltip: "Collect payments in-call or via secure link", included: true},
@@ -111,6 +109,7 @@ export const plans: Plan[] = [
     },
 ];
 
+// Keep add-ons content from the second block
 export const addons: { icon: LucideIcon; title: string; desc: string; price: string }[] = [
     {
         icon: Brain,
@@ -122,7 +121,7 @@ export const addons: { icon: LucideIcon; title: string; desc: string; price: str
         icon: Database,
         title: "Data retention",
         desc: "Extended transcript & audio retention with export API.",
-        price: "$49 / Month",
+        price: "$49 / month",
     },
     {
         icon: LayoutDashboard,

@@ -4,82 +4,82 @@ import {motion, Variants} from "framer-motion";
 
 const fadeUp: Variants = {
     hidden: {opacity: 0, y: 16},
-    show: {
-        opacity: 1,
-        y: 0,
-        transition: {duration: 0.5, ease: "easeOut"} as never, // <-- cast fixes strict type issue
-    },
+    show: {opacity: 1, y: 0, transition: {duration: 0.5, ease: "easeOut"} as never},
 };
 
 const container: Variants = {
     hidden: {},
-    show: {
-        transition: {staggerChildren: 0.08},
-    },
+    show: {transition: {staggerChildren: 0.08}},
 };
 
 import {
     ShieldCheck,
     Server,
-    Cloud,
     Headset,
-    ActivitySquare,
-    Cpu,
-    DatabaseBackup,
-    FileCog,
     KeySquare,
     CheckCircle2,
-    ArrowRight
+    ArrowRight,
+    Boxes,
+    ShoppingCart,
+    BadgeCheck,
+    Monitor,
+    Smartphone,
+    RotateCcw,
 } from "lucide-react";
 
 const features = [
     {
-        icon: ActivitySquare,
-        title: "24/7 Monitoring",
-        desc: "Proactive alerts, uptime SLAs, health checks on servers, endpoints & network."
+        icon: Boxes,
+        title: "IT Asset Management",
+        desc: "Track hardware & software lifecycle, warranties, refresh plans, and ownership."
     },
     {
-        icon: FileCog,
-        title: "Patch & Updates",
-        desc: "OS, drivers, firmware and app patching with maintenance windows and rollbacks."
+        icon: ShoppingCart,
+        title: "IT Procurement Services",
+        desc: "Source and supply devices & licenses with vendor quotes, staging, and delivery."
     },
     {
-        icon: DatabaseBackup,
-        title: "Backup & DR",
-        desc: "Snapshot + offsite backups, immutability options, tested recovery runbooks."
-    },
-    {
-        icon: Cloud,
-        title: "Cloud & M365",
-        desc: "Tenant hardening, cost-optimised compute/storage, identity & access governance."
-    },
-    {
-        icon: Cpu,
-        title: "Endpoint Management",
-        desc: "Zero-touch provisioning, profiles, compliance baselines, EDR integrations."
-    },
-    {
-        icon: ShieldCheck,
-        title: "Security & Compliance",
-        desc: "Hardening, SIEM alerts, MFA/SSO, audit trails, policy-as-code guardrails."
+        icon: BadgeCheck,
+        title: "IT Licensing Management",
+        desc: "Stay compliant with renewals, right-sizing, usage audits, and vendor governance."
     },
     {
         icon: Headset,
-        title: "Helpdesk & On-call",
-        desc: "Tiered support with SLAs, runbooks, escalation, and clear comms templates."
+        title: "Help Desk Services",
+        desc: "Friendly support with SLAs, ticketing, remote assistance, and on-site escalation."
+    },
+    {
+        icon: Monitor,
+        title: "Desktop Management",
+        desc: "Builds & baselines, patching, AV/EDR, device health, and policy enforcement."
     },
     {
         icon: Server,
-        title: "Network & Infra",
-        desc: "LAN/WAN, SD-WAN, Wi-Fi, VPN, firewall as code, capacity & resilience."
+        title: "Server Management",
+        desc: "Monitoring, patch windows, capacity planning, and performance optimisation."
+    },
+    {
+        icon: ShieldCheck,
+        title: "Security Management",
+        desc: "Hardening, MFA/SSO, threat alerts, audit trails, and policy governance."
+    },
+    {
+        icon: Smartphone,
+        title: "Mobility Management",
+        desc: "MDM/Intune profiles, app controls, compliance, lost-device lock & wipe."
+    },
+    {
+        icon: RotateCcw,
+        title: "Disaster Recovery Management",
+        desc: "RPO/RTO planning, off-site backups, recovery runbooks, and regular test restores."
     },
 ];
 
 const highlights = [
     {kpi: "99.9%", label: "Uptime target"},
     {kpi: "<15m", label: "P1 response"},
-    {kpi: "30–60%", label: "Cloud savings (optimised)"},
-    {kpi: "AES-256", label: "Backup at-rest"},
+    {kpi: "Fixed", label: "Monthly price"},
+    {kpi: "AU-wide", label: "Bris → Adel"},
 ];
 
 export default function ManagedITSection() {
@@ -102,10 +102,11 @@ export default function ManagedITSection() {
           <KeySquare className="h-3.5 w-3.5"/> Managed IT Services
         </span>
                 <h2 className="mt-4 text-3xl sm:text-4xl font-bold">
-                    Proactive, secure, and scalable IT — managed end-to-end
+                    Comprehensive managed IT — support, maintenance & governance
                 </h2>
                 <p className="mt-3 text-white/70">
-                    We monitor, patch, secure, and support your stack so your team can focus on the work that matters.
+                    All-inclusive support to keep your devices, networks, and apps running smoothly — so your team can
+                    focus on the work that matters.
                 </p>
 
                 {/* CTA */}
@@ -114,8 +115,8 @@ export default function ManagedITSection() {
                         href="/contact"
                         className="group inline-flex items-center gap-2 rounded-2xl border border-white/10 bg-white/10 px-4 py-2 text-sm font-medium backdrop-blur hover:bg-white/15"
                     >
-                        Book a consultation <ArrowRight
-                        className="h-4 w-4 transition -translate-x-0 group-hover:translate-x-0.5"/>
+                        Book a consultation{" "}
+                        <ArrowRight className="h-4 w-4 transition -translate-x-0 group-hover:translate-x-0.5"/>
                     </a>
                     <a
                         href="/pricing"
@@ -134,11 +135,11 @@ export default function ManagedITSection() {
                 viewport={{once: true, amount: 0.2}}
                 className="mx-auto mt-10 grid max-w-4xl grid-cols-2 gap-3 sm:grid-cols-4"
             >
-                {highlights.map(h => (
+                {highlights.map((h) => (
                     <motion.div
                         key={h.label}
                         variants={fadeUp}
-                        className="rounded-2xl border border-white/10 bg-black/30 p-4 text-center shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]"
+                        className="rounded-2xl border border-white/10 bg-black/30 p-4 text-center shadow-[inset_0_1px_0_rgba(255,255,255,0.06)] backdrop-blur-sm"
                     >
                         <p className="text-2xl font-extrabold">{h.kpi}</p>
                         <p className="mt-1 text-xs text-white/70">{h.label}</p>
@@ -146,36 +147,39 @@ export default function ManagedITSection() {
                 ))}
             </motion.div>
 
-            {/* Feature grid */}
+            {/* Feature grid (more transparency) */}
             <motion.div
                 variants={container}
                 initial="hidden"
                 whileInView="show"
                 viewport={{once: true, amount: 0.2}}
-                className="mx-auto mt-12 grid max-w-6xl grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4"
+                className="mx-auto mt-12 grid max-w-6xl grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3"
             >
                 {features.map((f, i) => (
                     <motion.div
                         key={f.title}
                         variants={fadeUp}
-                        className="group rounded-2xl border border-white/10 bg-[#0B0B0B]/70 p-5 backdrop-blur-sm transition hover:border-white/20 hover:bg-[#0F0F0F]"
+                        className="group rounded-2xl border border-white/10
+                       bg-white/10 p-5 backdrop-blur-md
+                       shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]
+                       transition hover:border-white/20 hover:bg-white/15 hover:backdrop-blur-lg"
                     >
                         <div className="flex items-start gap-3">
-                            <f.icon className="h-5 w-5 shrink-0" aria-hidden/>
+                            <f.icon className="h-5 w-5 shrink-0 text-white/90" aria-hidden/>
                             <div>
                                 <h3 className="font-semibold">{f.title}</h3>
                                 <p className="mt-1 text-sm text-white/70">{f.desc}</p>
                             </div>
                         </div>
 
-                        {/* subtle “explain” animation strip */}
+                        {/* subtle progress line */}
                         <div className="mt-4 h-1 w-full overflow-hidden rounded-full bg-white/5">
                             <motion.div
                                 initial={{width: "0%"}}
                                 whileInView={{width: "100%"}}
                                 viewport={{once: true}}
                                 transition={{duration: 1 + i * 0.05, ease: "easeOut"}}
-                                className="h-full bg-white/30"
+                                className="h-full bg-gradient-to-r from-white/30 to-emerald-300/40"
                             />
                         </div>
 
@@ -194,11 +198,10 @@ export default function ManagedITSection() {
                 initial="hidden"
                 whileInView="show"
                 viewport={{once: true, amount: 0.3}}
-                className="mx-auto mt-10 max-w-3xl rounded-2xl border border-emerald-500/20 bg-emerald-500/5 p-4 text-sm text-emerald-200"
+                className="mx-auto mt-10 max-w-3xl rounded-2xl border border-emerald-500/20 bg-emerald-500/5 p-4 text-sm text-emerald-200 backdrop-blur-sm"
             >
-                We can tailor bundles for startups to mid-market (e.g., “Secure-First”, “Cloud-Native”, or
-                “Compliance-Ready”)
-                and integrate with your existing tools (M365, Google Workspace, Okta, Slack, Jira, Datadog, etc.).
+                We tailor bundles for startups to mid-market (e.g., “Secure-First”, “Cloud-Native”, “Compliance-Ready”)
+                and integrate with your existing tools (Microsoft 365, Google Workspace, Okta, Slack, Jira, Datadog).
             </motion.div>
         </section>
     );

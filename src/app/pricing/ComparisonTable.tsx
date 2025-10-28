@@ -1,18 +1,18 @@
 "use client";
-import {plans} from "@/data/pricing";
+import {plans} from "@/data/planfeatures";
 import {Check, X} from "lucide-react";
 
 const rows: [string, string, string, string][] = [
     // core capacity
     ["AI voice agents", "1", "Up to 2", "Up to 3"],
-    ["Minutes / month", "500", "1,000", "1,500"],
+    ["Included minutes / month", "500", "1,000", "1,500"],
     ["Concurrent calls", "5", "10", "15"],
     // platform features
     ["Call recordings & transcripts", "✓", "✓", "✓"],
     ["DeskApp dashboard", "✓", "✓", "✓"],
     ["Payment links", "—", "✓", "✓"],
     ["CRM integrations", "—", "HubSpot, Pipedrive", "HubSpot, Pipedrive"],
-    ["WhatsApp messages ($/msg)", "$0.10", "$0.10", "$0.10"],
+    ["WhatsApp/Messaging (AUD/msg)", "$0.10", "$0.10", "$0.10"],
     // support & usage
     ["Support SLA", "48–72h", "24–48h", "Priority < 24h"],
     ["Extra minutes (AUD/min)", "$0.30", "$0.25", "$0.20"],

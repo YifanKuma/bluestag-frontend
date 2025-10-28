@@ -3,10 +3,6 @@
 import {
     Globe,
     Mail,
-    CreditCard,
-    BarChart3,
-    Shield,
-    Zap,
     Calendar,
     Video,
     Database,

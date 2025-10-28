@@ -32,7 +32,12 @@ export default function Hero() {
                     <span
                         className="block mt-2 bg-gradient-to-r from-cyan-300 to-blue-400 bg-clip-text text-transparent">
             <RotatingTyped
-                words={["answers", "books", "closes deals", "handles support"]}
+                words={[
+                    "books meetings",
+                    "qualifies leads",
+                    "closes deals",
+                    "supports customers",
+                ]}
                 typingMs={90}
                 backspaceMs={40}
                 holdMs={900}

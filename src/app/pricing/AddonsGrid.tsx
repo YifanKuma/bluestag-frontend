@@ -2,7 +2,7 @@
 
 import {useRef} from "react";
 import {motion} from "framer-motion";
-import {addons} from "./pricing";
+import {addons} from "@/data/planfeatures";
 
 export default function AddonsGrid() {
     const gridRef = useRef<HTMLDivElement>(null);
