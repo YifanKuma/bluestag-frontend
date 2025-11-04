@@ -20,7 +20,7 @@ export default function AboutPage() {
             {/* 📖 content */}
             <section id="about" className="relative z-10 pt-32 pb-24">
                 <div className="mx-auto max-w-6xl px-6 space-y-24">
-                    <OurStory imageSrc="/about-image.png"/>
+                    <OurStory/>
                     <OurVision/>
                     <ContactCTA/>
                 </div>

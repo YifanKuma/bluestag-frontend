@@ -1,5 +1,6 @@
 "use client";
 import {useState} from "react";
+import Link from "next/link"; // ✅ use Next.js Link
 import {AnimatePresence, motion} from "framer-motion";
 
 type QA = { q: string; a: string };
@@ -79,12 +80,13 @@ export default function FAQ() {
             </div>
 
             <div className="mt-8 text-center">
-                <a
+                {/* ✅ Replace <a> with Link for client-side navigation */}
+                <Link
                     href="/contact"
-                    className="inline-flex items-center gap-2 rounded-xl bg-emerald-500 px-5 py-2.5 font-medium text-black hover:bg-emerald-400"
+                    className="inline-flex items-center gap-2 rounded-xl bg-emerald-500 px-5 py-2.5 font-medium text-black hover:bg-emerald-400 transition"
                 >
                     Book a live demo
-                </a>
+                </Link>
             </div>
         </section>
     );

@@ -9,7 +9,7 @@ import {
     Bot, MessageSquare,
     Video, Clapperboard,
     Code2, AppWindow,
-    ShieldCheck, Server, Wrench, Monitor
+    ShieldCheck, Server, Wrench, Monitor, Activity, Headset, Gauge
 } from "lucide-react";
 import {INDUSTRIES} from "@/data/industries";
 import {usePathname, useSearchParams} from "next/navigation";
@@ -28,13 +28,12 @@ const TABS: { key: TabKey; label: string }[] = [
     {key: "chatbot", label: "AI Chatbot"},
     {key: "app", label: "App Development"},
     {key: "social", label: "Social Media Management"},
-    {key: "managed", label: "Management IT Services"},
+    // {key: "managed", label: "AI MSP"},
 ];
 
 export default function ProductTabs() {
     const [activeTab, setActiveTab] = useState<TabKey>("voice");
 
-    // same-selection → smooth scroll to #industry-detail
     const pathname = usePathname();
     const search = useSearchParams();
     const currentSlug = search.get("industry");
@@ -110,10 +109,10 @@ export default function ProductTabs() {
                             </div>
                             <div className="mt-6">
                                 <Link
-                                    href="/contact"
-                                    className="inline-flex items-center gap-2 rounded-xl bg-cyan-500 px-4 py-2 text-sm font-semibold text-slate-900 hover:bg-cyan-400"
+                                    href="/ai-services#voice"
+                                    className="inline-flex items-center gap-2 rounded-xl bg-cyan-500 px-4 py-2 text-sm font-semibold text-slate-900 hover:bg-cyan-400 transition"
                                 >
-                                    Contact for Demo <Play className="h-4 w-4"/>
+                                    Learn More <ChevronRight className="h-4 w-4"/>
                                 </Link>
                             </div>
                         </GlassCard>
@@ -169,9 +168,13 @@ export default function ProductTabs() {
                                     </li>
                                 ))}
                             </ul>
-                            <div
-                                className="mt-6 inline-flex items-center gap-2 rounded-xl bg-cyan-500 px-4 py-2 text-sm font-semibold text-slate-900 hover:bg-cyan-400">
-                                Get a Video Demo <ChevronRight className="h-4 w-4"/>
+                            <div className="mt-6">
+                                <Link
+                                    href="/ai-services#video"
+                                    className="inline-flex items-center gap-2 rounded-xl bg-cyan-500 px-4 py-2 text-sm font-semibold text-slate-900 hover:bg-cyan-400 transition"
+                                >
+                                    Learn More <ChevronRight className="h-4 w-4"/>
+                                </Link>
                             </div>
                         </GlassCard>
 
@@ -213,9 +216,13 @@ export default function ProductTabs() {
                                     </li>
                                 ))}
                             </ul>
-                            <div
-                                className="mt-6 inline-flex items-center gap-2 rounded-xl bg-cyan-500 px-4 py-2 text-sm font-semibold text-slate-900 hover:bg-cyan-400">
-                                Get a Chatbot Demo <ChevronRight className="h-4 w-4"/>
+                            <div className="mt-6">
+                                <Link
+                                    href="/ai-services#chatbot"
+                                    className="inline-flex items-center gap-2 rounded-xl bg-cyan-500 px-4 py-2 text-sm font-semibold text-slate-900 hover:bg-cyan-400 transition"
+                                >
+                                    Learn More <ChevronRight className="h-4 w-4"/>
+                                </Link>
                             </div>
                         </GlassCard>
 
@@ -257,9 +264,13 @@ export default function ProductTabs() {
                                     </li>
                                 ))}
                             </ul>
-                            <div
-                                className="mt-6 inline-flex items-center gap-2 rounded-xl bg-cyan-500 px-4 py-2 text-sm font-semibold text-slate-900 hover:bg-cyan-400">
-                                Start a Build <ChevronRight className="h-4 w-4"/>
+                            <div className="mt-6">
+                                <Link
+                                    href="/ai-services#appdev"
+                                    className="inline-flex items-center gap-2 rounded-xl bg-cyan-500 px-4 py-2 text-sm font-semibold text-slate-900 hover:bg-cyan-400 transition"
+                                >
+                                    Learn More <ChevronRight className="h-4 w-4"/>
+                                </Link>
                             </div>
                         </GlassCard>
 
@@ -301,9 +312,13 @@ export default function ProductTabs() {
                                     </li>
                                 ))}
                             </ul>
-                            <div
-                                className="mt-6 inline-flex items-center gap-2 rounded-xl border border-white/20 px-4 py-2 text-sm">
-                                Book Strategy Call <ChevronRight className="h-4 w-4"/>
+                            <div className="mt-6">
+                                <Link
+                                    href="/ai-services#social"
+                                    className="inline-flex items-center gap-2 rounded-xl bg-cyan-500 px-4 py-2 text-sm font-semibold text-slate-900 hover:bg-cyan-400 transition"
+                                >
+                                    Learn More <ChevronRight className="h-4 w-4"/>
+                                </Link>
                             </div>
                         </GlassCard>
 
@@ -314,43 +329,48 @@ export default function ProductTabs() {
                     </>
                 )}
 
-                {/* Management IT Services */}
+                {/* Managed IT Services / AI Guardian */}
                 {activeTab === "managed" && (
                     <>
                         <GlassCard className="lg:col-span-2 p-6">
-                            <h3 className="text-2xl font-bold">Management IT Services</h3>
-                            <p className="mt-2 text-white/70">
-                                Secure, monitor, and maintain your stack — from endpoints to cloud — with clear SLAs.
+                            <h3 className="text-2xl font-bold text-cyan-400">AI Guardian</h3>
+                            <p className="mt-2 text-white/80">
+                                Meet <span className="font-semibold text-white">AI Guardian</span> — where AI manages
+                                IT.
+                                Unlike traditional MSP tools that wait for problems, AI Guardian thinks ahead.
+                                It learns, predicts, and acts to keep your systems secure, fast, and compliant.
                             </p>
                             <ul className="mt-4 space-y-2 text-sm text-white/80">
                                 {[
-                                    {icon: ShieldCheck, text: "Security: patching, AV/EDR, backups, least-privilege"},
-                                    {icon: Monitor, text: "24/7 monitoring: uptime, health checks, alerts"},
-                                    {icon: Server, text: "Cloud & server administration (AWS/Azure/Proxmox)"},
-                                    {icon: Wrench, text: "Helpdesk & device lifecycle (procurement → disposal)"},
+                                    {icon: Activity, text: "AI-Powered Monitoring & Predictive Maintenance"},
+                                    {icon: ShieldCheck, text: "Security, Compliance & Backup Intelligence"},
+                                    {icon: Headset, text: "AI Helpdesk with Automated Ticketing"},
+                                    {icon: Gauge, text: "Smart Dashboard & Workflow Automations"},
                                 ].map(({icon: Icon, text}) => (
                                     <li key={text} className="flex items-center gap-2">
-                                        <Icon className="h-4 w-4"/> {text}
+                                        <Icon className="h-4 w-4 text-cyan-400"/> {text}
                                     </li>
                                 ))}
                             </ul>
-                            <div
-                                className="mt-6 inline-flex items-center gap-2 rounded-xl bg-cyan-500 px-4 py-2 text-sm font-semibold text-slate-900 hover:bg-cyan-400">
-                                Discuss a Managed Plan <ChevronRight className="h-4 w-4"/>
-                            </div>
+                            <Link
+                                href="/ai-services#managed"
+                                className="mt-6 inline-flex items-center gap-2 rounded-xl bg-cyan-500 px-4 py-2 text-sm font-semibold text-slate-900 hover:bg-cyan-400 transition"
+                            >
+                                Learn More <ChevronRight className="h-4 w-4"/>
+                            </Link>
                         </GlassCard>
 
                         <GlassCard className="p-6">
-                            <h4 className="text-lg font-semibold">What’s included</h4>
+                            <h4 className="text-lg font-semibold text-cyan-400">Why Businesses Choose AI Guardian</h4>
                             <ul className="mt-3 space-y-2 text-sm text-white/80">
                                 {[
-                                    "IT asset & license management",
-                                    "User onboarding/offboarding",
-                                    "Backup & disaster recovery drills",
-                                    "Compliance-first configurations",
+                                    "Predicts and resolves issues before downtime.",
+                                    "24/7 AI-driven monitoring and optimization.",
+                                    "Reduced IT workload through automation.",
+                                    "Complete visibility across every endpoint.",
                                 ].map((t) => (
                                     <li key={t} className="flex items-center gap-2">
-                                        <Check className="h-4 w-4"/> {t}
+                                        <Check className="h-4 w-4 text-cyan-400"/> {t}
                                     </li>
                                 ))}
                             </ul>

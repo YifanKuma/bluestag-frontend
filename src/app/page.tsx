@@ -9,9 +9,6 @@ import Languages from "@/components/Languages";
 import UseCaseCarousel from "@/components/UseCaseCarousel";
 import IntegrationsSection from "@/components/IntegrationsSection";
 
-// client-only cursor glow
-import ClientCursorGlow from "@/components/ClientCursorGlow";
-
 // If you know a component below uses useSearchParams/usePathname,
 // import and wrap *that* one with Suspense (examples shown).
 // e.g., ProductTabs may read ?plan from the URL.
@@ -19,9 +16,6 @@ import ClientCursorGlow from "@/components/ClientCursorGlow";
 export default function Page() {
     return (
         <main className="relative min-h-screen text-white pt-16">
-            {/* 💫 Local cursor glow (client) */}
-            <ClientCursorGlow/>
-
             {/* 🧭 Navbar */}
             <Navbar/>
 
@@ -47,15 +41,6 @@ export default function Page() {
             {/* 💼 Why Choose Bluestag AI */}
             <section id="use-cases-grid" data-bg={1} className="relative z-10">
                 <UseCasesGrid/>
-            </section>
-
-            {/* 🧠 What is Agentic AI */}
-            <section id="what-is-agentic-ai" data-bg={1} className="relative z-10 py-24 px-6 md:px-12">
-                <div className="max-w-6xl mx-auto">
-                    {/* If these read URL, wrap them, otherwise leave as-is */}
-                    {/* <Suspense fallback={null}><WhatIsAgent /></Suspense> */}
-                    {/* <Suspense fallback={null}><AgentArchitecture /></Suspense> */}
-                </div>
             </section>
 
             {/* 🔌 Integrations */}

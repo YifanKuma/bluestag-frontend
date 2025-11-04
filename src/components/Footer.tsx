@@ -4,7 +4,7 @@ import {Linkedin, Instagram, Facebook} from "lucide-react";
 import {INDUSTRIES} from "@/data/industries";
 
 const company = [
-    {label: "Blog", href: "/blog"},
+    {label: "Blog", href: "/under-construction"},
     {label: "Pricing", href: "/pricing"},
     {label: "Book a Demo", href: "/contact"},
 ];
@@ -110,7 +110,7 @@ export default function Footer() {
                     <div className="flex flex-col items-start justify-between gap-4 md:flex-row md:items-center">
                         <p className="text-neutral-400">© {year} Bluestag AI. All rights reserved.</p>
                         <nav className="flex flex-wrap items-center gap-x-8 gap-y-3 text-neutral-300">
-                            <Link href="/terms" className="transition hover:text-white" prefetch={false}>
+                            <Link href="/under-construction" className="transition hover:text-white" prefetch={false}>
                                 Terms & Conditions
                             </Link>
                             <Link href="/privacy-policy" className="transition hover:text-white" prefetch={false}>

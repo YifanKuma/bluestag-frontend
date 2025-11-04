@@ -44,7 +44,7 @@ export const INDUSTRIES: Industry[] = [
             {actor: "Customer", text: "1:15pm works."},
             {actor: "Agent", text: "Locked in! I’ve sent a calendar invite and directions. See you then."},
         ],
-        cta: {href: "/contact", label: "Book a real estate demo"},
+        cta: {href: "/contact", label: "Learn more from us"},
     },
     {
         id: "retail",
@@ -62,7 +62,7 @@ export const INDUSTRIES: Industry[] = [
             {actor: "Customer", text: "Can I change the drop-off time to after 5pm?"},
             {actor: "Agent", text: "Done. Delivery updated to 5–7pm window. You’ll receive a confirmation SMS."},
         ],
-        cta: {href: "/ai-services", label: "See commerce automations"},
+        cta: {href: "/ai-services", label: "Learn more from us"},
     },
     {
         id: "payments",
@@ -83,7 +83,7 @@ export const INDUSTRIES: Industry[] = [
             {actor: "Customer", text: "Yes, please send."},
             {actor: "Agent", text: "Link sent. I’ll confirm once it’s completed. Thanks!"},
         ],
-        cta: {href: "/contact", label: "Discuss payment flows"},
+        cta: {href: "/contact", label: "Learn more from us"},
     },
     {
         id: "logistics",
@@ -101,7 +101,7 @@ export const INDUSTRIES: Industry[] = [
             {actor: "Customer", text: "Need to move to Friday morning."},
             {actor: "Agent", text: "Rescheduled to Friday 9–11am. You’ll get a reminder 1 hour before."},
         ],
-        cta: {href: "/contact", label: "Optimize last-mile calls"},
+        cta: {href: "/contact", label: "Learn more from us"},
     },
     {
         id: "support",
@@ -120,7 +120,7 @@ export const INDUSTRIES: Industry[] = [
             {actor: "Customer", text: "Pause please."},
             {actor: "Agent", text: "Done through next month. I’ve emailed the confirmation."},
         ],
-        cta: {href: "/ai-services", label: "See support automations"},
+        cta: {href: "/ai-services", label: "Learn more from us"},
     },
     {
         id: "healthcare",
@@ -140,7 +140,7 @@ export const INDUSTRIES: Industry[] = [
             },
             {actor: "Customer", text: "All good, thanks!"},
         ],
-        cta: {href: "/contact", label: "Talk healthcare workflows"},
+        cta: {href: "/contact", label: "Learn more from us"},
     },
     {
         id: "education",
@@ -161,6 +161,6 @@ export const INDUSTRIES: Industry[] = [
             {actor: "Customer", text: "Yes, Thursday afternoon works."},
             {actor: "Agent", text: "Booked for 2:30pm Thu with Admissions. I’ve sent a calendar invite and checklist."},
         ],
-        cta: {href: "/contact", label: "See edu admissions demo"},
+        cta: {href: "/contact", label: "Learn more from us"},
     },
 ];

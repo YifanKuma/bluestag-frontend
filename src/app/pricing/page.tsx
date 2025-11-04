@@ -9,7 +9,7 @@ import AddonsGrid from "@/app/pricing/AddonsGrid";
 import FAQ from "@/app/pricing/FAQ";
 
 export default function PricingPage() {
-    const [annual, setAnnual] = useState(true);
+    const [annual, setAnnual] = useState(false);
 
     const onSelectPlanAction = () => {
         window.location.href = "/contact";

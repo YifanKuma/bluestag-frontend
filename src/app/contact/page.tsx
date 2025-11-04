@@ -1,18 +1,24 @@
 "use client";
 
 import {motion} from "framer-motion";
+import {usePathname} from "next/navigation";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import BlueGlowBackground from "@/components/BlueGlowBackground";
-
 import ContactInfo from "./ContactInfo";
 import ContactForm from "./ContactForm";
 import SuccessToast from "./SuccessToast";
 import AutofillFixStyle from "./AutofillFixStyle";
 
 export default function Page() {
+    // ✅ force remount on route change to prevent stale animations
+    const pathname = usePathname();
+
     return (
-        <main className="relative min-h-screen text-white pt-16 overflow-hidden">
+        <main
+            key={pathname}
+            className="relative min-h-screen text-white pt-16 overflow-hidden flex flex-col"
+        >
             <BlueGlowBackground/>
             <Navbar/>
 
@@ -32,8 +38,8 @@ export default function Page() {
                     transition={{duration: 0.8}}
                     className="text-gray-400 text-lg"
                 >
-                    Whether you’re curious about features, a demo, or partnership opportunities — we’re here to help
-                    your business scale with Voice&nbsp;AI.
+                    Whether you’re curious about features, a demo, or partnership opportunities —
+                    we’re here to help your business scale with Voice&nbsp;AI.
                 </motion.p>
             </section>
 

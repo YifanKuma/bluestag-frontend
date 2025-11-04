@@ -1,122 +1,44 @@
 "use client";
 
-import Image from "next/image";
 import {motion} from "framer-motion";
 
-type Props = {
-    /** Optional image URL. If omitted, a stylish placeholder appears. */
-    imageSrc?: string;
-    imageAlt?: string;
-};
-
-export default function OurStory({imageSrc, imageAlt = "Bluestag team"}: Props) {
+export default function OurStory() {
     return (
         <section id="our-story" className="relative">
-            {/* decorative glow */}
+            {/* decorative glows */}
             <div
                 className="pointer-events-none absolute -top-24 -left-24 h-72 w-72 rounded-full bg-sky-500/15 blur-3xl"/>
             <div
                 className="pointer-events-none absolute -bottom-24 -right-24 h-72 w-72 rounded-full bg-emerald-500/15 blur-3xl"/>
 
-            <div className="grid items-start gap-10 md:grid-cols-2">
-                {/* copy */}
-                <div className="space-y-6">
-                    <motion.h2
-                        initial={{opacity: 0, y: 12}}
-                        whileInView={{opacity: 1, y: 0}}
-                        viewport={{once: true}}
-                        transition={{duration: 0.5}}
-                        className="text-3xl md:text-4xl font-extrabold tracking-tight"
-                    >
-            <span className="bg-gradient-to-r from-white to-white/60 bg-clip-text text-transparent">
-              Our Story
-            </span>
-                    </motion.h2>
-
-                    <motion.p
-                        initial={{opacity: 0, y: 16}}
-                        whileInView={{opacity: 1, y: 0}}
-                        viewport={{once: true}}
-                        transition={{delay: 0.05, duration: 0.5}}
-                        className="text-white/85 leading-relaxed"
-                    >
-                        Bluestag AI began with a clear belief: automation should <em>elevate</em> people,
-                        never replace them. That principle drives our agentic AI—natural-sounding voice
-                        agents that handle routine work with care, speed, and accuracy.
-                    </motion.p>
-
-                    <motion.p
-                        initial={{opacity: 0, y: 16}}
-                        whileInView={{opacity: 1, y: 0}}
-                        viewport={{once: true}}
-                        transition={{delay: 0.1, duration: 0.5}}
-                        className="text-white/80 leading-relaxed"
-                    >
-                        From first prototypes to production systems, we’ve obsessed over reliability,
-                        safety, and feel. The result is technology that blends empathy with engineering—
-                        so businesses serve customers faster while feeling more human.
-                    </motion.p>
-
-                    {/* small badges */}
-                    <motion.div
-                        initial={{opacity: 0}}
-                        whileInView={{opacity: 1}}
-                        viewport={{once: true}}
-                        transition={{delay: 0.15}}
-                        className="flex flex-wrap gap-2 pt-2"
-                    >
-                        {[
-                            "Agentic AI",
-                            "Human-centred design",
-                            "Security-first",
-                            "AU-ready"
-                        ].map((t) => (
-                            <span
-                                key={t}
-                                className="rounded-full border border-white/15 bg-white/5 px-3 py-1 text-xs text-white/80 backdrop-blur"
-                            >
-                {t}
-              </span>
-                        ))}
-                    </motion.div>
-                </div>
-
-                {/* image / upload placeholder */}
+            <div className="relative z-10 mx-auto max-w-6xl px-6 grid md:grid-cols-2 gap-10 items-center">
+                {/* Text block */}
                 <motion.div
-                    initial={{opacity: 0, y: 10}}
-                    whileInView={{opacity: 1, y: 0}}
+                    initial={{opacity: 0, x: -30}}
+                    whileInView={{opacity: 1, x: 0}}
                     viewport={{once: true}}
-                    transition={{duration: 0.5}}
-                    className="relative"
+                    transition={{duration: 0.6}}
+                >
+                    <h2 className="text-4xl font-bold mb-6">Our Story</h2>
+                    <p className="text-gray-300 leading-relaxed">
+                        Bluestag AI began with a mission to empower businesses through
+                        intelligent automation and creativity. Our journey combines
+                        technology, innovation, and a human touch to make AI approachable
+                        and powerful for everyone.
+                    </p>
+                </motion.div>
+
+                {/* Image block (CSS background like ContactInfo) */}
+                <motion.div
+                    initial={{opacity: 0, x: 30}}
+                    whileInView={{opacity: 1, x: 0}}
+                    viewport={{once: true}}
+                    transition={{duration: 0.6}}
+                    className="rounded-2xl overflow-hidden relative h-72 sm:h-80 md:h-96 bg-cover bg-center border border-white/10 shadow-[0_0_20px_rgba(56,189,248,0.15)]"
+                    style={{backgroundImage: "url('/about-image.jpg')"}} // ✅ same as contact page
                 >
                     <div
-                        className="group relative overflow-hidden rounded-2xl border border-white/10 bg-white/5 backdrop-blur-sm shadow-[0_20px_60px_rgba(0,0,0,0.35)]">
-                        {/* gradient highlight */}
-                        <div
-                            className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,rgba(56,189,248,0.15),transparent_40%),radial-gradient(ellipse_at_bottom_left,rgba(16,185,129,0.12),transparent_45%)]"/>
-                        {imageSrc ? (
-                            <Image
-                                src={imageSrc}
-                                alt={imageAlt}
-                                width={1200}
-                                height={900}
-                                priority={false}
-                                className="relative block h-[340px] w-full object-cover"
-                            />
-                        ) : (
-                            <div className="relative grid h-[340px] w-full place-items-center">
-                                <div className="rounded-xl border-2 border-dashed border-white/20 p-6 text-center">
-                                    <p className="text-sm text-white/80">
-                                        Photo placeholder — <span className="text-white">add your image</span>
-                                    </p>
-                                    <p className="mt-1 text-xs text-white/60">
-                                        Pass <code>imageSrc</code> to <code>{"<OurStory />"}</code> or swap this block
-                                        with your uploader.
-                                    </p>
-                                </div>
-                            </div>
-                        )}
-                    </div>
+                        className="absolute inset-0 bg-gradient-to-t from-[#0b1120]/80 via-[#0b1120]/30 to-transparent"/>
                 </motion.div>
             </div>
         </section>

@@ -25,21 +25,11 @@ export default function ContactCTA() {
                 <div className="mt-6 flex flex-wrap gap-3">
                     <Magnetic>
                         <Link
-                            href="/#demo"
+                            href="/contact"
                             className="inline-flex items-center gap-2 px-5 py-3 rounded-xl border border-white/20
                          bg-white/10 hover:bg-white/20 transition"
                         >
-                            Book a demo <ArrowRight className="w-4 h-4"/>
-                        </Link>
-                    </Magnetic>
-
-                    <Magnetic>
-                        <Link
-                            href="/contact"
-                            className="inline-flex items-center gap-2 px-5 py-3 rounded-xl border border-white/10
-                         hover:border-white/30 transition"
-                        >
-                            Contact us
+                            Contact us <ArrowRight className="w-4 h-4"/>
                         </Link>
                     </Magnetic>
                 </div>

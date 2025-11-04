@@ -1,13 +1,13 @@
 "use client";
 
-import {useCallback, useMemo, useState} from "react";
+import {useEffect, useMemo, useState, useCallback} from "react";
 import {motion, AnimatePresence} from "framer-motion";
 import VoiceAISection from "@/app/ai-services/sections/VoiceAISection";
 import VideoAISection from "@/app/ai-services/sections/VideoAISection";
 import AIChatbotSection from "@/app/ai-services/sections/AIChatbotSection";
 import AppDevSection from "@/app/ai-services/sections/AppDevSection";
 import SocialMediaSection from "@/app/ai-services/sections/SocialMediaSection";
-import ManagedITSection from "@/app/ai-services/sections/ManagedITSection";
+import AIMSPSection from "@/app/ai-services/sections/AIMSPSection";
 
 type TabKey = "voice" | "video" | "chatbot" | "appdev" | "social" | "managed";
 
@@ -17,11 +17,46 @@ const TABS: { key: TabKey; label: string }[] = [
     {key: "chatbot", label: "AI Chatbot"},
     {key: "appdev", label: "App Development"},
     {key: "social", label: "Social Media Management"},
-    {key: "managed", label: "AI MSP"},
+    // {key: "managed", label: "AI MSP"},
 ];
 
 export default function ServicesSwitcher() {
+    // Wait until client-side to read hash
+    const [hydrated, setHydrated] = useState(false);
     const [active, setActive] = useState<TabKey>("voice");
+
+    // ✅ Run only once after hydration
+    useEffect(() => {
+        setHydrated(true);
+
+        const currentHash = window.location.hash.replace("#", "");
+        if (currentHash && TABS.some(t => t.key === currentHash)) {
+            setActive(currentHash as TabKey);
+        }
+    }, []);
+
+    // ✅ Watch for future hash changes (e.g., internal links)
+    useEffect(() => {
+        const handleHashChange = () => {
+            const hash = window.location.hash.replace("#", "");
+            if (hash && TABS.some(t => t.key === hash)) {
+                setActive(hash as TabKey);
+            }
+        };
+        window.addEventListener("hashchange", handleHashChange);
+        return () => window.removeEventListener("hashchange", handleHashChange);
+    }, []);
+
+    // ✅ Update URL when tab changes manually
+    useEffect(() => {
+        if (hydrated) {
+            const newHash = `#${active}`;
+            if (window.location.hash !== newHash) {
+                window.history.replaceState(null, "", newHash);
+            }
+        }
+    }, [active, hydrated]);
+
     const idx = useMemo(() => TABS.findIndex(t => t.key === active), [active]);
 
     const onKeyDown = useCallback(
@@ -35,11 +70,14 @@ export default function ServicesSwitcher() {
         [idx]
     );
 
+    // ⏳ Prevent mismatch: render nothing until hydration completes
+    if (!hydrated) return null;
+
     return (
         <div className="mx-auto max-w-7xl px-4">
             {/* Tabs */}
             <div
-                className="relative mb-12 grid grid-cols-6 overflow-hidden rounded-2xl border border-white/10 bg-white/5 p-1"
+                className="relative mb-12 grid grid-cols-5 overflow-hidden rounded-2xl border border-white/10 bg-white/5 p-1"
                 role="tablist"
                 aria-label="Service Tabs"
                 tabIndex={0}
@@ -65,7 +103,7 @@ export default function ServicesSwitcher() {
                     );
                 })}
 
-                {/* Animated Active Indicator */}
+                {/* Indicator */}
                 <motion.span
                     layout
                     transition={{type: "spring", stiffness: 400, damping: 30}}
@@ -87,36 +125,12 @@ export default function ServicesSwitcher() {
                         exit={{opacity: 0, y: -8}}
                         transition={{duration: 0.35}}
                     >
-                        {active === "voice" && (
-                            <div id="panel-voice" role="tabpanel" aria-labelledby="tab-voice">
-                                <VoiceAISection/>
-                            </div>
-                        )}
-                        {active === "video" && (
-                            <div id="panel-video" role="tabpanel" aria-labelledby="tab-video">
-                                <VideoAISection/>
-                            </div>
-                        )}
-                        {active === "chatbot" && (
-                            <div id="panel-chatbot" role="tabpanel" aria-labelledby="tab-chatbot">
-                                <AIChatbotSection/>
-                            </div>
-                        )}
-                        {active === "appdev" && (
-                            <div id="panel-appdev" role="tabpanel" aria-labelledby="tab-appdev">
-                                <AppDevSection/>
-                            </div>
-                        )}
-                        {active === "social" && (
-                            <div id="panel-social" role="tabpanel" aria-labelledby="tab-social">
-                                <SocialMediaSection/>
-                            </div>
-                        )}
-                        {active === "managed" && (
-                            <div id="panel-managed" role="tabpanel" aria-labelledby="tab-managed">
-                                <ManagedITSection/>
-                            </div>
-                        )}
+                        {active === "voice" && <VoiceAISection/>}
+                        {active === "video" && <VideoAISection/>}
+                        {active === "chatbot" && <AIChatbotSection/>}
+                        {active === "appdev" && <AppDevSection/>}
+                        {active === "social" && <SocialMediaSection/>}
+                        {active === "managed" && <AIMSPSection/>}
                     </motion.div>
                 </AnimatePresence>
             </div>
