@@ -1,13 +1,26 @@
 "use client";
+
 import {motion} from "framer-motion";
 import BillingToggle from "@/app/pricing/BillingToggle";
 
 type Props = {
     annual: boolean;
-    onToggleAction: (next: boolean) => void; // ✅ renamed
+    onToggleAction: (next: boolean) => void;
+
+    title: string;            // ⬅ NEW
+    subtitle: string;         // ⬅ NEW
+    labelMonthly: string;     // ⬅ NEW
+    labelAnnual: string;      // ⬅ NEW
 };
 
-export default function PricingHero({annual, onToggleAction}: Props) {
+export default function PricingHero({
+                                        annual,
+                                        onToggleAction,
+                                        title,
+                                        subtitle,
+                                        labelMonthly,
+                                        labelAnnual
+                                    }: Props) {
     return (
         <section className="relative z-10 mx-auto max-w-6xl px-6 pt-20 pb-10 text-center">
             <motion.h1
@@ -16,7 +29,7 @@ export default function PricingHero({annual, onToggleAction}: Props) {
                 transition={{duration: 0.5}}
                 className="text-4xl md:text-5xl font-bold tracking-tight"
             >
-                Simple pricing for voice AI that <span className="text-emerald-400">scales</span>
+                {title}
             </motion.h1>
 
             <motion.p
@@ -25,11 +38,11 @@ export default function PricingHero({annual, onToggleAction}: Props) {
                 transition={{delay: 0.1, duration: 0.5}}
                 className="mx-auto mt-3 max-w-2xl text-white/70"
             >
-                All plans include Australian numbers, call recordings, transcripts, and analytics. Switch anytime.
+                {subtitle}
             </motion.p>
 
             <div className="mt-6 flex justify-center">
-                <BillingToggle annual={annual} onToggleAction={onToggleAction}/> {/* ✅ */}
+                <BillingToggle annual={annual} onToggleAction={onToggleAction}/>
             </div>
         </section>
     );

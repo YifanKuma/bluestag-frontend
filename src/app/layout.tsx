@@ -1,17 +1,25 @@
-// app/layout.tsx
+"use client";
+
 import type {ReactNode} from "react";
 import "./globals.css";
-import PerformanceProvider from "@/components/PerformanceProvider";
-import GlobalBackgrounds from "@/components/GlobalBackgrounds"; // ← import client component
+
+import GlobalBackgrounds from "@/components/effects/GlobalBackgrounds";
+import ClientErrorLogger from "@/components/ClientErrorLogger";
 
 export default function RootLayout({children}: { children: ReactNode }) {
     return (
         <html lang="en">
         <body className="relative min-h-screen text-white overflow-x-hidden">
-        <PerformanceProvider>
-            <GlobalBackgrounds/>
-            <div className="relative z-10">{children}</div>
-        </PerformanceProvider>
+        {/* Global error listener */}
+        <ClientErrorLogger/>
+
+        {/* 🌌 All full GPU effects enabled */}
+        <GlobalBackgrounds/>
+
+        {/* 🚀 Your app content */}
+        <div className="relative z-10">
+            {children}
+        </div>
         </body>
         </html>
     );

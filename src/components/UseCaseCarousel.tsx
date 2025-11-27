@@ -2,123 +2,81 @@
 
 import {useState, useEffect} from "react";
 import {motion, AnimatePresence} from "framer-motion";
-import {
-    PhoneCall,
-    Headphones,
-    Home,
-    CreditCard,
-    GraduationCap,
-    Heart,
-    Briefcase,
-    DollarSign,
-    Users,
-} from "lucide-react";
+import {PRODUCT_ICON_MAP} from "@/data/product";
+import type {UseCase} from "@/types/home-page";
 
-const useCases = [
-    {
-        icon: <PhoneCall size={44}/>,
-        title: "Sales Outreach",
-        desc: "Autodial prospects, qualify leads, and book meetings automatically.",
-    },
-    {
-        icon: <Headphones size={44}/>,
-        title: "Customer Service",
-        desc: "Provide instant answers, handle complaints, and boost satisfaction.",
-    },
-    {
-        icon: <Home size={44}/>,
-        title: "Real Estate",
-        desc: "Pre-qualify buyers, schedule inspections, and manage follow-ups.",
-    },
-    {
-        icon: <DollarSign size={44}/>,
-        title: "Investment Advisory",
-        desc: "Engage investors and automate updates with human-like voice clarity.",
-    },
-    {
-        icon: <CreditCard size={44}/>,
-        title: "Payment Collection",
-        desc: "Send secure payment links and automate overdue follow-ups.",
-    },
-    {
-        icon: <GraduationCap size={44}/>,
-        title: "Training & Education",
-        desc: "Conduct voice-driven lessons, quizzes, and reminders for learners.",
-    },
-    {
-        icon: <Heart size={44}/>,
-        title: "Counselling & Wellbeing",
-        desc: "Offer compassionate, AI-powered emotional support conversations.",
-    },
-    {
-        icon: <Briefcase size={44}/>,
-        title: "Recruitment & HR",
-        desc: "Screen candidates and automate interview scheduling instantly.",
-    },
-    {
-        icon: <Users size={44}/>,
-        title: "Community Engagement",
-        desc: "Call members for event reminders and collect feedback efficiently.",
-    },
-];
-
-export default function UseCaseCarousel() {
+export default function UseCaseCarousel({items}: { items: UseCase[] }) {
     const [index, setIndex] = useState(0);
 
     useEffect(() => {
         const timer = setInterval(() => {
-            setIndex((prev) => (prev + 1) % useCases.length);
+            setIndex((prev) => (prev + 1) % items.length);
         }, 3500);
         return () => clearInterval(timer);
-    }, []);
+    }, [items.length]);
 
     return (
-        <section className="relative py-28 text-white overflow-visible">
-            <h2 className="text-5xl font-extrabold text-center mb-14">
-                What can Bluestag Voice AI do?
+        <section className="relative py-20 text-white overflow-hidden px-4 sm:px-6">
+            <h2 className="text-3xl sm:text-5xl font-extrabold text-center mb-10 leading-snug">
+                What can Bluestag <br className="sm:hidden"/> Voice AI do?
             </h2>
 
-            <div className="flex justify-center items-center relative h-[420px] md:h-[480px]">
-                {useCases.map((useCase, i) => {
-                    const offset = (i - index + useCases.length) % useCases.length;
+            <div className="flex justify-center items-center relative h-[360px] sm:h-[460px]">
+                {items.map((useCase, i) => {
+                    const offset = (i - index + items.length) % items.length;
                     const center = offset === 0;
-                    const left = offset === useCases.length - 1;
+                    const left = offset === items.length - 1;
                     const right = offset === 1;
 
                     let x = 0;
                     let scale = 1;
                     let opacity = 1;
 
+                    const isLargeScreen =
+                        typeof window !== "undefined" && window.innerWidth >= 1024;
+                    const sideOffset = isLargeScreen ? 340 : 250;
+
                     if (left) {
-                        x = -360;
-                        scale = 0.8;
-                        opacity = 0.4;
+                        x = -sideOffset;
+                        scale = 0.85;
+                        opacity = 0.55;
                     } else if (right) {
-                        x = 360;
-                        scale = 0.8;
-                        opacity = 0.4;
+                        x = sideOffset;
+                        scale = 0.85;
+                        opacity = 0.55;
                     } else if (!center) {
                         opacity = 0;
                         scale = 0.6;
                     }
 
+                    const Icon = PRODUCT_ICON_MAP[useCase.icon_key];
+
                     return (
                         <AnimatePresence key={i}>
-                            {Math.abs(offset) <= 1 || offset === useCases.length - 1 ? (
+                            {(Math.abs(offset) <= 1 ||
+                                offset === items.length - 1) && (
                                 <motion.div
                                     key={i}
                                     initial={{opacity: 0, scale: 0.7}}
                                     animate={{x, scale, opacity}}
                                     transition={{duration: 0.8, ease: "easeInOut"}}
-                                    className={`absolute w-[420px] h-[340px] rounded-3xl backdrop-blur bg-white/10 border border-white/10 shadow-2xl text-center p-10 flex flex-col justify-center items-center ${
+                                    className={`absolute w-[85vw] max-w-[380px] h-[280px] sm:w-[420px] sm:h-[340px] rounded-2xl backdrop-blur bg-white/10 border border-white/10 shadow-xl text-center p-6 sm:p-10 flex flex-col justify-center items-center ${
                                         center ? "z-20" : "z-10"
                                     }`}
                                 >
-                                    <div className="mb-5 text-blue-400">{useCase.icon}</div>
-                                    <h3 className="text-2xl font-bold mb-3">{useCase.title}</h3>
-                                    <p className="text-base text-gray-300">{useCase.desc}</p>
+                                    <div className="mb-4 text-sky-400">
+                                        {Icon && <Icon size={36}/>}
+                                    </div>
+
+                                    <h3 className="text-xl sm:text-2xl font-bold mb-2">
+                                        {useCase.title}
+                                    </h3>
+
+                                    <p className="text-sm sm:text-base text-gray-300 leading-relaxed">
+                                        {useCase.desc}
+                                    </p>
                                 </motion.div>
-                            ) : null}
+                            )}
                         </AnimatePresence>
                     );
                 })}

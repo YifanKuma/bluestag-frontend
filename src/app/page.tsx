@@ -1,62 +1,67 @@
-import {Suspense} from "react";
-
-import Navbar from "@/components/Navbar";
-import Footer from "@/components/Footer";
+import {getHomePage} from "@/lib/strapi";
 import Hero from "@/components/Hero";
 import ProductTabs from "@/components/ProductTabs";
-import UseCasesGrid from "@/components/UseCasesGrid";
-import Languages from "@/components/Languages";
 import UseCaseCarousel from "@/components/UseCaseCarousel";
+import UseCasesGrid from "@/components/UseCasesGrid";
 import IntegrationsSection from "@/components/IntegrationsSection";
+import Languages from "@/components/Languages";
+import Navbar from "@/components/Navbar";
+import Footer from "@/components/Footer";
 
-// If you know a component below uses useSearchParams/usePathname,
-// import and wrap *that* one with Suspense (examples shown).
-// e.g., ProductTabs may read ?plan from the URL.
+export default async function Page() {
+    const home = await getHomePage();
 
-export default function Page() {
+
+    // ✅ Prevent null crash (fixes right panel disappearing)
+    if (!home) {
+        return (
+            <main className="min-h-screen text-white flex items-center justify-center">
+                <p className="text-white/60 text-lg">
+                    Failed to load homepage content. Please try again.
+                </p>
+            </main>
+        );
+    }
+
     return (
         <main className="relative min-h-screen text-white pt-16">
-            {/* 🧭 Navbar */}
             <Navbar/>
 
-            {/* 🚀 Hero Section */}
-            <section id="hero" data-bg={0} className="relative z-10">
-                <Hero/>
+            <section id="hero" data-bg={0}>
+                <Hero
+                    title={home.hero_title}
+                    subtitle={home.hero_subtitle}
+                    description={home.hero_description}
+                    rotatingWords={home.hero_rotating_words}
+                    kpis={home.hero_kpis}
+                />
             </section>
 
-            {/* 🧩 Product Section (wrap if it reads URL/search params) */}
-            <section id="product" data-bg={1} className="relative z-10">
-                <Suspense fallback={null}>
-                    <ProductTabs/>
-                </Suspense>
+            <section id="product" data-bg={1}>
+                <ProductTabs
+                    tabs={home.product_tabs}
+                    industries={home.industries}
+                />
             </section>
 
-            {/* 🎠 Use Case Carousel (wrap if it reads URL/search params) */}
-            <section id="use-cases-carousel" data-bg={1} className="relative z-10">
-                <Suspense fallback={null}>
-                    <UseCaseCarousel/>
-                </Suspense>
+            <section id="carousel" data-bg={1}>
+                <UseCaseCarousel items={home.carousel_items}/>
             </section>
 
-            {/* 💼 Why Choose Bluestag AI */}
-            <section id="use-cases-grid" data-bg={1} className="relative z-10">
-                <UseCasesGrid/>
+            <section id="use-cases" data-bg={1}>
+                <UseCasesGrid items={home.use_cases}/>
+
             </section>
 
-            {/* 🔌 Integrations */}
-            <section id="integrations" data-bg={2} className="relative z-10">
-                <IntegrationsSection/>
+            <section id="integrations" data-bg={2}>
+                <IntegrationsSection items={home.integrations}/>
             </section>
 
-            {/* 🌍 Languages */}
-            <section id="languages" data-bg={3} className="relative z-10">
-                <Languages/>
+            <section id="languages" data-bg={3}>
+                <Languages items={home.languages}/>
             </section>
 
-            {/* ⚙️ Footer */}
-            <section id="footer" data-bg={4} className="relative z-10">
-                <Footer/>
-            </section>
+            <Footer/>
         </main>
     );
 }

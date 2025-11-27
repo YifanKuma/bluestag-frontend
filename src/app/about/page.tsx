@@ -1,33 +1,37 @@
-import type {Metadata} from "next";
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
-import OurStory from "@/app/about/OurStory";
-import OurVision from "@/app/about/OurVision";
-import ContactCTA from "@/app/about/ContactCTA";
+import OurStory from "./OurStory";
+import OurVision from "./OurVision";
+import ContactCTA from "./ContactCTA";
+import { getAboutPage } from "@/lib/strapi";
 
-export const metadata: Metadata = {
-    title: "About Us | Bluestag AI",
-    description:
-        "Learn how Bluestag AI started and where we’re headed next.",
-};
+export default async function AboutPage() {
+    const data = await getAboutPage();
 
-export default function AboutPage() {
+    if (!data) {
+        return (
+            <main className="min-h-screen flex items-center justify-center text-red-400 text-xl">
+                ⚠️ Failed to load About page data
+            </main>
+        );
+    }
+
     return (
         <main className="relative min-h-screen text-white overflow-hidden">
-            {/* 🧭 header */}
-            <Navbar/>
+            <Navbar />
 
-            {/* 📖 content */}
             <section id="about" className="relative z-10 pt-32 pb-24">
                 <div className="mx-auto max-w-6xl px-6 space-y-24">
-                    <OurStory/>
-                    <OurVision/>
-                    <ContactCTA/>
+                    <OurStory data={data} />
+                    <OurVision data={data} />
+                    <ContactCTA data={data} />
                 </div>
             </section>
 
-            {/* 🔚 footer */}
-            <Footer/>
+            <Footer />
         </main>
     );
 }

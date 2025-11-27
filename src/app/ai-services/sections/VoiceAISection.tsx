@@ -3,10 +3,19 @@
 import {motion, AnimatePresence, useInView} from "framer-motion";
 import type {Variants} from "framer-motion";
 import {useEffect, useRef, useState} from "react";
+import type {VoiceAIData, VoiceAIStat} from "@/types/voice-ai";
 
-// ───────────────────────────────── CountUp (numeric only)
-function CountUp({end, duration = 1.0, suffix = "", prefix = ""}: {
-    end: number; duration?: number; suffix?: string; prefix?: string;
+/* -------------------------------- CountUp -------------------------------- */
+function CountUp({
+                     end,
+                     duration = 1.0,
+                     suffix = "",
+                     prefix = "",
+                 }: {
+    end: number;
+    duration?: number;
+    suffix?: string;
+    prefix?: string;
 }) {
     const ref = useRef<HTMLSpanElement | null>(null);
     const inView = useInView(ref, {once: true, margin: "-20% 0px"});
@@ -26,10 +35,14 @@ function CountUp({end, duration = 1.0, suffix = "", prefix = ""}: {
     return <span ref={ref}>{prefix}{val}{suffix}</span>;
 }
 
-// ───────────────────────────────── Variants
+/* -------------------------------- Variants -------------------------------- */
 const cardVariants: Variants = {
     hidden: {opacity: 0, y: 8},
-    show: {opacity: 1, y: 0, transition: {duration: 0.45, ease: "easeOut"}},
+    show: {
+        opacity: 1,
+        y: 0,
+        transition: {duration: 0.45, ease: "easeOut"},
+    },
 };
 
 const pulseVariants: Variants = {
@@ -37,75 +50,11 @@ const pulseVariants: Variants = {
     active: {
         scale: [1, 1.15, 1],
         opacity: [0.35, 0.6, 0.35],
-        transition: {duration: 1.2, repeat: Infinity, ease: "easeInOut"}
-    }
+        transition: {duration: 1.2, repeat: Infinity, ease: "easeInOut"},
+    },
 };
 
-type Stat = {
-    id: number;
-    heading: string;
-    numeric?: { value: number; suffix?: string; prefix?: string };
-    sub: string;
-    explainerTitle: string;
-    bullets: string[];
-    hintBars?: boolean;
-};
-
-// ───────────────────────────────── Data
-const STATS: Stat[] = [
-    {
-        id: 0,
-        heading: "5×",
-        numeric: {value: 5, suffix: "×"},
-        sub: "Concurrent calls handled",
-        explainerTitle: "Parallel calling for real throughput",
-        bullets: [
-            "Dials multiple contacts at once and prioritises whoever picks up first.",
-            "Auto-retries no-answers; hands warm leads to your calendar.",
-            "Ideal for outreach bursts, confirmations, and wait-list callbacks."
-        ],
-        hintBars: true,
-    },
-    {
-        id: 1,
-        heading: "24/7",
-        sub: "Always available",
-        explainerTitle: "Never miss a call again",
-        bullets: [
-            "Captures after-hours leads and issues with scripted triage.",
-            "Overnight follow-ups keep pipelines moving while you sleep.",
-            "Public holidays and weekends covered automatically."
-        ],
-        hintBars: false,
-    },
-    {
-        id: 2,
-        heading: "99%",
-        numeric: {value: 99, suffix: "%"},
-        sub: "Natural-voice accuracy",
-        explainerTitle: "Human-like prosody & AU accent handling",
-        bullets: [
-            "Neural TTS + ASR tuned for Australian accents and slang.",
-            "Barge-in & turn-taking so callers can interrupt naturally.",
-            "Context memory across the call for fewer repeats."
-        ],
-        hintBars: true,
-    },
-    {
-        id: 3,
-        heading: "Seconds",
-        sub: "to first response",
-        explainerTitle: "Instant answers, zero hold music",
-        bullets: [
-            "Detects intent in ~600–900 ms and responds immediately.",
-            "No queues during peaks—capacity scales elastically.",
-            "Transfers to humans with a full call summary when needed."
-        ],
-        hintBars: false,
-    },
-];
-
-// ───────────────────────────────── Small visual: animated “process bars”
+/* -------------------------------- MiniBars -------------------------------- */
 function MiniBars({active}: { active: boolean }) {
     return (
         <div className="mt-3 h-8 w-full flex items-end gap-1 opacity-80">
@@ -113,8 +62,16 @@ function MiniBars({active}: { active: boolean }) {
                 <motion.div
                     key={i}
                     initial={{height: `${h * 100}%`}}
-                    animate={active ? {height: [`${h * 60}%`, `${h * 100}%`, `${h * 70}%`]} : {height: `${h * 80}%`}}
-                    transition={{duration: 1 + i * 0.15, repeat: active ? Infinity : 0, ease: "easeInOut"}}
+                    animate={
+                        active
+                            ? {height: [`${h * 60}%`, `${h * 100}%`, `${h * 70}%`]}
+                            : {height: `${h * 80}%`}
+                    }
+                    transition={{
+                        duration: 1 + i * 0.15,
+                        repeat: active ? Infinity : 0,
+                        ease: "easeInOut",
+                    }}
                     className="flex-1 rounded bg-cyan-400/25"
                 />
             ))}
@@ -122,26 +79,32 @@ function MiniBars({active}: { active: boolean }) {
     );
 }
 
-// ───────────────────────────────── Component
-export default function VoiceAISection() {
+/* -------------------------------- Component -------------------------------- */
+export default function VoiceAISection({data}: { data: VoiceAIData }) {
+    const {title, subtitle, description, stat: stats} = data;
+
     const [active, setActive] = useState<number>(0);
 
-    // Auto-cycle through stats every 4s (pauses on hover)
+    /* Auto-cycle between stats */
     const wrapRef = useRef<HTMLDivElement | null>(null);
     useEffect(() => {
         let paused = false;
         const el = wrapRef.current;
+
         const onEnter = () => {
             paused = true;
         };
         const onLeave = () => {
             paused = false;
         };
+
         el?.addEventListener("mouseenter", onEnter);
         el?.addEventListener("mouseleave", onLeave);
 
         const id = setInterval(() => {
-            if (!paused) setActive((a) => (a + 1) % STATS.length);
+            if (!paused) {
+                setActive((a) => (a + 1) % stats.length);
+            }
         }, 4000);
 
         return () => {
@@ -149,10 +112,11 @@ export default function VoiceAISection() {
             el?.removeEventListener("mouseenter", onEnter);
             el?.removeEventListener("mouseleave", onLeave);
         };
-    }, []);
+    }, [stats.length]);
 
     return (
         <section className="relative mt-16" ref={wrapRef}>
+
             {/* soft glow */}
             <motion.div
                 aria-hidden
@@ -163,56 +127,78 @@ export default function VoiceAISection() {
                 className="pointer-events-none absolute -top-10 -left-10 h-64 w-64 rounded-full bg-cyan-500/10 blur-3xl"
             />
 
-            <p className="text-xs uppercase tracking-widest text-cyan-300/90">Why Voice AI</p>
-            <h2 className="mt-2 text-2xl md:text-4xl font-bold">
-                Transform customer engagement with human-sounding automation
-            </h2>
-            <p className="mt-3 text-white/70 max-w-3xl">
-                Bluestag Voice AI helps Australian businesses handle more calls, stay available 24/7,
-                and deliver consistent customer experiences — all in a natural, human-like voice that callers trust.
+            {/* subtitle */}
+            <p className="text-xs uppercase tracking-widest text-cyan-300/90">
+                {subtitle}
             </p>
 
-            {/* Stat cards */}
+            {/* title */}
+            <h2 className="mt-2 text-2xl md:text-4xl font-bold">
+                {title}
+            </h2>
+
+            {/* description */}
+            <p className="mt-3 text-white/70 max-w-3xl">
+                {description}
+            </p>
+
+            {/* Stat Cards */}
             <div className="mt-8 grid grid-cols-2 md:grid-cols-4 gap-4">
-                {STATS.map((s, i) => {
-                    const isActive = active === s.id;
+                {stats.map((s: VoiceAIStat, i: number) => {
+                    const isActive = active === i;
+
                     return (
                         <motion.button
-                            key={s.id}
+                            key={s.id ?? i}
                             variants={cardVariants}
                             initial="hidden"
                             whileInView="show"
                             viewport={{once: true, margin: "-10% 0px"}}
                             transition={{delay: i * 0.06}}
-                            onClick={() => setActive(s.id)}
-                            onFocus={() => setActive(s.id)}
+                            onClick={() => setActive(i)}
+                            onFocus={() => setActive(i)}
                             className={`relative rounded-2xl border p-5 text-center backdrop-blur-md transition
-                ${isActive ? "border-cyan-400/60 bg-white/10" : "border-white/10 bg-white/5 hover:bg-white/10"}`}
+                                ${isActive
+                                ? "border-cyan-400/60 bg-white/10"
+                                : "border-white/10 bg-white/5 hover:bg-white/10"
+                            }`}
                         >
-                            {/* pulsing halo when active */}
+                            {/* pulsing halo */}
                             <motion.span
                                 aria-hidden
                                 variants={pulseVariants}
                                 animate={isActive ? "active" : "idle"}
                                 className="absolute inset-0 rounded-2xl ring-2 ring-cyan-400/20"
                             />
+
+                            {/* number or heading */}
                             <div className="relative text-2xl md:text-3xl font-bold text-cyan-300">
-                                {s.numeric ? <CountUp end={s.numeric.value} suffix={s.numeric.suffix}
-                                                      prefix={s.numeric.prefix}/> : s.heading}
+                                {s.value !== null && s.value !== undefined ? (
+                                    <CountUp
+                                        end={s.value}
+                                        prefix={s.prefix || ""}
+                                        suffix={s.suffix || ""}
+                                    />
+                                ) : (
+                                    s.heading
+                                )}
                             </div>
-                            <div className="relative mt-1 text-sm text-white/70">{s.sub}</div>
+
+                            <div className="relative mt-1 text-sm text-white/70">
+                                {s.sub}
+                            </div>
                         </motion.button>
                     );
                 })}
             </div>
 
-            {/* Explainer panel */}
+            {/* Explainer Panel */}
             <div className="mt-6">
                 <AnimatePresence mode="wait">
-                    {STATS.map((s) =>
-                        s.id === active ? (
+                    {stats.map((s: VoiceAIStat, i: number) =>
+                        i === active ? (
                             <motion.div
-                                key={s.id}
+                                key={s.id ?? i}
                                 initial={{opacity: 0, y: 8, height: 0}}
                                 animate={{opacity: 1, y: 0, height: "auto"}}
                                 exit={{opacity: 0, y: -6, height: 0}}
@@ -220,14 +206,21 @@ export default function VoiceAISection() {
                                 className="overflow-hidden rounded-2xl border border-white/10 bg-white/5 p-6"
                             >
                                 <div className="grid md:grid-cols-3 gap-6 items-start">
+
                                     <div className="md:col-span-2">
-                                        <h3 className="text-lg font-semibold">{s.explainerTitle}</h3>
+                                        <h3 className="text-lg font-semibold">
+                                            {s.explainerTitle}
+                                        </h3>
+
                                         <ul className="mt-3 space-y-2 text-white/80 text-sm list-disc pl-5">
-                                            {s.bullets.map((b, i) => <li key={i}>{b}</li>)}
+                                            {Array.isArray(s.bullets) &&
+                                                s.bullets.map((b: string, idx: number) => (
+                                                    <li key={idx}>{b}</li>
+                                                ))}
                                         </ul>
                                     </div>
 
-                                    {/* tiny illustrative animation */}
+                                    {/* right side mini animation */}
                                     <div className="md:col-span-1">
                                         {s.hintBars ? (
                                             <MiniBars active/>
@@ -240,8 +233,15 @@ export default function VoiceAISection() {
                                             >
                                                 <motion.div
                                                     initial={{x: -8, opacity: 0.4}}
-                                                    animate={{x: [-8, 8, -8], opacity: [0.4, 1, 0.4]}}
-                                                    transition={{duration: 1.6, repeat: Infinity, ease: "easeInOut"}}
+                                                    animate={{
+                                                        x: [-8, 8, -8],
+                                                        opacity: [0.4, 1, 0.4],
+                                                    }}
+                                                    transition={{
+                                                        duration: 1.6,
+                                                        repeat: Infinity,
+                                                        ease: "easeInOut",
+                                                    }}
                                                     className="text-xs uppercase tracking-widest text-cyan-300"
                                                 >
                                                     live response

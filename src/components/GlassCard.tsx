@@ -1,34 +1,31 @@
-// GlassCard.tsx
 "use client";
 import clsx from "clsx";
-import React from "react";
-
-function isSafariUA() {
-    if (typeof navigator === "undefined") return false;
-    return /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
-}
+import React, {useEffect, useState} from "react";
 
 type Props = React.HTMLAttributes<HTMLDivElement> & {
-    safariLite?: boolean; // force non-blur for Safari
+    safariLite?: boolean;
 };
 
 export default function GlassCard({className, safariLite, ...rest}: Props) {
-    const safari = isSafariUA();
-    const useLite = safariLite || safari;
+    const [isSafari, setIsSafari] = useState(false);
+
+    useEffect(() => {
+        const ua = navigator.userAgent.toLowerCase();
+        setIsSafari(/safari/.test(ua) && !/chrome|android/.test(ua));
+    }, []);
+
+    const useLite = safariLite || isSafari;
 
     return (
         <div
             className={clsx(
                 "rounded-3xl border border-white/10",
                 useLite
-                    ? // Safari-friendly: no backdrop-blur, use faint fill + inner glow
-                    "bg-white/[0.04]"
-                    : // Non-Safari: original look
-                    "bg-white/10 backdrop-blur-lg",
+                    ? "bg-white/[0.04]" // ✅ Safari-safe fallback
+                    : "bg-white/10 backdrop-blur-lg",
                 className
             )}
             style={{
-                // avoid costly shadows; let the border + subtle fill do the work
                 transform: "translateZ(0)",
                 willChange: "transform, opacity",
             }}

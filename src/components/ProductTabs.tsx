@@ -1,383 +1,157 @@
 "use client";
-import Link from "next/link";
+
 import {useState} from "react";
+import Link from "next/link";
+import {motion, AnimatePresence} from "framer-motion";
+
 import Section from "./Section";
 import GlassCard from "./GlassCard";
-import {
-    PhoneCall, CreditCard, Headphones, Cpu, Zap, Play, Sparkles,
-    Megaphone, Check, ChevronRight,
-    Bot, MessageSquare,
-    Video, Clapperboard,
-    Code2, AppWindow,
-    ShieldCheck, Server, Wrench, Monitor, Activity, Headset, Gauge
-} from "lucide-react";
-import {INDUSTRIES} from "@/data/industries";
-import {usePathname, useSearchParams} from "next/navigation";
 
-type TabKey =
-    | "voice"
-    | "video"
-    | "chatbot"
-    | "app"
-    | "social"
-    | "managed";
+import type {ProductTab, ProductIndustry} from "@/types/product-tab";
+import {PRODUCT_ICON_MAP} from "@/data/product";
+import {BADGE_ICON_MAP} from "@/data/badges";
+import {INDUSTRY_ICON_MAP} from "@/data/industries-icon";
 
-const TABS: { key: TabKey; label: string }[] = [
-    {key: "voice", label: "Voice AI"},
-    {key: "video", label: "Video AI"},
-    {key: "chatbot", label: "AI Chatbot"},
-    {key: "app", label: "App Development"},
-    {key: "social", label: "Social Media Management"},
-    // {key: "managed", label: "AI MSP"},
-];
 
-export default function ProductTabs() {
-    const [activeTab, setActiveTab] = useState<TabKey>("voice");
+// 🔥 Accept industries as prop
+export default function ProductTabs({
+                                        tabs,
+                                        industries,
+                                    }: {
+    tabs: ProductTab[];
+    industries: ProductIndustry[];
+}) {
+    const [active, setActive] = useState(tabs[0]?.slug);
+    const activeTab = tabs.find((t) => t.slug === active);
 
-    const pathname = usePathname();
-    const search = useSearchParams();
-    const currentSlug = search.get("industry");
-
-    const hrefFor = (slug: string) => ({
-        pathname: "/industries",
-        query: {industry: slug},
-        hash: "industry-detail",
-    });
-
-    const forceScrollIfSame = (slug: string) => {
-        const samePage = pathname === "/industries";
-        const sameQuery = currentSlug === slug;
-        const sameHash =
-            typeof window !== "undefined" &&
-            window.location.hash === "#industry-detail";
-        if (samePage && sameQuery && sameHash) {
-            document
-                .getElementById("industry-detail")
-                ?.scrollIntoView({behavior: "smooth", block: "start"});
-            return true;
-        }
-        return false;
-    };
+    if (!activeTab) return null;
 
     return (
         <Section id="services" variant="tall">
-            {/* Tabs */}
-            <div
-                className="flex flex-wrap items-center justify-center gap-2 rounded-2xl border border-white/10 bg-white/5 p-1 backdrop-blur">
-                {TABS.map(({key, label}) => (
-                    <button
-                        key={key}
-                        onClick={() => setActiveTab(key)}
-                        className={`rounded-xl px-4 py-2 text-sm font-semibold transition ${
-                            activeTab === key ? "bg-cyan-500 text-slate-900" : "hover:bg-white/5"
-                        }`}
-                        aria-selected={activeTab === key}
-                        role="tab"
-                    >
-                        {label}
-                    </button>
-                ))}
+            {/* -------- TOP TABS -------- */}
+            <div className="flex items-center justify-center">
+                <div
+                    className="flex flex-wrap gap-2 rounded-2xl border border-white/10 bg-white/5 p-2 backdrop-blur-lg">
+                    {tabs.map((tab) => (
+                        <button
+                            key={tab.slug}
+                            onClick={() => setActive(tab.slug)}
+                            className={`px-4 py-2 text-sm font-semibold rounded-xl transition-all ${
+                                active === tab.slug
+                                    ? "bg-cyan-500 text-slate-900 shadow-lg"
+                                    : "hover:bg-white/10 text-white/80"
+                            }`}
+                        >
+                            {tab.tab_label || tab.title}
+                        </button>
+                    ))}
+                </div>
             </div>
 
-            {/* Panels */}
-            <div className="mt-6 grid gap-6 lg:grid-cols-3" role="tabpanel">
-                {/* Voice AI */}
-                {activeTab === "voice" && (
-                    <>
-                        <GlassCard className="lg:col-span-2 p-6">
-                            <h3 className="text-2xl font-bold">Autonomous calling with live transfer</h3>
-                            <p className="mt-2 text-white/70">
-                                Call up to <strong>5 contacts concurrently</strong>. Detect intent, collect payments,
-                                and escalate to humans when needed.
-                            </p>
-                            <ul className="mt-4 space-y-2 text-sm text-white/80">
-                                {[
-                                    {icon: PhoneCall, text: "Outbound & inbound with smart routing"},
-                                    {icon: CreditCard, text: "Secure payment collection in-call"},
-                                    {icon: Headphones, text: "Tier-1 customer service and FAQs"},
-                                    {icon: Sparkles, text: "Smart customer interaction automation"},
-                                ].map(({icon: Icon, text}) => (
-                                    <li key={text} className="flex items-center gap-2">
-                                        <Icon className="h-4 w-4"/> {text}
-                                    </li>
-                                ))}
-                            </ul>
-                            <div className="mt-6 flex items-center gap-3 text-xs text-white/70">
-                                <Cpu className="h-4 w-4"/> On-device + cloud
-                                <span className="opacity-40">|</span>
-                                <Zap className="h-4 w-4"/> Realtime
-                            </div>
-                            <div className="mt-6">
-                                <Link
-                                    href="/ai-services#voice"
-                                    className="inline-flex items-center gap-2 rounded-xl bg-cyan-500 px-4 py-2 text-sm font-semibold text-slate-900 hover:bg-cyan-400 transition"
-                                >
-                                    Learn More <ChevronRight className="h-4 w-4"/>
-                                </Link>
-                            </div>
-                        </GlassCard>
+            {/* -------- PANELS -------- */}
+            <AnimatePresence mode="wait">
+                <motion.div
+                    key={activeTab.slug}
+                    initial={{opacity: 0, y: 10}}
+                    animate={{opacity: 1, y: 0}}
+                    exit={{opacity: 0, y: -10}}
+                    transition={{duration: 0.25}}
+                    className="mt-10 grid gap-8 lg:grid-cols-3"
+                >
+                    {/* -------- LEFT PANEL -------- */}
+                    <GlassCard className="p-10 lg:col-span-2">
+                        <h3 className="text-3xl font-bold">{activeTab.title}</h3>
 
-                        {/* Industry quick links */}
-                        <GlassCard className="p-6">
-                            <h4 className="text-lg font-semibold">Built for Australian SMB workflows</h4>
-                            <div
-                                className="mt-4 grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-3 gap-3 text-sm">
-                                {INDUSTRIES.map((ind) => {
-                                    const slug = ind.slug ?? ind.id;
+                        <p className="mt-3 text-white/70 text-lg">
+                            {activeTab.description}
+                        </p>
+
+                        {/* Features */}
+                        <ul className="mt-6 space-y-3 text-white/80">
+                            {activeTab.features?.map((f) => {
+                                const Icon = PRODUCT_ICON_MAP[f.icon_key];
+                                return (
+                                    <li key={f.id} className="flex items-center gap-3">
+                                        {Icon && <Icon className="h-5 w-5 text-cyan-400"/>}
+                                        {f.text}
+                                    </li>
+                                );
+                            })}
+                        </ul>
+
+                        {/* Badges */}
+                        {!!activeTab.badge?.length && (
+                            <div className="flex items-center gap-6 mt-8 text-white/60">
+                                {activeTab.badge.map((b) => {
+                                    const BadgeIcon =
+                                        BADGE_ICON_MAP[b.badge_icon_key] ??
+                                        BADGE_ICON_MAP.default;
+
                                     return (
-                                        <Link
-                                            key={ind.id}
-                                            href={hrefFor(slug)}
-                                            prefetch={false}
-                                            className="flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 p-3 hover:bg-cyan-500/10 transition-all"
-                                            onClick={(e) => {
-                                                if (forceScrollIfSame(slug)) e.preventDefault();
-                                            }}
+                                        <div
+                                            key={b.id}
+                                            className="flex items-center gap-2 text-sm"
                                         >
-                                            <ind.icon className="h-4 w-4 text-cyan-400"/>
-                                            <span>{ind.title}</span>
-                                        </Link>
+                                            <BadgeIcon className="h-4 w-4 text-cyan-400"/>
+                                            {b.badge_text}
+                                        </div>
                                     );
                                 })}
                             </div>
-                            <div className="mt-4 text-xs text-white/60">
-                                Native AU English voices, local latency, and compliance-first design.
-                            </div>
-                        </GlassCard>
-                    </>
-                )}
+                        )}
 
-                {/* Video AI */}
-                {activeTab === "video" && (
-                    <>
-                        <GlassCard className="lg:col-span-2 p-6">
-                            <h3 className="text-2xl font-bold">Video AI</h3>
-                            <p className="mt-2 text-white/70">
-                                Generate, edit, and localise videos from scripts, slides, or call highlights.
-                                Perfect for recruiting, training, and promo content.
-                            </p>
-                            <ul className="mt-4 space-y-2 text-sm text-white/80">
-                                {[
-                                    {icon: Video, text: "Script → talking-head or explainer video"},
-                                    {icon: Clapperboard, text: "Auto cuts, captions, B-roll suggestions"},
-                                    {icon: Sparkles, text: "Voice cloning & multi-language dubbing"},
-                                    {icon: Megaphone, text: "Publish to YouTube/LinkedIn/TikTok"},
-                                ].map(({icon: Icon, text}) => (
-                                    <li key={text} className="flex items-center gap-2">
-                                        <Icon className="h-4 w-4"/> {text}
-                                    </li>
-                                ))}
-                            </ul>
-                            <div className="mt-6">
-                                <Link
-                                    href="/ai-services#video"
-                                    className="inline-flex items-center gap-2 rounded-xl bg-cyan-500 px-4 py-2 text-sm font-semibold text-slate-900 hover:bg-cyan-400 transition"
-                                >
-                                    Learn More <ChevronRight className="h-4 w-4"/>
-                                </Link>
-                            </div>
-                        </GlassCard>
-
-                        <GlassCard className="p-6">
-                            <h4 className="text-lg font-semibold">Use cases</h4>
-                            <ul className="mt-3 space-y-2 text-sm text-white/80">
-                                {[
-                                    "Recruiting interviews & JD promos",
-                                    "Education/training modules & onboarding",
-                                    "Presentation practice & auto summaries",
-                                ].map((t) => (
-                                    <li key={t} className="flex items-center gap-2">
-                                        <Check className="h-4 w-4"/> {t}
-                                    </li>
-                                ))}
-                            </ul>
-                        </GlassCard>
-                    </>
-                )}
-
-                {/* AI Chatbot */}
-                {activeTab === "chatbot" && (
-                    <>
-                        <GlassCard className="lg:col-span-2 p-6">
-                            <h3 className="text-2xl font-bold">AI Chatbot for web & messaging</h3>
-                            <p className="mt-2 text-white/70">
-                                Omni-channel chat on your website, WhatsApp, and Facebook — grounded on your docs,
-                                policies, and CRM.
-                            </p>
-                            <ul className="mt-4 space-y-2 text-sm text-white/80">
-                                {[
-                                    {icon: Bot, text: "24/7 lead capture, FAQs, bookings & payments"},
-                                    {icon: MessageSquare, text: "WhatsApp / Messenger / Web widget integration"},
-                                    {icon: Sparkles, text: "Retrieval-augmented answers from your knowledge base"},
-                                    {icon: Headphones, text: "Human handoff with full chat context"},
-                                ].map(({icon: Icon, text}) => (
-                                    <li key={text} className="flex items-center gap-2">
-                                        <Icon className="h-4 w-4"/> {text}
-                                    </li>
-                                ))}
-                            </ul>
-                            <div className="mt-6">
-                                <Link
-                                    href="/ai-services#chatbot"
-                                    className="inline-flex items-center gap-2 rounded-xl bg-cyan-500 px-4 py-2 text-sm font-semibold text-slate-900 hover:bg-cyan-400 transition"
-                                >
-                                    Learn More <ChevronRight className="h-4 w-4"/>
-                                </Link>
-                            </div>
-                        </GlassCard>
-
-                        <GlassCard className="p-6">
-                            <h4 className="text-lg font-semibold">Use cases</h4>
-                            <ul className="mt-3 space-y-2 text-sm text-white/80">
-                                {[
-                                    "Recruiting pre-screen & interview scheduling",
-                                    "Training/education Q&A & lesson guidance",
-                                    "Presentation practice & speaking coach",
-                                ].map((t) => (
-                                    <li key={t} className="flex items-center gap-2">
-                                        <Check className="h-4 w-4"/> {t}
-                                    </li>
-                                ))}
-                            </ul>
-                        </GlassCard>
-                    </>
-                )}
-
-                {/* App Development */}
-                {activeTab === "app" && (
-                    <>
-                        <GlassCard className="lg:col-span-2 p-6">
-                            <h3 className="text-2xl font-bold">App Development</h3>
-                            <p className="mt-2 text-white/70">
-                                Web, mobile, and internal tools — built with modern stacks and integrated with your CRM,
-                                billing, and auth.
-                            </p>
-                            <ul className="mt-4 space-y-2 text-sm text-white/80">
-                                {[
-                                    {icon: Code2, text: "Next.js/React, Node/Express, Python/FastAPI"},
-                                    {icon: AppWindow, text: "Design systems, dashboards, and admin portals"},
-                                    {icon: Sparkles, text: "AI features: chat, search, analytics"},
-                                    {icon: Server, text: "Deploy to Vercel/AWS/Azure with CI/CD"},
-                                ].map(({icon: Icon, text}) => (
-                                    <li key={text} className="flex items-center gap-2">
-                                        <Icon className="h-4 w-4"/> {text}
-                                    </li>
-                                ))}
-                            </ul>
-                            <div className="mt-6">
-                                <Link
-                                    href="/ai-services#appdev"
-                                    className="inline-flex items-center gap-2 rounded-xl bg-cyan-500 px-4 py-2 text-sm font-semibold text-slate-900 hover:bg-cyan-400 transition"
-                                >
-                                    Learn More <ChevronRight className="h-4 w-4"/>
-                                </Link>
-                            </div>
-                        </GlassCard>
-
-                        <GlassCard className="p-6">
-                            <h4 className="text-lg font-semibold">Deliverables</h4>
-                            <ul className="mt-3 space-y-2 text-sm text-white/80">
-                                {[
-                                    "Architecture & UX specs",
-                                    "MVP in sprints with demos",
-                                    "Testing, monitoring & handover",
-                                ].map((t) => (
-                                    <li key={t} className="flex items-center gap-2">
-                                        <Check className="h-4 w-4"/> {t}
-                                    </li>
-                                ))}
-                            </ul>
-                        </GlassCard>
-                    </>
-                )}
-
-                {/* Social Media Management */}
-                {activeTab === "social" && (
-                    <>
-                        <GlassCard className="lg:col-span-2 p-6">
-                            <h3 className="text-2xl font-bold">Social Media Management</h3>
-                            <p className="mt-2 text-white/70">
-                                Plan, generate, schedule, and track content across platforms — powered by your call/chat
-                                insights.
-                            </p>
-                            <ul className="mt-4 space-y-2 text-sm text-white/80">
-                                {[
-                                    "Auto-generate post copy from transcripts & chats",
-                                    "Schedule to Meta, TikTok, LinkedIn in one click",
-                                    "Performance analytics with lead attribution",
-                                    "Comment triage and suggested replies",
-                                ].map((t) => (
-                                    <li key={t} className="flex items-center gap-2">
-                                        <Check className="h-4 w-4"/> {t}
-                                    </li>
-                                ))}
-                            </ul>
-                            <div className="mt-6">
-                                <Link
-                                    href="/ai-services#social"
-                                    className="inline-flex items-center gap-2 rounded-xl bg-cyan-500 px-4 py-2 text-sm font-semibold text-slate-900 hover:bg-cyan-400 transition"
-                                >
-                                    Learn More <ChevronRight className="h-4 w-4"/>
-                                </Link>
-                            </div>
-                        </GlassCard>
-
-                        <GlassCard className="p-6 grid place-content-center">
-                            <Megaphone className="h-10 w-10"/>
-                            <p className="mt-3 text-sm text-white/70">Content ops done right</p>
-                        </GlassCard>
-                    </>
-                )}
-
-                {/* Managed IT Services / AI Guardian */}
-                {activeTab === "managed" && (
-                    <>
-                        <GlassCard className="lg:col-span-2 p-6">
-                            <h3 className="text-2xl font-bold text-cyan-400">AI Guardian</h3>
-                            <p className="mt-2 text-white/80">
-                                Meet <span className="font-semibold text-white">AI Guardian</span> — where AI manages
-                                IT.
-                                Unlike traditional MSP tools that wait for problems, AI Guardian thinks ahead.
-                                It learns, predicts, and acts to keep your systems secure, fast, and compliant.
-                            </p>
-                            <ul className="mt-4 space-y-2 text-sm text-white/80">
-                                {[
-                                    {icon: Activity, text: "AI-Powered Monitoring & Predictive Maintenance"},
-                                    {icon: ShieldCheck, text: "Security, Compliance & Backup Intelligence"},
-                                    {icon: Headset, text: "AI Helpdesk with Automated Ticketing"},
-                                    {icon: Gauge, text: "Smart Dashboard & Workflow Automations"},
-                                ].map(({icon: Icon, text}) => (
-                                    <li key={text} className="flex items-center gap-2">
-                                        <Icon className="h-4 w-4 text-cyan-400"/> {text}
-                                    </li>
-                                ))}
-                            </ul>
+                        {/* CTA Button */}
+                        {activeTab.cta_link && (
                             <Link
-                                href="/ai-services#managed"
-                                className="mt-6 inline-flex items-center gap-2 rounded-xl bg-cyan-500 px-4 py-2 text-sm font-semibold text-slate-900 hover:bg-cyan-400 transition"
+                                href={activeTab.cta_link}
+                                className="inline-flex items-center gap-2 mt-8 px-5 py-3 rounded-xl bg-cyan-500 text-slate-900 font-semibold hover:bg-cyan-400 transition"
                             >
-                                Learn More <ChevronRight className="h-4 w-4"/>
+                                {activeTab.cta_label || "Learn More"} →
                             </Link>
-                        </GlassCard>
+                        )}
+                    </GlassCard>
 
-                        <GlassCard className="p-6">
-                            <h4 className="text-lg font-semibold text-cyan-400">Why Businesses Choose AI Guardian</h4>
-                            <ul className="mt-3 space-y-2 text-sm text-white/80">
-                                {[
-                                    "Predicts and resolves issues before downtime.",
-                                    "24/7 AI-driven monitoring and optimization.",
-                                    "Reduced IT workload through automation.",
-                                    "Complete visibility across every endpoint.",
-                                ].map((t) => (
-                                    <li key={t} className="flex items-center gap-2">
-                                        <Check className="h-4 w-4 text-cyan-400"/> {t}
-                                    </li>
-                                ))}
-                            </ul>
-                        </GlassCard>
-                    </>
-                )}
-            </div>
+                    {/* -------- RIGHT PANEL (INDUSTRIES LIST) -------- */}
+                    <GlassCard className="p-8">
+                        <h4 className="text-xl font-semibold">
+                            Built for Australian SMB workflows
+                        </h4>
+
+                        <div className="mt-5 grid grid-cols-2 sm:grid-cols-3 gap-4">
+                            {industries.map((ind) => {
+                                const Icon =
+                                    INDUSTRY_ICON_MAP[ind.icon_key] ??
+                                    INDUSTRY_ICON_MAP.default;
+
+                                return (
+                                    <Link
+                                        key={ind.id}
+                                        href={{
+                                            pathname: "/industries",
+                                            query: {industry: ind.slug},
+                                            hash: "industry-detail",
+                                        }}
+                                        className="flex flex-col justify-center items-start gap-2
+                                            p-4 rounded-2xl border border-white/10 bg-white/5
+                                            hover:bg-cyan-500/10 transition"
+                                    >
+                                        {Icon && <Icon className="h-5 w-5 text-cyan-400"/>}
+
+                                        <span className="text-sm font-medium leading-tight text-white">
+                                            {ind.title}
+                                        </span>
+                                    </Link>
+                                );
+                            })}
+                        </div>
+
+                        <p className="mt-6 text-xs text-white/50">
+                            Native AU English voices, local latency, and
+                            compliance-first design.
+                        </p>
+                    </GlassCard>
+                </motion.div>
+            </AnimatePresence>
         </Section>
     );
 }

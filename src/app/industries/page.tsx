@@ -4,34 +4,54 @@ import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import SubPageLayout from "@/components/SubPageLayout";
 import IndustriesContent from "./IndustriesContent";
-import ScrollIntoDetail from "./ScrollIntoDetail"; // client
+import ScrollIntoDetail from "./ScrollIntoDetail";
+import {getIndustriesPage} from "@/lib/strapi";
+export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
     title: "Industries | Bluestag AI",
     description: "Voice AI solutions tailored for each industry with live demos.",
 };
 
-export default function Page() {
+export default async function Page() {
+    const page = await getIndustriesPage();
+
+    if (!page) {
+        return (
+            <main className="text-white">
+                <Navbar/>
+                <div className="pt-24 px-6">
+                    <h1 className="text-3xl font-bold">No CMS Entry Found</h1>
+                    <p className="opacity-70 mt-3">
+                        Please create & publish the *Industries Page* entry in Strapi.
+                    </p>
+                </div>
+                <Footer/>
+            </main>
+        );
+    }
+
     return (
         <main className="relative min-h-screen text-white overflow-x-clip">
             <Navbar/>
+
             <section className="relative z-10 pt-20">
                 <Suspense fallback={null}>
-                    <ScrollIntoDetail/>
+                    <ScrollIntoDetail selected={page.hero_scroll_text}/>
                 </Suspense>
 
                 <SubPageLayout
-                    title="AI Voice Solutions by Industry"
-                    subtitle="Bluestag adapts to real estate, logistics, education, healthcare, and more — pick an industry to see a live demo."
+                    title={page.title}
+                    subtitle={page.subtitle}
                 >
                     <div className="mt-10 sm:mt-12">
-                        {/* If IndustriesContent reads URL, keep it in Suspense too */}
                         <Suspense fallback={null}>
-                            <IndustriesContent/>
+                            <IndustriesContent industries={page.industries}/>
                         </Suspense>
                     </div>
                 </SubPageLayout>
             </section>
+
             <Footer/>
         </main>
     );

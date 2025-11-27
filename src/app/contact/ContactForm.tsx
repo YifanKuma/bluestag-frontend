@@ -3,48 +3,50 @@
 import {useState} from "react";
 import {motion} from "framer-motion";
 import {Send} from "lucide-react";
+
 import InputField from "./fields/InputField";
 import TextareaField from "./fields/TextareaField";
 
-export default function ContactForm() {
-    const services = [
-        "Voice AI",
-        "Video AI",
-        "AI Chatbot",
-        "App Development",
-        "Social Media Management",
-        // "AI MSP",
-    ];
-
+export default function ContactForm({
+                                        services,
+                                        submitEmail,
+                                        ccEmails,
+                                    }: {
+    services: string[];
+    submitEmail: string;
+    ccEmails: string[];
+}) {
     const [selected, setSelected] = useState<string[]>([]);
     const [error, setError] = useState<string | null>(null);
     const [phoneError, setPhoneError] = useState<string | null>(null);
 
-    const toggle = (srv: string) =>
+    const toggle = (srv: string) => {
         setSelected((prev) =>
             prev.includes(srv) ? prev.filter((x) => x !== srv) : [...prev, srv]
         );
+    };
 
     const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
-        const phone =
-            (e.currentTarget.elements.namedItem("phone") as HTMLInputElement)?.value ||
-            "";
+        const phoneInput = e.currentTarget.elements.namedItem(
+            "phone"
+        ) as HTMLInputElement;
 
-        if (selected.length === 0) {
+        if (!selected.length) {
             e.preventDefault();
             setError("Please select at least one service.");
             return;
         }
-        setError(null);
 
+        const phone = phoneInput?.value?.trim() || "";
         const ausRegex = /^(?:\+61|0)4\d{8}$/;
+
         if (!ausRegex.test(phone.replace(/\s+/g, ""))) {
             e.preventDefault();
-            setPhoneError(
-                "Please enter a valid Australian number (04xx xxx xxx or +61 4xx xxx xxx)."
-            );
+            setPhoneError("Please enter a valid Australian mobile number.");
             return;
         }
+
+        setError(null);
         setPhoneError(null);
     };
 
@@ -55,39 +57,32 @@ export default function ContactForm() {
             viewport={{once: true}}
             transition={{duration: 0.7}}
             onSubmit={handleSubmit}
-            action="https://formsubmit.co/yifan.h@federationacademy.edu.au"
+            action={`https://formsubmit.co/${submitEmail}`}
             method="POST"
             className="relative bg-gradient-to-br from-white/10 via-white/5 to-transparent border border-white/10 rounded-3xl p-8 backdrop-blur-2xl shadow-[0_0_20px_rgba(56,189,248,0.15)]"
         >
-            {/* CC to multiple recipients */}
-            <input
-                type="hidden"
-                name="_cc"
-                value="mel@bluestag.ai,Nanda.kumar@firstpointit.com.au"
-            />
-
-            {/* Include selected services in submission */}
+            <input type="hidden" name="_cc" value={ccEmails.join(",")}/>
             <input type="hidden" name="services" value={selected.join(", ")}/>
 
             <h2 className="text-2xl font-semibold mb-6 text-sky-400">
                 Send us a message
             </h2>
 
-            <div className="space-y-5 relative z-10">
+            <div className="space-y-5">
                 <InputField id="name" label="Name" required/>
-                <InputField id="phone" label="Phone" required type="tel"/>
-                {phoneError && (
-                    <p className="text-red-400 text-sm -mt-3">{phoneError}</p>
-                )}
-                <InputField id="email" label="Email" required type="email"/>
+                <InputField id="phone" label="Phone" type="tel" required/>
+                {phoneError && <p className="text-red-400 text-sm">{phoneError}</p>}
+
+                <InputField id="email" label="Email" type="email" required/>
                 <InputField id="business" label="Business Name (optional)"/>
 
-                {/* prettier glowing checkboxes */}
+                {/* Services */}
                 <div>
                     <label className="block mb-2 text-sm font-medium text-white/80">
                         Select Services{" "}
                         <span className="text-sky-400">(choose at least one)</span>
                     </label>
+
                     <div className="flex flex-wrap gap-3">
                         {services.map((srv) => {
                             const checked = selected.includes(srv);
@@ -107,6 +102,7 @@ export default function ContactForm() {
                             );
                         })}
                     </div>
+
                     {error && <p className="text-red-400 text-sm mt-2">{error}</p>}
                 </div>
 

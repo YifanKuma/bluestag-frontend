@@ -1,6 +1,5 @@
-// src/components/PerformanceProvider.tsx
 "use client";
-import {createContext, useContext, useEffect, useMemo, useRef, useState} from "react";
+import {createContext, useContext, useEffect, useMemo, useState} from "react";
 import {detectLowPowerDevice, PerfMode} from "@/utils/perf";
 
 type PerfCtx = {
@@ -17,13 +16,19 @@ export function usePerfMode() {
 }
 
 export default function PerformanceProvider({children}: { children: React.ReactNode }) {
-    const [mode, setMode] = useState<PerfMode>(() =>
-        detectLowPowerDevice() ? "low" : "high"
-    );
+    const [mode, setMode] = useState<PerfMode>("high"); // ✅ start deterministic
+
+    // ✅ Detect only on client after hydration
+    useEffect(() => {
+        const low = detectLowPowerDevice();
+        if (low) setMode("low");
+    }, []);
 
     // Optional FPS watchdog: demote to "low" if sustained jank
     useEffect(() => {
-        if (mode === "low") return;
+        if (mode === "low") {
+            return; // ✅ returns undefined, not null
+        }
 
         let rafId: number | null = null;
         let last = performance.now();
@@ -35,7 +40,6 @@ export default function PerformanceProvider({children}: { children: React.ReactN
             const dt = now - last;
             last = now;
 
-            // frame time > 20ms ≈ <50fps
             if (dt > 20) below50fpsSamples++;
             if (below50fpsSamples > SAMPLE_TARGET) {
                 setMode("low"); // auto-demote
@@ -45,10 +49,13 @@ export default function PerformanceProvider({children}: { children: React.ReactN
         };
 
         rafId = requestAnimationFrame(tick);
+
+        // ✅ always return a function, not null
         return () => {
-            if (rafId) cancelAnimationFrame(rafId);
+            if (rafId !== null) cancelAnimationFrame(rafId);
         };
     }, [mode]);
+
 
     const value = useMemo(() => ({mode, setMode}), [mode]);
 

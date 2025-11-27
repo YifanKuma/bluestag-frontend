@@ -62,7 +62,7 @@ export const INDUSTRIES: Industry[] = [
             {actor: "Customer", text: "Can I change the drop-off time to after 5pm?"},
             {actor: "Agent", text: "Done. Delivery updated to 5–7pm window. You’ll receive a confirmation SMS."},
         ],
-        cta: {href: "/ai-services", label: "Learn more from us"},
+        cta: {href: "/contact", label: "Learn more from us"},
     },
     {
         id: "payments",
@@ -120,7 +120,7 @@ export const INDUSTRIES: Industry[] = [
             {actor: "Customer", text: "Pause please."},
             {actor: "Agent", text: "Done through next month. I’ve emailed the confirmation."},
         ],
-        cta: {href: "/ai-services", label: "Learn more from us"},
+        cta: {href: "/contact", label: "Learn more from us"},
     },
     {
         id: "healthcare",

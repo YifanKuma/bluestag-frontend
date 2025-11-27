@@ -1,30 +1,19 @@
 "use client";
+
 import {useState} from "react";
-import Link from "next/link"; // ✅ use Next.js Link
+import Link from "next/link";
 import {AnimatePresence, motion} from "framer-motion";
+import type {FAQItem as FAQItemType} from "@/types/pricing";
 
-type QA = { q: string; a: string };
-
-const items: QA[] = [
-    {
-        q: "How do minutes work?",
-        a: "Minutes include inbound and outbound agent talk time. We bill per second after the first second."
-    },
-    {
-        q: "Can I switch plans later?",
-        a: "Yes. Upgrades take effect immediately and are prorated. Downgrades apply next billing cycle."
-    },
-    {
-        q: "Which countries are supported?",
-        a: "Australia by default. Talk to us for international numbers and local compliance."
-    },
-    {
-        q: "What level of customisation do you offer?",
-        a: "Yes, we offer full customization at the initial setup. However, once the Voice AI is live and operational, any further customization requests will be charged at $500 per update."
-    }
-];
-
-function FAQItem({qa, open, onToggle}: { qa: QA; open: boolean; onToggle: () => void }) {
+function FAQItem({
+                     qa,
+                     open,
+                     onToggle,
+                 }: {
+    qa: { q: string; a: string };
+    open: boolean;
+    onToggle: () => void;
+}) {
     return (
         <div className="rounded-xl border border-white/10 bg-white/5">
             <button
@@ -62,17 +51,22 @@ function FAQItem({qa, open, onToggle}: { qa: QA; open: boolean; onToggle: () => 
     );
 }
 
-export default function FAQ() {
+type Props = {
+    items: FAQItemType[];
+};
+
+export default function FAQ({items}: Props) {
     const [openIndex, setOpenIndex] = useState<number | null>(0);
 
     return (
         <section className="relative z-10 mx-auto max-w-5xl px-6 pb-24">
             <h2 className="text-xl font-semibold">Frequently asked</h2>
+
             <div className="mt-4 space-y-3">
-                {items.map((qa, i) => (
+                {items.map((faq, i) => (
                     <FAQItem
-                        key={qa.q}
-                        qa={qa}
+                        key={faq.id}
+                        qa={{q: faq.question, a: faq.answer}}
                         open={openIndex === i}
                         onToggle={() => setOpenIndex(openIndex === i ? null : i)}
                     />
@@ -80,7 +74,6 @@ export default function FAQ() {
             </div>
 
             <div className="mt-8 text-center">
-                {/* ✅ Replace <a> with Link for client-side navigation */}
                 <Link
                     href="/contact"
                     className="inline-flex items-center gap-2 rounded-xl bg-emerald-500 px-5 py-2.5 font-medium text-black hover:bg-emerald-400 transition"
