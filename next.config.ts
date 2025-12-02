@@ -3,13 +3,10 @@ import type {NextConfig} from "next";
 const nextConfig: NextConfig = {
     reactStrictMode: true,
 
+    // ⭐ REQUIRED because static export disables image optimizer
     images: {
-        unoptimized: true, // needed for static export
-    },
-
-    experimental: {
-        allowedDevOrigins: ["192.168.50.240"], // ⭐ fixes warning
-    },
+        unoptimized: true,
+    }
 };
 
 export default nextConfig;

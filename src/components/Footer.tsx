@@ -182,7 +182,7 @@ export default async function Footer() {
 
                         <nav className="flex flex-wrap items-center gap-x-8 gap-y-3 text-neutral-300">
                             <Link
-                                href="/terms"
+                                href="/under-construction"
                                 className="transition hover:text-white"
                                 prefetch={false}
                             >
