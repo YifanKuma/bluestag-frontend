@@ -207,7 +207,7 @@ export async function getIndustriesPage() {
     try {
         const res = await fetch(url, {
             headers: {Authorization: `Bearer ${TOKEN}`},
-            cache: "no-store",
+            next: {revalidate: 1},
         });
 
         const text = await res.text();
@@ -292,7 +292,7 @@ export async function getContactPageData(): Promise<ContactPageData | null> {
             headers: {
                 Authorization: `Bearer ${process.env.STRAPI_API_TOKEN}`,
             },
-            cache: "no-store",
+            next: {revalidate: 1},
         });
 
         const json = await res.json();
@@ -316,7 +316,7 @@ export async function getAboutPage() {
 
     try {
         const res = await fetch(url, {
-            cache: "no-store",
+            next: {revalidate: 1},
             headers: {
                 Authorization: `Bearer ${process.env.STRAPI_API_TOKEN}`, // 🔹 server-only token
             },
@@ -581,7 +581,6 @@ export async function getFooter() {
     }
 }
 
-
 export async function getNavbar() {
     const query = qs.stringify(
         {
@@ -597,8 +596,10 @@ export async function getNavbar() {
     const url = `${STRAPI_URL}/api/navbar?${query}`;
 
     try {
-        const res = await fetch(url, {cache: "no-store"});
-
+        const res = await fetch(url, {
+            headers: {Authorization: `Bearer ${TOKEN}`},
+            next: {revalidate: 1},
+        });
 
         if (!res.ok) {
             console.error("❌ Navbar fetch failed:", await res.text());
@@ -606,14 +607,13 @@ export async function getNavbar() {
         }
 
         const json = await res.json();
-
         const data = json?.data;
+
         if (!data) {
             console.warn("⚠️ No navbar data found!");
             return null;
         }
 
-        // ✅ Strapi v5: fields are directly in data
         return {
             id: data.id,
             logo: data.logo ?? null,
