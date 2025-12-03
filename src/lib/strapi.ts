@@ -597,8 +597,8 @@ export async function getNavbar() {
 
     try {
         const res = await fetch(url, {
-            headers: {Authorization: `Bearer ${TOKEN}`},
-            next: {revalidate: 1},
+            cache: "force-cache",        // SSG compatible
+            next: {revalidate: 60},    // ISR compatible
         });
 
         if (!res.ok) {
