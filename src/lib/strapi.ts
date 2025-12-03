@@ -9,7 +9,7 @@ import type {UseCaseItem} from "@/types/use-cases";
 
 
 const STRAPI_URL = process.env.NEXT_PUBLIC_STRAPI_URL!;
-const TOKEN = process.env.STRAPI_API_TOKEN!;
+const TOKEN = process.env.STRAPI_TOKEN!;   // ✅ FIXED
 const API = process.env.NEXT_PUBLIC_STRAPI_URL!;
 
 /* -------------------------------------------------------
@@ -241,7 +241,7 @@ export async function getPricingPage(): Promise<PricingPageData | null> {
 
     const res = await fetch(
         `${process.env.NEXT_PUBLIC_STRAPI_URL}/api/pricing-page?${query}`,
-        {headers: {Authorization: `Bearer ${process.env.STRAPI_API_TOKEN}`}}
+        {headers: {Authorization: `Bearer ${process.env.STRAPI_TOKEN}`}}
     );
 
     if (!res.ok) return null;
@@ -290,7 +290,7 @@ export async function getContactPageData(): Promise<ContactPageData | null> {
         const res = await fetch(url, {
             method: "GET",
             headers: {
-                Authorization: `Bearer ${process.env.STRAPI_API_TOKEN}`,
+                Authorization: `Bearer ${process.env.STRAPI_TOKEN}`,
             },
             next: {revalidate: 1},
         });
@@ -318,7 +318,7 @@ export async function getAboutPage() {
         const res = await fetch(url, {
             next: {revalidate: 1},
             headers: {
-                Authorization: `Bearer ${process.env.STRAPI_API_TOKEN}`, // 🔹 server-only token
+                Authorization: `Bearer ${process.env.STRAPI_TOKEN}`, // 🔹 server-only token
             },
         });
 
@@ -586,19 +586,22 @@ export async function getNavbar() {
         {
             fields: ["cta_label", "cta_href", "enable_scroll_style"],
             populate: {
-                logo: {fields: ["url", "alternativeText", "width", "height"]},
-                nav_link: {fields: ["label", "href"]},
+                logo: { fields: ["url", "alternativeText", "width", "height"] },
+                nav_link: { fields: ["label", "href"] },
             },
         },
-        {encodeValuesOnly: true}
+        { encodeValuesOnly: true }
     );
 
     const url = `${STRAPI_URL}/api/navbar?${query}`;
 
     try {
         const res = await fetch(url, {
-            cache: "force-cache",        // SSG compatible
-            next: {revalidate: 60},    // ISR compatible
+            headers: {
+                Authorization: `Bearer ${TOKEN}`, // 🔥 REQUIRED
+            },
+            cache: "force-cache",     // SSG
+            next: { revalidate: 60 }, // ISR
         });
 
         if (!res.ok) {
@@ -628,3 +631,5 @@ export async function getNavbar() {
         return null;
     }
 }
+
+
