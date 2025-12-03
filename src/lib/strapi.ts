@@ -8,9 +8,8 @@ import {ContactPageData} from "@/types/contact";
 import type {UseCaseItem} from "@/types/use-cases";
 
 
-const STRAPI_URL = process.env.NEXT_PUBLIC_STRAPI_URL!;
-const TOKEN = process.env.STRAPI_TOKEN!;   // ✅ FIXED
-const API = process.env.NEXT_PUBLIC_STRAPI_URL!;
+const STRAPI_URL = process.env.STRAPI_URL!;
+const TOKEN = process.env.STRAPI_TOKEN!;
 
 /* -------------------------------------------------------
    GENERIC FETCHER (STRAPI V5)
@@ -240,7 +239,7 @@ export async function getPricingPage(): Promise<PricingPageData | null> {
     );
 
     const res = await fetch(
-        `${process.env.NEXT_PUBLIC_STRAPI_URL}/api/pricing-page?${query}`,
+        `${STRAPI_URL}/api/pricing-page?${query}`,
         {headers: {Authorization: `Bearer ${process.env.STRAPI_TOKEN}`}}
     );
 
@@ -284,7 +283,7 @@ export async function getPricingPage(): Promise<PricingPageData | null> {
 
 
 export async function getContactPageData(): Promise<ContactPageData | null> {
-    const url = `${process.env.NEXT_PUBLIC_STRAPI_URL}/api/contact-page?populate=*`;
+    const url = `${STRAPI_URL}/api/contact-page?populate=*`;
 
     try {
         const res = await fetch(url, {
@@ -312,7 +311,7 @@ export async function getContactPageData(): Promise<ContactPageData | null> {
 
 // src/lib/strapi.ts
 export async function getAboutPage() {
-    const url = `${process.env.NEXT_PUBLIC_STRAPI_URL}/api/about-content?populate=*`;
+    const url = `${STRAPI_URL}/api/about-content?populate=*`;
 
     try {
         const res = await fetch(url, {
