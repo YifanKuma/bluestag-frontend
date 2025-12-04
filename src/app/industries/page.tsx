@@ -1,11 +1,11 @@
 import type {Metadata} from "next";
 import {Suspense} from "react";
-import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import SubPageLayout from "@/components/SubPageLayout";
 import IndustriesContent from "./IndustriesContent";
 import ScrollIntoDetail from "./ScrollIntoDetail";
 import {getIndustriesPage} from "@/lib/strapi";
+import NavbarServer from "@/components/NavbarServer";
 export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
@@ -19,7 +19,7 @@ export default async function Page() {
     if (!page) {
         return (
             <main className="text-white">
-                <Navbar/>
+                <NavbarServer />
                 <div className="pt-24 px-6">
                     <h1 className="text-3xl font-bold">No CMS Entry Found</h1>
                     <p className="opacity-70 mt-3">
@@ -33,7 +33,7 @@ export default async function Page() {
 
     return (
         <main className="relative min-h-screen text-white overflow-x-clip">
-            <Navbar/>
+            <NavbarServer/>
 
             <section className="relative z-10 pt-20">
                 <Suspense fallback={null}>

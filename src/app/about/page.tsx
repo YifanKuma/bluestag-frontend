@@ -1,7 +1,8 @@
+import NavbarServer from "@/components/NavbarServer";
+
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
-import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import OurStory from "./OurStory";
 import OurVision from "./OurVision";
@@ -21,7 +22,7 @@ export default async function AboutPage() {
 
     return (
         <main className="relative min-h-screen text-white overflow-hidden">
-            <Navbar />
+            <NavbarServer />
 
             <section id="about" className="relative z-10 pt-32 pb-24">
                 <div className="mx-auto max-w-6xl px-6 space-y-24">

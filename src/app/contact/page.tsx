@@ -1,5 +1,4 @@
 import {getContactPageData} from "@/lib/strapi";
-import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import BlueGlowBackground from "@/components/effects/BlueGlowBackground";
 import ContactInfo from "./ContactInfo";
@@ -7,6 +6,7 @@ import ContactForm from "./ContactForm";
 import SuccessToast from "./SuccessToast";
 import AutofillFixStyle from "./AutofillFixStyle";
 import type {ContactPageData} from "@/types/contact";
+import NavbarServer from "@/components/NavbarServer";
 
 export const dynamic = "force-dynamic";
 
@@ -33,7 +33,7 @@ export default async function Page() {
     return (
         <main className="relative min-h-screen text-white pt-16 overflow-hidden flex flex-col">
             <BlueGlowBackground/>
-            <Navbar/>
+            <NavbarServer/>
 
             {/* Hero */}
             <section className="relative z-10 text-center max-w-3xl mx-auto mt-20 px-6">

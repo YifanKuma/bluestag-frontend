@@ -1,8 +1,9 @@
+import NavbarServer from "@/components/NavbarServer";
+
 export const revalidate = 60;
 // OR: export const dynamic = "force-dynamic";
 
 import type {Metadata} from "next";
-import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import PrivacyPolicyClient from "./PrivacyPolicyClient";
 import {getPrivacyPolicy} from "@/lib/strapi";
@@ -19,7 +20,7 @@ export default async function PrivacyPolicyPage() {
     if (!data) {
         return (
             <main className="min-h-screen text-white">
-                <Navbar/>
+                <NavbarServer />
                 <div className="p-20 text-center text-white/70">
                     Failed to load Privacy Policy.
                 </div>
@@ -30,7 +31,7 @@ export default async function PrivacyPolicyPage() {
 
     return (
         <main className="relative min-h-screen overflow-hidden text-white">
-            <Navbar/>
+            <NavbarServer />
             <PrivacyPolicyClient data={data}/>
             <Footer/>
         </main>

@@ -1,20 +1,20 @@
 "use client";
 
 import {useState} from "react";
-import Navbar from "@/components/Navbar";
 import PricingHero from "@/app/pricing/PricingHero";
 import PlansGrid from "@/app/pricing/PlansGrid";
 import ComparisonTable from "@/app/pricing/ComparisonTable";
 import AddonsGrid from "@/app/pricing/AddonsGrid";
 import FAQ from "@/app/pricing/FAQ";
 import type {PricingPageData} from "@/types/pricing";
+import NavbarServer from "@/components/NavbarServer";
 
 export default function PricingPageClient({data}: { data: PricingPageData }) {
     const [annual, setAnnual] = useState(false);
 
     return (
         <main className="relative min-h-screen overflow-hidden text-white pt-16">
-            <Navbar/>
+            <NavbarServer />
 
             <PricingHero
                 annual={annual}

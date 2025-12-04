@@ -5,7 +5,6 @@ import UseCaseCarousel from "@/components/UseCaseCarousel";
 import UseCasesGrid from "@/components/UseCasesGrid";
 import IntegrationsSection from "@/components/IntegrationsSection";
 import Languages from "@/components/Languages";
-import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import NavbarServer from "@/components/NavbarServer";
 

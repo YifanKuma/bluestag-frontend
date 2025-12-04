@@ -1,8 +1,8 @@
 import {getServicesPage, getServicesTabs} from "@/lib/strapi";
 import ServicesSwitcher from "@/app/ai-services/sections/ServicesSwitcher";
-import Navbar from "@/components/Navbar";
 import SubPageLayout from "@/components/SubPageLayout";
 import Footer from "@/components/Footer";
+import NavbarServer from "@/components/NavbarServer";
 
 export const dynamic = "force-dynamic";
 
@@ -12,7 +12,7 @@ export default async function Page() {
 
     return (
         <main className="relative min-h-screen text-white overflow-hidden">
-            <Navbar/>
+            <NavbarServer/>
 
             <section className="relative z-10 pt-20">
                 <SubPageLayout
