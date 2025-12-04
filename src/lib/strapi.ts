@@ -196,30 +196,11 @@ export async function getIndustry(slug: string) {
    INDUSTRIES PAGE (Single Type)
 ------------------------------------------------------- */
 export async function getIndustriesPage() {
-    const url =
-        `${STRAPI_URL}/api/industries-page` +
-        `?populate=industries` +
-        `&populate[industries][populate]=cta,demo` +
-        `&populate[industries][populate][cta]=*` +
-        `&populate[industries][populate][demo]=*`;
-
     try {
-        const res = await fetch(url, {
-            headers: {Authorization: `Bearer ${TOKEN}`},
-            next: {revalidate: 1},
-        });
-
-        const text = await res.text();
-        const json = JSON.parse(text);
-
-        if (!json?.data) {
-            console.warn("⚠️ No data returned from Strapi");
-            return null;
-        }
-
-        return json.data; // v5 already returns attributes at root
-    } catch (e) {
-        console.error("💥 getIndustriesPage crashed:", e);
+        const data = await strapiFetch(`/api/industries-page?populate=*`);
+        return data ?? null;
+    } catch (err) {
+        console.error("💥 getIndustriesPage crashed:", err);
         return null;
     }
 }
@@ -585,11 +566,11 @@ export async function getNavbar() {
         {
             fields: ["cta_label", "cta_href", "enable_scroll_style"],
             populate: {
-                logo: { fields: ["url", "alternativeText", "width", "height"] },
-                nav_link: { fields: ["label", "href"] },
+                logo: {fields: ["url", "alternativeText", "width", "height"]},
+                nav_link: {fields: ["label", "href"]},
             },
         },
-        { encodeValuesOnly: true }
+        {encodeValuesOnly: true}
     );
 
     const url = `${STRAPI_URL}/api/navbar?${query}`;
@@ -600,7 +581,7 @@ export async function getNavbar() {
                 Authorization: `Bearer ${TOKEN}`, // 🔥 REQUIRED
             },
             cache: "force-cache",     // SSG
-            next: { revalidate: 60 }, // ISR
+            next: {revalidate: 60}, // ISR
         });
 
         if (!res.ok) {
