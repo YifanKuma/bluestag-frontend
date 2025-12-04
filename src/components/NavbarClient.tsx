@@ -25,6 +25,7 @@ interface NavbarData {
     cta_label?: string | null;
     cta_href?: string | null;
     enable_scroll_style?: boolean;
+    logoUrl?: string | null;
 }
 
 export default function NavbarClient({navbar}: { navbar: NavbarData | null }) {
@@ -89,10 +90,7 @@ export default function NavbarClient({navbar}: { navbar: NavbarData | null }) {
     ------------------------------------------------------- */
     if (!navbar) return null;
 
-    const logoUrl =
-        logo?.url
-            ? `${process.env.NEXT_PUBLIC_STRAPI_URL}${logo.url}`
-            : "/logo.png";
+    const logoUrl = navbar.logoUrl || "/logo.png";
 
     const Underline = () => (
         <span
