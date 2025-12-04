@@ -1,3 +1,4 @@
+"use client";
 
 import {Check, X} from "lucide-react";
 import type {PricingPlan, ComparisonRow} from "@/types/pricing";
