@@ -8,10 +8,14 @@ import {ContactPageData} from "@/types/contact";
 import type {UseCaseItem} from "@/types/use-cases";
 
 
+
 const STRAPI_URL =
     process.env.STRAPI_URL ||
     process.env.NEXT_PUBLIC_STRAPI_URL ||
     "";
+
+if (!STRAPI_URL) console.error("❌ STRAPI_URL missing!");
+
 
 const TOKEN = process.env.STRAPI_TOKEN!;
 
