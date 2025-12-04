@@ -5,25 +5,21 @@ import "./globals.css";
 
 import GlobalBackgrounds from "@/components/effects/GlobalBackgrounds";
 import ClientErrorLogger from "@/components/ClientErrorLogger";
-import NavbarServer from "@/components/NavbarServer";
-import Footer from "@/components/Footer";
 
 export default function RootLayout({children}: { children: ReactNode }) {
     return (
         <html lang="en">
         <body className="relative min-h-screen text-white overflow-x-hidden">
+        {/* Global error listener */}
+        <ClientErrorLogger/>
 
-        <ClientErrorLogger />
-        <GlobalBackgrounds />
+        {/* 🌌 All full GPU effects enabled */}
+        <GlobalBackgrounds/>
 
-        <NavbarServer />
-
-        <div className="relative z-10 pt-16">
+        {/* 🚀 Your app content */}
+        <div className="relative z-10">
             {children}
         </div>
-
-        <Footer />
-
         </body>
         </html>
     );

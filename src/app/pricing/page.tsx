@@ -9,6 +9,17 @@ export const dynamic = "force-static";
 export default async function PricingPage() {
     const data = await getPricingPage();
 
+    console.log(
+        "%c[PricingPage] Rendering PricingPage...",
+        "color:#4ade80;font-weight:bold;"
+    );
+    console.log("[PricingPage] Data:", data);
+    console.log(
+        "%c[PricingPage] Navbar + Footer SHOULD appear if this page is inside (marketing) layout",
+        "color:#60a5fa;"
+    );
+
+
     if (!data) {
         return (
             <main className="min-h-screen w-full bg-[#020617] text-white pt-16">
