@@ -1,4 +1,3 @@
-"use client";
 
 import {getPricingPage} from "@/lib/strapi";
 import NavbarServer from "@/components/NavbarServer";
