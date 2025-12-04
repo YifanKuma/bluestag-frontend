@@ -1,3 +1,5 @@
+"use client";
+
 import {getPricingPage} from "@/lib/strapi";
 import NavbarServer from "@/components/NavbarServer";
 import Footer from "@/components/Footer";
