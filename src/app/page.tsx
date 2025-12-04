@@ -7,6 +7,10 @@ import IntegrationsSection from "@/components/IntegrationsSection";
 import Languages from "@/components/Languages";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
+import NavbarServer from "@/components/NavbarServer";
+
+export const dynamic = "force-dynamic";
+
 
 export default async function Page() {
     const home = await getHomePage();
@@ -25,7 +29,7 @@ export default async function Page() {
 
     return (
         <main className="relative min-h-screen text-white pt-16">
-            <Navbar/>
+            <NavbarServer/>
 
             <section id="hero" data-bg={0}>
                 <Hero
