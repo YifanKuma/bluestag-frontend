@@ -1,3 +1,5 @@
+"use client";
+
 import {useState} from "react";
 import PricingHero from "./PricingHero";
 import PlansGrid from "./PlansGrid";
