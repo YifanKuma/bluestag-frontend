@@ -1,4 +1,4 @@
-"use client";
+
 
 import PlanCard from "@/app/pricing/PlanCard";
 import type {PricingPlan} from "@/types/pricing";
