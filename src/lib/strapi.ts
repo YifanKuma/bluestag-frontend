@@ -207,73 +207,60 @@ export async function getIndustriesPage() {
 
 
 export async function getPricingPage(): Promise<PricingPageData | null> {
-    try {
-        const query = qs.stringify(
-            {
-                populate: {
-                    plans: {
-                        populate: {
-                            Feature_Item: { populate: "*" },
-                        },
-                    },
-                    addons: { populate: "*" },
-                    faqs: { populate: "*" },
-                    comparison_rows: { populate: "*" },
-                },
+    const query = qs.stringify(
+        {
+            populate: {
+                plans: {populate: "*"},
+                addons: {populate: "*"},
+                faqs: {populate: "*"},
+                comparison_rows: {populate: "*"},
             },
-            { encodeValuesOnly: true }
-        );
+        },
+        {encodeValuesOnly: true}
+    );
 
-        const res = await fetch(
-            `${STRAPI_URL}/api/pricing-page?${query}`,
-            { headers: { Authorization: `Bearer ${process.env.STRAPI_TOKEN}` } }
-        );
+    const res = await fetch(
+        `${STRAPI_URL}/api/pricing-page?${query}`,
+        {headers: {Authorization: `Bearer ${process.env.STRAPI_TOKEN}`}}
+    );
 
-        if (!res.ok) {
-            console.error("Pricing fetch failed:", await res.text());
-            return null;
-        }
+    if (!res.ok) return null;
 
-        const raw = await res.json();
-        const data = raw.data;
-        if (!data) return null;
+    const raw = await res.json();
+    const data = raw.data;
 
-        const plans: PricingPlan[] = (data.plans ?? []).map((p: StrapiPlanRaw) => ({
-            id: p.id,
-            title: p.title,
-            tagline: p.tagline ?? undefined,
-            popular: p.popular ?? false,
+    // ---- FIX HERE ----
+    const plans: PricingPlan[] = data.plans.map((p: StrapiPlanRaw) => ({
+        id: p.id,
+        title: p.title,
+        tagline: p.tagline ?? undefined,
+        popular: p.popular ?? false,
 
-            price_monthly: Number(p.price_monthly ?? 0),
-            price_annual: Number(p.price_annual ?? 0),
+        price_monthly: p.price_monthly,
+        price_annual: p.price_annual,
 
-            call_minutes_included: p.call_minutes_included,
-            parallel_calls: p.parallel_calls,
+        call_minutes_included: p.call_minutes_included,
+        parallel_calls: p.parallel_calls,
 
-            icon_key: p.icon_key ?? undefined,
+        icon_key: p.icon_key ?? undefined,
 
-            features: Array.isArray(p.Feature_Item)
-                ? p.Feature_Item.map((fi: any) => ({ label: fi.label }))
-                : []
-        }));
+        features: (p.Feature_Item ?? []).map(fi => ({
+            label: fi.label
+        }))
+    }));
 
-        return {
-            hero_title: data.hero_title ?? "",
-            hero_subtitle: data.hero_subtitle ?? "",
-            hero_toggle_label_monthly: data.hero_toggle_label_monthly ?? "",
-            hero_toggle_label_annual: data.hero_toggle_label_annual ?? "",
-            plans,
-            comparison_rows: data.comparison_rows ?? [],
-            addons: data.addons ?? [],
-            faqs: data.faqs ?? [],
-        };
+    return {
+        hero_title: data.hero_title,
+        hero_subtitle: data.hero_subtitle,
+        hero_toggle_label_monthly: data.hero_toggle_label_monthly,
+        hero_toggle_label_annual: data.hero_toggle_label_annual,
 
-    } catch (err) {
-        console.error("getPricingPage crashed:", err);
-        return null;
-    }
+        plans,
+        comparison_rows: data.comparison_rows ?? [],
+        addons: data.addons ?? [],
+        faqs: data.faqs ?? [],
+    };
 }
-
 
 
 export async function getContactPageData(): Promise<ContactPageData | null> {
