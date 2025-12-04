@@ -4,7 +4,7 @@ import Footer from "@/components/Footer";
 import PricingPageClient from "./PricingPageClient";
 
 // IMPORTANT: Do NOT force dynamic unless absolutely needed
-export const dynamic = "force-static";
+export const dynamic = "force-dynamic";
 
 export default async function PricingPage() {
     const data = await getPricingPage();
