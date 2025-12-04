@@ -5,8 +5,15 @@ const nextConfig: NextConfig = {
 
     // ⭐ REQUIRED because static export disables image optimizer
     images: {
-        unoptimized: true,
-    }
+        remotePatterns: [
+            {
+                protocol: "https",
+                hostname: "bluestag-ai-strapi.onrender.com",
+                pathname: "/uploads/**/*",
+            },
+        ],
+    },
 };
 
 export default nextConfig;
+
