@@ -1,11 +1,11 @@
 "use client";
 
 import {useState} from "react";
-import PricingHero from "@/app/pricing/PricingHero";
-import PlansGrid from "@/app/pricing/PlansGrid";
-import ComparisonTable from "@/app/pricing/ComparisonTable";
-import AddonsGrid from "@/app/pricing/AddonsGrid";
-import FAQ from "@/app/pricing/FAQ";
+import PricingHero from "./PricingHero";
+import PlansGrid from "./PlansGrid";
+import ComparisonTable from "./ComparisonTable";
+import AddonsGrid from "./AddonsGrid";
+import FAQ from "./FAQ";
 import type {PricingPageData} from "@/types/pricing";
 
 export default function PricingPageClient({data}: { data: PricingPageData }) {
@@ -25,7 +25,7 @@ export default function PricingPageClient({data}: { data: PricingPageData }) {
             <PlansGrid
                 annual={annual}
                 plans={data.plans}
-                onSelectAction={() => window.location.href = "/contact"}
+                onSelectAction={() => (window.location.href = "/contact")}
             />
 
             <ComparisonTable

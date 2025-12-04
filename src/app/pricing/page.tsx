@@ -1,17 +1,17 @@
-import Footer from "@/components/Footer";
-import PricingPageClient from "@/app/pricing/PricingPageClient";
 import {getPricingPage} from "@/lib/strapi";
 import NavbarServer from "@/components/NavbarServer";
+import Footer from "@/components/Footer";
+import PricingPageClient from "./PricingPageClient";
 
-export const dynamic = "force-dynamic";
+// IMPORTANT: Do NOT force dynamic unless absolutely needed
+export const dynamic = "force-static";
 
-
-export default async function PricingPageWrapper() {
+export default async function PricingPage() {
     const data = await getPricingPage();
 
     if (!data) {
         return (
-            <main className="min-h-screen w-full text-white pt-16">
+            <main className="min-h-screen w-full bg-[#020617] text-white pt-16">
                 <NavbarServer/>
 
                 <div className="p-12 text-center text-white/60">
@@ -35,4 +35,3 @@ export default async function PricingPageWrapper() {
         </main>
     );
 }
-
