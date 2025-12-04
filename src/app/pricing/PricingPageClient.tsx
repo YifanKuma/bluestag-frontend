@@ -8,13 +8,14 @@ import AddonsGrid from "@/app/pricing/AddonsGrid";
 import FAQ from "@/app/pricing/FAQ";
 import type {PricingPageData} from "@/types/pricing";
 import NavbarServer from "@/components/NavbarServer";
+import Footer from "@/components/Footer";
 
 export default function PricingPageClient({data}: { data: PricingPageData }) {
     const [annual, setAnnual] = useState(false);
 
     return (
         <main className="relative min-h-screen overflow-hidden text-white pt-16">
-            <NavbarServer />
+            <NavbarServer/>
 
             <PricingHero
                 annual={annual}
@@ -40,6 +41,7 @@ export default function PricingPageClient({data}: { data: PricingPageData }) {
             <AddonsGrid addons={data.addons}/>
 
             <FAQ items={data.faqs}/>
+            <Footer/>
 
         </main>
     );

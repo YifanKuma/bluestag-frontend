@@ -13,7 +13,6 @@ export default async function PricingPageWrapper() {
             <main className="min-h-screen text-white pt-16">
                 <NavbarServer />
                 <div className="p-12">Failed to load pricing data.</div>
-                <Footer/>
             </main>
         );
     }
