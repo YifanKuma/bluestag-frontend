@@ -9,33 +9,31 @@ import type {UseCaseItem} from "@/types/use-cases";
 
 
 
-const STRAPI_URL =
-    process.env.STRAPI_URL ||
-    process.env.NEXT_PUBLIC_STRAPI_URL ||
-    "";
-
-if (!STRAPI_URL) console.error("❌ STRAPI_URL missing!");
-
-
-const TOKEN = process.env.STRAPI_TOKEN!;
-
 /* -------------------------------------------------------
    GENERIC FETCHER (STRAPI V5)
 ------------------------------------------------------- */
+// lib/strapi.ts
+
+const STRAPI_URL = process.env.NEXT_PUBLIC_STRAPI_URL!;
+const TOKEN = process.env.STRAPI_TOKEN!;
+
+
 export async function strapiFetch(endpoint: string) {
     try {
         const res = await fetch(`${STRAPI_URL}${endpoint}`, {
-            headers: {Authorization: `Bearer ${TOKEN}`},
-            next: {revalidate: 1},
+            headers: {
+                Authorization: `Bearer ${TOKEN}`,
+            },
+            cache: "no-store",
         });
 
         if (!res.ok) {
-            console.error(`❌ Strapi fetch failed (${res.status}):`, endpoint);
+            console.error("❌ Strapi fetch failed:", res.status, res.statusText);
             return null;
         }
 
         const json = await res.json();
-        return json.data ?? null; // ⭐ v5 data directly
+        return json.data ?? null;
     } catch (err) {
         console.error("❌ Strapi fetch error:", err);
         return null;
