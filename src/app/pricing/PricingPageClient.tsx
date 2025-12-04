@@ -7,16 +7,12 @@ import ComparisonTable from "@/app/pricing/ComparisonTable";
 import AddonsGrid from "@/app/pricing/AddonsGrid";
 import FAQ from "@/app/pricing/FAQ";
 import type {PricingPageData} from "@/types/pricing";
-import NavbarServer from "@/components/NavbarServer";
-import Footer from "@/components/Footer";
 
 export default function PricingPageClient({data}: { data: PricingPageData }) {
     const [annual, setAnnual] = useState(false);
 
     return (
-        <main className="relative min-h-screen overflow-hidden text-white pt-16">
-            <NavbarServer/>
-
+        <div className="relative w-full text-white">
             <PricingHero
                 annual={annual}
                 onToggleAction={setAnnual}
@@ -34,15 +30,11 @@ export default function PricingPageClient({data}: { data: PricingPageData }) {
 
             <ComparisonTable
                 rows={data.comparison_rows}
-                plans={data.plans}     // ⭐ REQUIRED
+                plans={data.plans}
             />
 
-
             <AddonsGrid addons={data.addons}/>
-
             <FAQ items={data.faqs}/>
-            <Footer/>
-
-        </main>
+        </div>
     );
 }
