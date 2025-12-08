@@ -8,7 +8,6 @@ import {ContactPageData} from "@/types/contact";
 import type {UseCaseItem} from "@/types/use-cases";
 
 
-
 /* -------------------------------------------------------
    GENERIC FETCHER (STRAPI V5)
 ------------------------------------------------------- */
@@ -203,7 +202,13 @@ export async function getIndustry(slug: string) {
 ------------------------------------------------------- */
 export async function getIndustriesPage() {
     try {
-        const data = await strapiFetch(`/api/industries-page?populate=*`);
+        const data = await strapiFetch(
+            `/api/industries-page?` +
+            `populate[industries][populate][cta]=*` +
+            `&populate[industries][populate][demo]=*` +
+            `&populate[industries][populate][bullets]=*`
+        );
+
         return data ?? null;
     } catch (err) {
         console.error("💥 getIndustriesPage crashed:", err);
