@@ -206,8 +206,7 @@ export async function getIndustriesPage() {
             `/api/industries-page?` +
             `populate[industries]=*` +
             `&populate[industries][populate][cta]=*` +
-            `&populate[industries][populate][demo]=*` +
-            `&populate[industries][populate][bullets]=*`
+            `&populate[industries][populate][demo]=*`
         );
 
         return data ?? null;
