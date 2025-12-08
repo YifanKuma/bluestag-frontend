@@ -90,14 +90,25 @@ export default function IndustryPanel({
                 {/* CTA */}
                 {industry.cta && (
                     <div className="mt-6">
-                        <Link
-                            href={industry.cta.href}
-                            className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full bg-sky-600 hover:bg-sky-700 font-medium transition-all duration-300"
-                        >
-                            {industry.cta.label}
-                        </Link>
+                        {(() => {
+                            const raw = industry.cta.href || "";
+                            const safeHref =
+                                raw.startsWith("/")
+                                    ? raw
+                                    : "/" + raw.trim().replace(/\s+/g, "-").toLowerCase();
+
+                            return (
+                                <Link
+                                    href={safeHref}
+                                    className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full bg-sky-600 hover:bg-sky-700 font-medium transition-all duration-300"
+                                >
+                                    {industry.cta.label}
+                                </Link>
+                            );
+                        })()}
                     </div>
                 )}
+
             </div>
 
             {/* Desktop Demo Flow */}
