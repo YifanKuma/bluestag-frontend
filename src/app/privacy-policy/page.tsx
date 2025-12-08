@@ -1,12 +1,12 @@
 import NavbarServer from "@/components/NavbarServer";
 
-export const revalidate = 60;
-// OR: export const dynamic = "force-dynamic";
-
 import type {Metadata} from "next";
 import Footer from "@/components/Footer";
 import PrivacyPolicyClient from "./PrivacyPolicyClient";
 import {getPrivacyPolicy} from "@/lib/strapi";
+
+export const dynamic = "force-dynamic";
+
 
 export const metadata: Metadata = {
     title: "Privacy Policy | Bluestag AI",
