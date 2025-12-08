@@ -217,6 +217,7 @@ export async function getIndustriesPage() {
 }
 
 
+
 export async function getPricingPage(): Promise<PricingPageData | null> {
     const query = qs.stringify(
         {
