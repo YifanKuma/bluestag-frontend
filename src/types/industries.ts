@@ -5,7 +5,7 @@ export interface StrapiMedia {
 }
 
 export interface DemoStep {
-    actor: "Agent" | "Customer";
+    actor: string;
     text: string;
     title?: string;
     icon?: string;

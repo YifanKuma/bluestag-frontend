@@ -5,6 +5,8 @@ import {useState, useRef} from "react";
 import Link from "next/link";
 import DemoFlow from "./DemoFlow";
 import type {Industry} from "../../data/industries";
+import {ICON_MAP} from "@/data/industry-icons";   // ✅ import icon map
+
 
 export default function IndustryDetail({ind}: { ind: Industry }) {
     const [open, setOpen] = useState(false);
@@ -13,6 +15,9 @@ export default function IndustryDetail({ind}: { ind: Industry }) {
     const mouseY = useMotionValue(0);
     const glowX = useTransform(mouseX, (x) => `${x}px`);
     const glowY = useTransform(mouseY, (y) => `${y}px`);
+
+    // ✅ Resolve real icon component from icon_key
+    const Icon = ICON_MAP[ind.icon_key] ?? ICON_MAP.default;
 
     const handleMouseMove = (e: React.MouseEvent) => {
         const rect = ref.current?.getBoundingClientRect();
@@ -24,32 +29,38 @@ export default function IndustryDetail({ind}: { ind: Industry }) {
 
     return (
         <motion.div
-            id="industry-detail"                 // ✅ anchor for hash links
-            data-industry={ind.id}               // ✅ keep which industry is shown
+            id="industry-detail"
+            data-industry={ind.id}
             ref={ref}
             onMouseMove={handleMouseMove}
             initial={{opacity: 0, y: 40}}
             whileInView={{opacity: 1, y: 0}}
             viewport={{once: true, margin: "-80px"}}
             transition={{duration: 0.7, ease: "easeOut"}}
-            className="relative overflow-hidden group bg-white/5 border border-white/10 rounded-3xl p-8 backdrop-blur-xl shadow-lg hover:shadow-sky-500/20 scroll-mt-24" // ✅ scroll offset for fixed navbar
-            tabIndex={-1}                         // ♿ allows focus when jumping
+            className="relative overflow-hidden group bg-white/5 border border-white/10 rounded-3xl p-8 backdrop-blur-xl shadow-lg hover:shadow-sky-500/20 scroll-mt-24"
+            tabIndex={-1}
         >
-            {/* Glow effect following mouse */}
+
+            {/* Glow effect */}
             <motion.div
-                className="pointer-events-none absolute -translate-x-1/2 -translate-y-1/2 w-[250px] h-[250px] rounded-full bg-sky-500/20 blur-3xl opacity-0 group-hover:opacity-100 transition-opacity duration-500"
+                className="pointer-events-none absolute -translate-x-1/2 -translate-y-1/2
+                           w-[250px] h-[250px] rounded-full bg-sky-500/20 blur-3xl
+                           opacity-0 group-hover:opacity-100 transition-opacity duration-500"
                 style={{left: glowX, top: glowY}}
             />
 
             <div className="grid lg:grid-cols-2 gap-10 relative z-10">
-                {/* Left: info */}
+
+                {/* ================= LEFT: INFO ================= */}
                 <div>
                     <motion.div
                         whileHover={{scale: 1.05}}
                         transition={{type: "spring", stiffness: 150, damping: 10}}
                         className="flex items-center gap-4 mb-4"
                     >
-                        <ind.icon className="w-10 h-10 text-sky-400 drop-shadow-lg"/>
+                        {/* ✅ FIXED: real icon component */}
+                        <Icon className="w-10 h-10 text-sky-400 drop-shadow-lg" />
+
                         <h3 className="text-3xl font-bold">{ind.title}</h3>
                     </motion.div>
 
@@ -73,7 +84,8 @@ export default function IndustryDetail({ind}: { ind: Industry }) {
                         <div className="mt-6">
                             <Link
                                 href={ind.cta.href}
-                                className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full bg-sky-600 hover:bg-sky-700 font-medium"
+                                className="inline-flex items-center gap-2 px-5 py-2.5
+                                           rounded-full bg-sky-600 hover:bg-sky-700 font-medium"
                             >
                                 {ind.cta.label}
                             </Link>
@@ -81,13 +93,14 @@ export default function IndustryDetail({ind}: { ind: Industry }) {
                     )}
                 </div>
 
-                {/* Right: interactive demo */}
+                {/* ================= RIGHT: INTERACTIVE DEMO ================= */}
                 <motion.div
                     initial={{scale: 0.95, opacity: 0}}
                     whileInView={{scale: 1, opacity: 1}}
                     transition={{duration: 0.6}}
                 >
-                    <DemoFlow steps={ind.demo}/>
+                    <DemoFlow steps={ind.demo} />
+
                     <button
                         onClick={() => setOpen(!open)}
                         className="mt-4 text-sm text-sky-300 hover:text-sky-200 underline underline-offset-4"
@@ -105,13 +118,12 @@ export default function IndustryDetail({ind}: { ind: Industry }) {
                                 className="overflow-hidden"
                             >
                                 <div
-                                    className="mt-3 text-xs text-gray-400 space-y-2 bg-black/30 border border-white/10 rounded-xl p-4">
-                                    <p><span className="font-semibold text-gray-300">How it works:</span> ASR → NLU →
-                                        Policy Engine → Tool Calls → TTS.</p>
-                                    <p><span className="font-semibold text-gray-300">Integrations:</span> Calendars,
-                                        CRMs, SMS/email, payments, and more.</p>
-                                    <p><span className="font-semibold text-gray-300">Controls:</span> Guardrails and
-                                        hand-off for sensitive actions.</p>
+                                    className="mt-3 text-xs text-gray-400 space-y-2
+                                               bg-black/30 border border-white/10 rounded-xl p-4"
+                                >
+                                    <p><span className="font-semibold text-gray-300">How it works:</span> ASR → NLU → Policy Engine → Tool Calls → TTS.</p>
+                                    <p><span className="font-semibold text-gray-300">Integrations:</span> Calendars, CRMs, SMS/email, payments, and more.</p>
+                                    <p><span className="font-semibold text-gray-300">Controls:</span> Guardrails and hand-off for sensitive actions.</p>
                                 </div>
                             </motion.div>
                         )}
