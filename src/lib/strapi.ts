@@ -204,7 +204,8 @@ export async function getIndustriesPage() {
     try {
         const data = await strapiFetch(
             `/api/industries-page?` +
-            `populate[industries][populate][cta]=*` +
+            `populate[industries]=*` +
+            `&populate[industries][populate][cta]=*` +
             `&populate[industries][populate][demo]=*` +
             `&populate[industries][populate][bullets]=*`
         );
@@ -215,7 +216,6 @@ export async function getIndustriesPage() {
         return null;
     }
 }
-
 
 
 export async function getPricingPage(): Promise<PricingPageData | null> {
